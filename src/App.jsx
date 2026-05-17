@@ -352,7 +352,7 @@ export default function App() {
             }
           >
 
-<div>
+        <div>
 
           <button
 
@@ -367,6 +367,74 @@ export default function App() {
             {
               template.name
             }
+
+          </button>
+
+
+          {" "}
+
+
+          <button
+
+            onClick={() => {
+
+              const copy = {
+
+                ...template,
+
+                id:
+                  Date.now(),
+
+                name:
+                  template.name
+                  + " copy",
+
+                lastCompleted:
+                  null
+
+              }
+
+
+              setTemplates([
+
+                ...templates,
+
+                copy
+
+              ])
+
+            }}
+
+          >
+
+            Clone
+
+          </button>
+
+
+          {" "}
+
+
+          <button
+
+            onClick={() => {
+
+              setTemplates(
+
+                templates.filter(
+                  t =>
+
+                    t.id !==
+                    template.id
+                )
+
+              )
+
+            }}
+
+          >
+
+            Delete
 
           </button>
 
@@ -406,8 +474,21 @@ export default function App() {
 
           </button>
 
-        </div>
 
+          {" — Last: "}
+
+
+          {
+
+            template.lastCompleted
+
+            ??
+
+            "Never"
+
+          }
+
+        </div>
             {" — "}
 
 

@@ -220,13 +220,55 @@ export default function TemplateView({
 
 
 
-      <h1>
+      <input
 
-        {
-          template.name
-        }
+          style={{
+            fontSize:
+              "2rem",
 
-      </h1>
+            marginBottom:
+              "20px",
+
+            width:
+              "100%"
+          }}
+
+          value={
+            template.name
+          }
+
+          onChange={
+            e =>
+
+              setTemplates(
+
+                templates.map(
+                  t =>
+
+                    t.id ===
+                    template.id
+
+                      ?
+
+                      {
+
+                        ...t,
+
+                        name:
+                          e.target.value
+
+                      }
+
+                      :
+
+                      t
+
+                )
+
+              )
+          }
+
+        />
 
 
 
