@@ -401,63 +401,212 @@ export default function TemplateView({
               }}
             >
 
-              <h3>
+             <h3>
 
-                  {
-                    exercise.name
-                  }
-
-
-                  {" "}
+              {
+                exercise.name
+              }
 
 
-                  <button
+              {" "}
 
-                    onClick={() => {
 
-                      setTemplates(
+              <button
 
-                        templates.map(
-                          t =>
+                onClick={() => {
 
-                            t.id ===
-                            template.id
+                  const index =
 
-                              ?
+                    template.exercises.findIndex(
+                      ex =>
 
-                              {
+                        ex.id ===
+                        exercise.id
+                    )
 
-                                ...t,
 
-                                exercises:
+                  if (
+                    index <= 0
+                  )
+                  return
 
-                                  t.exercises.filter(
-                                    ex =>
 
-                                      ex.id !==
-                                      exercise.id
-                                  )
+                  const reordered =
+                    [...template.exercises]
 
-                              }
 
-                              :
+                  ;[
+                    reordered[index - 1],
+                    reordered[index]
+                  ] = [
 
-                              t
+                    reordered[index],
+                    reordered[index - 1]
 
-                        )
+                  ]
 
-                      )
 
-                    }}
+                  setTemplates(
 
-                  >
+                    templates.map(
+                      t =>
 
-                    Delete
+                        t.id ===
+                        template.id
 
-                  </button>
+                          ?
 
-                </h3>
+                          {
 
+                            ...t,
+
+                            exercises:
+                              reordered
+
+                          }
+
+                          :
+
+                          t
+                    )
+
+                  )
+
+                }}
+
+              >
+
+                ↑
+
+              </button>
+
+
+
+              <button
+
+                onClick={() => {
+
+                  const index =
+
+                    template.exercises.findIndex(
+                      ex =>
+
+                        ex.id ===
+                        exercise.id
+                    )
+
+
+                  if (
+
+                    index >=
+
+                    template.exercises
+                    .length - 1
+
+                  )
+
+                  return
+
+
+                  const reordered =
+                    [...template.exercises]
+
+
+                  ;[
+                    reordered[index + 1],
+                    reordered[index]
+                  ] = [
+
+                    reordered[index],
+                    reordered[index + 1]
+
+                  ]
+
+
+                  setTemplates(
+
+                    templates.map(
+                      t =>
+
+                        t.id ===
+                        template.id
+
+                          ?
+
+                          {
+
+                            ...t,
+
+                            exercises:
+                              reordered
+
+                          }
+
+                          :
+
+                          t
+                    )
+
+                  )
+
+                }}
+
+              >
+
+                ↓
+
+              </button>
+
+
+
+              {" "}
+
+
+              <button
+
+                onClick={() => {
+
+                  setTemplates(
+
+                    templates.map(
+                      t =>
+
+                        t.id ===
+                        template.id
+
+                          ?
+
+                          {
+
+                            ...t,
+
+                            exercises:
+
+                              t.exercises.filter(
+                                ex =>
+
+                                  ex.id !==
+                                  exercise.id
+                              )
+
+                          }
+
+                          :
+
+                          t
+                    )
+
+                  )
+
+                }}
+
+              >
+
+                Delete
+
+              </button>
+
+            </h3>
 
 
               {

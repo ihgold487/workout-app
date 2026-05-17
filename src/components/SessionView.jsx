@@ -485,34 +485,158 @@ export default function SessionView({
               }}
             >
 
-              <h3>
+            <h3>
 
-                {
-                  exercise.name
-                }
-
-
-                {" "}
+              {
+                exercise.name
+              }
 
 
-                <button
+              {" "}
 
-                  onClick={() =>
 
-                    deleteExercise(
-                      exercise.id
+              <button
+
+                onClick={() => {
+
+                  const index =
+
+                    session.exercises.findIndex(
+                      ex =>
+
+                        ex.id ===
+                        exercise.id
                     )
 
-                  }
 
-                >
+                  if (
+                    index <= 0
+                  )
+                  return
 
-                  Delete Exercise
 
-                </button>
+                  const reordered =
+                    [...session.exercises]
 
-              </h3>
 
+                  ;[
+                    reordered[index - 1],
+                    reordered[index]
+                  ] = [
+
+                    reordered[index],
+                    reordered[index - 1]
+
+                  ]
+
+
+                  updateSession(
+
+                    s => ({
+
+                      ...s,
+
+                      exercises:
+                        reordered
+
+                    })
+
+                  )
+
+                }}
+
+              >
+
+                ↑
+
+              </button>
+
+
+
+              <button
+
+                onClick={() => {
+
+                  const index =
+
+                    session.exercises.findIndex(
+                      ex =>
+
+                        ex.id ===
+                        exercise.id
+                    )
+
+
+                  if (
+
+                    index >=
+
+                    session.exercises
+                    .length - 1
+
+                  )
+
+                  return
+
+
+                  const reordered =
+                    [...session.exercises]
+
+
+                  ;[
+                    reordered[index + 1],
+                    reordered[index]
+                  ] = [
+
+                    reordered[index],
+                    reordered[index + 1]
+
+                  ]
+
+
+                  updateSession(
+
+                    s => ({
+
+                      ...s,
+
+                      exercises:
+                        reordered
+
+                    })
+
+                  )
+
+                }}
+
+              >
+
+                ↓
+
+              </button>
+
+
+
+              {" "}
+
+
+              <button
+
+                onClick={() =>
+
+                  deleteExercise(
+                    exercise.id
+                  )
+
+                }
+
+              >
+
+                Delete
+
+              </button>
+
+            </h3>
 
 
               {
