@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react"
+import TemplateView from "./components/TemplateView"
+import SessionView from "./components/SessionView"
 
 const seedExercises = [
   { id: 1, name: "Bench Press" },
@@ -6,86 +8,107 @@ const seedExercises = [
   { id: 3, name: "Lat Pulldown" }
 ]
 
-function App() {
+export default function App() {
 
-  const [templates, setTemplates] =
-    useState(
-      () =>
-        JSON.parse(
-          localStorage.getItem("templates")
-        ) || []
-    )
+  const [templates, setTemplates] = useState(
+    () =>
+      JSON.parse(
+        localStorage.getItem("templates")
+      ) || []
+  )
 
-  const [exerciseLibrary,
-    setExerciseLibrary] =
-    useState(
+  const [sessions, setSessions] = useState(
+    () =>
+      JSON.parse(
+        localStorage.getItem("sessions")
+      ) || []
+  )
+
+  const [exerciseLibrary] = useState(
+    () =>
+      JSON.parse(
+        localStorage.getItem("exerciseLibrary")
+      ) || seedExercises
+  )
+
+    const [
+      selectedTemplateId,
+      setSelectedTemplateId
+    ] = useState(
+
       () =>
+
         JSON.parse(
           localStorage.getItem(
-            "exerciseLibrary"
+            "selectedTemplateId"
           )
-        ) || seedExercises
+        ) || null
+
     )
 
-  const [sessions,
-    setSessions] =
-    useState(
+
+
+    const [
+      selectedSessionId,
+      setSelectedSessionId
+    ] = useState(
+
       () =>
+
         JSON.parse(
           localStorage.getItem(
-            "sessions"
+            "selectedSessionId"
           )
-        ) || []
+        ) || null
+
     )
 
-  const [selectedTemplateId,
-    setSelectedTemplateId] =
-    useState(null)
-
-  const [selectedSessionId,
-    setSelectedSessionId] =
-    useState(null)
-
-  const [search,
-    setSearch] =
-    useState("")
-
-  const [showAddExercise,
-    setShowAddExercise] =
-    useState(false)
 
 
+    useEffect(() => {
 
-  useEffect(() => {
+      localStorage.setItem(
+        "templates",
 
-    localStorage.setItem(
-      "templates",
-      JSON.stringify(
-        templates
+        JSON.stringify(
+          templates
+        )
       )
-    )
 
-    localStorage.setItem(
-      "sessions",
-      JSON.stringify(
-        sessions
+
+      localStorage.setItem(
+        "sessions",
+
+        JSON.stringify(
+          sessions
+        )
       )
-    )
 
-    localStorage.setItem(
-      "exerciseLibrary",
-      JSON.stringify(
-        exerciseLibrary
+
+      localStorage.setItem(
+        "selectedTemplateId",
+
+        JSON.stringify(
+          selectedTemplateId
+        )
       )
-    )
 
-  },
+
+      localStorage.setItem(
+        "selectedSessionId",
+
+        JSON.stringify(
+          selectedSessionId
+        )
+      )
+
+    },
     [
       templates,
       sessions,
-      exerciseLibrary
-    ]
-  )
+      selectedTemplateId,
+      selectedSessionId
+    ])
 
 
 
@@ -95,7 +118,6 @@ function App() {
       t.id ===
       selectedTemplateId
     )
-
 
   const selectedSession =
     sessions.find(
@@ -118,7 +140,6 @@ function App() {
 
 
     setTemplates([
-
       ...templates,
 
       {
@@ -127,7 +148,10 @@ function App() {
 
         name,
 
-        exercises:[]
+        exercises: [],
+
+        lastCompleted:
+          null
       }
 
     ])
@@ -136,713 +160,161 @@ function App() {
 
 
 
-  function addExerciseToTemplate(
-    exercise
-  ) {
+  if (selectedSession) {
 
-    const weight =
-      prompt(
-        "Target weight"
-      )
+    return (
 
-    const reps =
-      prompt(
-        "Target reps"
-      )
+        <SessionView
 
-    const numSets =
-      prompt(
-        "Number sets"
-      )
+          session={
+            selectedSession
+          }
 
+          sessions={
+            sessions
+          }
 
-    const sets=[]
+          setSessions={
+            setSessions
+          }
 
-    for(
-      let i=0;
-      i<Number(numSets);
-      i++
-    ){
+          exerciseLibrary={
+            exerciseLibrary
+          }
 
-      sets.push({
+          setSelectedSessionId={
+            setSelectedSessionId
+          }
 
-        id:
-          Date.now()+i,
+        />
 
-        targetWeight:
-          weight,
+    )
 
-        targetReps:
-          reps
-
-      })
-
-    }
+  }
 
 
 
-    setTemplates(
+  if (selectedTemplate) {
 
-      templates.map(
-        template =>
+    return (
 
-        template.id ===
-        selectedTemplateId
+      <TemplateView
 
-        ?
-
-        {
-
-          ...template,
-
-          exercises:[
-
-            ...template.exercises,
-
-            {
-
-              id:
-                Date.now(),
-
-              name:
-                exercise.name,
-
-              sets
-
-            }
-
-          ]
-
+        template={
+          selectedTemplate
         }
 
-        :
+        templates={
+          templates
+        }
 
-        template
+        setTemplates={
+          setTemplates
+        }
 
-      )
+        exerciseLibrary={
+          exerciseLibrary
+        }
 
-    )
+        setSelectedTemplateId={
+          setSelectedTemplateId
+        }
 
+        setSelectedSessionId={
+          setSelectedSessionId
+        }
 
-    setShowAddExercise(false)
-    setSearch("")
+        sessions={
+          sessions
+        }
 
-  }
+        setSessions={
+          setSessions
+        }
 
+      />
 
-
-  function startWorkout() {
-
-    const session = {
-
-      id:
-        Date.now(),
-
-      templateName:
-        selectedTemplate.name,
-
-      exercises:
-
-      selectedTemplate.exercises
-      .map(
-        ex => ({
-
-          ...ex,
-
-          sets:
-
-          ex.sets.map(
-            set => ({
-
-              ...set,
-
-              actualWeight:"",
-              actualReps:""
-
-            })
-
-          )
-
-        })
-
-      )
-
-    }
-
-
-    setSessions([
-      ...sessions,
-      session
-    ])
-
-
-    setSelectedSessionId(
-      session.id
     )
 
   }
 
 
-
-// SESSION VIEW
-
-if (selectedSession) {
 
   return (
 
-    <div style={{ padding: "20px" }}>
-
-      <button
-        onClick={() =>
-          setSelectedSessionId(
-            null
-          )
-        }
-      >
-
-        ← Back
-
-      </button>
-
+    <div
+      style={{
+        padding:
+          "20px"
+      }}
+    >
 
       <h1>
 
-        {
-          selectedSession
-          .templateName
-        }
+        Workout Log
 
       </h1>
 
 
 
+      <button
+        onClick={
+          addTemplate
+        }
+      >
+
+        + New Template
+
+      </button>
+
+
+
+      <hr />
+
+
       {
 
-        selectedSession
-        .exercises
-        .map(
-          ex => (
+        templates.map(
+          template => (
 
           <div
-            key={ex.id}
-            style={{
-              marginBottom:
-              "20px"
-            }}
-          >
-
-            <h3>
-
-              {ex.name}
-
-            </h3>
-
-
-
-            {
-
-              ex.sets.map(
-                set => (
-
-                <div
-                  key={set.id}
-                  style={{
-                    marginBottom:
-                    "10px"
-                  }}
-                >
-
-                  Target:
-
-                  {" "}
-
-                  {
-                    set.targetWeight
-                  }
-
-                  ×
-
-                  {
-                    set.targetReps
-                  }
-
-
-                  {" | "}
-
-
-                  Actual:
-
-
-                  <input
-
-                    placeholder="wt"
-
-                    value={
-                      set.actualWeight
-                      || ""
-                    }
-
-                    onChange={
-                      e => {
-
-                        setSessions(
-
-                          sessions.map(
-                            session =>
-
-                            session.id ===
-                            selectedSessionId
-
-                            ?
-
-                            {
-
-                              ...session,
-
-                              exercises:
-
-                              session.exercises
-                              .map(
-                                exercise =>
-
-                                exercise.id ===
-                                ex.id
-
-                                ?
-
-                                {
-
-                                  ...exercise,
-
-                                  sets:
-
-                                  exercise.sets
-                                  .map(
-                                    s =>
-
-                                    s.id ===
-                                    set.id
-
-                                    ?
-
-                                    {
-
-                                      ...s,
-
-                                      actualWeight:
-                                      e.target.value
-
-                                    }
-
-                                    :
-
-                                    s
-
-                                  )
-
-                                }
-
-                                :
-
-                                exercise
-
-                              )
-
-                            }
-
-                            :
-
-                            session
-
-                          )
-
-                        )
-
-                      }
-
-                    }
-
-                  />
-
-
-                  ×
-
-
-                  <input
-
-                    placeholder="reps"
-
-                    value={
-                      set.actualReps
-                      || ""
-                    }
-
-                    onChange={
-                      e => {
-
-                        setSessions(
-
-                          sessions.map(
-                            session =>
-
-                            session.id ===
-                            selectedSessionId
-
-                            ?
-
-                            {
-
-                              ...session,
-
-                              exercises:
-
-                              session.exercises
-                              .map(
-                                exercise =>
-
-                                exercise.id ===
-                                ex.id
-
-                                ?
-
-                                {
-
-                                  ...exercise,
-
-                                  sets:
-
-                                  exercise.sets
-                                  .map(
-                                    s =>
-
-                                    s.id ===
-                                    set.id
-
-                                    ?
-
-                                    {
-
-                                      ...s,
-
-                                      actualReps:
-                                      e.target.value
-
-                                    }
-
-                                    :
-
-                                    s
-
-                                  )
-
-                                }
-
-                                :
-
-                                exercise
-
-                              )
-
-                            }
-
-                            :
-
-                            session
-
-                          )
-
-                        )
-
-                      }
-
-                    }
-
-                  />
-
-                </div>
-
-              ))
-
+            key={
+              template.id
             }
-
-          </div>
-
-        ))
-
-      }
-
-    </div>
-
-  )
-
-}
-
-
-  // TEMPLATE VIEW
-
-  if(
-    selectedTemplate
-  ){
-
-    const filtered =
-
-    exerciseLibrary.filter(
-      ex =>
-
-      ex.name
-      .toLowerCase()
-
-      .includes(
-        search
-        .toLowerCase()
-      )
-    )
-
-
-
-    return(
-
-      <div style={{
-        padding:"20px"
-      }}>
-
-        <button
-        onClick={() =>
-        setSelectedTemplateId(
-          null
-        )}
-        >
-
-        ← Back
-
-        </button>
-
-
-        <h1>
-
-        {
-        selectedTemplate.name
-        }
-
-        </h1>
-
-
-
-        <button
-        onClick={
-        startWorkout
-        }
-        >
-
-        Start Workout
-
-        </button>
-
-
-        {" "}
-
-
-        <button
-        onClick={() =>
-        setShowAddExercise(
-          !showAddExercise
-        )
-        }
-        >
-
-        + Add Exercise
-
-        </button>
-
-
-
-        {
-
-        showAddExercise &&
-
-        <div
-        style={{
-          marginTop:"20px",
-          border:
-          "1px solid #ccc",
-          padding:"10px"
-        }}
-        >
-
-          <input
-
-          placeholder=
-          "Search exercise"
-
-          value={
-          search
-          }
-
-          onChange={
-          e =>
-          setSearch(
-            e.target.value
-          )
-          }
-
-          />
-
-
-          {
-
-          filtered.map(
-          ex => (
-
-          <div
-          key={ex.id}
-          style={{
-          marginTop:"10px"
-          }}
           >
 
             <button
-            onClick={() =>
-            addExerciseToTemplate(
-              ex
-            )
-            }
+              onClick={() =>
+                setSelectedTemplateId(
+                  template.id
+                )
+              }
             >
 
-            {
-            ex.name
-            }
+              {
+                template.name
+              }
 
             </button>
 
-          </div>
 
-          ))
-
-          }
-
-        </div>
-
-        }
+            {" — "}
 
 
-
-        <hr/>
-
+            Last:
 
 
-        {
-
-        selectedTemplate
-        .exercises
-        .map(
-        ex => (
-
-        <div
-        key={ex.id}
-        >
-
-          <h3>
-
-          {
-          ex.name
-          }
-
-          </h3>
+            {" "}
 
 
-          {
-
-          ex.sets.map(
-          set => (
-
-          <div
-          key={set.id}
-          >
-
-          Target:
-
-          {
-          set.targetWeight
-          }
-
-          ×
-
-          {
-          set.targetReps
-          }
+            {
+              template.lastCompleted
+              ?? "Never"
+            }
 
           </div>
-
-          ))
-
-          }
-
-        </div>
 
         ))
-
-        }
-
-      </div>
-
-    )
-
-  }
-
-
-
-  return(
-
-    <div style={{
-      padding:"20px"
-    }}>
-
-      <h1>
-
-      Workout Log
-
-      </h1>
-
-
-      <button
-      onClick={
-      addTemplate
-      }
-      >
-
-      + New Template
-
-      </button>
-
-
-
-      {
-
-      templates.map(
-      template => (
-
-      <div
-      key={template.id}
-      >
-
-      <button
-      onClick={() =>
-      setSelectedTemplateId(
-        template.id
-      )
-      }
-      >
-
-      {
-      template.name
-      }
-
-      </button>
-
-      </div>
-
-      ))
-
       }
 
     </div>
@@ -850,5 +322,3 @@ if (selectedSession) {
   )
 
 }
-
-export default App
