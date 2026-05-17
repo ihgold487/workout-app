@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import TemplateView from "./components/TemplateView"
 import SessionView from "./components/SessionView"
+import HistoryView from "./components/HistoryView"
 
 const seedExercises = [
   { id: 1, name: "Bench Press" },
@@ -22,6 +23,23 @@ export default function App() {
       JSON.parse(
         localStorage.getItem("sessions")
       ) || []
+  )
+  
+  const [history, setHistory] =
+  useState(
+
+    () =>
+
+      JSON.parse(
+        localStorage.getItem(
+          "history"
+        )
+      )
+
+      ||
+
+      []
+
   )
 
   const [exerciseLibrary] = useState(
@@ -62,7 +80,13 @@ export default function App() {
         ) || null
 
     )
-
+    const [
+      selectedHistory,
+      setSelectedHistory
+    ] =
+    useState(
+      null
+    )
 
 
     useEffect(() => {
@@ -72,6 +96,15 @@ export default function App() {
 
         JSON.stringify(
           templates
+        )
+      )
+
+
+      localStorage.setItem(
+        "history",
+
+        JSON.stringify(
+          history
         )
       )
 
@@ -105,11 +138,11 @@ export default function App() {
     },
     [
       templates,
+      history,
       sessions,
       selectedTemplateId,
       selectedSessionId
     ])
-
 
 
   const selectedTemplate =
@@ -158,7 +191,27 @@ export default function App() {
 
   }
 
+    if (
+      selectedHistory
+    ) {
 
+      return (
+
+        <HistoryView
+
+          selectedHistory={
+            selectedHistory
+          }
+
+          setSelectedHistory={
+            setSelectedHistory
+          }
+
+        />
+
+      )
+
+    }
 
   if (selectedSession) {
 
@@ -166,27 +219,43 @@ export default function App() {
 
         <SessionView
 
-          session={
-            selectedSession
-          }
+              session={
+                selectedSession
+              }
 
-          sessions={
-            sessions
-          }
+              sessions={
+                sessions
+              }
 
-          setSessions={
-            setSessions
-          }
+              setSessions={
+                setSessions
+              }
 
-          exerciseLibrary={
-            exerciseLibrary
-          }
+              history={
+                history
+              }
 
-          setSelectedSessionId={
-            setSelectedSessionId
-          }
+              setHistory={
+                setHistory
+              }
 
-        />
+              templates={
+                templates
+              }
+
+              setTemplates={
+                setTemplates
+              }
+
+              exerciseLibrary={
+                exerciseLibrary
+              }
+
+              setSelectedSessionId={
+                setSelectedSessionId
+              }
+
+            />
 
     )
 
@@ -283,20 +352,61 @@ export default function App() {
             }
           >
 
-            <button
-              onClick={() =>
-                setSelectedTemplateId(
-                  template.id
+<div>
+
+          <button
+
+            onClick={() =>
+              setSelectedTemplateId(
+                template.id
+              )
+            }
+
+          >
+
+            {
+              template.name
+            }
+
+          </button>
+
+
+          {" "}
+
+
+          <button
+
+            onClick={() => {
+
+              const latest =
+
+                history.find(
+                  h =>
+
+                    h.templateId ===
+                    template.id
                 )
+
+
+              if (
+                latest
+              ) {
+
+                setSelectedHistory(
+                  latest
+                )
+
               }
-            >
 
-              {
-                template.name
-              }
+            }}
 
-            </button>
+          >
 
+            History
+
+          </button>
+
+        </div>
 
             {" — "}
 

@@ -4,6 +4,10 @@ export default function SessionView({
   session,
   sessions,
   setSessions,
+  history,
+  setHistory,
+  templates,
+  setTemplates,
   exerciseLibrary,
   setSelectedSessionId
 }) {
@@ -652,6 +656,135 @@ export default function SessionView({
           ))
 
       }
+      
+      <hr />
+
+
+        <button
+
+        onClick={() => {
+
+          const completedWorkout = {
+
+            ...session,
+
+            completedAt:
+
+            new Date()
+            .toLocaleDateString()
+
+          }
+
+
+
+          setHistory([
+
+            completedWorkout,
+
+            ...history
+
+          ])
+
+
+
+          setTemplates(
+
+            templates.map(
+              t =>
+
+              t.id ===
+              session.templateId
+
+              ?
+
+              {
+
+                ...t,
+
+                lastCompleted:
+
+                completedWorkout
+                .completedAt,
+
+
+                exercises:
+
+                session.exercises
+                .map(
+                  ex => ({
+
+                    ...ex,
+
+                    sets:
+
+                    ex.sets
+
+                    .filter(
+                      set =>
+
+                      set.actualWeight
+                      &&
+
+                      set.actualReps
+                    )
+
+                    .map(
+                      set => ({
+
+                        id:
+                        Date.now()
+                        + Math.random(),
+
+                        targetWeight:
+                        set.actualWeight,
+
+                        targetReps:
+                        set.actualReps
+
+                      })
+
+                    )
+
+                  })
+                )
+
+              }
+
+              :
+
+              t
+            )
+
+          )
+
+
+
+          setSessions(
+
+            sessions.filter(
+              s =>
+
+              s.id !==
+              session.id
+            )
+
+          )
+
+
+
+          setSelectedSessionId(
+            null
+          )
+
+        }}
+
+        >
+
+        Complete Workout
+
+        </button>
+      
+      
 
     </div>
 
