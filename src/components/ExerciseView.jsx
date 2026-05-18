@@ -158,70 +158,81 @@ export default function ExerciseView({
 
 
 
-      {
+        {
 
-        exerciseLibrary.map(
-          exercise => (
+          [...exerciseLibrary]
 
-            <div
-              key={
-                exercise.id
-              }
-            >
+            .sort(
 
-              {
+              (a,b) =>
 
-                exercise.name
+                a.name.localeCompare(
+                  b.name
+                )
 
-              }
+            )
 
+            .map(
+              exercise => (
 
-              {" — "}
+                <div
+                  key={
+                    exercise.id
+                  }
+                >
 
+                  {
 
-              {
+                    exercise.name
 
-                exercise.muscleGroup
-
-                ||
-
-                "Uncategorized"
-
-              }
+                  }
 
 
-              {" "}
+                  {" — "}
 
 
-              <button
+                  {
 
-                onClick={() =>
+                    exercise.muscleGroup
 
-                  setExerciseLibrary(
+                    ||
 
-                    exerciseLibrary.filter(
-                      ex =>
+                    "Uncategorized"
 
-                        ex.id !==
-                        exercise.id
-                    )
+                  }
 
-                  )
 
-                }
+                  {" "}
 
-              >
 
-                Delete
+                  <button
 
-              </button>
+                    onClick={() =>
 
-            </div>
+                      setExerciseLibrary(
 
-          ))
+                        exerciseLibrary.filter(
+                          ex =>
 
-      }
+                            ex.id !==
+                            exercise.id
+                        )
 
+                      )
+
+                    }
+
+                  >
+
+                    Delete
+
+                  </button>
+
+                </div>
+
+              ))
+
+        }
     </div>
 
   )

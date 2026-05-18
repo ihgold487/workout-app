@@ -180,37 +180,49 @@ export default function TemplateView({
 
   }
 
-    const filteredExercises =
+const filteredExercises =
 
-      exerciseLibrary.filter(
-        exercise =>
+  exerciseLibrary
 
-          (
+    .filter(
+      exercise =>
 
-            !selectedMuscle
+        (
 
-            ||
+          !selectedMuscle
 
-            exercise
-              .muscleGroup
+          ||
 
-              ===
+          exercise
+            .muscleGroup
 
-            selectedMuscle
+            ===
 
+          selectedMuscle
+
+        )
+
+        &&
+
+        exercise.name
+          .toLowerCase()
+
+          .includes(
+            search.toLowerCase()
           )
 
-          &&
+    )
 
-          exercise.name
-            .toLowerCase()
 
-            .includes(
-              search.toLowerCase()
-            )
+    .sort(
 
-      )
+      (a, b) =>
 
+        a.name.localeCompare(
+          b.name
+        )
+
+    )
 
 
     const muscleGroups =

@@ -304,54 +304,51 @@ export default function SessionView({
 
   }
 
-const filteredExercises =
+    const filteredExercises =
 
-  exerciseLibrary.filter(
-    exercise =>
+      exerciseLibrary
 
-      (
+        .filter(
+          exercise =>
 
-        !selectedMuscle
+            (
 
-        ||
+              !selectedMuscle
 
-        exercise
-          .muscleGroup
+              ||
 
-          ===
+              exercise
+                .muscleGroup
 
-        selectedMuscle
+                ===
 
-      )
+              selectedMuscle
 
-      &&
+            )
 
-      exercise.name
-        .toLowerCase()
+            &&
 
-        .includes(
-          search.toLowerCase()
+            exercise.name
+              .toLowerCase()
+
+              .includes(
+                search
+                  .toLowerCase()
+              )
+
         )
 
-  )
 
+        .sort(
 
+          (a, b) =>
 
-const muscleGroups =
+            a.name.localeCompare(
+              b.name
+            )
 
-  [
+        )
 
-    ...new Set(
-
-      exerciseLibrary.map(
-        e =>
-
-          e.muscleGroup
-      )
-
-    )
-
-  ]
 
   const groupedExercises =
 
