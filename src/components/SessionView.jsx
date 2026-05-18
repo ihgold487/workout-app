@@ -18,6 +18,17 @@ export default function SessionView({
   const [search, setSearch] = useState("")
   
   const [selectedMuscle, setSelectedMuscle] = useState("")
+  const [activeSet,setActiveSet] = useState(
+      {
+        exerciseId:
+          session.exercises[0]
+            ?.id,
+        setId:
+          session.exercises[0]
+            ?.sets[0]
+            ?.id
+      }
+    )
 
   function updateSession(updater) {
 
@@ -739,10 +750,74 @@ export default function SessionView({
                           set => (
 
                             <div
-                              key={
-                                set.id
-                              }
-                            >
+                                  key={
+                                    set.id
+                                  }
+
+                                  style={{
+
+                                    padding:
+                                      "6px",
+
+                                    marginBottom:
+                                      "4px",
+
+                                    borderLeft:
+
+                                      activeSet
+                                        ?.setId
+
+                                      ===
+
+                                      set.id
+
+                                        ?
+
+                                        "4px solid #444"
+
+                                        :
+
+                                        "none",
+
+
+                                    background:
+
+                                      activeSet
+                                        ?.setId
+
+                                      ===
+
+                                      set.id
+
+                                        ?
+
+                                        "#f3f3f3"
+
+                                        :
+
+                                        "transparent",
+
+
+                                    fontWeight:
+
+                                      activeSet
+                                        ?.setId
+
+                                      ===
+
+                                      set.id
+
+                                        ?
+
+                                        "bold"
+
+                                        :
+
+                                        "normal"
+
+                                  }}
+
+                                >
 
                               Target:
 
