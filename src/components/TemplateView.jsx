@@ -13,6 +13,9 @@ export default function TemplateView({
 
   const [search, setSearch] =
     useState("")
+    
+    const [selectedMuscle, setSelectedMuscle] =
+     useState("")
 
   const [showAdd, setShowAdd] =
     useState(false)
@@ -177,25 +180,54 @@ export default function TemplateView({
 
   }
 
+    const filteredExercises =
+
+      exerciseLibrary.filter(
+        exercise =>
+
+          (
+
+            !selectedMuscle
+
+            ||
+
+            exercise
+              .muscleGroup
+
+              ===
+
+            selectedMuscle
+
+          )
+
+          &&
+
+          exercise.name
+            .toLowerCase()
+
+            .includes(
+              search.toLowerCase()
+            )
+
+      )
 
 
-  const filteredExercises =
 
-    exerciseLibrary.filter(
-      exercise =>
+    const muscleGroups =
 
-        exercise.name
-        .toLowerCase()
+      [
 
-        .includes(
+        ...new Set(
 
-          search
-          .toLowerCase()
+          exerciseLibrary.map(
+            e =>
+
+              e.muscleGroup
+          )
 
         )
-    )
 
-
+      ]
 
   return (
 
@@ -317,24 +349,83 @@ export default function TemplateView({
           }}
         >
 
-          <input
+        <div>
+            <select
 
-            placeholder=
+              value={
+                selectedMuscle
+              }
+
+              onChange={
+                e =>
+
+                  setSelectedMuscle(
+                    e.target.value
+                  )
+              }
+
+            >
+
+              <option value="">
+
+                All Muscles
+
+              </option>
+
+
+              {
+
+                muscleGroups.map(
+                  muscle => (
+
+                    <option
+
+                      key={
+                        muscle
+                      }
+
+                      value={
+                        muscle
+                      }
+
+                    >
+
+                      {
+
+                        muscle
+
+                      }
+
+                    </option>
+
+                  ))
+
+              }
+
+            </select>
+
+        </div>
+
+
+
+        <input
+
+          placeholder=
             "Search exercise"
 
-            value={
-              search
-            }
+          value={
+            search
+          }
 
-            onChange={
-              e =>
+          onChange={
+            e =>
 
-                setSearch(
-                  e.target.value
-                )
-            }
+              setSearch(
+                e.target.value
+              )
+          }
 
-          />
+        />
 
 
           {

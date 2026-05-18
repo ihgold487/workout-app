@@ -1,3 +1,22 @@
+const muscleGroups = [
+  "Abs",
+  "Biceps",
+  "Calves",
+  "Chest",
+  "Forearms",
+  "Front Delts",
+  "Full Body",
+  "Glutes",
+  "Hamstrings",
+  "Lats",
+  "Quads",
+  "Rear Delts",
+  "Side Delts",
+  "Triceps",
+  "Upper Back",
+  "Other"
+]
+
 export default function ExerciseView({
   exerciseLibrary,
   setExerciseLibrary,
@@ -32,53 +51,107 @@ export default function ExerciseView({
       </h1>
 
 
+        <div>
 
-      <button
+          <input
 
-        onClick={() => {
+            id="newExercise"
 
-          const name =
-            prompt(
+            placeholder=
               "Exercise name"
-            )
+
+          />
 
 
-          const muscle =
-            prompt(
-              "Muscle group"
-            )
-
-
-          if(!name)
-            return
-
-
-          setExerciseLibrary([
-
-            ...exerciseLibrary,
+          <select
+            id="muscleGroup"
+          >
 
             {
 
-              id:
-                Date.now(),
+              muscleGroups.map(
+                muscle => (
 
-              name,
+                  <option
 
-              muscleGroup:
-                muscle
+                    key={
+                      muscle
+                    }
+
+                    value={
+                      muscle
+                    }
+
+                  >
+
+                    {
+
+                      muscle
+
+                    }
+
+                  </option>
+
+                ))
 
             }
 
-          ])
+          </select>
 
-        }}
 
-      >
 
-        + Add Exercise
+          <button
 
-      </button>
+            onClick={() => {
 
+              const name =
+
+                document
+                  .getElementById(
+                    "newExercise"
+                  )
+                  .value
+
+
+              const muscleGroup =
+
+                document
+                  .getElementById(
+                    "muscleGroup"
+                  )
+                  .value
+
+
+              if (!name)
+                return
+
+
+              setExerciseLibrary([
+
+                ...exerciseLibrary,
+
+                {
+
+                  id:
+                    Date.now(),
+
+                  name,
+
+                  muscleGroup
+
+                }
+
+              ])
+
+            }}
+
+          >
+
+            + Add Exercise
+
+          </button>
+
+        </div>
 
 
       <hr />

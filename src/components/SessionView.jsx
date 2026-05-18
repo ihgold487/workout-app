@@ -15,10 +15,9 @@ export default function SessionView({
   const [showAddExercise, setShowAddExercise] =
     useState(false)
 
-  const [search, setSearch] =
-    useState("")
-
-
+  const [search, setSearch] = useState("")
+  
+  const [selectedMuscle, setSelectedMuscle] = useState("")
 
   function updateSession(updater) {
 
@@ -305,22 +304,54 @@ export default function SessionView({
 
   }
 
+const filteredExercises =
+
+  exerciseLibrary.filter(
+    exercise =>
+
+      (
+
+        !selectedMuscle
+
+        ||
+
+        exercise
+          .muscleGroup
+
+          ===
+
+        selectedMuscle
+
+      )
+
+      &&
+
+      exercise.name
+        .toLowerCase()
+
+        .includes(
+          search.toLowerCase()
+        )
+
+  )
 
 
-  const filteredExercises =
 
-    exerciseLibrary.filter(
-      ex =>
+const muscleGroups =
 
-        ex.name
-          .toLowerCase()
+  [
 
-          .includes(
-            search.toLowerCase()
-          )
+    ...new Set(
+
+      exerciseLibrary.map(
+        e =>
+
+          e.muscleGroup
+      )
+
     )
 
-
+  ]
 
   const groupedExercises =
 
@@ -428,26 +459,80 @@ export default function SessionView({
         showAddExercise &&
 
         <div>
+            <select
 
-          <input
+              value={
+                selectedMuscle
+              }
 
-            placeholder=
-              "Search exercise"
+              onChange={
+                e =>
 
-            value={
-              search
-            }
+                  setSelectedMuscle(
+                    e.target.value
+                  )
+              }
 
-            onChange={
-              e =>
-                setSearch(
-                  e.target.value
-                )
-            }
+            >
 
-          />
+              <option value="">
+
+                All Muscles
+
+              </option>
 
 
+              {
+
+                muscleGroups.map(
+                  muscle => (
+
+                    <option
+
+                      key={
+                        muscle
+                      }
+
+                      value={
+                        muscle
+                      }
+
+                    >
+
+                      {
+
+                        muscle
+
+                      }
+
+                    </option>
+
+                  ))
+
+              }
+
+            </select>
+
+
+
+            <input
+
+              placeholder=
+                "Search exercise"
+
+              value={
+                search
+              }
+
+              onChange={
+                e =>
+
+                  setSearch(
+                    e.target.value
+                  )
+              }
+
+            />
           {
 
             filteredExercises.map(
