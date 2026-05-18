@@ -73,7 +73,27 @@ export default function HistoryView({
 
               </h3>
 
+                {
 
+                  exercise.note
+
+                  &&
+
+                  <div>
+
+                    Note:
+
+                    {" "}
+
+                    {
+
+                      exercise.note
+
+                    }
+
+                  </div>
+
+                }
 
               {
 

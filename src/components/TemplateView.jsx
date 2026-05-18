@@ -788,6 +788,83 @@ const filteredExercises =
 
             </h3>
 
+            <textarea
+
+              placeholder=
+                "Notes"
+
+              value={
+                exercise.note
+                ||
+                ""
+              }
+
+              onChange={
+                e =>
+
+                  setTemplates(
+
+                    templates.map(
+                      t =>
+
+                        t.id ===
+                        template.id
+
+                          ?
+
+                          {
+
+                            ...t,
+
+                            exercises:
+
+                              t.exercises.map(
+                                ex =>
+
+                                  ex.id ===
+                                  exercise.id
+
+                                    ?
+
+                                    {
+
+                                      ...ex,
+
+                                      note:
+                                        e.target.value
+
+                                    }
+
+                                    :
+
+                                    ex
+                              )
+
+                          }
+
+                          :
+
+                          t
+
+                    )
+
+                  )
+              }
+
+              style={{
+
+                width:
+                  "100%",
+
+                height:
+                  "50px",
+
+                marginBottom:
+                  "10px"
+
+              }}
+
+            />
 
               {
 

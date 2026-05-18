@@ -669,9 +669,70 @@ export default function SessionView({
                         </button>
 
                       </h3>
+                      
+                        <textarea
 
+                          placeholder=
+                            "Notes"
 
+                          value={
+                            exercise.note
+                            ||
+                            ""
+                          }
 
+                          onChange={
+                            e =>
+
+                              updateSession(
+
+                                s => ({
+
+                                  ...s,
+
+                                  exercises:
+
+                                    s.exercises.map(
+                                      ex =>
+
+                                        ex.id ===
+                                        exercise.id
+
+                                          ?
+
+                                          {
+
+                                            ...ex,
+
+                                            note:
+                                              e.target.value
+
+                                          }
+
+                                          :
+
+                                          ex
+                                    )
+
+                                })
+
+                              )
+                          }
+
+                          style={{
+
+                            width:
+                              "100%",
+
+                            height:
+                              "50px",
+
+                            marginBottom:
+                              "10px"
+
+                          }}
+
+                        />
                       {
 
                         exercise.sets.map(
@@ -704,29 +765,39 @@ export default function SessionView({
                               Actual:
 
 
-                              <input
+                             <input
 
-                                value={
-                                  set.actualWeight
-                                }
+                                  style={{
 
-                                onChange={
-                                  e =>
+                                    width:
+                                      "60px",
 
-                                    updateActual(
+                                    marginLeft:
+                                      "6px"
 
-                                      exercise.id,
+                                  }}
 
-                                      set.id,
+                                  value={
+                                    set.actualWeight
+                                  }
 
-                                      "actualWeight",
+                                  onChange={
+                                    e =>
 
-                                      e.target.value
+                                      updateActual(
 
-                                    )
-                                }
+                                        exercise.id,
 
-                              />
+                                        set.id,
+
+                                        "actualWeight",
+
+                                        e.target.value
+
+                                      )
+                                  }
+
+                                />
 
 
                               ×
@@ -734,28 +805,37 @@ export default function SessionView({
 
                               <input
 
-                                value={
-                                  set.actualReps
-                                }
+                                  style={{
 
-                                onChange={
-                                  e =>
+                                    width:
+                                      "40px",
 
-                                    updateActual(
+                                    marginLeft:
+                                      "6px"
 
-                                      exercise.id,
+                                  }}
 
-                                      set.id,
+                                  value={
+                                    set.actualReps
+                                  }
 
-                                      "actualReps",
+                                  onChange={
+                                    e =>
 
-                                      e.target.value
+                                      updateActual(
 
-                                    )
-                                }
+                                        exercise.id,
 
-                              />
+                                        set.id,
 
+                                        "actualReps",
+
+                                        e.target.value
+
+                                      )
+                                  }
+
+                                />
 
                               <button
 
