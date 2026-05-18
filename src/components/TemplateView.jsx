@@ -411,200 +411,277 @@ export default function TemplateView({
               {" "}
 
 
-              <button
+                <button
+                  onClick={() => {
 
-                onClick={() => {
+                    const index =
+                      template.exercises.findIndex(
+                        ex =>
+                          ex.id ===
+                          exercise.id
+                      )
 
-                  const index =
+                    if (index <= 0)
+                      return
 
-                    template.exercises.findIndex(
-                      ex =>
 
-                        ex.id ===
-                        exercise.id
+                    const reordered =
+                      [...template.exercises]
+
+
+                    ;[
+                      reordered[index - 1],
+                      reordered[index]
+
+                    ] = [
+
+                      reordered[index],
+                      reordered[index - 1]
+
+                    ]
+
+
+                    setTemplates(
+
+                      templates.map(
+                        t =>
+
+                          t.id ===
+                          template.id
+
+                            ?
+
+                            {
+
+                              ...t,
+
+                              exercises:
+                                reordered
+
+                            }
+
+                            :
+
+                            t
+
+                      )
+
                     )
 
+                  }}
+                >
 
-                  if (
-                    index <= 0
-                  )
-                  return
+                  ↑
 
-
-                  const reordered =
-                    [...template.exercises]
+                </button>
 
 
-                  ;[
-                    reordered[index - 1],
-                    reordered[index]
-                  ] = [
 
-                    reordered[index],
-                    reordered[index - 1]
+                <button
+                  onClick={() => {
 
-                  ]
+                    const index =
+                      template.exercises.findIndex(
+                        ex =>
+                          ex.id ===
+                          exercise.id
+                      )
 
 
-                  setTemplates(
+                    if (
 
-                    templates.map(
-                      t =>
+                      index >=
 
-                        t.id ===
-                        template.id
+                      template.exercises
+                      .length - 1
 
-                          ?
-
-                          {
-
-                            ...t,
-
-                            exercises:
-                              reordered
-
-                          }
-
-                          :
-
-                          t
                     )
 
-                  )
-
-                }}
-
-              >
-
-                ↑
-
-              </button>
+                      return
 
 
+                    const reordered =
+                      [...template.exercises]
 
-              <button
 
-                onClick={() => {
+                    ;[
+                      reordered[index + 1],
+                      reordered[index]
 
-                  const index =
+                    ] = [
 
-                    template.exercises.findIndex(
-                      ex =>
+                      reordered[index],
+                      reordered[index + 1]
 
-                        ex.id ===
-                        exercise.id
+                    ]
+
+
+                    setTemplates(
+
+                      templates.map(
+                        t =>
+
+                          t.id ===
+                          template.id
+
+                            ?
+
+                            {
+
+                              ...t,
+
+                              exercises:
+                                reordered
+
+                            }
+
+                            :
+
+                            t
+
+                      )
+
                     )
 
+                  }}
+                >
 
-                  if (
+                  ↓
 
-                    index >=
-
-                    template.exercises
-                    .length - 1
-
-                  )
-
-                  return
+                </button>
 
 
-                  const reordered =
-                    [...template.exercises]
+
+                <button
+
+                  onClick={() => {
+
+                    const group =
+
+                      prompt(
+                        "Superset group (A, B, etc). Leave empty to clear."
+                      )
 
 
-                  ;[
-                    reordered[index + 1],
-                    reordered[index]
-                  ] = [
+                    setTemplates(
 
-                    reordered[index],
-                    reordered[index + 1]
+                      templates.map(
+                        t =>
 
-                  ]
+                          t.id ===
+                          template.id
 
+                            ?
 
-                  setTemplates(
+                            {
 
-                    templates.map(
-                      t =>
+                              ...t,
 
-                        t.id ===
-                        template.id
+                              exercises:
 
-                          ?
+                                t.exercises.map(
+                                  ex =>
 
-                          {
+                                    ex.id ===
+                                    exercise.id
 
-                            ...t,
+                                      ?
 
-                            exercises:
-                              reordered
+                                      {
 
-                          }
+                                        ...ex,
 
-                          :
+                                        supersetGroup:
 
-                          t
+                                          group
+
+                                          ||
+
+                                          null
+
+                                      }
+
+                                      :
+
+                                      ex
+                                )
+
+                            }
+
+                            :
+
+                            t
+
+                      )
+
                     )
 
-                  )
+                  }}
 
-                }}
+                >
 
-              >
+                  {
 
-                ↓
+                    exercise.supersetGroup
 
-              </button>
+                      ?
+
+                      `Set ${exercise.supersetGroup}`
+
+                      :
+
+                      "Superset"
+
+                  }
+
+                </button>
 
 
 
-              {" "}
+                <button
 
+                  onClick={() => {
 
-              <button
+                    setTemplates(
 
-                onClick={() => {
+                      templates.map(
+                        t =>
 
-                  setTemplates(
+                          t.id ===
+                          template.id
 
-                    templates.map(
-                      t =>
+                            ?
 
-                        t.id ===
-                        template.id
+                            {
 
-                          ?
+                              ...t,
 
-                          {
+                              exercises:
 
-                            ...t,
+                                t.exercises.filter(
+                                  ex =>
 
-                            exercises:
+                                    ex.id !==
+                                    exercise.id
+                                )
 
-                              t.exercises.filter(
-                                ex =>
+                            }
 
-                                  ex.id !==
-                                  exercise.id
-                              )
+                            :
 
-                          }
+                            t
 
-                          :
+                      )
 
-                          t
                     )
 
-                  )
+                  }}
 
-                }}
+                >
 
-              >
+                  Delete
 
-                Delete
-
-              </button>
+                </button>
 
             </h3>
 

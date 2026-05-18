@@ -12,19 +12,15 @@ export default function SessionView({
   setSelectedSessionId
 }) {
 
-  const [showAddExercise,
-    setShowAddExercise] =
+  const [showAddExercise, setShowAddExercise] =
     useState(false)
 
-  const [search,
-    setSearch] =
+  const [search, setSearch] =
     useState("")
 
 
 
-  function updateSession(
-    updater
-  ) {
+  function updateSession(updater) {
 
     setSessions(
 
@@ -33,13 +29,9 @@ export default function SessionView({
 
           s.id === session.id
 
-            ?
+            ? updater(s)
 
-            updater(s)
-
-            :
-
-            s
+            : s
       )
 
     )
@@ -57,48 +49,40 @@ export default function SessionView({
 
     updateSession(
 
-      session => ({
+      s => ({
 
-        ...session,
+        ...s,
 
         exercises:
 
-          session.exercises.map(
+          s.exercises.map(
             ex =>
 
               ex.id === exerciseId
 
-                ?
+                ? {
 
-                {
+                    ...ex,
 
-                  ...ex,
+                    sets:
 
-                  sets:
+                      ex.sets.map(
+                        set =>
 
-                    ex.sets.map(
-                      set =>
+                          set.id === setId
 
-                        set.id === setId
+                            ? {
+                                ...set,
+                                [field]:
+                                  value
+                              }
 
-                          ?
+                            : set
+                      )
 
-                          {
-                            ...set,
-                            [field]:
-                              value
-                          }
+                  }
 
-                          :
-
-                          set
-                    )
-
-                }
-
-                :
-
-                ex
+                : ex
           )
 
       })
@@ -116,36 +100,31 @@ export default function SessionView({
 
     updateSession(
 
-      session => ({
+      s => ({
 
-        ...session,
+        ...s,
 
         exercises:
 
-          session.exercises.map(
+          s.exercises.map(
             ex =>
 
               ex.id === exerciseId
 
-                ?
+                ? {
 
-                {
+                    ...ex,
 
-                  ...ex,
+                    sets:
 
-                  sets:
+                      ex.sets.filter(
+                        set =>
+                          set.id !== setId
+                      )
 
-                    ex.sets.filter(
-                      set =>
-                        set.id !==
-                        setId
-                    )
+                  }
 
-                }
-
-                :
-
-                ex
+                : ex
           )
 
       })
@@ -183,36 +162,31 @@ export default function SessionView({
     }
 
 
-
     updateSession(
 
-      session => ({
+      s => ({
 
-        ...session,
+        ...s,
 
         exercises:
 
-          session.exercises.map(
+          s.exercises.map(
             ex =>
 
               ex.id === exerciseId
 
-                ?
+                ? {
 
-                {
+                    ...ex,
 
-                  ...ex,
+                    sets: [
+                      ...ex.sets,
+                      newSet
+                    ]
 
-                  sets: [
-                    ...ex.sets,
-                    newSet
-                  ]
+                  }
 
-                }
-
-                :
-
-                ex
+                : ex
           )
 
       })
@@ -229,16 +203,15 @@ export default function SessionView({
 
     updateSession(
 
-      session => ({
+      s => ({
 
-        ...session,
+        ...s,
 
         exercises:
 
-          session.exercises.filter(
+          s.exercises.filter(
             ex =>
-              ex.id !==
-              exerciseId
+              ex.id !== exerciseId
           )
 
       })
@@ -254,14 +227,10 @@ export default function SessionView({
   ) {
 
     const weight =
-      prompt(
-        "Target weight"
-      )
+      prompt("Target weight")
 
     const reps =
-      prompt(
-        "Target reps"
-      )
+      prompt("Target reps")
 
     const numSets =
       Number(
@@ -272,6 +241,7 @@ export default function SessionView({
 
 
     const sets =
+
       Array.from(
 
         {
@@ -302,16 +272,15 @@ export default function SessionView({
       )
 
 
-
     updateSession(
 
-      session => ({
+      s => ({
 
-        ...session,
+        ...s,
 
         exercises: [
 
-          ...session.exercises,
+          ...s.exercises,
 
           {
 
@@ -320,6 +289,9 @@ export default function SessionView({
 
             name:
               exercise.name,
+
+            supersetGroup:
+              null,
 
             sets
 
@@ -331,25 +303,77 @@ export default function SessionView({
 
     )
 
-
-    setSearch("")
-    setShowAddExercise(false)
-
   }
 
 
 
   const filteredExercises =
+
     exerciseLibrary.filter(
       ex =>
 
         ex.name
-        .toLowerCase()
-
-        .includes(
-          search
           .toLowerCase()
-        )
+
+          .includes(
+            search.toLowerCase()
+          )
+    )
+
+
+
+  const groupedExercises =
+
+    Object.values(
+
+      session.exercises.reduce(
+
+        (
+          groups,
+          exercise
+        ) => {
+
+          const key =
+
+            exercise.supersetGroup
+
+            ||
+
+            `single-${exercise.id}`
+
+
+          if (
+            !groups[key]
+          ) {
+
+            groups[key] = {
+
+              group:
+                exercise.supersetGroup,
+
+              exercises:
+                []
+
+            }
+
+          }
+
+
+          groups[key]
+            .exercises
+            .push(
+              exercise
+            )
+
+
+          return groups
+
+        },
+
+        {}
+
+      )
+
     )
 
 
@@ -357,7 +381,8 @@ export default function SessionView({
   return (
 
     <div style={{
-      padding:"20px"
+      padding:
+        "20px"
     }}>
 
       <button
@@ -402,17 +427,12 @@ export default function SessionView({
 
         showAddExercise &&
 
-        <div
-          style={{
-            marginTop:
-              "15px"
-          }}
-        >
+        <div>
 
           <input
 
             placeholder=
-            "Search exercise"
+              "Search exercise"
 
             value={
               search
@@ -433,27 +453,21 @@ export default function SessionView({
             filteredExercises.map(
               ex => (
 
-                <div
+                <button
+
                   key={ex.id}
+
+                  onClick={() =>
+                    addExercise(ex)
+                  }
+
                 >
 
-                  <button
+                  {
+                    ex.name
+                  }
 
-                    onClick={() =>
-                      addExercise(
-                        ex
-                      )
-                    }
-
-                  >
-
-                    {
-                      ex.name
-                    }
-
-                  </button>
-
-                </div>
+                </button>
 
               ))
 
@@ -471,268 +485,235 @@ export default function SessionView({
 
       {
 
-        session.exercises.map(
-          exercise => (
+        groupedExercises.map(
+          group => (
 
             <div
+
               key={
-                exercise.id
+                group.group
+                ||
+                group.exercises[0]
+                  .id
               }
 
               style={{
+
+                border:
+
+                  group.group
+
+                    ?
+
+                    "2px solid #666"
+
+                    :
+
+                    "none",
+
+                padding:
+                  "12px",
+
                 marginBottom:
-                  "30px"
+                  "24px",
+
+                borderRadius:
+                  "8px"
+
               }}
+
             >
 
-            <h3>
-
               {
-                exercise.name
+
+                group.group &&
+
+                <h2>
+
+                  ════ Set {
+
+                    group.group
+
+                  } ════
+
+                </h2>
+
               }
 
 
-              {" "}
-
-
-              <button
-
-                onClick={() => {
-
-                  const index =
-
-                    session.exercises.findIndex(
-                      ex =>
-
-                        ex.id ===
-                        exercise.id
-                    )
-
-
-                  if (
-                    index <= 0
-                  )
-                  return
-
-
-                  const reordered =
-                    [...session.exercises]
-
-
-                  ;[
-                    reordered[index - 1],
-                    reordered[index]
-                  ] = [
-
-                    reordered[index],
-                    reordered[index - 1]
-
-                  ]
-
-
-                  updateSession(
-
-                    s => ({
-
-                      ...s,
-
-                      exercises:
-                        reordered
-
-                    })
-
-                  )
-
-                }}
-
-              >
-
-                ↑
-
-              </button>
-
-
-
-              <button
-
-                onClick={() => {
-
-                  const index =
-
-                    session.exercises.findIndex(
-                      ex =>
-
-                        ex.id ===
-                        exercise.id
-                    )
-
-
-                  if (
-
-                    index >=
-
-                    session.exercises
-                    .length - 1
-
-                  )
-
-                  return
-
-
-                  const reordered =
-                    [...session.exercises]
-
-
-                  ;[
-                    reordered[index + 1],
-                    reordered[index]
-                  ] = [
-
-                    reordered[index],
-                    reordered[index + 1]
-
-                  ]
-
-
-                  updateSession(
-
-                    s => ({
-
-                      ...s,
-
-                      exercises:
-                        reordered
-
-                    })
-
-                  )
-
-                }}
-
-              >
-
-                ↓
-
-              </button>
-
-
-
-              {" "}
-
-
-              <button
-
-                onClick={() =>
-
-                  deleteExercise(
-                    exercise.id
-                  )
-
-                }
-
-              >
-
-                Delete
-
-              </button>
-
-            </h3>
-
 
               {
 
-                exercise.sets.map(
-                  set => (
+                group.exercises.map(
+                  exercise => (
 
                     <div
+
                       key={
-                        set.id
+                        exercise.id
                       }
+
+                      style={{
+                        marginBottom:
+                          "20px"
+                      }}
+
                     >
 
-                      Target:
+                      <h3>
 
-                      {" "}
+                        {
+                          exercise.name
+                        }
+
+
+                        {" "}
+
+
+                        <button
+
+                          onClick={() =>
+
+                            deleteExercise(
+                              exercise.id
+                            )
+
+                          }
+
+                        >
+
+                          Delete
+
+                        </button>
+
+                      </h3>
+
+
 
                       {
-                        set.targetWeight
+
+                        exercise.sets.map(
+                          set => (
+
+                            <div
+                              key={
+                                set.id
+                              }
+                            >
+
+                              Target:
+
+                              {" "}
+
+                              {
+                                set.targetWeight
+                              }
+
+                              ×
+
+                              {
+                                set.targetReps
+                              }
+
+
+                              {" | "}
+
+
+                              Actual:
+
+
+                              <input
+
+                                value={
+                                  set.actualWeight
+                                }
+
+                                onChange={
+                                  e =>
+
+                                    updateActual(
+
+                                      exercise.id,
+
+                                      set.id,
+
+                                      "actualWeight",
+
+                                      e.target.value
+
+                                    )
+                                }
+
+                              />
+
+
+                              ×
+
+
+                              <input
+
+                                value={
+                                  set.actualReps
+                                }
+
+                                onChange={
+                                  e =>
+
+                                    updateActual(
+
+                                      exercise.id,
+
+                                      set.id,
+
+                                      "actualReps",
+
+                                      e.target.value
+
+                                    )
+                                }
+
+                              />
+
+
+                              <button
+
+                                onClick={() =>
+
+                                  deleteSet(
+
+                                    exercise.id,
+
+                                    set.id
+
+                                  )
+
+                                }
+
+                              >
+
+                                Delete Set
+
+                              </button>
+
+                            </div>
+
+                          ))
+
                       }
 
-                      ×
-
-                      {
-                        set.targetReps
-                      }
-
-
-                      {" | "}
-
-
-                      Actual:
-
-
-                      <input
-
-                        value={
-                          set.actualWeight
-                        }
-
-                        onChange={
-                          e =>
-
-                            updateActual(
-
-                              exercise.id,
-
-                              set.id,
-
-                              "actualWeight",
-
-                              e.target.value
-
-                            )
-                        }
-
-                      />
-
-
-                      ×
-
-
-                      <input
-
-                        value={
-                          set.actualReps
-                        }
-
-                        onChange={
-                          e =>
-
-                            updateActual(
-
-                              exercise.id,
-
-                              set.id,
-
-                              "actualReps",
-
-                              e.target.value
-
-                            )
-                        }
-
-                      />
 
 
                       <button
 
                         onClick={() =>
 
-                          deleteSet(
+                          addSet(
 
                             exercise.id,
 
-                            set.id
+                            exercise.sets[
+                              exercise.sets.length - 1
+                            ]
 
                           )
 
@@ -740,7 +721,7 @@ export default function SessionView({
 
                       >
 
-                        Delete Set
+                        + Add Set
 
                       </button>
 
@@ -750,168 +731,148 @@ export default function SessionView({
 
               }
 
-
-
-              <button
-
-                onClick={() =>
-
-                  addSet(
-
-                    exercise.id,
-
-                    exercise.sets[
-                      exercise.sets.length
-                      - 1
-                    ]
-
-                  )
-
-                }
-
-              >
-
-                + Add Set
-
-              </button>
-
             </div>
 
           ))
 
-      }
-      
-      <hr />
+        }
+
+
+
+        <hr />
+
 
 
         <button
 
-        onClick={() => {
+          onClick={() => {
 
-          const completedWorkout = {
+            const completedWorkout = {
 
-            ...session,
+              ...session,
 
-            completedAt:
+              completedAt:
 
-            new Date()
-            .toLocaleDateString()
+                new Date()
+                  .toLocaleDateString()
 
-          }
-
-
-
-          setHistory([
-
-            completedWorkout,
-
-            ...history
-
-          ])
+            }
 
 
 
-          setTemplates(
+            setHistory([
 
-            templates.map(
-              t =>
+              completedWorkout,
 
-              t.id ===
-              session.templateId
+              ...history
 
-              ?
-
-              {
-
-                ...t,
-
-                lastCompleted:
-
-                completedWorkout
-                .completedAt,
+            ])
 
 
-                exercises:
 
-                session.exercises
-                .map(
-                  ex => ({
+            setTemplates(
 
-                    ...ex,
+              templates.map(
+                t =>
 
-                    sets:
+                  t.id ===
+                  session.templateId
 
-                    ex.sets
+                    ?
 
-                    .filter(
-                      set =>
+                    {
 
-                      set.actualWeight
-                      &&
+                      ...t,
 
-                      set.actualReps
-                    )
+                      lastCompleted:
 
-                    .map(
-                      set => ({
+                        completedWorkout
+                          .completedAt,
 
-                        id:
-                        Date.now()
-                        + Math.random(),
 
-                        targetWeight:
-                        set.actualWeight,
+                      exercises:
 
-                        targetReps:
-                        set.actualReps
+                        session.exercises
+                          .map(
+                            ex => ({
 
-                      })
+                              ...ex,
 
-                    )
+                              sets:
 
-                  })
-                )
+                                ex.sets
 
-              }
+                                  .filter(
+                                    set =>
 
-              :
+                                      set.actualWeight
 
-              t
+                                      &&
+
+                                      set.actualReps
+                                  )
+
+                                  .map(
+                                    set => ({
+
+                                      id:
+                                        Date.now()
+                                        + Math.random(),
+
+                                      targetWeight:
+                                        set.actualWeight,
+
+                                      targetReps:
+                                        set.actualReps
+
+                                    })
+
+                                  )
+
+                            })
+                          )
+
+                    }
+
+                    :
+
+                    t
+
+              )
+
             )
 
-          )
 
 
+            setSessions(
 
-          setSessions(
+              sessions.filter(
+                s =>
 
-            sessions.filter(
-              s =>
+                  s.id !==
+                  session.id
+              )
 
-              s.id !==
-              session.id
             )
 
-          )
 
 
+            setSelectedSessionId(
+              null
+            )
 
-          setSelectedSessionId(
-            null
-          )
-
-        }}
+          }}
 
         >
 
-        Complete Workout
+          Complete Workout
 
         </button>
-      
-      
 
-    </div>
 
-  )
+
+        </div>
+
+        )
 
 }
