@@ -12,6 +12,138 @@ const seedExercises = [
 
 export default function App() {
 
+    function exportBackup() {
+
+      const data = {
+
+        templates,
+
+        history,
+
+        sessions,
+
+        exerciseLibrary
+
+      }
+
+
+      const blob =
+
+        new Blob(
+
+          [
+
+            JSON.stringify(
+              data,
+              null,
+              2
+            )
+
+          ],
+
+          {
+
+            type:
+              "application/json"
+
+          }
+
+        )
+
+
+      const url =
+
+        URL.createObjectURL(
+          blob
+        )
+
+
+      const a =
+        document.createElement(
+          "a"
+        )
+
+
+      a.href =
+        url
+
+
+      a.download =
+
+        `workout-backup-${
+          new Date()
+            .toISOString()
+            .slice(0,10)
+        }.json`
+
+
+      a.click()
+
+
+      URL.revokeObjectURL(
+        url
+      )
+
+    }
+    
+        async function importBackup(
+      event
+    ) {
+
+      const file =
+
+        event.target.files[0]
+
+
+      if (!file)
+        return
+
+
+      const text =
+
+        await file.text()
+
+
+      const data =
+
+        JSON.parse(
+          text
+        )
+
+
+      if (
+        data.templates
+      )
+        setTemplates(
+          data.templates
+        )
+
+
+      if (
+        data.history
+      )
+        setHistory(
+          data.history
+        )
+
+
+      if (
+        data.sessions
+      )
+        setSessions(
+          data.sessions
+        )
+
+
+      if (
+        data.exerciseLibrary
+      )
+        setExerciseLibrary(
+          data.exerciseLibrary
+        )
+
+    }
+
   const [templates, setTemplates] = useState(
     () =>
       JSON.parse(
@@ -386,6 +518,36 @@ export default function App() {
         Workout Log
 
       </h1>
+      
+      <button
+
+          onClick={
+            exportBackup
+          }
+
+        >
+
+          Export Backup
+
+        </button>
+
+
+
+        <input
+
+          type="file"
+
+          accept=".json"
+
+          onChange={
+            importBackup
+          }
+
+        />
+
+
+
+        <hr />
       
       <button
 
