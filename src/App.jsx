@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import TemplateView from "./components/TemplateView"
 import SessionView from "./components/SessionView"
 import HistoryView from "./components/HistoryView"
+import ExerciseView from "./components/ExerciseView"
 
 const seedExercises = [
   { id: 1, name: "Bench Press" },
@@ -42,12 +43,29 @@ export default function App() {
 
   )
 
-  const [exerciseLibrary] = useState(
-    () =>
-      JSON.parse(
-        localStorage.getItem("exerciseLibrary")
-      ) || seedExercises
-  )
+  const [
+
+      exerciseLibrary,
+
+      setExerciseLibrary
+
+    ] = useState(
+
+      () =>
+
+        JSON.parse(
+
+          localStorage.getItem(
+            "exerciseLibrary"
+          )
+
+        )
+
+        ||
+
+        seedExercises
+
+    )
 
     const [
       selectedTemplateId,
@@ -87,9 +105,27 @@ export default function App() {
     useState(
       null
     )
+    
+    const [
+      showExercises,
+      setShowExercises
+    ] =
+    useState(
+      false
+    )
 
 
     useEffect(() => {
+
+        localStorage.setItem(
+
+          "exerciseLibrary",
+
+          JSON.stringify(
+            exerciseLibrary
+          )
+
+        )
 
       localStorage.setItem(
         "templates",
@@ -140,6 +176,7 @@ export default function App() {
       templates,
       history,
       sessions,
+      exerciseLibrary,
       selectedTemplateId,
       selectedSessionId
     ])
@@ -190,6 +227,32 @@ export default function App() {
     ])
 
   }
+
+    if (
+      showExercises
+    ) {
+
+      return (
+
+        <ExerciseView
+
+          exerciseLibrary={
+            exerciseLibrary
+          }
+
+          setExerciseLibrary={
+            setExerciseLibrary
+          }
+
+          setShowExercises={
+            setShowExercises
+          }
+
+        />
+
+      )
+
+    }
 
     if (
       selectedHistory
@@ -323,6 +386,24 @@ export default function App() {
         Workout Log
 
       </h1>
+      
+      <button
+
+          onClick={() =>
+
+            setShowExercises(
+              true
+            )
+
+          }
+
+        >
+
+          Manage Exercises
+
+        </button>
+
+    <hr />
 
 
 
