@@ -1232,25 +1232,6 @@ export default function SessionView({
                                       set.id
                                     ] = el
 
-
-                                    if (
-
-                                      activeSet?.setId
-
-                                      ===
-
-                                      set.id
-
-                                    ) {
-
-                                      setTimeout(
-                                        () =>
-                                          el.focus(),
-                                        0
-                                      )
-
-                                    }
-
                                   }}
 
                                   style={{
