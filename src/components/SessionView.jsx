@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 
 export default function SessionView({
   session,
@@ -40,25 +40,82 @@ export default function SessionView({
     )
     
     const inputRefs = useRef({})
+  
+    const [restMinutes, setRestMinutes] =
+        useState(2)
 
-  function updateSession(updater) {
+    const [restRemainder, setRestRemainder] =
+      useState(0)
+    
+    const [restSeconds, setRestSeconds] =
+      useState(120)
 
-    setSessions(
+    const [timerRunning, setTimerRunning] =
+      useState(false)
+      
+    useEffect(() => {
 
-      sessions.map(
-        s =>
+          if (
+            !timerRunning ||
+            restSeconds <= 0
+          ) return
 
-          s.id === session.id
+          const id =
+            setTimeout(
+              () =>
+                setRestSeconds(
+                  s => s - 1
+                ),
+              1000
+            )
 
-            ? updater(s)
+          return () =>
+            clearTimeout(id)
 
-            : s
-      )
+        }, [
+          timerRunning,
+          restSeconds
+        ])
 
-    )
+        useEffect(() => {
 
-  }
+          if (
+            restSeconds === 0 &&
+            timerRunning
+          ) {
 
+            alert(
+              "Rest complete"
+            )
+
+            setTimerRunning(
+              false
+            )
+
+          }
+
+        }, [
+          restSeconds,
+          timerRunning
+        ])
+
+      function updateSession(updater) {
+
+        setSessions(
+
+          sessions.map(
+            s =>
+
+              s.id === session.id
+
+                ? updater(s)
+
+                : s
+          )
+
+        )
+
+      }
 
 
   function updateActual(
@@ -618,7 +675,124 @@ export default function SessionView({
 
       </button>
 
+        <div style={{
+          border: "1px solid #ccc",
+          padding: "10px",
+          marginTop: "10px",
+          marginBottom: "20px"
+        }}>
 
+          <h3>Rest Timer</h3>
+          <div style={{
+              marginBottom: "10px"
+            }}>
+
+              <select
+                value={restMinutes}
+                onChange={e =>
+                  setRestMinutes(
+                    Number(
+                      e.target.value
+                    )
+                  )
+                }
+              >
+
+                {[0,1,2,3,4,5].map(
+                  n =>
+
+                    <option
+                      key={n}
+                      value={n}
+                    >
+
+                      {n}
+
+                    </option>
+                )}
+
+              </select>
+
+              <select
+                value={restRemainder}
+                onChange={e =>
+                  setRestRemainder(
+                    Number(
+                      e.target.value
+                    )
+                  )
+                }
+              >
+
+                {[0,15,30,45].map(
+                  n =>
+
+                    <option
+                      key={n}
+                      value={n}
+                    >
+
+                      {
+                        String(n)
+                          .padStart(
+                            2,
+                            "0"
+                          )
+                      }
+
+                    </option>
+                )}
+
+              </select>
+
+            </div>
+
+          <div style={{
+            fontSize: "2rem",
+            marginBottom: "10px"
+          }}>
+            {String(
+              Math.floor(restSeconds / 60)
+            ).padStart(2, "0")}
+            :
+            {String(
+              restSeconds % 60
+            ).padStart(2, "0")}
+          </div>
+
+          <button
+              onClick={() => {
+
+                setRestSeconds(
+                  restMinutes * 60 +
+                  restRemainder
+                )
+
+                setTimerRunning(true)
+
+              }}
+            >
+              Start
+            </button>
+
+          <button
+            onClick={() =>
+              setTimerRunning(false)
+            }
+          >
+            Pause
+          </button>
+
+          <button
+            onClick={() => {
+              setTimerRunning(false)
+              setRestSeconds(restMinutes * 60 + restRemainder)
+            }}
+          >
+            Reset
+          </button>
+
+        </div>
 
       <h1>
 
@@ -800,23 +974,12 @@ export default function SessionView({
             >
 
               {
-
-                group.group &&
-
-                <h2>
-
-                  ════ Set {
-
-                    group.group
-
-                  } ════
-
-                </h2>
-
-              }
-
-
-
+                  group.group && (
+                    <h2>
+                      ==== Set {group.group} ====
+                    </h2>
+                  )
+                }
               {
 
                 group.exercises.map(
