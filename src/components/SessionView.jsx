@@ -40,6 +40,8 @@ export default function SessionView({
     )
     
     const inputRefs = useRef({})
+    
+    const [expandedNotes, setExpandedNotes] = useState({})
   
     const [restMinutes, setRestMinutes] =
         useState(2)
@@ -982,66 +984,101 @@ export default function SessionView({
 
                     >
 
-                      <h3>
+                      <div style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
 
-                        {
-                          exercise.name
-                        }
+                          <div>
+
+                            <button
+                              onClick={() =>
+                                setExpandedNotes(
+                                  s => ({
+                                    ...s,
+                                    [exercise.id]:
+                                      !s[exercise.id]
+                                  })
+                                )
+                              }
+                            >
+                              📝
+                            </button>
+
+                            {" "}
+
+                            <strong>
+                              {exercise.name}
+                            </strong>
+
+                          </div>
 
 
-                        {" "}
+                          <button
+                            onClick={() =>
+                              deleteExercise(
+                                exercise.id
+                              )
+                            }
+                          >
+                            🗑
+                          </button>
 
-
-                        <button
-
-                          onClick={() =>
-
-                            deleteExercise(
-                              exercise.id
-                            )
-
-                          }
-
-                        >
-
-                          Delete
-
-                        </button>
-
-                      </h3>
+                        </div>
                       
-                        <input
+                        {
+                          (
 
-                          placeholder=
-                            "Notes"
+                            expandedNotes[
+                              exercise.id
+                            ]
 
-                          value={
-                            exercise.note
                             ||
-                            ""
-                          }
 
-                          onChange={
-                            e =>
+                            exercise.note
 
-                              updateSession(
+                          )
 
-                                s => ({
+                          &&
 
-                                  ...s,
+                          <input
 
-                                  exercises:
+                            placeholder="Notes"
 
-                                    s.exercises.map(
-                                      ex =>
+                            style={{
+                              width: "100%",
+                              height: "20px",
+                              fontSize: "0.85rem",
+                              padding: "2px"
+                            }}
 
-                                        ex.id ===
-                                        exercise.id
+                            value={
+                              exercise.note
+                              ||
+                              ""
+                            }
+
+                            onChange={
+                              e =>
+
+                                updateSession(
+
+                                  s => ({
+
+                                    ...s,
+
+                                    exercises:
+
+                                      s.exercises.map(
+                                        ex =>
+
+                                          ex.id ===
+                                          exercise.id
 
                                           ?
 
                                           {
-
                                             ...ex,
 
                                             note:
@@ -1052,21 +1089,17 @@ export default function SessionView({
                                           :
 
                                           ex
-                                    )
 
-                                })
+                                      )
 
-                              )
-                          }
+                                  })
 
-                            style={{
-                              width: "100%",
-                              height: "20px",
-                              fontSize: "0.85rem",
-                              padding: "2px"
-                            }}
+                                )
 
-                        />
+                            }
+
+                          />
+                        }
                       {
 
                         exercise.sets.map(
