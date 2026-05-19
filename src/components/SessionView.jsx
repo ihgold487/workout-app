@@ -18,16 +18,25 @@ export default function SessionView({
   const [search, setSearch] = useState("")
   
   const [selectedMuscle, setSelectedMuscle] = useState("")
-  const [activeSet,setActiveSet] = useState(
+  
+  const [activeSet, setActiveSet] =
+    useState(
+
       {
+
         exerciseId:
+
           session.exercises[0]
             ?.id,
+
         setId:
+
           session.exercises[0]
             ?.sets[0]
             ?.id
+
       }
+
     )
 
   function updateSession(updater) {
@@ -150,7 +159,7 @@ export default function SessionView({
     lastSet
   ) {
 
-    const newSet = {
+        const newSet = {
 
       id:
         Date.now(),
@@ -167,7 +176,10 @@ export default function SessionView({
         "",
 
       actualReps:
-        ""
+        "",
+
+      completed:
+        false
 
     }
 
@@ -205,7 +217,98 @@ export default function SessionView({
 
   }
 
+    function markSetComplete(exerciseId, setId) {
+      const exercise =
+        session.exercises.find(
+          ex => ex.id === exerciseId
+        )
 
+      const currentSet =
+        exercise.sets.find(
+          s => s.id === setId
+        )
+
+      const currentIndex =
+        exercise.sets.findIndex(
+          s => s.id === setId
+        )
+
+      const nextSet =
+        exercise.sets.find(
+          (s, index) =>
+            index > currentIndex &&
+            !s.completed
+        )
+
+      const undo =
+        currentSet.completed
+
+      updateSession(s => ({
+        ...s,
+        exercises: s.exercises.map(ex =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+                sets: ex.sets.map(set =>
+                  set.id === setId
+                    ? {
+                        ...set,
+                        completed: !undo,
+                        actualWeight:
+                          undo ? "" : set.actualWeight,
+                        actualReps:
+                          undo ? "" : set.actualReps
+                      }
+                    : set
+                )
+              }
+            : ex
+        )
+      }))
+
+      if (undo) {
+        setActiveSet({
+          exerciseId,
+          setId
+        })
+
+      } else if (nextSet) {
+
+        setActiveSet({
+          exerciseId,
+          setId:
+            nextSet.id
+        })
+
+      } else {
+
+        const currentExerciseIndex =
+          session.exercises.findIndex(
+            ex => ex.id === exerciseId
+          )
+
+        const nextExercise =
+          session.exercises[
+            currentExerciseIndex + 1
+          ]
+
+        if (
+          nextExercise &&
+          nextExercise.sets[0]
+        ) {
+
+          setActiveSet({
+            exerciseId:
+              nextExercise.id,
+
+            setId:
+              nextExercise.sets[0].id
+          })
+
+        }
+
+      }
+    }
 
   function deleteExercise(
     exerciseId
@@ -359,6 +462,22 @@ export default function SessionView({
             )
 
         )
+    
+    const muscleGroups =
+
+  [
+
+    ...new Set(
+
+      exerciseLibrary.map(
+        e =>
+
+          e.muscleGroup
+      )
+
+    )
+
+  ]
 
 
   const groupedExercises =
@@ -754,6 +873,46 @@ export default function SessionView({
                                     set.id
                                   }
 
+                                      onClick={() => {
+
+                                          const blocked =
+
+                                            exercise.sets
+
+                                              .slice(
+
+                                                0,
+
+                                                exercise.sets.findIndex(
+                                                  s =>
+                                                    s.id ===
+                                                    set.id
+                                                )
+
+                                              )
+
+                                              .some(
+                                                s =>
+                                                  !s.completed
+                                              )
+
+
+                                          if (!blocked) {
+
+                                            setActiveSet({
+
+                                              exerciseId:
+                                                exercise.id,
+
+                                              setId:
+                                                set.id
+
+                                            })
+
+                                          }
+
+                                        }}
+                                    
                                   style={{
 
                                     padding:
@@ -762,43 +921,41 @@ export default function SessionView({
                                     marginBottom:
                                       "4px",
 
-                                    borderLeft:
+                                borderLeft:
 
-                                      activeSet
-                                        ?.setId
+                                  activeSet
+                                    ?.setId
 
-                                      ===
+                                  ===
 
-                                      set.id
+                                  set.id
 
-                                        ?
+                                    ?
 
-                                        "4px solid #444"
+                                    "4px solid #444"
 
-                                        :
+                                    :
 
-                                        "none",
+                                    "none",
+                                    
+                                background:
 
+                                  activeSet
+                                    ?.setId
 
-                                    background:
+                                  ===
 
-                                      activeSet
-                                        ?.setId
+                                  set.id
 
-                                      ===
+                                    ?
 
-                                      set.id
+                                    "#f3f3f3"
 
-                                        ?
+                                    :
 
-                                        "#f3f3f3"
-
-                                        :
-
-                                        "transparent",
-
-
-                                    fontWeight:
+                                    "transparent",
+                                      
+                                   fontWeight:
 
                                       activeSet
                                         ?.setId
@@ -813,8 +970,7 @@ export default function SessionView({
 
                                         :
 
-                                        "normal"
-
+                                        "normal",
                                   }}
 
                                 >
@@ -911,27 +1067,42 @@ export default function SessionView({
                                   }
 
                                 />
+                                <button
+                                  disabled={
+                                    set.completed
+                                      ? exercise.sets
+                                          .slice(
+                                            exercise.sets.findIndex(
+                                              s => s.id === set.id
+                                            ) + 1
+                                          )
+                                          .some(
+                                            s => s.completed
+                                          )
+                                      : activeSet?.setId !== set.id
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    markSetComplete(
+                                      exercise.id,
+                                      set.id
+                                    )
+                                  }}
+                                >
+                                  {set.completed ? "✓" : "○"}
+                                </button>
 
-                              <button
-
-                                onClick={() =>
-
-                                  deleteSet(
-
-                                    exercise.id,
-
-                                    set.id
-
-                                  )
-
-                                }
-
-                              >
-
-                                Delete Set
-
-                              </button>
-
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    deleteSet(
+                                      exercise.id,
+                                      set.id
+                                    )
+                                  }}
+                                >
+                                  Delete
+                                </button>
                             </div>
 
                           ))
