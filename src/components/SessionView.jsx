@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 
 export default function SessionView({
   session,
@@ -38,6 +38,8 @@ export default function SessionView({
       }
 
     )
+    
+    const inputRefs = useRef({})
 
   function updateSession(updater) {
 
@@ -1058,6 +1060,35 @@ export default function SessionView({
 
 
                              <input
+
+                                  ref={el => {
+
+                                    if (!el) return
+
+                                    inputRefs.current[
+                                      set.id
+                                    ] = el
+
+
+                                    if (
+
+                                      activeSet?.setId
+
+                                      ===
+
+                                      set.id
+
+                                    ) {
+
+                                      setTimeout(
+                                        () =>
+                                          el.focus(),
+                                        0
+                                      )
+
+                                    }
+
+                                  }}
 
                                   style={{
 
