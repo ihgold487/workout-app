@@ -675,125 +675,109 @@ export default function SessionView({
 
       </button>
 
-        <div style={{
-          border: "1px solid #ccc",
-          padding: "10px",
-          marginTop: "10px",
-          marginBottom: "20px"
-        }}>
-
-          <h3>Rest Timer</h3>
           <div style={{
-              marginBottom: "10px"
+              border: "1px solid #ccc",
+              padding: "6px",
+              marginTop: "10px",
+              marginBottom: "12px"
             }}>
 
-              <select
-                value={restMinutes}
-                onChange={e =>
-                  setRestMinutes(
-                    Number(
-                      e.target.value
+              <div>
+
+                ⏱
+
+                <select
+                  value={restMinutes}
+                  onChange={e =>
+                    setRestMinutes(
+                      Number(e.target.value)
                     )
-                  )
-                }
-              >
+                  }
+                >
+                  {[0,1,2,3,4,5].map(
+                    n =>
+                      <option
+                        key={n}
+                        value={n}
+                      >
+                        {n}
+                      </option>
+                  )}
+                </select>
 
-                {[0,1,2,3,4,5].map(
-                  n =>
-
-                    <option
-                      key={n}
-                      value={n}
-                    >
-
-                      {n}
-
-                    </option>
-                )}
-
-              </select>
-
-              <select
-                value={restRemainder}
-                onChange={e =>
-                  setRestRemainder(
-                    Number(
-                      e.target.value
+                <select
+                  value={restRemainder}
+                  onChange={e =>
+                    setRestRemainder(
+                      Number(e.target.value)
                     )
+                  }
+                >
+                  {[0,15,30,45].map(
+                    n =>
+                      <option
+                        key={n}
+                        value={n}
+                      >
+                        {
+                          String(n)
+                          .padStart(2,"0")
+                        }
+                      </option>
+                  )}
+                </select>
+
+              </div>
+
+              <div>
+
+                {String(
+                  Math.floor(
+                    restSeconds / 60
                   )
-                }
-              >
+                ).padStart(2,"0")}
 
-                {[0,15,30,45].map(
-                  n =>
+                :
 
-                    <option
-                      key={n}
-                      value={n}
-                    >
+                {String(
+                  restSeconds % 60
+                ).padStart(2,"0")}
 
-                      {
-                        String(n)
-                          .padStart(
-                            2,
-                            "0"
-                          )
-                      }
+                <button
+                  onClick={() => {
+                    setRestSeconds(
+                      restMinutes * 60 +
+                      restRemainder
+                    )
+                    setTimerRunning(true)
+                  }}
+                >
+                  ▶
+                </button>
 
-                    </option>
-                )}
+                <button
+                  onClick={() =>
+                    setTimerRunning(false)
+                  }
+                >
+                  ❚❚
+                </button>
 
-              </select>
+                <button
+                  onClick={() => {
+                    setTimerRunning(false)
+                    setRestSeconds(
+                      restMinutes * 60 +
+                      restRemainder
+                    )
+                  }}
+                >
+                  ↺
+                </button>
+
+              </div>
 
             </div>
-
-          <div style={{
-            fontSize: "2rem",
-            marginBottom: "10px"
-          }}>
-            {String(
-              Math.floor(restSeconds / 60)
-            ).padStart(2, "0")}
-            :
-            {String(
-              restSeconds % 60
-            ).padStart(2, "0")}
-          </div>
-
-          <button
-              onClick={() => {
-
-                setRestSeconds(
-                  restMinutes * 60 +
-                  restRemainder
-                )
-
-                setTimerRunning(true)
-
-              }}
-            >
-              Start
-            </button>
-
-          <button
-            onClick={() =>
-              setTimerRunning(false)
-            }
-          >
-            Pause
-          </button>
-
-          <button
-            onClick={() => {
-              setTimerRunning(false)
-              setRestSeconds(restMinutes * 60 + restRemainder)
-            }}
-          >
-            Reset
-          </button>
-
-        </div>
-
       <h1>
 
         {
@@ -1026,7 +1010,7 @@ export default function SessionView({
 
                       </h3>
                       
-                        <textarea
+                        <input
 
                           placeholder=
                             "Notes"
@@ -1075,18 +1059,12 @@ export default function SessionView({
                               )
                           }
 
-                          style={{
-
-                            width:
-                              "100%",
-
-                            height:
-                              "50px",
-
-                            marginBottom:
-                              "10px"
-
-                          }}
+                            style={{
+                              width: "100%",
+                              height: "20px",
+                              fontSize: "0.85rem",
+                              padding: "2px"
+                            }}
 
                         />
                       {
@@ -1201,25 +1179,23 @@ export default function SessionView({
 
                                 >
 
-                              Target:
+                              🎯
 
-                              {" "}
+                                {
+                                  set.targetWeight
+                                }
 
-                              {
-                                set.targetWeight
-                              }
+                                ×
 
-                              ×
-
-                              {
-                                set.targetReps
-                              }
+                                {
+                                  set.targetReps
+                                }
 
 
                               {" | "}
 
 
-                              Actual:
+                              ✍️
 
 
                              <input
@@ -1237,10 +1213,10 @@ export default function SessionView({
                                   style={{
 
                                     width:
-                                      "60px",
+                                      "24px",
 
                                     marginLeft:
-                                      "6px"
+                                      "4px"
 
                                   }}
 
@@ -1275,7 +1251,7 @@ export default function SessionView({
                                   style={{
 
                                     width:
-                                      "40px",
+                                      "16px",
 
                                     marginLeft:
                                       "6px"
@@ -1337,7 +1313,7 @@ export default function SessionView({
                                     )
                                   }}
                                 >
-                                  Delete
+                                  🗑
                                 </button>
                             </div>
 
