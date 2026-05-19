@@ -233,13 +233,6 @@ export default function SessionView({
           s => s.id === setId
         )
 
-      const nextSet =
-        exercise.sets.find(
-          (s, index) =>
-            index > currentIndex &&
-            !s.completed
-        )
-
       const undo =
         currentSet.completed
 
@@ -267,12 +260,81 @@ export default function SessionView({
       }))
 
       if (undo) {
-        setActiveSet({
-          exerciseId,
-          setId
-        })
+        setActiveSet({ exerciseId, setId })
+        return
+      }
 
-      } else if (nextSet) {
+      const group =
+        exercise.supersetGroup
+
+      if (group) {
+
+          const superset =
+            session.exercises.filter(
+              ex =>
+                ex.supersetGroup === group
+            )
+
+          const currentSupersetIndex =
+            superset.findIndex(
+              ex =>
+                ex.id === exerciseId
+            )
+
+          const nextExercise =
+            superset[
+              currentSupersetIndex + 1
+            ]
+
+          if (
+            nextExercise &&
+            nextExercise.sets[currentIndex]
+          ) {
+
+            setActiveSet({
+              exerciseId:
+                nextExercise.id,
+
+              setId:
+                nextExercise
+                  .sets[currentIndex]
+                  .id
+            })
+
+            return
+          }
+
+          const firstExercise =
+            superset[0]
+
+          if (
+            firstExercise &&
+            firstExercise.sets[
+              currentIndex + 1
+            ]
+          ) {
+
+            setActiveSet({
+              exerciseId:
+                firstExercise.id,
+
+              setId:
+                firstExercise
+                  .sets[currentIndex + 1]
+                  .id
+            })
+
+            return
+          }
+
+        }
+
+      const nextSet =
+        exercise.sets[
+          currentIndex + 1
+        ]
+
+      if (nextSet) {
 
         setActiveSet({
           exerciseId,
@@ -280,36 +342,35 @@ export default function SessionView({
             nextSet.id
         })
 
-      } else {
+        return
+      }
 
-        const currentExerciseIndex =
-          session.exercises.findIndex(
-            ex => ex.id === exerciseId
-          )
+      const exerciseIndex =
+        session.exercises.findIndex(
+          ex =>
+            ex.id === exerciseId
+        )
 
-        const nextExercise =
-          session.exercises[
-            currentExerciseIndex + 1
-          ]
+      const nextExercise =
+        session.exercises[
+          exerciseIndex + 1
+        ]
 
-        if (
-          nextExercise &&
-          nextExercise.sets[0]
-        ) {
+      if (
+        nextExercise &&
+        nextExercise.sets[0]
+      ) {
 
-          setActiveSet({
-            exerciseId:
-              nextExercise.id,
+        setActiveSet({
+          exerciseId:
+            nextExercise.id,
 
-            setId:
-              nextExercise.sets[0].id
-          })
-
-        }
+          setId:
+            nextExercise.sets[0].id
+        })
 
       }
     }
-
   function deleteExercise(
     exerciseId
   ) {
