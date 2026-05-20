@@ -755,17 +755,28 @@ export default function SessionView({
       </button>
 
           <div style={{
-              border: "1px solid #ccc",
-              padding: "6px",
-              marginTop: "10px",
-              marginBottom: "12px"
-            }}>
+                  border:"1px solid #ccc",
+                  padding:"6px",
+                  marginTop:"10px",
+                  marginBottom:"12px",
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  gap:"8px",
+                  flexWrap:"nowrap"
+                }}>
 
-              <div>
-
-                ⏱
+                <span style={{
+                  fontSize:"28px"
+                }}>
+                  ⏱
+                </span>
 
                 <select
+                  style={{
+                    fontSize:"16px",
+                    padding:"4px"
+                  }}
                   value={restMinutes}
                   onChange={e =>
                     setRestMinutes(
@@ -774,17 +785,22 @@ export default function SessionView({
                   }
                 >
                   {[0,1,2,3,4,5].map(
-                    n =>
+                    n => (
                       <option
                         key={n}
                         value={n}
                       >
                         {n}
                       </option>
+                    )
                   )}
                 </select>
 
                 <select
+                  style={{
+                    fontSize:"16px",
+                    padding:"4px"
+                  }}
                   value={restRemainder}
                   onChange={e =>
                     setRestRemainder(
@@ -793,22 +809,24 @@ export default function SessionView({
                   }
                 >
                   {[0,15,30,45].map(
-                    n =>
+                    n => (
                       <option
                         key={n}
                         value={n}
                       >
                         {
                           String(n)
-                          .padStart(2,"0")
+                            .padStart(2,"0")
                         }
                       </option>
+                    )
                   )}
                 </select>
 
-              </div>
-
-              <div>
+                <strong style={{
+                  fontSize:"20px",
+                  minWidth:"55px"
+                }}>
 
                 {String(
                   Math.floor(
@@ -822,39 +840,73 @@ export default function SessionView({
                   restSeconds % 60
                 ).padStart(2,"0")}
 
+                </strong>
+
                 <button
+                  style={{
+                    fontSize:"18px",
+                    padding:"4px 8px"
+                  }}
                   onClick={() => {
+
+                    if (timerRunning) {
+
+                      setTimerRunning(
+                        false
+                      )
+
+                    } else {
+
+                      if (
+                        restSeconds <= 0
+                      ) {
+
+                        setRestSeconds(
+                          restMinutes * 60 +
+                          restRemainder
+                        )
+
+                      }
+
+                      setTimerRunning(
+                        true
+                      )
+
+                    }
+
+                  }}
+                >
+
+                {
+                  timerRunning
+                    ? "■"
+                    : "▶"
+                }
+
+                </button>
+
+                <button
+                  style={{
+                    fontSize:"18px",
+                    padding:"4px 8px"
+                  }}
+                  onClick={() => {
+
+                    setTimerRunning(
+                      false
+                    )
+
                     setRestSeconds(
                       restMinutes * 60 +
                       restRemainder
                     )
-                    setTimerRunning(true)
+
                   }}
                 >
-                  ▶
-                </button>
 
-                <button
-                  onClick={() =>
-                    setTimerRunning(false)
-                  }
-                >
-                  ❚❚
-                </button>
+                ↺
 
-                <button
-                  onClick={() => {
-                    setTimerRunning(false)
-                    setRestSeconds(
-                      restMinutes * 60 +
-                      restRemainder
-                    )
-                  }}
-                >
-                  ↺
                 </button>
-
-              </div>
 
             </div>
       <h1>
@@ -1027,7 +1079,7 @@ export default function SessionView({
                   "12px",
 
                 marginBottom:
-                  "24px",
+                  "8px",
 
                 borderRadius:
                   "8px"
@@ -1036,13 +1088,6 @@ export default function SessionView({
 
             >
 
-              {
-                  group.group && (
-                    <h2>
-                      ==== Set {group.group} ====
-                    </h2>
-                  )
-                }
               {
 
                 group.exercises.map(
@@ -1345,16 +1390,18 @@ export default function SessionView({
                           &&
 
                           <div style={{
-                              marginTop:"8px",
-                              padding:"8px",
+                              marginTop:"6px",
+                              padding:"6px",
                               border:"1px solid #ccc",
-                              background:"#f8f8f8"
+                              background:"#f8f8f8",
+                              display:"flex",
+                              flexDirection:"column",
+                              gap:"4px"
                             }}>
-
                             <div style={{
                               display:"flex",
-                              justifyContent:"space-between",
-                              marginBottom:"8px"
+                              justifyContent:"flex-start",
+                              marginBottom:"2px"
                             }}>
 
                             <button
@@ -1537,65 +1584,29 @@ export default function SessionView({
                                         }}
                                     
                                   style={{
+                                      padding:"6px",
+                                      marginBottom:"4px",
 
-                                    padding:
-                                      "6px",
+                                      borderLeft:
+                                        activeSet?.setId === set.id
+                                          ? "4px solid green"
+                                          : "none",
 
-                                    marginBottom:
-                                      "4px",
+                                      borderRight:
+                                        activeSet?.setId === set.id
+                                          ? "4px solid green"
+                                          : "none",
 
-                                borderLeft:
+                                      background:
+                                        activeSet?.setId === set.id
+                                          ? "#e8f5e9"
+                                          : "transparent",
 
-                                  activeSet
-                                    ?.setId
-
-                                  ===
-
-                                  set.id
-
-                                    ?
-
-                                    "4px solid #444"
-
-                                    :
-
-                                    "none",
-                                    
-                                background:
-
-                                  activeSet
-                                    ?.setId
-
-                                  ===
-
-                                  set.id
-
-                                    ?
-
-                                    "#f3f3f3"
-
-                                    :
-
-                                    "transparent",
-                                      
-                                   fontWeight:
-
-                                      activeSet
-                                        ?.setId
-
-                                      ===
-
-                                      set.id
-
-                                        ?
-
-                                        "bold"
-
-                                        :
-
-                                        "normal",
-                                  }}
-
+                                      fontWeight:
+                                        activeSet?.setId === set.id
+                                          ? "bold"
+                                          : "normal"
+                                    }}
                                 >
 
                               🎯
