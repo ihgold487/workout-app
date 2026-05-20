@@ -17,11 +17,19 @@ const muscleGroups = [
   "Other"
 ]
 
+import { useState } from "react"
+
 export default function ExerciseView({
   exerciseLibrary,
   setExerciseLibrary,
   setShowExercises
 }) {
+
+    const [
+      selectedMuscle,
+      setSelectedMuscle
+    ] =
+    useState("")
 
   return (
 
@@ -156,13 +164,75 @@ export default function ExerciseView({
 
       <hr />
 
+        <label>
+
+          Filter:
+
+        </label>
+
+        {" "}
+
+        <select
+          value={
+            selectedMuscle
+          }
+
+          onChange={
+            e =>
+
+              setSelectedMuscle(
+                e.target.value
+              )
+          }
+
+        >
+
+        <option value="">
+          All Muscles
+        </option>
+
+        {
+
+          muscleGroups.map(
+            muscle => (
+
+              <option
+                key={muscle}
+                value={muscle}
+              >
+
+                {muscle}
+
+              </option>
+
+            )
+          )
+
+        }
+
+        </select>
+
+        <hr />
+
 
 
         {
 
           [...exerciseLibrary]
 
-            .sort(
+              .filter(
+                ex =>
+
+                  !selectedMuscle
+
+                  ||
+
+                  ex.muscleGroup
+                  ===
+                  selectedMuscle
+              )
+
+              .sort(
 
               (a,b) =>
 

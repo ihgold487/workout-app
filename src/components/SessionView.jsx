@@ -1086,7 +1086,47 @@ export default function SessionView({
                             {" "}
 
                             <strong>
-                              {exercise.name}
+                              <span
+
+                                  onClick={() =>
+
+                                    alert(
+                                      exercise.name
+                                    )
+
+                                  }
+
+                                  style={{
+
+                                    display:
+                                      "inline-block",
+
+                                    maxWidth:
+                                      "180px",
+
+                                    overflow:
+                                      "hidden",
+
+                                    textOverflow:
+                                      "ellipsis",
+
+                                    whiteSpace:
+                                      "nowrap",
+
+                                    verticalAlign:
+                                      "middle",
+
+                                    cursor:
+                                      "pointer"
+                                  }}
+
+                                >
+
+                                  {
+                                    exercise.name
+                                  }
+
+                                </span>
                             </strong>
 
                           </div>
