@@ -482,16 +482,17 @@ export default function SessionView({
                   ?
 
                   {
+                      ...ex,
 
-                    ...ex,
+                      name:
+                        newExercise.name,
 
-                    name:
-                      newExercise.name,
+                      muscleGroup:
+                        newExercise.muscleGroup,
 
-                    muscleGroup:
-                      newExercise.muscleGroup
-
-                  }
+                      originalExerciseId:
+                        newExercise.id
+                    }
 
                   :
 
@@ -502,11 +503,33 @@ export default function SessionView({
 
       )
 
-      setReplacingExerciseId(
-        null
-      )
+      if (
 
-      setSearch("")
+              activeSet
+                ?.exerciseId
+
+              ===
+
+              oldExerciseId
+
+            ) {
+
+              setActiveSet(
+                s => ({
+                  ...s,
+
+                  exerciseId:
+                    oldExerciseId
+                })
+              )
+
+            }
+
+            setReplacingExerciseId(
+              null
+            )
+
+            setSearch("")
 
     }
 
