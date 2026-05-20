@@ -42,6 +42,8 @@ export default function SessionView({
     const inputRefs = useRef({})
     
     const [expandedNotes, setExpandedNotes] = useState({})
+
+    const [replacingExerciseId, setReplacingExerciseId] = useState(null)
   
     const [restMinutes, setRestMinutes] =
         useState(2)
@@ -455,6 +457,58 @@ export default function SessionView({
 
   }
 
+    function replaceExercise(
+      oldExerciseId,
+      newExercise
+    ) {
+
+      updateSession(
+
+        s => ({
+
+          ...s,
+
+          templateChanged:
+            true,
+
+          exercises:
+
+            s.exercises.map(
+              ex =>
+
+                ex.id ===
+                oldExerciseId
+
+                  ?
+
+                  {
+
+                    ...ex,
+
+                    name:
+                      newExercise.name,
+
+                    muscleGroup:
+                      newExercise.muscleGroup
+
+                  }
+
+                  :
+
+                  ex
+            )
+
+        })
+
+      )
+
+      setReplacingExerciseId(
+        null
+      )
+
+      setSearch("")
+
+    }
 
 
   function addExercise(
@@ -1015,16 +1069,76 @@ export default function SessionView({
                           </div>
 
 
+                          <div>
+
                           <button
+
+                            onClick={() => {
+
+                              setReplacingExerciseId(
+
+                                replacingExerciseId ===
+                                exercise.id
+
+                                  ?
+
+                                  null
+
+                                  :
+
+                                  exercise.id
+
+                              )
+
+                              const originalExercise =
+
+                                exerciseLibrary.find(
+                                  ex =>
+
+                                    ex.name ===
+                                    exercise.name
+                                )
+
+                              setSelectedMuscle(
+
+                                originalExercise
+                                  ?.muscleGroup
+
+                                  ||
+
+                                  ""
+
+                              )
+
+                              setSearch("")
+
+                            }}
+
+                          >
+
+                            🔄
+
+                          </button>
+
+                          {" "}
+
+                          <button
+
                             onClick={() =>
+
                               deleteExercise(
                                 exercise.id
                               )
+
                             }
+
                           >
+
                             🗑
+
                           </button>
 
+                        </div>
                         </div>
                       
                         {
@@ -1036,31 +1150,77 @@ export default function SessionView({
 
                             ||
 
-                            exercise.note
+                            exercise.note?.trim()
 
                           )
 
                           &&
 
-                          <input
+                            <div style={{
+                              display: "flex",
+                              gap: "4px"
+                            }}>
 
-                            placeholder="Notes"
+                            <input
 
-                            style={{
-                              width: "100%",
-                              height: "20px",
-                              fontSize: "0.85rem",
-                              padding: "2px"
-                            }}
+                                  placeholder="Notes"
 
-                            value={
-                              exercise.note
-                              ||
-                              ""
-                            }
+                                  style={{
+                                    width:"100%",
+                                    height:"20px",
+                                    fontSize:"0.85rem",
+                                    padding:"2px"
+                                  }}
 
-                            onChange={
-                              e =>
+                                  value={
+                                    exercise.note
+                                    ||
+                                    ""
+                                  }
+
+                                  onChange={
+                                    e =>
+
+                                      updateSession(
+
+                                        s => ({
+
+                                          ...s,
+
+                                          exercises:
+
+                                            s.exercises.map(
+                                              ex =>
+
+                                                ex.id ===
+                                                exercise.id
+
+                                                ?
+
+                                                {
+                                                  ...ex,
+
+                                                  note:
+                                                    e.target.value
+
+                                                }
+
+                                                :
+
+                                                ex
+                                            )
+
+                                        })
+
+                                      )
+
+                                  }
+
+                                 />
+
+                            <button
+
+                              onClick={() => {
 
                                 updateSession(
 
@@ -1081,24 +1241,187 @@ export default function SessionView({
                                           {
                                             ...ex,
 
-                                            note:
-                                              e.target.value
+                                            note: ""
 
                                           }
 
                                           :
 
                                           ex
-
                                       )
 
                                   })
 
                                 )
 
+                                setExpandedNotes(
+                                  notes => ({
+                                    ...notes,
+
+                                    [exercise.id]:
+                                      false
+                                  })
+                                )
+
+                              }}
+
+                            >
+
+                            ✕
+
+                            </button>
+
+                        </div>
+                        }
+
+                        {
+
+                          replacingExerciseId ===
+                          exercise.id
+
+                          &&
+
+                          <div style={{
+                              marginTop:"8px",
+                              padding:"8px",
+                              border:"1px solid #ccc",
+                              background:"#f8f8f8"
+                            }}>
+
+                            <div style={{
+                              display:"flex",
+                              justifyContent:"space-between",
+                              marginBottom:"8px"
+                            }}>
+
+                            <button
+                              onClick={() => {
+                                setReplacingExerciseId(
+                                  null
+                                )
+                                setSearch("")
+                              }}
+                            >
+
+                            ✕
+
+                            </button>
+
+                            </div>
+
+                            <select
+
+                              value={
+                                selectedMuscle
+                              }
+
+                              onChange={
+                                e =>
+
+                                  setSelectedMuscle(
+                                    e.target.value
+                                  )
+                              }
+
+                            >
+
+                              <option value="">
+                                All Muscles
+                              </option>
+
+                              {
+
+                                muscleGroups.map(
+                                  muscle => (
+
+                                    <option
+                                      key={muscle}
+                                      value={muscle}
+                                    >
+
+                                      {muscle}
+
+                                    </option>
+
+                                  )
+                                )
+
+                              }
+
+                            </select>
+
+                            <input
+
+                              placeholder=
+                                "Search exercise"
+
+                              value={search}
+
+                              onChange={
+                                e =>
+
+                                  setSearch(
+                                    e.target.value
+                                  )
+                              }
+
+                                />
+
+                                {
+
+                                  exerciseLibrary
+
+                                    .filter(
+                                      ex =>
+
+                                        !selectedMuscle
+
+                                        ||
+
+                                        ex.muscleGroup ===
+                                        selectedMuscle
+                                    )
+
+                                    .filter(
+                                      ex =>
+
+                                        ex.name
+                                          .toLowerCase()
+
+                                          .includes(
+                                            search
+                                              .toLowerCase()
+                                          )
+                                    )
+
+                                    .map(
+                                      ex => (
+                                  <button
+
+                                    key={ex.id}
+
+                                    onClick={() =>
+
+                                      replaceExercise(
+                                        exercise.id,
+                                        ex
+                                      )
+
+                                    }
+
+                                  >
+
+                                    {ex.name}
+
+                                  </button>
+
+                                )
+                              )
+
                             }
 
-                          />
+                          </div>
+
                         }
                       {
 
@@ -1232,7 +1555,6 @@ export default function SessionView({
 
 
                              <input
-
                                   ref={el => {
 
                                     if (!el) return
@@ -1243,15 +1565,18 @@ export default function SessionView({
 
                                   }}
 
+                                  inputMode="decimal"
+                                  pattern="[0-9.]*"
+                                  autoComplete="off"
+
                                   style={{
-
-                                    width:
-                                      "24px",
-
-                                    marginLeft:
-                                      "4px"
-
-                                  }}
+                                      width:"56px",
+                                      marginLeft:"4px",
+                                      fontSize:"16px",
+                                      border:"1px solid #ccc",
+                                      outline:"none",
+                                      boxSizing:"border-box"
+                                    }}
 
                                   value={
                                     set.actualWeight
@@ -1275,21 +1600,22 @@ export default function SessionView({
 
                                 />
 
-
                               ×
 
 
                               <input
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  autoComplete="off"
 
                                   style={{
-
-                                    width:
-                                      "16px",
-
-                                    marginLeft:
-                                      "6px"
-
-                                  }}
+                                      width:"36px",
+                                      marginLeft:"6px",
+                                      fontSize:"16px",
+                                      border:"1px solid #ccc",
+                                      outline:"none",
+                                      boxSizing:"border-box"
+                                    }}
 
                                   value={
                                     set.actualReps
@@ -1312,6 +1638,7 @@ export default function SessionView({
                                   }
 
                                 />
+
                                 <button
                                   disabled={
                                     set.completed
