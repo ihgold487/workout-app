@@ -231,12 +231,18 @@ export default function App() {
 
     )
     const [
-      selectedHistory,
-      setSelectedHistory
-    ] =
-    useState(
-      null
-    )
+          selectedHistory,
+          setSelectedHistory
+        ]
+        =
+        useState(null)
+
+        const [
+          selectedHistoryList,
+          setSelectedHistoryList
+        ]
+        =
+        useState(null)
     
     const [
       showExercises,
@@ -387,26 +393,102 @@ export default function App() {
     }
 
     if (
-      selectedHistory
-    ) {
+          selectedHistory
+        ) {
 
-      return (
+          return (
 
-        <HistoryView
+            <HistoryView
 
-          selectedHistory={
-            selectedHistory
-          }
+              selectedHistory={
+                selectedHistory
+              }
 
-          setSelectedHistory={
-            setSelectedHistory
-          }
+              setSelectedHistory={
+                setSelectedHistory
+              }
 
-        />
+            />
 
-      )
+          )
 
-    }
+        }
+
+        if (
+          selectedHistoryList
+        ) {
+
+          return (
+
+            <div style={{
+              padding:"20px"
+            }}>
+
+              <button
+                onClick={() =>
+
+                  setSelectedHistoryList(
+                    null
+                  )
+
+                }
+              >
+
+                ← Back
+
+              </button>
+
+              <h2>
+
+                History
+
+              </h2>
+
+              {
+
+                selectedHistoryList
+                  .map(
+                    workout => (
+
+                      <button
+
+                        key={
+                          workout.id
+                        }
+
+                        style={{
+                          display:"block",
+                          marginBottom:"8px"
+                        }}
+
+                        onClick={() =>
+
+                          setSelectedHistory(
+                            workout
+                          )
+
+                        }
+
+                      >
+
+                        {
+
+                          workout.completedAt
+
+                        }
+
+                      </button>
+
+                    )
+                  )
+
+              }
+
+            </div>
+
+          )
+
+        }
 
   if (selectedSession) {
 
@@ -595,33 +677,83 @@ export default function App() {
             }
           >
 
-        <div>
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"1fr 180px",
+          alignItems:"center",
+          marginBottom:"8px",
+          columnGap:"8px"
+        }}>
 
-          <button
+        <button
+              style={{
+                textAlign:"left",
+                width:"100%",
+                overflow:"hidden"
+              }}
 
-            onClick={() =>
-              setSelectedTemplateId(
-                template.id
-              )
-            }
+              onClick={() =>
+                setSelectedTemplateId(
+                  template.id
+                )
+              }
+            >
 
-          >
+            <span
+
+              onClick={e => {
+
+                e.stopPropagation()
+
+                alert(
+                  template.name
+                )
+
+              }}
+
+              style={{
+
+                display:
+                  "inline-block",
+
+                maxWidth:
+                  "120px",
+
+                overflow:
+                  "hidden",
+
+                textOverflow:
+                  "ellipsis",
+
+                whiteSpace:
+                  "nowrap",
+
+                verticalAlign:
+                  "middle"
+
+              }}
+
+            >
 
             {
               template.name
             }
 
-          </button>
+            </span>
 
+            </button>
 
-          {" "}
+        <div style={{
+          display:"flex",
+          justifyContent:"space-between",
+          alignItems:"center"
+        }}>
 
+            <button
 
-          <button
+              onClick={() => {
 
-            onClick={() => {
-
-              const copy = {
+                const copy = {
 
                 ...template,
 
@@ -650,7 +782,7 @@ export default function App() {
 
           >
 
-            Clone
+            ⧉
 
           </button>
 
@@ -677,7 +809,7 @@ export default function App() {
 
           >
 
-            Delete
+            🗑
 
           </button>
 
@@ -689,62 +821,61 @@ export default function App() {
 
             onClick={() => {
 
-              const latest =
+              const matches =
 
-                history.find(
-                  h =>
+                  history.filter(
+                    h =>
 
-                    h.templateId ===
-                    template.id
-                )
+                      h.templateId ===
+                      template.id
+                  )
 
+                if (
+                  matches.length
+                ) {
 
-              if (
-                latest
-              ) {
+                  setSelectedHistoryList(
+                    matches
+                  )
 
-                setSelectedHistory(
-                  latest
-                )
-
-              }
+                }
 
             }}
 
           >
 
-            History
+            🕘
 
           </button>
 
 
-          {" — Last: "}
+          {" "}
 
 
           {
-
-            template.lastCompleted
-
-            ??
-
-            "Never"
-
-          }
-
-        </div>
-            {" — "}
-
-
-            Last:
-
-
-            {" "}
-
-
-            {
               template.lastCompleted
-              ?? "Never"
+
+                ?
+
+                new Date(
+                  template.lastCompleted
+                ).toLocaleDateString(
+                  [],
+                  {
+                    month:"numeric",
+                    day:"numeric",
+                    year:"2-digit"
+                  }
+                )
+
+                :
+
+                "Never"
             }
+
+            </div>
+
+            </div>
 
           </div>
 
