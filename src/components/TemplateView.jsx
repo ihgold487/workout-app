@@ -17,8 +17,26 @@ export default function TemplateView({
     const [selectedMuscle, setSelectedMuscle] =
      useState("")
 
-  const [showAdd, setShowAdd] =
-    useState(false)
+    const [showAdd, setShowAdd] =
+      useState(false)
+
+    const [
+      pendingExercise,
+      setPendingExercise
+    ] =
+    useState(null)
+
+    const [
+      newExerciseValues,
+      setNewExerciseValues
+    ] =
+    useState({
+
+      weight:"",
+      reps:"",
+      sets:""
+
+    })
 
 
 
@@ -84,22 +102,16 @@ export default function TemplateView({
     exercise
   ) {
 
-    const weight =
-      prompt(
-        "Target weight"
-      )
+        const weight =
+          newExerciseValues.weight
 
-    const reps =
-      prompt(
-        "Target reps"
-      )
+        const reps =
+          newExerciseValues.reps
 
-    const numSets =
-      Number(
-        prompt(
-          "Number of sets"
-        )
-      )
+        const numSets =
+          Number(
+            newExerciseValues.sets
+          )
 
 
     const sets =
@@ -177,6 +189,14 @@ export default function TemplateView({
     )
 
     setSearch("")
+
+    setNewExerciseValues({
+
+      weight:"",
+      reps:"",
+      sets:""
+
+    })
 
   }
 
@@ -344,146 +364,388 @@ const filteredExercises =
 
 
 
-      {
+{
+showAdd && (
 
-        showAdd &&
+<div
+  style={{
+    marginTop: "20px",
+    border: "1px solid #ccc",
+    padding: "10px"
+  }}
+>
+
+  <div>
+
+    <select
+      value={selectedMuscle}
+      onChange={e =>
+        setSelectedMuscle(
+          e.target.value
+        )
+      }
+    >
+
+      <option value="">
+        All Muscles
+      </option>
+
+      {
+        muscleGroups.map(
+          muscle => (
+
+            <option
+              key={muscle}
+              value={muscle}
+            >
+
+              {muscle}
+
+            </option>
+
+          )
+        )
+      }
+
+    </select>
+
+  </div>
+
+
+  <input
+
+    placeholder=
+      "Search exercise"
+
+    value={search}
+
+    onChange={e =>
+      setSearch(
+        e.target.value
+      )
+    }
+
+  />
+
+
+  {
+    filteredExercises.map(
+      exercise => (
 
         <div
+          key={exercise.id}
+
           style={{
             marginTop:
-              "20px",
-
-            border:
-              "1px solid #ccc",
-
-            padding:
               "10px"
           }}
         >
 
-        <div>
-            <select
+          <button
+            onClick={() =>
+              setPendingExercise(
+                exercise
+              )
+            }
+          >
 
-              value={
-                selectedMuscle
-              }
+            {
+              exercise.name
+            }
 
-              onChange={
-                e =>
-
-                  setSelectedMuscle(
-                    e.target.value
-                  )
-              }
-
-            >
-
-              <option value="">
-
-                All Muscles
-
-              </option>
-
-
-              {
-
-                muscleGroups.map(
-                  muscle => (
-
-                    <option
-
-                      key={
-                        muscle
-                      }
-
-                      value={
-                        muscle
-                      }
-
-                    >
-
-                      {
-
-                        muscle
-
-                      }
-
-                    </option>
-
-                  ))
-
-              }
-
-            </select>
+          </button>
 
         </div>
 
+      )
+    )
+  }
 
 
-        <input
+  {
+    pendingExercise && (
 
-          placeholder=
-            "Search exercise"
+      <div
+        style={{
 
-          value={
-            search
-          }
+          position:
+            "fixed",
 
-          onChange={
-            e =>
+          top:
+            "50%",
 
-              setSearch(
-                e.target.value
-              )
-          }
+          left:
+            "50%",
 
-        />
+          transform:
+            "translate(-50%, -50%)",
 
+          background:
+            "white",
+
+          border:
+            "1px solid #ccc",
+
+          borderRadius:
+            "12px",
+
+          padding:
+            "20px",
+
+          width:
+            "280px",
+
+          zIndex:
+            "1000",
+
+          boxShadow:
+            "0 4px 12px rgba(0,0,0,.2)"
+
+        }}
+      >
+
+        <h3>
 
           {
-
-            filteredExercises.map(
-              exercise => (
-
-                <div
-                  key={
-                    exercise.id
-                  }
-
-                  style={{
-                    marginTop:
-                      "10px"
-                  }}
-                >
-
-                  <button
-
-                    onClick={() =>
-                      addExercise(
-                        exercise
-                      )
-                    }
-
-                  >
-
-                    {
-                      exercise.name
-                    }
-
-                  </button>
-
-                </div>
-
-              ))
-
+            pendingExercise.name
           }
+
+        </h3>
+
+
+        <div
+          style={{
+            display:"flex",
+            alignItems:"center",
+            gap:"10px",
+            marginBottom:"12px"
+          }}
+        >
+
+          <span
+            style={{
+              fontSize:"28px"
+            }}
+          >
+
+            🏋️
+
+          </span>
+
+          <input
+            type="number"
+            inputMode="decimal"
+
+            placeholder="Weight"
+
+            style={{
+              width:"70px",
+              fontSize:"20px",
+              padding:"10px"
+            }}
+
+            value={
+              newExerciseValues.weight
+            }
+
+            onChange={e =>
+              setNewExerciseValues(
+                v => ({
+                  ...v,
+                  weight:
+                    e.target.value
+                })
+              )
+            }
+          />
 
         </div>
 
-      }
+
+        <div
+              style={{
+                display:"flex",
+                alignItems:"center",
+                gap:"10px",
+                marginBottom:"12px"
+              }}
+            >
+
+              <span
+                style={{
+                  fontSize:"28px"
+                }}
+              >
+
+                🔁
+
+              </span>
+
+              <input
+                type="number"
+                inputMode="numeric"
+
+                placeholder="Reps"
+
+                style={{
+                  width:"70px",
+                  fontSize:"20px",
+                  padding:"10px"
+                }}
+
+                value={
+                  newExerciseValues.reps
+                }
+
+                onChange={e =>
+                  setNewExerciseValues(
+                    v => ({
+                      ...v,
+                      reps:
+                        e.target.value
+                    })
+                  )
+                }
+              />
+
+            </div>
 
 
+       <div
+              style={{
+                display:"flex",
+                alignItems:"center",
+                gap:"10px",
+                marginBottom:"12px"
+              }}
+            >
 
+              <span
+                style={{
+                  fontSize:"28px"
+                }}
+              >
+
+                🔢 
+
+              </span>
+
+              <input
+                type="number"
+                inputMode="numeric"
+
+                placeholder="Sets"
+
+                style={{
+                  width:"70px",
+                  fontSize:"20px",
+                  padding:"10px"
+                }}
+
+                value={
+                  newExerciseValues.sets
+                }
+
+                onChange={e =>
+                  setNewExerciseValues(
+                    v => ({
+                      ...v,
+                      sets:
+                        e.target.value
+                    })
+                  )
+                }
+              />
+
+            </div>
+
+
+        <div
+          style={{
+            marginTop:
+              "12px",
+
+            display:
+              "flex",
+
+            gap:
+              "10px",
+
+            justifyContent:
+              "flex-end"
+          }}
+        >
+
+          <button
+
+              style={{
+                fontSize:"28px",
+                padding:"8px 18px",
+                minWidth:"56px"
+              }}
+
+              onClick={() => {
+
+                setPendingExercise(
+                  null
+                )
+
+                setNewExerciseValues({
+
+                  weight:"",
+                  reps:"",
+                  sets:""
+
+                })
+
+              }}
+            >
+
+              ✕
+
+            </button>
+
+
+          <button
+
+              style={{
+                fontSize:"28px",
+                padding:"8px 18px",
+                minWidth:"56px"
+              }}
+
+              onClick={() => {
+
+                addExercise(
+                  pendingExercise
+                )
+
+                setNewExerciseValues({
+
+                  weight:"",
+                  reps:"",
+                  sets:""
+
+                })
+
+              }}
+            >
+
+              ✓
+
+            </button>
+
+        </div>
+
+      </div>
+
+    )
+  }
+
+</div>
+
+)
+}
       <hr />
 
 

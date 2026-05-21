@@ -701,16 +701,6 @@ export default function App() {
 
             <span
 
-              onClick={e => {
-
-                e.stopPropagation()
-
-                alert(
-                  template.name
-                )
-
-              }}
-
               style={{
 
                 display:
