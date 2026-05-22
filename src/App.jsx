@@ -4,6 +4,9 @@ import SessionView from "./components/SessionView"
 import HistoryView from "./components/HistoryView"
 import ExerciseView from "./components/ExerciseView"
 
+// DATABASE
+import { db } from "./db"
+
 const seedExercises = [
   { id: 1, name: "Bench Press" },
   { id: 2, name: "Squat" },
@@ -252,6 +255,20 @@ export default function App() {
       false
     )
 
+    useEffect(() => {
+
+      async function testDb() {
+
+        console.log(
+          "Templates in DB:",
+          await db.templates.count()
+        )
+
+      }
+
+      testDb()
+
+    }, [])
 
     useEffect(() => {
 
