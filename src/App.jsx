@@ -1,26 +1,9 @@
 import { useState, useEffect } from "react"
+import {seedExercises} from "./data/seedExercises"
 import TemplateView from "./components/TemplateView"
 import SessionView from "./components/SessionView"
 import HistoryView from "./components/HistoryView"
 import ExerciseView from "./components/ExerciseView"
-
-const seedExercises = [
-  {
-    id: 1,
-    name: "Bench Press",
-    builtin: true
-  },
-  {
-    id: 2,
-    name: "Squat",
-    builtin: true
-  },
-  {
-    id: 3,
-    name: "Lat Pulldown",
-    builtin: true
-  }
-]
 
 // STORAGE VERSION
 const STORAGE_VERSION =
@@ -232,29 +215,45 @@ export default function App() {
 
   )
 
-  const [
+  // EXERCISE LIBRARY
+// merge saved exercises + missing built-in exercises
 
+    const [
       exerciseLibrary,
-
       setExerciseLibrary
+    ] = useState(() => {
 
-    ] = useState(
-
-      () =>
-
+      const saved =
         JSON.parse(
+          localStorage.getItem("exerciseLibrary")
+        ) || []
 
-          localStorage.getItem(
-            "exerciseLibrary"
-          )
+      // MERGE built-ins + saved exercises
+      // uniqueness = name + equipment
 
+      const missingBuiltins =
+        seedExercises.filter(
+          seed =>
+            !saved.some(
+              ex =>
+
+                ex.name === seed.name
+
+                &&
+
+                ex.equipment?.[0]
+                ===
+                seed.equipment?.[0]
+
+            )
         )
 
-        ||
+      return [
+        ...saved,
+        ...missingBuiltins
+      ]
 
-        seedExercises
-
-    )
+    })
 
     const [
       selectedTemplateId,

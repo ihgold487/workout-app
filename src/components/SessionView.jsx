@@ -602,6 +602,12 @@ export default function SessionView({
             name:
               exercise.name,
 
+            equipment:
+              exercise.equipment,
+
+            muscles:
+              exercise.muscles,
+
             supersetGroup:
               null,
 
@@ -662,22 +668,15 @@ export default function SessionView({
 
         )
     
-    const muscleGroups =
-
-  [
-
-    ...new Set(
-
+  // UNIQUE muscle filter options
+  const muscleGroups =
+    [...new Set(
       exerciseLibrary.map(
-        e =>
-
-          e.muscleGroup
+        e => e.muscles?.[0]
       )
-
-    )
-
-  ]
-
+    )]
+    .filter(Boolean)
+    .sort()
 
   const groupedExercises =
 
@@ -1019,7 +1018,11 @@ export default function SessionView({
 
                 <button
 
-                  key={ex.id}
+                  key={
+                    `${ex.name}-${
+                      ex.equipment?.[0] || ""
+                    }-${ex.id}`
+                  }
 
                   onClick={() =>
                     addExercise(ex)
@@ -1028,7 +1031,11 @@ export default function SessionView({
                 >
 
                   {
-                    ex.name
+                    `${ex.name}${
+                      ex.equipment?.[0]
+                        ? ", " + ex.equipment[0]
+                        : ""
+                    }`
                   }
 
                 </button>
@@ -1136,7 +1143,12 @@ export default function SessionView({
                                   onClick={() =>
 
                                     alert(
-                                      exercise.name
+
+                                      `${exercise.name}${
+                                        exercise.equipment?.[0]
+                                          ? ", " + exercise.equipment[0]
+                                          : ""
+                                      }`
                                     )
 
                                   }
@@ -1168,7 +1180,11 @@ export default function SessionView({
                                 >
 
                                   {
-                                    exercise.name
+                                    `${exercise.name}${
+                                      exercise.equipment?.[0]
+                                        ? ", " + exercise.equipment[0]
+                                        : ""
+                                    }`
                                   }
 
                                 </span>
@@ -1508,7 +1524,11 @@ export default function SessionView({
                                       ex => (
                                   <button
 
-                                    key={ex.id}
+                                    key={
+                                      `${ex.name}-${
+                                        ex.equipment?.[0] || ""
+                                      }-${ex.id}`
+                                    }
 
                                     onClick={() =>
 

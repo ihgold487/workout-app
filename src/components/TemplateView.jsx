@@ -171,6 +171,12 @@ export default function TemplateView({
                   name:
                     exercise.name,
 
+                  equipment:
+                    exercise.equipment,
+
+                  muscles:
+                    exercise.muscles,
+
                   sets
 
                 }
@@ -218,7 +224,7 @@ const filteredExercises =
           ||
 
           exercise
-            .muscleGroup
+            .muscles?.[0]
 
             ===
 
@@ -256,9 +262,7 @@ const filteredExercises =
         ...new Set(
 
           exerciseLibrary.map(
-            e =>
-
-              e.muscleGroup
+            e => e.muscles?.[0]
           )
 
         )
@@ -437,7 +441,7 @@ showAdd && (
       exercise => (
 
         <div
-          key={exercise.id}
+          key={`${exercise.name}-${exercise.equipment?.[0] || ""}-${exercise.id}`}
 
           style={{
             marginTop:
@@ -454,7 +458,11 @@ showAdd && (
           >
 
             {
-              exercise.name
+              `${exercise.name}${
+                exercise.equipment?.[0]
+                  ? ", " + exercise.equipment[0]
+                  : ""
+              }`
             }
 
           </button>
@@ -509,9 +517,12 @@ showAdd && (
       >
 
         <h3>
-
           {
-            pendingExercise.name
+            `${pendingExercise.name}${
+              pendingExercise.equipment?.[0]
+                ? ", " + pendingExercise.equipment[0]
+                : ""
+            }`
           }
 
         </h3>
@@ -792,7 +803,12 @@ showAdd && (
 
                   onClick={() =>
                     alert(
-                      exercise.name
+                      `${exercise.name}${
+                        exercise.equipment?.[0]
+                          ? ", " + exercise.equipment[0]
+                          : ""
+                      }`
+
                     )
                   }
 
@@ -869,7 +885,11 @@ showAdd && (
                 </button>
 
                 {
-                  exercise.name
+                  `${exercise.name}${
+                    exercise.equipment?.[0]
+                      ? ", " + exercise.equipment[0]
+                      : ""
+                  }`
                 }
                 
                 </span>
