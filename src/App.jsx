@@ -5,16 +5,69 @@ import HistoryView from "./components/HistoryView"
 import ExerciseView from "./components/ExerciseView"
 
 const seedExercises = [
-  { id: 1, name: "Bench Press" },
-  { id: 2, name: "Squat" },
-  { id: 3, name: "Lat Pulldown" }
+  {
+    id: 1,
+    name: "Bench Press",
+    builtin: true
+  },
+  {
+    id: 2,
+    name: "Squat",
+    builtin: true
+  },
+  {
+    id: 3,
+    name: "Lat Pulldown",
+    builtin: true
+  }
 ]
 
 // STORAGE VERSION
 const STORAGE_VERSION =
   1
+  
+// STORAGE MIGRATION BASELINE
+const savedStorageVersion =
+
+  JSON.parse(
+
+    localStorage.getItem(
+      "storageVersion"
+    )
+
+  )
+
+  ||
+
+  0
 
 export default function App() {
+
+    // STORAGE MIGRATIONS
+    useEffect(() => {
+
+      if (
+        savedStorageVersion <
+        STORAGE_VERSION
+      ) {
+
+        console.log(
+          "Migrating storage:",
+          savedStorageVersion,
+          "→",
+          STORAGE_VERSION
+        )
+
+        localStorage.setItem(
+          "storageVersion",
+          JSON.stringify(
+            STORAGE_VERSION
+          )
+        )
+
+      }
+
+    }, [])
 
     function exportBackup() {
 
