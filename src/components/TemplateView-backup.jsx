@@ -38,7 +38,6 @@ export default function TemplateView({
 
     })
 
-    // ACTION BUTTONS: keep icon sizes consistent app-wide
     const iconButton = {
       fontSize: "0.9rem",
       padding: "1px 4px"
