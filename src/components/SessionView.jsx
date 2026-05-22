@@ -637,7 +637,7 @@ export default function SessionView({
               ||
 
               exercise
-                .muscleGroup
+                .muscles?.[0]
 
                 ===
 
@@ -1504,7 +1504,7 @@ export default function SessionView({
 
                                         ||
 
-                                        ex.muscleGroup ===
+                                        ex.muscles?.[0] ===
                                         selectedMuscle
                                     )
 
@@ -1541,7 +1541,13 @@ export default function SessionView({
 
                                   >
 
-                                    {ex.name}
+                                    {
+                                      `${ex.name}${
+                                        ex.equipment?.[0]
+                                          ? ", " + ex.equipment[0]
+                                          : ""
+                                      }`
+                                    }
 
                                   </button>
 
