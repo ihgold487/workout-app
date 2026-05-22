@@ -5,6 +5,9 @@ import { VitePWA } from "vite-plugin-pwa"
 // VITE CONFIG
 export default defineConfig({
 
+  base:
+    "/workout-app/",
+
   plugins: [
 
     react(),
