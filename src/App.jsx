@@ -4,14 +4,15 @@ import SessionView from "./components/SessionView"
 import HistoryView from "./components/HistoryView"
 import ExerciseView from "./components/ExerciseView"
 
-// DATABASE
-import { db } from "./db"
-
 const seedExercises = [
   { id: 1, name: "Bench Press" },
   { id: 2, name: "Squat" },
   { id: 3, name: "Lat Pulldown" }
 ]
+
+// STORAGE VERSION
+const STORAGE_VERSION =
+  1
 
 export default function App() {
 
@@ -257,27 +258,21 @@ export default function App() {
 
     useEffect(() => {
 
-      async function testDb() {
-
-        console.log(
-          "Templates in DB:",
-          await db.templates.count()
-        )
-
-      }
-
-      testDb()
-
-    }, [])
-
-    useEffect(() => {
-
         localStorage.setItem(
 
           "exerciseLibrary",
 
           JSON.stringify(
             exerciseLibrary
+          )
+        )
+
+        localStorage.setItem(
+
+          "storageVersion",
+
+          JSON.stringify(
+            STORAGE_VERSION
           )
 
         )
