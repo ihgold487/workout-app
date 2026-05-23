@@ -7,7 +7,10 @@ import App from "./App.jsx"
 
 // REGISTER SERVICE WORKER
 registerSW({
-  immediate: true
+  immediate: true,
+  onNeedRefresh() {
+    window.location.reload()
+  }
 })
 
 createRoot(

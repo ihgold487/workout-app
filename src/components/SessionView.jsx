@@ -740,9 +740,21 @@ export default function SessionView({
   return (
 
     <div style={{
-      padding:
-        "20px"
+      height:"100vh",
+      overflow:"hidden"
     }}>
+
+    <div
+      style={{
+        position:"sticky",
+        top:0,
+        background:"white",
+        zIndex:10,
+        padding:"20px",
+        borderBottom:
+          "1px solid #ddd"
+      }}
+    >
 
       <button
         onClick={() =>
@@ -910,8 +922,22 @@ export default function SessionView({
 
                 </button>
 
-            </div>
-      <h1>
+          </div>
+
+          </div>
+
+          <div
+            style={{
+              height:
+                "calc(100vh - 120px)",
+              overflowY:
+                "auto",
+              padding:
+                "20px"
+            }}
+          >
+
+          <h1>
 
         {
           session.templateName
@@ -1952,7 +1978,7 @@ export default function SessionView({
 
         </button>
 
-
+        </div>
 
         </div>
 
