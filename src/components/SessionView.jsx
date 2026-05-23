@@ -57,6 +57,9 @@ export default function SessionView({
     const [timerRunning, setTimerRunning] =
       useState(false)
       
+    const [timerPaused, setTimerPaused] = 
+      useState(false)
+      
     const [restComplete, setRestComplete] = 
       useState(false)
       
@@ -85,8 +88,10 @@ export default function SessionView({
             ])
 
             useEffect(() => {
-
-              if (!timerRunning)
+              if (
+                !timerRunning &&
+                !timerPaused
+              )
 
                 setRestSeconds(
                   restMinutes * 60 +
@@ -96,7 +101,8 @@ export default function SessionView({
             }, [
               restMinutes,
               restRemainder,
-              timerRunning
+              timerRunning,
+              timerPaused
             ])
 
             useEffect(() => {
@@ -942,12 +948,19 @@ export default function SessionView({
                   onClick={() => {
 
                     if (timerRunning) {
+                      setTimerPaused(
+                        true
+                      )
 
                       setTimerRunning(
                         false
                       )
 
                     } else {
+
+                      setTimerPaused(
+                        false
+                      )
 
                       if (
                         restSeconds <= 0
@@ -983,6 +996,9 @@ export default function SessionView({
                     padding:"4px 8px"
                   }}
                   onClick={() => {
+                    setTimerPaused(
+                      false
+                    )
 
                     setTimerRunning(
                       false
