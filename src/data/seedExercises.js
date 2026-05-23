@@ -43,3 +43,23 @@ export const seedExercises = [
   }
 
 ]
+
+export const equipmentOptions = [
+
+  "Barbell",
+  "Dumbbells",
+  "Cable",
+  "Machine",
+  "Bodyweight",
+  "EZ Curl Bar",
+  "Trap Bar",
+  "Smith Machine",
+  "Resistance Band",
+  "Kettlebell",
+  "Suspension Trainer",
+  "Medicine Ball",
+  "Landmine",
+  "Bench",
+  "Pullup Bar"
+
+]

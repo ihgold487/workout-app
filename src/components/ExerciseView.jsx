@@ -19,6 +19,8 @@ const muscleGroups = [
 
 import { useState } from "react"
 
+import { equipmentOptions } from "../data/seedExercises"
+
 export default function ExerciseView({
   exerciseLibrary,
   setExerciseLibrary,
@@ -67,11 +69,25 @@ export default function ExerciseView({
               "Exercise name"
           />
           
-          <input
-            id="equipment"
-            placeholder=
-              "Equipment"
-          />
+          <select
+              id="equipment"
+            >
+              <option value="">
+                Equipment
+              </option>
+              {
+                equipmentOptions.map(
+                  item => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  )                )
+
+              }
+            </select>
 
 
           <select
