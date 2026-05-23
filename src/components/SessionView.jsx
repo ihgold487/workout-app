@@ -80,14 +80,29 @@ export default function SessionView({
             clearTimeout(id)
 
         }, [
-          timerRunning,
-          restSeconds
-        ])
+              timerRunning,
+              restSeconds
+            ])
 
-        useEffect(() => {
+            useEffect(() => {
 
-          if (
-            restSeconds === 0 &&
+              if (!timerRunning)
+
+                setRestSeconds(
+                  restMinutes * 60 +
+                  restRemainder
+                )
+
+            }, [
+              restMinutes,
+              restRemainder,
+              timerRunning
+            ])
+
+            useEffect(() => {
+
+              if (
+                restSeconds === 0 &&
             timerRunning
           ) {
 
@@ -851,16 +866,13 @@ export default function SessionView({
                     padding:"4px"
                   }}
                   value={restMinutes}
-                  onChange={e => {
-
-                    const mins =
-                      Number(e.target.value)
-
-                    setRestMinutes(mins)
-
-                    if (!timerRunning)
-                      setRestSeconds(mins * 60 + restRemainder)
-                  }}
+                  onChange={e =>
+                    setRestMinutes(
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  }
                 >
                   {[0,1,2,3,4,5].map(
                     n => (
@@ -880,16 +892,13 @@ export default function SessionView({
                     padding:"4px"
                   }}
                   value={restRemainder}
-                  onChange={e => {
-
-                  const secs = Number(e.target.value)
-
-                  setRestRemainder(secs)
-
-                  if (!timerRunning)
-
-                    setRestSeconds(restMinutes * 60 + secs)
-                }}
+                  onChange={e =>
+                    setRestRemainder(
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  }
                 >
                   {[0,5,15,30,45].map(
                     n => (
