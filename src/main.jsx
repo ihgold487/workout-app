@@ -6,10 +6,10 @@ import "./index.css"
 import App from "./App.jsx"
 
 // REGISTER SERVICE WORKER
-registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    window.location.reload()
+const updateSW = registerSW({
+  immediate:true,
+  onNeedRefresh(){
+    updateSW(true)
   }
 })
 
