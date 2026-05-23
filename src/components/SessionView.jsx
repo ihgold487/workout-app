@@ -482,17 +482,20 @@ export default function SessionView({
                   ?
 
                   {
-                      ...ex,
+                    ...ex,
 
-                      name:
-                        newExercise.name,
+                    name:
+                      newExercise.name,
 
-                      muscleGroup:
-                        newExercise.muscleGroup,
+                    equipment:
+                      newExercise.equipment,
 
-                      originalExerciseId:
-                        newExercise.id
-                    }
+                    muscles:
+                      newExercise.muscles,
+
+                    originalExerciseId:
+                      newExercise.id
+                  }
 
                   :
 
