@@ -139,7 +139,6 @@ export default function ExerciseView({
                   )
                   .value
 
-
               const muscleGroup =
 
                 document
@@ -156,10 +155,14 @@ export default function ExerciseView({
                   .value
 
 
-              if (!name)
-                return
+                if (!name) {
 
-            
+                  alert(
+                    "Exercise name required"
+                  )
+
+                  return
+                }          
 
               setExerciseLibrary([
 
@@ -284,50 +287,80 @@ export default function ExerciseView({
                   }
                 >
 
-                  {
-                    `${exercise.name}${
-                      exercise.equipment?.[0]
-                        ? ", " + exercise.equipment[0]
-                        : ""
-                    }`
-                  }
+                 <div
+                    style={{
+                      display:
+                        "flex",
 
+                      justifyContent:
+                        "space-between",
 
-                  {" — "}
-
-
-                  {
-                    exercise.muscles?.join(
-                      ", "
-                    )
-                  }
-
-
-                  {" "}
-
-
-                  <button
-
-                    onClick={() =>
-
-                      setExerciseLibrary(
-
-                        exerciseLibrary.filter(
-                          ex =>
-
-                            ex.id !==
-                            exercise.id
-                        )
-
-                      )
-
-                    }
-
+                      alignItems:
+                        "center"
+                    }}
                   >
 
-                    Delete
+                    <div
+                      style={{
+                        fontWeight:
+                          "bold"
+                      }}
+                    >
 
-                  </button>
+                      {
+                        `${exercise.name}${
+                          exercise.equipment?.[0]
+                            ? ", " + exercise.equipment[0]
+                            : ""
+                        }`
+                      }
+
+                    </div>
+
+                    <button
+
+                      onClick={() =>
+
+                        setExerciseLibrary(
+
+                          exerciseLibrary.filter(
+                            e =>
+                              e.id
+                              !==
+                              exercise.id
+                          )
+
+                        )
+
+                      }
+
+                    >
+
+                      🗑️
+
+                    </button>
+
+                  </div>
+
+                  <div
+                    style={{
+                      textAlign:
+                        "left",
+
+                      fontSize:
+                        "0.9em"
+                    }}
+                  >
+
+                    {
+                      exercise.muscles?.join(
+                        ", "
+                      )
+                    }
+
+                  </div>
+
+                  <br />
 
                 </div>
 
