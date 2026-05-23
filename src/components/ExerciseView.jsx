@@ -62,12 +62,15 @@ export default function ExerciseView({
         <div>
 
           <input
-
             id="newExercise"
-
             placeholder=
               "Exercise name"
-
+          />
+          
+          <input
+            id="equipment"
+            placeholder=
+              "Equipment"
           />
 
 
@@ -128,25 +131,39 @@ export default function ExerciseView({
                     "muscleGroup"
                   )
                   .value
+                  
+              const equipment =
+                document
+                  .getElementById(
+                    "equipment"
+                  )
+                  .value
 
 
               if (!name)
                 return
 
+            
 
               setExerciseLibrary([
 
                 ...exerciseLibrary,
 
                 {
-
                   id:
                     Date.now(),
 
                   name,
 
-                  muscleGroup
+                  muscles:
+                    [muscleGroup],
 
+                  equipment:
+                    equipment
+                      ?
+                      [equipment]
+                      :
+                      []
                 }
 
               ])
@@ -227,7 +244,7 @@ export default function ExerciseView({
 
                   ||
 
-                  ex.muscleGroup
+                  ex.muscles?.[0]
                   ===
                   selectedMuscle
               )
@@ -252,9 +269,11 @@ export default function ExerciseView({
                 >
 
                   {
-
-                    exercise.name
-
+                    `${exercise.name}${
+                      exercise.equipment?.[0]
+                        ? ", " + exercise.equipment[0]
+                        : ""
+                    }`
                   }
 
 
@@ -262,13 +281,9 @@ export default function ExerciseView({
 
 
                   {
-
-                    exercise.muscleGroup
-
-                    ||
-
-                    "Uncategorized"
-
+                    exercise.muscles?.join(
+                      ", "
+                    )
                   }
 
 
