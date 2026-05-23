@@ -265,19 +265,9 @@ export default function App() {
       selectedTemplateId,
       setSelectedTemplateId
     ] = useState(
-
-      () =>
-
-        JSON.parse(
-          localStorage.getItem(
-            "selectedTemplateId"
-          )
-        ) || null
-
+      null
     )
-
-
-
+    
     const [
       selectedSessionId,
       setSelectedSessionId
@@ -361,16 +351,6 @@ export default function App() {
         )
       )
 
-
-      localStorage.setItem(
-        "selectedTemplateId",
-
-        JSON.stringify(
-          selectedTemplateId
-        )
-      )
-
-
       localStorage.setItem(
         "selectedSessionId",
 
@@ -385,7 +365,6 @@ export default function App() {
       history,
       sessions,
       exerciseLibrary,
-      selectedTemplateId,
       selectedSessionId
     ])
 
