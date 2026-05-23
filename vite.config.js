@@ -8,6 +8,16 @@ export default defineConfig({
   base:
     "/workout-app/",
 
+  define: {
+
+    __BUILD_TIME__:
+      JSON.stringify(
+        new Date()
+          .toLocaleString()
+      )
+
+  },
+
   plugins: [
 
     react(),

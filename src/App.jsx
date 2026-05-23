@@ -8,6 +8,12 @@ import ExerciseView from "./components/ExerciseView"
 // STORAGE VERSION
 const STORAGE_VERSION =
   1
+
+const APP_VERSION =
+  "0.15"
+
+const BUILD_TIME =
+  __BUILD_TIME__
   
 // STORAGE MIGRATION BASELINE
 const savedStorageVersion =
@@ -664,6 +670,26 @@ export default function App() {
         Workout Log
 
       </h1>
+
+      <div
+        style={{
+          fontSize:"0.8em",
+          opacity:0.7,
+          marginBottom:"20px"
+        }}
+      >
+
+        v{
+          APP_VERSION
+        }
+
+        {" • built "}
+
+        {
+          BUILD_TIME
+        }
+
+      </div>
       
       <button
 
