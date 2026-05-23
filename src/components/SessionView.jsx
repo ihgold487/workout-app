@@ -57,6 +57,9 @@ export default function SessionView({
     const [timerRunning, setTimerRunning] =
       useState(false)
       
+    const [restComplete, setRestComplete] = 
+      useState(false)
+      
     useEffect(() => {
 
           if (
@@ -88,12 +91,68 @@ export default function SessionView({
             timerRunning
           ) {
 
-            alert(
-              "Rest complete"
+            navigator.vibrate?.(
+              [200,100,200]
             )
+
+            try {
+
+              const ctx =
+                new (
+                  window.AudioContext
+                  ||
+                  window.webkitAudioContext
+                )()
+
+              const osc =
+                ctx.createOscillator()
+
+              osc.connect(
+                ctx.destination
+              )
+
+              osc.frequency.value =
+                1000
+
+              osc.start()
+
+              setTimeout(
+                () => {
+
+                  osc.stop()
+                  ctx.close()
+
+                },
+
+                200
+              )
+
+            }
+
+            catch {}
+            
+            setRestComplete(
+            true
+          )
+
+          setTimeout(
+            () =>
+              setRestComplete(
+                false
+              ),
+            2000
+          )
 
             setTimerRunning(
               false
+            )
+
+            setRestSeconds(
+
+              restMinutes * 60 +
+
+              restRemainder
+
             )
 
           }
@@ -792,11 +851,16 @@ export default function SessionView({
                     padding:"4px"
                   }}
                   value={restMinutes}
-                  onChange={e =>
-                    setRestMinutes(
+                  onChange={e => {
+
+                    const mins =
                       Number(e.target.value)
-                    )
-                  }
+
+                    setRestMinutes(mins)
+
+                    if (!timerRunning)
+                      setRestSeconds(mins * 60 + restRemainder)
+                  }}
                 >
                   {[0,1,2,3,4,5].map(
                     n => (
@@ -816,13 +880,18 @@ export default function SessionView({
                     padding:"4px"
                   }}
                   value={restRemainder}
-                  onChange={e =>
-                    setRestRemainder(
-                      Number(e.target.value)
-                    )
-                  }
+                  onChange={e => {
+
+                  const secs = Number(e.target.value)
+
+                  setRestRemainder(secs)
+
+                  if (!timerRunning)
+
+                    setRestSeconds(restMinutes * 60 + secs)
+                }}
                 >
-                  {[0,15,30,45].map(
+                  {[0,5,15,30,45].map(
                     n => (
                       <option
                         key={n}
@@ -936,6 +1005,27 @@ export default function SessionView({
                 "20px"
             }}
           >
+
+          {
+
+            restComplete &&
+
+            <div
+              style={{
+                marginBottom:"10px",
+                padding:"10px",
+                textAlign:"center",
+                fontWeight:"bold",
+                border:"1px solid",
+                borderRadius:"8px"
+              }}
+            >
+
+              REST COMPLETE
+
+            </div>
+
+          }
 
           <h1>
 
