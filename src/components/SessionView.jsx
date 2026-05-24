@@ -1754,32 +1754,38 @@ export default function SessionView({
                                         }}
                                     
                                   style={{
-                                      padding:"6px",
-                                      marginBottom:"4px",
+                                    padding:"6px",
+                                    marginBottom:"4px",
 
-                                      borderLeft:
-                                        activeSet?.setId === set.id
-                                          ? "4px solid green"
-                                          : "none",
+                                    display:"flex",
+                                    alignItems:"center",
+                                    flexWrap:"nowrap",
 
-                                      borderRight:
-                                        activeSet?.setId === set.id
-                                          ? "4px solid green"
-                                          : "none",
+                                    borderLeft:
+                                      activeSet?.setId === set.id
+                                        ? "4px solid green"
+                                        : "none",
 
-                                      background:
-                                        activeSet?.setId === set.id
-                                          ? "#e8f5e9"
-                                          : "transparent",
+                                    borderRight:
+                                      activeSet?.setId === set.id
+                                        ? "4px solid green"
+                                        : "none",
 
-                                      fontWeight:
-                                        activeSet?.setId === set.id
-                                          ? "bold"
-                                          : "normal"
-                                    }}
+                                    background:
+                                      activeSet?.setId === set.id
+                                        ? "#e8f5e9"
+                                        : "transparent",
+
+                                    fontWeight:
+                                      activeSet?.setId === set.id
+                                        ? "bold"
+                                        : "normal"
+                                  }}
                                 >
 
-                              🎯
+                             <span style={{whiteSpace:"nowrap"}}>
+
+                                🎯
 
                                 {
                                   set.targetWeight
@@ -1791,14 +1797,21 @@ export default function SessionView({
                                   set.targetReps
                                 }
 
+                                {" | "}
 
-                              {" | "}
+                              </span>
 
+                                <span
+                                  style={{
+                                    display:"inline-flex",
+                                    alignItems:"center",
+                                    whiteSpace:"nowrap"
+                                  }}
+                                >
 
-                              ✍️
+                                ✍️
 
-
-                             <input
+                                <input
                                   ref={el => {
 
                                     if (!el) return
@@ -1814,7 +1827,7 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"56px",
+                                      width:"48px",
                                       marginLeft:"4px",
                                       fontSize:"16px",
                                       border:"1px solid #ccc",
@@ -1867,23 +1880,16 @@ export default function SessionView({
 
                                   onChange={
                                     e =>
-
                                       updateActual(
-
                                         exercise.id,
-
                                         set.id,
-
                                         "actualReps",
-
                                         e.target.value
-
                                       )
                                   }
-
-                                />
-
-                                <button
+                                   />
+                                  </span>
+                                  <button
                                   disabled={
                                     set.completed
                                       ? exercise.sets

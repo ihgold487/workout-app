@@ -814,17 +814,14 @@ showAdd && (
 
                   style={{
 
-                    overflow:
-                      "hidden",
-
-                    textOverflow:
-                      "ellipsis",
-
-                    whiteSpace:
-                      "nowrap",
-
                     flex:
                       1,
+
+                    minWidth:
+                      0,
+
+                    overflowWrap:
+                      "break-word",
 
                     cursor:
                       "pointer"
