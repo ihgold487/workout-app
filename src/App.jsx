@@ -7,7 +7,7 @@ import ExerciseView from "./components/ExerciseView"
 
 // STORAGE VERSION
 const STORAGE_VERSION =
-  1
+  5
 
 const APP_VERSION =
   "0.15"
@@ -35,10 +35,7 @@ export default function App() {
     // STORAGE MIGRATIONS
     useEffect(() => {
 
-      if (
-        savedStorageVersion <
-        STORAGE_VERSION
-      ) {
+      if (savedStorageVersion < STORAGE_VERSION) {
 
         console.log(
           "Migrating storage:",
@@ -47,11 +44,12 @@ export default function App() {
           STORAGE_VERSION
         )
 
+        localStorage.removeItem("exerciseLibrary")
+        localStorage.removeItem("equipmentOptions")
+
         localStorage.setItem(
           "storageVersion",
-          JSON.stringify(
-            STORAGE_VERSION
-          )
+          JSON.stringify(STORAGE_VERSION)
         )
 
       }
@@ -240,23 +238,23 @@ export default function App() {
       const missingBuiltins =
         seedExercises.filter(
           seed =>
+
             !saved.some(
+
               ex =>
 
-                ex.name === seed.name
-
-                &&
-
-                ex.equipment?.[0]
-                ===
-                seed.equipment?.[0]
+                ex.id ===
+                seed.id
 
             )
         )
 
       return [
+
         ...saved,
+
         ...missingBuiltins
+
       ]
 
     })

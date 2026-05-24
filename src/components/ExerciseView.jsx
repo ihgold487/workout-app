@@ -19,7 +19,7 @@ const muscleGroups = [
 
 import { useState } from "react"
 
-import { equipmentOptions } from "../data/seedExercises"
+import { equipmentOptions } from "../data/seedEquipment"
 
 export default function ExerciseView({
   exerciseLibrary,
@@ -317,28 +317,19 @@ export default function ExerciseView({
 
                     </div>
 
-                    <button
-
-                      onClick={() =>
-
-                        setExerciseLibrary(
-
-                          exerciseLibrary.filter(
-                            e =>
-                              e.id
-                              !==
-                              exercise.id
+                    {!exercise.builtin && (
+                      <button
+                        onClick={() =>
+                          setExerciseLibrary(
+                            exerciseLibrary.filter(
+                              e => e.id !== exercise.id
+                            )
                           )
-
-                        )
-
-                      }
-
-                    >
-
-                      🗑️
-
-                    </button>
+                        }
+                      >
+                        🗑️
+                      </button>
+                    )}
 
                   </div>
 

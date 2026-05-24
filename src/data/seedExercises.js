@@ -1,65 +1,79 @@
-// BUILT-IN EXERCISE LIBRARY
-
 export const seedExercises = [
 
-  {
-    id: 1,
-    name: "Bench Press",
-    equipment: ["Barbell"],
-    muscles: ["Chest","Triceps","Front Delts"],
-    builtin: true
-  },
+{  id: 1, name:"Bench Press", equipment:["Barbell"], muscles:["Chest","Triceps","Front Delts"], builtin: true },
+{  id: 2, name:"Bench Press", equipment:["Dumbbells"], muscles:["Chest","Triceps","Front Delts"], builtin: true },
+{  id: 3, name:"Incline Bench Press", equipment:["Barbell"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 4, name:"Incline Bench Press", equipment:["Dumbbells"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 5, name:"15-deg Incline Bench Press", equipment:["Barbell"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 6, name:"15-deg Incline Bench Press", equipment:["Dumbbells"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 7, name:"60-deg Incline Bench Press", equipment:["Barbell"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 8, name:"60-deg Incline Bench Press", equipment:["Dumbbells"], muscles:["Chest", "Upper Chest","Triceps","Front Delts"], builtin: true },
+{  id: 9, name:"Decline Bench Press", equipment:["Barbell"], muscles:["Chest", "Lower Chest","Triceps","Front Delts"], builtin: true },
+{  id: 10, name:"Decline Bench Press", equipment:["Dumbbells"], muscles:["Chest", "Lower Chest","Triceps","Front Delts"], builtin: true },
+{  id: 11, name:"Chest Fly", equipment:["Cable"], muscles:["Chest"], builtin: true },
+{  id: 12, name:"Chest Fly", equipment:["Dumbbells"], muscles:["Chest"], builtin: true },
+{  id: 13, name:"Incline Chest Fly", equipment:["Dumbbells"], muscles:["Chest", "Upper Chest"], builtin: true },
+{  id: 14, name:"Decline Chest Fly", equipment:["Dumbbells"], muscles:["Chest", "Lower Chest"], builtin: true },
+{  id: 15, name:"Pushup", equipment:["Bodyweight"], muscles:["Chest","Triceps"], builtin: true },
 
-  {
-    id: 2,
-    name: "Bench Press",
-    equipment: ["Dumbbells"],
-    muscles: ["Chest","Triceps","Front Delts"],
-    builtin: true
-  },
+{  id: 16, name:"Overhead Press", equipment:["Barbell"], muscles:["Front Delts","Triceps"], builtin: true },
+{  id: 17, name:"Shoulder Press", equipment:["Dumbbells"], muscles:["Front Delts","Triceps"], builtin: true },
+{  id: 18, name:"Lateral Raise", equipment:["Dumbbells"], muscles:["Side Delts"], builtin: true },
+{  id: 19, name:"Lateral Raise", equipment:["Cable"], muscles:["Side Delts"], builtin: true },
+{  id: 20, name:"Rear Delt Fly", equipment:["Dumbbells"], muscles:["Rear Delts","Upper Back"], builtin: true },
+{  id: 21, name:"Rear Delt Fly", equipment:["Cable"], muscles:["Rear Delts","Upper Back"], builtin: true },
+{  id: 22, name:"Face Pull", equipment:["Cable"], muscles:["Rear Delts","Upper Back"], builtin: true },
 
-  {
-    id: 3,
-    name: "Squat",
-    equipment: ["Barbell"],
-    muscles: ["Quads","Glutes","Hamstrings"],
-    builtin: true
-  },
+{  id: 23, name:"Barbell Row", equipment:["Barbell"], muscles:["Lats","Upper Back"], builtin: true },
+{  id: 24, name:"One Arm Row", equipment:["Dumbbells"], muscles:["Lats","Upper Back"], builtin: true },
+{  id: 25, name:"One Arm High Row", equipment:["Dumbbells"], muscles:["Lats","Upper Back"], builtin: true },
+{  id: 26, name:"Seated Cable Row", equipment:["Cable"], muscles:["Upper Back", "Lats"], builtin: true },
+{  id: 27, name:"Seated Cable Row, Wide Grip", equipment:["Cable"], muscles:["Upper Back", "Lats"], builtin: true },
+{  id: 28, name:"Seated Cable Row, Wide Neutral Grip", equipment:["Cable"], muscles:["Upper Back", "Lats"], builtin: true },
+{  id: 29, name:"Seated Cable Row, Supinated Grip", equipment:["Cable"], muscles:["Upper Back", "Lats"], builtin: true },
+{  id: 30, name:"Lat Pulldown", equipment:["Cable"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 31, name:"Lat Pulldown, Wide Grip", equipment:["Cable"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 32, name:"Lat Pulldown, Wide Neutral Grip", equipment:["Cable"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 33, name:"Lat Pulldown, Narrow Grip", equipment:["Cable"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 34, name:"Lat Pulldown, Supinated Grip", equipment:["Cable"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 35, name:"Pullup", equipment:["Bodyweight"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 36, name:"Chinup", equipment:["Bodyweight"], muscles:["Lats","Biceps"], builtin: true },
+{  id: 37, name:"Shrug", equipment:["Barbell"], muscles:["Upper Traps"], builtin: true },
+{  id: 38, name:"Shrug", equipment:["Dumbbells"], muscles:["Upper Traps"], builtin: true },
 
-  {
-    id: 4,
-    name: "Lat Pulldown",
-    equipment: ["Cable"],
-    muscles: ["Lats","Biceps","Upper Back"],
-    builtin: true
-  },
+{  id: 39, name:"Curl", equipment:["Barbell"], muscles:["Biceps"], builtin: true },
+{  id: 40, name:"Curl", equipment:["Dumbbells"], muscles:["Biceps"], builtin: true },
+{  id: 41, name:"Hammer Curl", equipment:["Dumbbells"], muscles:["Biceps","Forearms"], builtin: true },
+{  id: 42, name:"Cable Curl", equipment:["Cable"], muscles:["Biceps"], builtin: true },
 
-  {
-    id: 5,
-    name: "Romanian Deadlift",
-    equipment: ["Barbell"],
-    muscles: ["Hamstrings","Glutes","Lower Back"],
-    builtin: true
-  }
+{  id: 43, name:"Skull Crusher", equipment:["EZ Curl Bar"], muscles:["Triceps"], builtin: true },
+{  id: 44, name:"Tricep Pushdown", equipment:["Cable"], muscles:["Triceps"], builtin: true },
+{  id: 45, name:"Overhead Tricep Extension", equipment:["Cable"], muscles:["Triceps"], builtin: true },
 
-]
+{  id: 46, name:"Back Squat", equipment:["Barbell"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 47, name:"Front Squat", equipment:["Barbell"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 48, name:"Goblet Squat", equipment:["Dumbbells"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 49, name:"Walking Lunge", equipment:["Dumbbells"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 50, name:"Bulgarian Split Squat", equipment:["Dumbbells"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 51, name:"Step Up", equipment:["Dumbbells"], muscles:["Glutes","Quads"], builtin: true },
 
-export const equipmentOptions = [
+{  id: 52, name:"Deadlift", equipment:["Barbell"], muscles:["Hamstrings","Glutes","Upper Back"], builtin: true },
+{  id: 53, name:"Romanian Deadlift", equipment:["Barbell"], muscles:["Hamstrings","Glutes"], builtin: true },
+{  id: 54, name:"Romanian Deadlift", equipment:["Dumbbells"], muscles:["Hamstrings","Glutes"], builtin: true },
+{  id: 55, name:"Hip Thrust", equipment:["Barbell"], muscles:["Glutes"], builtin: true },
+{  id: 56, name:"Glute Bridge", equipment:["Bodyweight"], muscles:["Glutes"], builtin: true },
 
-  "Barbell",
-  "Dumbbells",
-  "Cable",
-  "Machine",
-  "Bodyweight",
-  "EZ Curl Bar",
-  "Trap Bar",
-  "Smith Machine",
-  "Resistance Band",
-  "Kettlebell",
-  "Suspension Trainer",
-  "Medicine Ball",
-  "Landmine",
-  "Bench",
-  "Pullup Bar"
+{  id: 57, name:"Standing Calf Raise", equipment:["Bodyweight"], muscles:["Calves"], builtin: true },
+{  id: 58, name:"Standing Calf Raise", equipment:["Dumbbells"], muscles:["Calves"], builtin: true },
+
+{  id: 59, name:"Leg Curl", equipment:["Machine"], muscles:["Hamstrings"], builtin: true },
+{  id: 60, name:"Leg Extension", equipment:["Machine"], muscles:["Quads"], builtin: true },
+
+{  id: 61, name:"Crunch", equipment:["Bodyweight"], muscles:["Abs"], builtin: true },
+{  id: 62, name:"Twist Crunch", equipment:["Bodyweight"], muscles:["Abs"], builtin: true },
+{  id: 63, name:"Plank", equipment:["Bodyweight"], muscles:["Abs"], builtin: true },
+{  id: 64, name:"Crunch", equipment:["Cable"], muscles:["Abs"], builtin: true },
+{  id: 65, name:"Twist Crunch", equipment:["Cable"], muscles:["Abs"], builtin: true },
+{  id: 66, name:"Hanging Knee Raise", equipment:["Bodyweight"], muscles:["Abs","Hip Flexors"], builtin: true }
 
 ]
