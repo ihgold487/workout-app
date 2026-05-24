@@ -250,8 +250,6 @@ export default function ExerciseView({
 
         <hr />
 
-
-
         {
 
           [...exerciseLibrary]

@@ -7,7 +7,7 @@ import ExerciseView from "./components/ExerciseView"
 
 // STORAGE VERSION
 const STORAGE_VERSION =
-  5
+  8
 
 const APP_VERSION =
   "0.15"
@@ -51,6 +51,8 @@ export default function App() {
           "storageVersion",
           JSON.stringify(STORAGE_VERSION)
         )
+
+        window.location.reload()
 
       }
 
@@ -235,26 +237,14 @@ export default function App() {
       // MERGE built-ins + saved exercises
       // uniqueness = name + equipment
 
-      const missingBuiltins =
-        seedExercises.filter(
-          seed =>
-
-            !saved.some(
-
-              ex =>
-
-                ex.id ===
-                seed.id
-
-            )
+      const customExercises =
+        saved.filter(
+          ex => !ex.builtin
         )
 
       return [
-
-        ...saved,
-
-        ...missingBuiltins
-
+        ...seedExercises,
+        ...customExercises
       ]
 
     })
