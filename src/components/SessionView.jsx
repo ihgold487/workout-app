@@ -53,6 +53,9 @@ export default function SessionView({
     const [expandedNotes, setExpandedNotes] = useState({})
 
     const [replacingExerciseId, setReplacingExerciseId] = useState(null)
+    
+    const [confirmComplete, setConfirmComplete] =
+      useState(false)
   
     const [restMinutes, setRestMinutes] =
         useState(2)
@@ -1014,271 +1017,7 @@ export default function SessionView({
 
       </h1>
 
-
-
-      <button
-        onClick={() =>
-          setShowAddExercise(
-            !showAddExercise
-          )
-        }
-      >
-
-        + Add Exercise
-
-      </button>
-
-
-
-      {
-
-        showAddExercise &&
-
-        <div>
-            <select
-
-              value={
-                selectedMuscle
-              }
-
-              onChange={
-                e =>
-
-                  setSelectedMuscle(
-                    e.target.value
-                  )
-              }
-
-            >
-
-              <option value="">
-
-                All Muscles
-
-              </option>
-
-
-              {
-
-                muscleGroups.map(
-                  muscle => (
-
-                    <option
-
-                      key={
-                        muscle
-                      }
-
-                      value={
-                        muscle
-                      }
-
-                    >
-
-                      {
-
-                        muscle
-
-                      }
-
-                    </option>
-
-                  ))
-
-              }
-
-            </select>
-
-
-
-            <input
-
-              placeholder=
-                "Search exercise"
-
-              value={
-                search
-              }
-
-              onChange={
-                e =>
-
-                  setSearch(
-                    e.target.value
-                  )
-              }
-
-            />
-
-            {pendingExercise && (
-
-              <div style={{
-                position:"fixed",
-                top:"50%",
-                left:"50%",
-                transform:"translate(-50%,-50%)",
-                background:"white",
-                border:"1px solid #ccc",
-                borderRadius:"12px",
-                padding:"20px",
-                width:"280px",
-                zIndex:1000,
-                boxShadow:"0 4px 12px rgba(0,0,0,.2)"
-              }}>
-
-                <h3>
-                  {pendingExercise.name}
-                </h3>
-
-                <div style={{
-                  display:"flex",
-                  alignItems:"center",
-                  gap:"10px",
-                  marginBottom:"12px"
-                }}>
-                  🏋️
-                  <input
-                    type="number"
-                    placeholder="Weight"
-                    value={newExerciseValues.weight}
-                    onChange={e =>
-                      setNewExerciseValues({
-                        ...newExerciseValues,
-                        weight:e.target.value
-                      })
-                    }
-                  />
-                </div>
-
-                <div style={{
-                  display:"flex",
-                  alignItems:"center",
-                  gap:"10px",
-                  marginBottom:"12px"
-                }}>
-                  🔁
-                  <input
-                    type="number"
-                    placeholder="Reps"
-                    value={newExerciseValues.reps}
-                    onChange={e =>
-                      setNewExerciseValues({
-                        ...newExerciseValues,
-                        reps:e.target.value
-                      })
-                    }
-                  />
-                </div>
-
-                <div style={{
-                  display:"flex",
-                  alignItems:"center",
-                  gap:"10px",
-                  marginBottom:"16px"
-                }}>
-                  #️⃣
-                  <input
-                    type="number"
-                    placeholder="Sets"
-                    value={newExerciseValues.sets}
-                    onChange={e =>
-                      setNewExerciseValues({
-                        ...newExerciseValues,
-                        sets:e.target.value
-                      })
-                    }
-                  />
-                </div>
-
-                <div style={{
-                  display:"flex",
-                  justifyContent:"space-between"
-                }}>
-
-                  <button
-                    onClick={() => {
-                      setPendingExercise(null)
-                      setShowAddExercise(false)
-                    }}
-                  >
-                    ✖️
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      addExercise(
-                        pendingExercise,
-                        newExerciseValues.weight,
-                        newExerciseValues.reps,
-                        newExerciseValues.sets
-                      )
-                    }
-                  >
-                    ✔️
-                  </button>
-
-                </div>
-
-              </div>
-
-            )}
-
-            {
-
-                      filteredExercises.map(
-                        ex => (
-
-                          <button
-
-                            key={
-                              `${ex.name}-${
-                                ex.equipment?.[0] || ""
-                              }-${ex.id}`
-                            }
-
-                            onClick={() => {
-
-                              setPendingExercise(ex)
-
-                              setNewExerciseValues({
-
-                                weight:
-                                  ex.lastWeight || "",
-
-                                reps:
-                                  ex.lastReps || "",
-
-                                sets:""
-
-                              })
-
-                            }}
-
-                          >
-
-                            {
-                              `${ex.name}${
-                                ex.equipment?.[0]
-                                  ? ", " + ex.equipment[0]
-                                  : ""
-                              }`
-                            }
-
-                          </button>
-
-                        ))
-
-                    }
-
-                  </div>
-
-                }
-
-
-
       <hr />
-
-
 
       {
 
@@ -1441,23 +1180,15 @@ export default function SessionView({
                               )
 
                               const originalExercise =
-
                                 exerciseLibrary.find(
                                   ex =>
-
-                                    ex.name ===
-                                    exercise.name
+                                    ex.name === exercise.name
                                 )
 
                               setSelectedMuscle(
-
                                 originalExercise
-                                  ?.muscleGroup
-
-                                  ||
-
-                                  ""
-
+                                  ?.muscles?.[0]
+                                  || ""
                               )
 
                               setSearch("")
@@ -2052,137 +1783,406 @@ export default function SessionView({
 
 
         <hr />
+        
+        {
 
-        <button
+        showAddExercise &&
 
-          onClick={() => {
+        <div>
+            <select
 
-            const completedWorkout = {
+              value={
+                selectedMuscle
+              }
 
-              ...session,
+              onChange={
+                e =>
 
-              completedAt:
+                  setSelectedMuscle(
+                    e.target.value
+                  )
+              }
 
-                new Date()
-                  .toLocaleDateString()
+            >
 
-            }
+              <option value="">
 
+                All Muscles
 
-
-            setHistory([
-
-              completedWorkout,
-
-              ...history
-
-            ])
-
-
-
-            setTemplates(
-
-              templates.map(
-                t =>
-
-                  t.id ===
-                  session.templateId
-
-                    ?
-
-                    {
-
-                      ...t,
-
-                      lastCompleted:
-
-                        completedWorkout
-                          .completedAt,
+              </option>
 
 
-                      exercises:
+              {
 
-                        session.exercises
-                          .map(
-                            ex => ({
+                muscleGroups.map(
+                  muscle => (
 
-                              ...ex,
+                    <option
 
-                              sets:
+                      key={
+                        muscle
+                      }
 
-                                ex.sets
+                      value={
+                        muscle
+                      }
 
-                                  .filter(
-                                    set =>
+                    >
 
-                                      set.actualWeight
+                      {
 
-                                      &&
+                        muscle
 
-                                      set.actualReps
-                                  )
+                      }
 
-                                  .map(
-                                    set => ({
+                    </option>
 
-                                      id:
-                                        Date.now()
-                                        + Math.random(),
+                  ))
 
-                                      targetWeight:
-                                        set.actualWeight,
+              }
 
-                                      targetReps:
-                                        set.actualReps
+            </select>
 
-                                    })
 
-                                  )
 
-                            })
-                          )
+            <input
+
+              placeholder=
+                "Search exercise"
+
+              value={
+                search
+              }
+
+              onChange={
+                e =>
+
+                  setSearch(
+                    e.target.value
+                  )
+              }
+
+            />
+
+            {pendingExercise && (
+
+              <div style={{
+                position:"fixed",
+                top:"50%",
+                left:"50%",
+                transform:"translate(-50%,-50%)",
+                background:"white",
+                border:"1px solid #ccc",
+                borderRadius:"12px",
+                padding:"20px",
+                width:"280px",
+                zIndex:1000,
+                boxShadow:"0 4px 12px rgba(0,0,0,.2)"
+              }}>
+
+                <h3>
+                  {pendingExercise.name}
+                </h3>
+
+                <div style={{
+                  display:"flex",
+                  alignItems:"center",
+                  gap:"10px",
+                  marginBottom:"12px"
+                }}>
+                  🏋️
+                  <input
+                    type="number"
+                    placeholder="Weight"
+                    value={newExerciseValues.weight}
+                    onChange={e =>
+                      setNewExerciseValues({
+                        ...newExerciseValues,
+                        weight:e.target.value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={{
+                  display:"flex",
+                  alignItems:"center",
+                  gap:"10px",
+                  marginBottom:"12px"
+                }}>
+                  🔁
+                  <input
+                    type="number"
+                    placeholder="Reps"
+                    value={newExerciseValues.reps}
+                    onChange={e =>
+                      setNewExerciseValues({
+                        ...newExerciseValues,
+                        reps:e.target.value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={{
+                  display:"flex",
+                  alignItems:"center",
+                  gap:"10px",
+                  marginBottom:"16px"
+                }}>
+                  #️⃣
+                  <input
+                    type="number"
+                    placeholder="Sets"
+                    value={newExerciseValues.sets}
+                    onChange={e =>
+                      setNewExerciseValues({
+                        ...newExerciseValues,
+                        sets:e.target.value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={{
+                  display:"flex",
+                  justifyContent:"space-between"
+                }}>
+
+                  <button
+                    onClick={() => {
+                      setPendingExercise(null)
+                      setShowAddExercise(false)
+                    }}
+                  >
+                    ✖️
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      addExercise(
+                        pendingExercise,
+                        newExerciseValues.weight,
+                        newExerciseValues.reps,
+                        newExerciseValues.sets
+                      )
+                    }
+                  >
+                    ✔️
+                  </button>
+
+                </div>
+
+              </div>
+
+            )}
+
+            {
+
+                      filteredExercises.map(
+                        ex => (
+
+                          <button
+
+                            key={
+                              `${ex.name}-${
+                                ex.equipment?.[0] || ""
+                              }-${ex.id}`
+                            }
+
+                            onClick={() => {
+
+                              setPendingExercise(ex)
+
+                              setNewExerciseValues({
+
+                                weight:
+                                  ex.lastWeight || "",
+
+                                reps:
+                                  ex.lastReps || "",
+
+                                sets:""
+
+                              })
+
+                            }}
+
+                          >
+
+                            {
+                              `${ex.name}${
+                                ex.equipment?.[0]
+                                  ? ", " + ex.equipment[0]
+                                  : ""
+                              }`
+                            }
+
+                          </button>
+
+                        ))
 
                     }
 
-                    :
+                  </div>
 
-                    t
+                }
 
+
+         <>
+
+          <hr style={{
+            margin:"16px 0"
+          }} />
+
+          <div style={{
+            display:"flex",
+            justifyContent:"center",
+            gap:"12px",
+            marginBottom:"12px"
+          }}>
+
+          <button
+            style={{
+              padding:"10px 14px"
+            }}
+            
+            onClick={() =>
+              setShowAddExercise(
+                !showAddExercise
+              )
+            }
+          >
+            {showAddExercise ? "✕ Cancel" : "+ Add Exercise"}
+          </button>
+
+          <button
+            style={{
+              padding:"10px 14px"
+            }}
+
+            onClick={() =>
+              setConfirmComplete(true)
+            }
+          >
+
+            Complete Workout
+
+          </button>
+
+      </div>
+
+      {confirmComplete && (
+
+      <div style={{
+        position:"fixed",
+        top:"50%",
+        left:"50%",
+        transform:"translate(-50%,-50%)",
+        background:"white",
+        border:"1px solid #ccc",
+        borderRadius:"12px",
+        padding:"20px",
+        zIndex:1000
+      }}>
+
+        <div style={{
+          marginBottom:"16px"
+        }}>
+          Complete Workout?
+        </div>
+
+        <div style={{
+          display:"flex",
+          justifyContent:"space-between"
+        }}>
+
+          <button
+            onClick={() =>
+              setConfirmComplete(false)
+            }
+          >
+            ✖️
+          </button>
+
+          <button
+            onClick={() => {
+
+              const completedWorkout = {
+                ...session,
+                completedAt:
+                  new Date()
+                    .toLocaleDateString()
+              }
+
+              setHistory([
+                completedWorkout,
+                ...history
+              ])
+
+              setTemplates(
+                templates.map(
+                  t =>
+                    t.id === session.templateId
+                      ? {
+                          ...t,
+                          lastCompleted:
+                            completedWorkout.completedAt,
+                          exercises:
+                            session.exercises.map(
+                              ex => ({
+                                ...ex,
+                                sets:
+                                  ex.sets
+                                    .filter(
+                                      set =>
+                                        set.actualWeight &&
+                                        set.actualReps
+                                    )
+                                    .map(
+                                      set => ({
+                                        id:
+                                          Date.now()
+                                          + Math.random(),
+                                        targetWeight:
+                                          set.actualWeight,
+                                        targetReps:
+                                          set.actualReps
+                                      })
+                                    )
+                              })
+                            )
+                        }
+                      : t
+                )
               )
 
-            )
-
-
-
-            setSessions(
-
-              sessions.filter(
-                s =>
-
-                  s.id !==
-                  session.id
+              setSessions(
+                sessions.filter(
+                  s =>
+                    s.id !== session.id
+                )
               )
 
-            )
+              setSelectedSessionId(null)
 
-
-
-            setSelectedSessionId(
-              null
-            )
-
-          }}
-
-        >
-
-          Complete Workout
-
-        </button>
+            }}
+          >
+            ✔️
+          </button>
 
         </div>
 
-        </div>
+      </div>
 
-        )
+      )}
 
-}
+      </>
+
+      </div>
+
+      </div>
+
+      )
+
+      }
