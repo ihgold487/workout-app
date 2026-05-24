@@ -56,6 +56,9 @@ export default function SessionView({
     
     const [confirmComplete, setConfirmComplete] =
       useState(false)
+      
+    const [confirmExitWorkout, setConfirmExitWorkout] =
+      useState(false)
   
     const [restMinutes, setRestMinutes] =
         useState(2)
@@ -797,16 +800,84 @@ export default function SessionView({
 
       <button
         onClick={() =>
-          setSelectedSessionId(
-            null
+          setConfirmExitWorkout(
+            true
           )
         }
       >
 
-        ← Back
+        ← End Workout
 
       </button>
 
+          {confirmExitWorkout && (
+
+            <div style={{
+              position:"fixed",
+              top:"50%",
+              left:"50%",
+              transform:"translate(-50%,-50%)",
+              background:"white",
+              border:"1px solid #ccc",
+              borderRadius:"12px",
+              padding:"20px",
+              zIndex:1000,
+              width:"280px"
+            }}>
+
+              <div style={{
+                marginBottom:"12px",
+                fontWeight:"bold"
+              }}>
+
+                End workout?
+
+              </div>
+
+              <div style={{
+                marginBottom:"16px"
+              }}>
+
+                Any entered info will be lost.
+
+              </div>
+
+              <div style={{
+                display:"flex",
+                justifyContent:"space-between"
+              }}>
+
+                <button
+                  onClick={() =>
+                    setConfirmExitWorkout(
+                      false
+                    )
+                  }
+                >
+                  ✖️
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setConfirmExitWorkout(
+                      false
+                    )
+
+                    setSelectedSessionId(
+                      null
+                    )
+
+                  }}
+                >
+                  ✔️
+                </button>
+
+              </div>
+
+            </div>
+
+            )}
           <div style={{
                   border:"1px solid #ccc",
                   padding:"6px",
