@@ -2209,19 +2209,15 @@ export default function SessionView({
           <button
             onClick={() => {
 
-              const completedWorkout = {
+              let completedWorkout = {
                 ...session,
                 completedAt:
                   new Date()
                     .toLocaleDateString()
               }
 
-              setHistory([
-                completedWorkout,
-                ...history
-              ])
+              if (hasStructuralChanges()) {
 
-             if (hasStructuralChanges()) {
                 const original =
                   templates.find(
                     t =>
@@ -2269,6 +2265,15 @@ export default function SessionView({
 
                 }
 
+                completedWorkout = {
+
+                  ...completedWorkout,
+
+                  templateId:
+                    derived.id
+
+                }
+
                 setTemplates([
                   ...templates,
                   derived
@@ -2276,7 +2281,12 @@ export default function SessionView({
 
               }
 
-              else {
+              setHistory([
+                completedWorkout,
+                ...history
+              ])
+
+              if (!hasStructuralChanges()) {
 
                 setTemplates(
 
@@ -2319,6 +2329,7 @@ export default function SessionView({
                                           set.actualReps
                                       })
                                     )
+
                               })
                             )
 
