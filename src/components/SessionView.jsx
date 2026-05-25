@@ -9,7 +9,8 @@ export default function SessionView({
   templates,
   setTemplates,
   exerciseLibrary,
-  setSelectedSessionId
+  setSelectedSessionId,
+  setSelectedTemplateId
 }) {
 
   const [showAddExercise, setShowAddExercise] =
@@ -775,7 +776,32 @@ export default function SessionView({
 
     )
 
+    function hasStructuralChanges() {
 
+      const original =
+        templates.find(
+          t =>
+            t.id === session.templateId
+        )
+
+      if (!original)
+        return false
+
+      const originalNames =
+        original.exercises
+          .map(ex => ex.name)
+
+      const sessionNames =
+        session.exercises
+          .map(ex => ex.name)
+
+      return JSON.stringify(
+        originalNames
+      ) !== JSON.stringify(
+        sessionNames
+      )
+
+    }
 
   return (
 
@@ -865,6 +891,10 @@ export default function SessionView({
                     )
 
                     setSelectedSessionId(
+                      null
+                    )
+                    
+                    setSelectedTemplateId(
                       null
                     )
 
@@ -2191,18 +2221,84 @@ export default function SessionView({
                 ...history
               ])
 
-              setTemplates(
-                templates.map(
-                  t =>
-                    t.id === session.templateId
-                      ? {
+             if (hasStructuralChanges()) {
+                const original =
+                  templates.find(
+                    t =>
+                      t.id === session.templateId
+                  )
+
+                const derived = {
+
+                  ...original,
+
+                  id:Date.now(),
+
+                  name:
+                    `${original.name} (modified)`,
+
+                  parentTemplateId:
+                    original.id,
+
+                  exercises:
+                    session.exercises.map(
+                      ex => ({
+                        ...ex,
+                        sets:
+                          ex.sets
+                            .filter(
+                              set =>
+                                set.actualWeight &&
+                                set.actualReps
+                            )
+                            .map(
+                              set => ({
+                                id:
+                                  Date.now()
+                                  + Math.random(),
+
+                                targetWeight:
+                                  set.actualWeight,
+
+                                targetReps:
+                                  set.actualReps
+                              })
+                            )
+                      })
+                    )
+
+                }
+
+                setTemplates([
+                  ...templates,
+                  derived
+                ])
+
+              }
+
+              else {
+
+                setTemplates(
+
+                  templates.map(
+                    t =>
+
+                      t.id === session.templateId
+
+                        ?
+
+                        {
+
                           ...t,
+
                           lastCompleted:
                             completedWorkout.completedAt,
+
                           exercises:
                             session.exercises.map(
                               ex => ({
                                 ...ex,
+
                                 sets:
                                   ex.sets
                                     .filter(
@@ -2215,18 +2311,27 @@ export default function SessionView({
                                         id:
                                           Date.now()
                                           + Math.random(),
+
                                         targetWeight:
                                           set.actualWeight,
+
                                         targetReps:
                                           set.actualReps
                                       })
                                     )
                               })
                             )
+
                         }
-                      : t
+
+                        :
+
+                        t
+                  )
+
                 )
-              )
+
+              }
 
               setSessions(
                 sessions.filter(
@@ -2236,6 +2341,8 @@ export default function SessionView({
               )
 
               setSelectedSessionId(null)
+
+              setSelectedTemplateId(null)
 
             }}
           >

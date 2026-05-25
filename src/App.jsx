@@ -569,7 +569,11 @@ export default function App() {
                 setSelectedSessionId
               }
 
-            />
+              setSelectedTemplateId={
+                setSelectedTemplateId
+              }
+
+              />
 
     )
 
