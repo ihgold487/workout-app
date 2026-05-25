@@ -255,6 +255,13 @@ export default function App() {
     ] = useState(
       null
     )
+
+    const [
+      confirmDeleteTemplate,
+      setConfirmDeleteTemplate
+    ] = useState(
+      null
+    )
     
     const [
       selectedSessionId,
@@ -843,20 +850,11 @@ export default function App() {
 
           <button
 
-            onClick={() => {
-
-              setTemplates(
-
-                templates.filter(
-                  t =>
-
-                    t.id !==
-                    template.id
-                )
-
+            onClick={() =>
+              setConfirmDeleteTemplate(
+                template
               )
-
-            }}
+            }
 
           >
 
@@ -867,6 +865,78 @@ export default function App() {
 
           {" "}
 
+          {confirmDeleteTemplate && (
+
+            <div style={{
+              position:"fixed",
+              top:"50%",
+              left:"50%",
+              transform:"translate(-50%,-50%)",
+              background:"white",
+              border:"1px solid #ccc",
+              borderRadius:"12px",
+              padding:"20px",
+              zIndex:1000,
+              width:"280px"
+            }}>
+
+              <div style={{
+                marginBottom:"12px",
+                fontWeight:"bold"
+              }}>
+
+                Delete template?
+
+              </div>
+
+              <div style={{
+                marginBottom:"16px"
+              }}>
+
+                Workout history tied to this template may be lost.
+
+              </div>
+
+              <div style={{
+                display:"flex",
+                justifyContent:"space-between"
+              }}>
+
+                <button
+                  onClick={() =>
+                    setConfirmDeleteTemplate(
+                      null
+                    )
+                  }
+                >
+                  ✖️
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setTemplates(
+                      templates.filter(
+                        t =>
+                          t.id !==
+                          confirmDeleteTemplate.id
+                      )
+                    )
+
+                    setConfirmDeleteTemplate(
+                      null
+                    )
+
+                  }}
+                >
+                  ✔️
+                </button>
+
+              </div>
+
+            </div>
+
+            )}
 
           <button
 
