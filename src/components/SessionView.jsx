@@ -73,35 +73,73 @@ export default function SessionView({
     const [timerRunning, setTimerRunning] =
       useState(false)
       
-    const [timerPaused, setTimerPaused] = 
+    const [timerPaused, setTimerPaused] =
       useState(false)
-      
-    const [restComplete, setRestComplete] = 
+
+    const [timerStartedAt, setTimerStartedAt] =
+      useState(null)
+
+    const [restComplete, setRestComplete] =
       useState(false)
+    
+    useEffect(() => {
+
+      if (
+        "Notification" in window
+        &&
+        Notification.permission
+          === "default"
+      ) {
+
+        Notification
+          .requestPermission()
+
+      }
+
+    }, [])
+    
       
     useEffect(() => {
 
-          if (
-            !timerRunning ||
-            restSeconds <= 0
-          ) return
+      if (
+        !timerRunning ||
+        !timerStartedAt
+      ) return
 
-          const id =
-            setTimeout(
-              () =>
-                setRestSeconds(
-                  s => s - 1
-                ),
-              1000
+      const id =
+        setInterval(() => {
+
+          const elapsed =
+            Math.floor(
+              (Date.now() - timerStartedAt)
+              / 1000
             )
 
-          return () =>
-            clearTimeout(id)
+          const total =
+            restMinutes * 60 +
+            restRemainder
 
-        }, [
-              timerRunning,
-              restSeconds
-            ])
+          const remaining =
+            Math.max(
+              total - elapsed,
+              0
+            )
+
+          setRestSeconds(
+            remaining
+          )
+
+        }, 1000)
+
+      return () =>
+        clearInterval(id)
+
+    }, [
+      timerRunning,
+      timerStartedAt,
+      restMinutes,
+      restRemainder
+    ])
 
             useEffect(() => {
               if (
@@ -167,18 +205,38 @@ export default function SessionView({
             }
 
             catch {}
-            
-            setRestComplete(
-            true
-          )
 
-          setTimeout(
-            () =>
-              setRestComplete(
-                false
-              ),
-            2000
-          )
+            if (
+              "Notification" in window
+              &&
+              Notification.permission
+                === "granted"
+            ) {
+
+              new Notification(
+
+                "Rest complete",
+
+                {
+                  body:
+                    "Ready for next set"
+                }
+
+              )
+
+            }
+
+            setRestComplete(
+              true
+            )
+
+            setTimeout(
+              () =>
+                setRestComplete(
+                  false
+                ),
+              2000
+            )
 
             setTimerRunning(
               false
@@ -1033,6 +1091,19 @@ export default function SessionView({
 
                       }
 
+                      setTimerStartedAt(
+                        Date.now()
+                        -
+                        (
+                          (
+                            restMinutes * 60 +
+                            restRemainder
+                          )
+                          -
+                          restSeconds
+                        ) * 1000
+                      )
+
                       setTimerRunning(
                         true
                       )
@@ -1062,6 +1133,10 @@ export default function SessionView({
 
                     setTimerRunning(
                       false
+                    )
+
+                    setTimerStartedAt(
+                      null
                     )
 
                     setRestSeconds(
