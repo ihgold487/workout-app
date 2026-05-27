@@ -1134,8 +1134,9 @@ export default function SessionView({
 
                 <button
                   style={{
-                    fontSize:"18px",
-                    padding:"4px 8px"
+                    padding:"8px 6px",
+                    fontSize:"20px",
+                    lineHeight:"1"
                   }}
                   onClick={() => {
 
@@ -1198,7 +1199,7 @@ export default function SessionView({
                 <button
                   style={{
                     fontSize:"18px",
-                    padding:"4px 8px"
+                    padding:"8px 6px"
                   }}
                   onClick={() => {
                     setTimerPaused(
@@ -1337,6 +1338,13 @@ export default function SessionView({
                           <div>
 
                             <button
+                            
+                            style={{
+                              padding:"8px 6px",
+                              fontSize:"20px",
+                              lineHeight:"1"
+                            }}
+
                               onClick={() =>
                                 setExpandedNotes(
                                   s => ({
@@ -1347,7 +1355,7 @@ export default function SessionView({
                                 )
                               }
                             >
-                              📝
+                              ✏️
                             </button>
 
                             {" "}
@@ -1411,6 +1419,12 @@ export default function SessionView({
                           <div>
 
                           <button
+                          
+                          style={{
+                            padding:"8px 6px",
+                            fontSize:"20px",
+                            lineHeight:"1"
+                          }}
 
                             onClick={() => {
 
@@ -1454,6 +1468,12 @@ export default function SessionView({
                           {" "}
 
                           <button
+
+                            style={{
+                              padding:"8px 6px",
+                              fontSize:"20px",
+                              lineHeight:"1"
+                            }}
 
                             onClick={() =>
 
@@ -1817,23 +1837,21 @@ export default function SessionView({
                                         }}
                                     
                                   style={{
-                                    padding:"6px",
-                                    marginBottom:"4px",
-
+                                    padding:"8px 2px",
+                                    marginBottom:"6px",
                                     display:"flex",
                                     alignItems:"center",
                                     flexWrap:"nowrap",
+                                    width:"calc(100% + 12px)",
+                                    marginRight:"-12px",
+                                    boxSizing:"border-box",
+                                    gap:"4px",
 
                                     borderLeft:
                                       activeSet?.setId === set.id
                                         ? "4px solid #1976d2"
                                         : "none",
-
-                                    borderRight:
-                                      activeSet?.setId === set.id
-                                        ? "4px solid #1976d2"
-                                        : "none",
-
+    
                                     background:
                                       activeSet?.setId === set.id
                                         ? "#e3f2fd"
@@ -1890,7 +1908,7 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"58px",
+                                      width:"72px",
                                       marginLeft:"4px",
                                       fontSize:"16px",
                                       border:"1px solid #ccc",
@@ -1948,7 +1966,7 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"36px",
+                                      width:"52px",
                                       marginLeft:"6px",
                                       fontSize:"16px",
                                       border:"1px solid #ccc",
@@ -1971,8 +1989,14 @@ export default function SessionView({
                                   }
                                    />
                                   </span>
-                                  <button
-                                  disabled={
+                                 <button
+                                    style={{
+                                      padding:"8px 6px",
+                                      fontSize:"22px",
+                                      lineHeight:"1"
+                                    }}
+
+                                    disabled={
                                     set.completed
                                       ? exercise.sets
                                           .slice(
@@ -1997,7 +2021,13 @@ export default function SessionView({
                                 </button>
 
                                 <button
-                                  onClick={(e) => {
+                                    style={{
+                                      padding:"8px 6px",
+                                      fontSize:"20px",
+                                      lineHeight:"1"
+                                    }}
+
+                                    onClick={(e) => {
                                     e.stopPropagation()
                                     deleteSet(
                                       exercise.id,

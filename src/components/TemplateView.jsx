@@ -877,7 +877,7 @@ showAdd && (
 
                 >
 
-                📝
+                ✏️
 
                 </button>
 
