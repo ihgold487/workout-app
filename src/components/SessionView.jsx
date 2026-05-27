@@ -1816,7 +1816,7 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"48px",
+                                      width:"58px",
                                       marginLeft:"4px",
                                       fontSize:"16px",
                                       border:"1px solid #ccc",

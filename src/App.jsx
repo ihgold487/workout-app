@@ -262,6 +262,13 @@ export default function App() {
     ] = useState(
       null
     )
+
+    const [
+      templateSort,
+      setTemplateSort
+    ] = useState(
+      "recent"
+    )
     
     const [
       selectedSessionId,
@@ -715,11 +722,9 @@ export default function App() {
 
         </button>
 
-    <hr />
+       <hr />
 
-
-
-      <button
+          <button
         onClick={
           addTemplate
         }
@@ -729,15 +734,87 @@ export default function App() {
 
       </button>
 
-
-
       <hr />
 
+      <div style={{
+        margin:"12px 0",
+        textAlign:"center"
+      }}>
+
+      <select
+
+        value={
+          templateSort
+        }
+
+        onChange={
+          e =>
+            setTemplateSort(
+              e.target.value
+            )
+        }
+
+      >
+
+      <option value="recent">
+
+        Recent
+
+      </option>
+
+      <option value="alpha">
+
+        A → Z
+
+      </option>
+
+      </select>
+
+      </div>
 
       {
 
-        templates.map(
-          template => (
+        [...templates]
+
+          .sort(
+
+            (a,b) => {
+
+              if (
+                templateSort
+                === "alpha"
+              ) {
+
+                return a.name
+                  .localeCompare(
+                    b.name
+                  )
+
+              }
+
+              return (
+
+                new Date(
+                  b.lastCompleted
+                  || 0
+                )
+
+                -
+
+                new Date(
+                  a.lastCompleted
+                  || 0
+                )
+
+              )
+
+            }
+
+          )
+
+          .map(
+
+            template => (
 
           <div
             key={
