@@ -200,13 +200,13 @@ export default function TemplateView({
 
     setSearch("")
 
-    setNewExerciseValues({
+    setPendingExercise(null)
 
-      weight:"",
-      reps:"",
-      sets:""
-
-    })
+      setNewExerciseValues({
+        weight:"",
+        reps:"",
+        sets:""
+      })
 
   }
 
