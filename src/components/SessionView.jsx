@@ -51,6 +51,62 @@ export default function SessionView({
     
     const inputRefs = useRef({})
     
+    useEffect(() => {
+
+      if (!activeSet) return
+
+      const exercise =
+        session.exercises.find(
+          ex =>
+            ex.id === activeSet.exerciseId
+        )
+
+      const setIndex =
+        exercise?.sets.findIndex(
+          s =>
+            s.id === activeSet.setId
+        )
+
+      const currentSet =
+        exercise?.sets[setIndex]
+
+      const previousSet =
+        setIndex > 0
+          ? exercise.sets[
+              setIndex - 1
+            ]
+          : null
+
+      if (
+        currentSet &&
+        !currentSet.actualWeight
+      ) {
+
+        updateActual(
+
+          exercise.id,
+
+          currentSet.id,
+
+          "actualWeight",
+
+          previousSet
+            ?.actualWeight
+
+            ||
+
+          currentSet.targetWeight
+
+            ||
+
+          ""
+
+        )
+
+      }
+
+    }, [activeSet])
+    
     const [expandedNotes, setExpandedNotes] = useState({})
 
     const [replacingExerciseId, setReplacingExerciseId] = useState(null)
@@ -390,10 +446,10 @@ export default function SessionView({
         || "",
 
       actualWeight:
-        "",
-
-      actualReps:
-        "",
+        lastSet?.actualWeight
+        || lastSet?.targetWeight
+        || "",
+      actualReps:"",
 
       completed:
         false
@@ -1830,18 +1886,37 @@ export default function SessionView({
 
                                   onChange={
                                     e =>
-
                                       updateActual(
-
                                         exercise.id,
-
                                         set.id,
-
                                         "actualWeight",
-
                                         e.target.value
-
                                       )
+                                  }
+
+                                  onKeyDown={
+                                    e => {
+
+                                      if (
+                                        e.key === "Enter"
+                                      ) {
+
+                                        e.preventDefault()
+
+                                        const row =
+                                          e.target.closest(
+                                            "[data-set-row]"
+                                          )
+
+                                        row
+                                          ?.querySelector(
+                                            '[data-reps-input]'
+                                          )
+                                          ?.focus()
+
+                                      }
+
+                                    }
                                   }
 
                                 />
@@ -1930,9 +2005,15 @@ export default function SessionView({
 
                             exercise.id,
 
-                            exercise.sets[
-                              exercise.sets.length - 1
-                            ]
+                            [...exercise.sets]
+
+                              .reverse()
+
+                              .find(
+                                s =>
+                                  s.actualWeight
+                                  || s.targetWeight
+                              )
 
                           )
 
