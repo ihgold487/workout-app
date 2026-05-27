@@ -951,18 +951,26 @@ export default function SessionView({
       </button>
 
           {confirmExitWorkout && (
-
             <div style={{
-              position:"fixed",
-              top:"50%",
-              left:"50%",
-              transform:"translate(-50%,-50%)",
-              background:"white",
-              border:"1px solid #ccc",
+            position:"fixed",
+            top:0,left:0,
+            width:"100%",
+            height:"100%",
+            background:"rgba(0,0,0,.45)",
+            display:"flex",
+            justifyContent:"center",
+            alignItems:"center",
+            zIndex:9999
+            }}>
+            
+            <div style={{
+              background:"#ffe5e5",
+              color:"#400",
+              border:"2px solid #c66",
               borderRadius:"12px",
               padding:"20px",
-              zIndex:1000,
-              width:"280px"
+              minWidth:"260px",
+              boxShadow:"0 0 20px rgba(0,0,0,.35)"
             }}>
 
               <div style={{
@@ -970,7 +978,16 @@ export default function SessionView({
                 fontWeight:"bold"
               }}>
 
-                End workout?
+                <div style={{
+                  display:"flex",
+                  alignItems:"center",
+                  gap:"8px",
+                  fontWeight:"bold",
+                  marginBottom:"12px"
+                  }}>
+                  <span style={{fontSize:"22px"}}>⚠️</span>
+                  <span>End Workout?</span>
+                </div>
 
               </div>
 
@@ -1017,6 +1034,7 @@ export default function SessionView({
                   ✔️
                 </button>
 
+              </div>
               </div>
 
             </div>
@@ -1808,17 +1826,17 @@ export default function SessionView({
 
                                     borderLeft:
                                       activeSet?.setId === set.id
-                                        ? "4px solid green"
+                                        ? "4px solid #1976d2"
                                         : "none",
 
                                     borderRight:
                                       activeSet?.setId === set.id
-                                        ? "4px solid green"
+                                        ? "4px solid #1976d2"
                                         : "none",
 
                                     background:
                                       activeSet?.setId === set.id
-                                        ? "#e8f5e9"
+                                        ? "#e3f2fd"
                                         : "transparent",
 
                                     fontWeight:
@@ -2330,23 +2348,46 @@ export default function SessionView({
       </div>
 
       {confirmComplete && (
-
-      <div style={{
+        <div style={{
         position:"fixed",
-        top:"50%",
-        left:"50%",
-        transform:"translate(-50%,-50%)",
-        background:"white",
-        border:"1px solid #ccc",
-        borderRadius:"12px",
-        padding:"20px",
-        zIndex:1000
-      }}>
+        top:0,left:0,
+        width:"100%",
+        height:"100%",
+        background:"rgba(0,0,0,.45)",
+        display:"flex",
+        justifyContent:"center",
+        alignItems:"center",
+        zIndex:9999
+        }}>
+        
+        <div style={{
+          background:"#e6f7ea",
+          color:"#153a1f",
+          border:"2px solid #5aa469",
+          borderRadius:"12px",
+          padding:"20px",
+          minWidth:"260px",
+          boxShadow:"0 0 20px rgba(0,0,0,.35)"
+        }}>
 
         <div style={{
           marginBottom:"16px"
         }}>
-          Complete Workout?
+        <div style={{
+          display:"flex",
+          flexDirection:"column",
+          alignItems:"center",
+          fontWeight:"bold",
+          marginBottom:"16px"
+          }}>
+          <div style={{
+            fontSize:"56px",
+            marginBottom:"24px"
+            }}>
+            💪
+          </div>
+          <div>Complete Workout?</div>
+          </div>
         </div>
 
         <div style={{
@@ -2518,6 +2559,7 @@ export default function SessionView({
 
         </div>
 
+      </div>
       </div>
 
       )}
