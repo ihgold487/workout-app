@@ -7,10 +7,10 @@ import ExerciseView from "./components/ExerciseView"
 
 // STORAGE VERSION
 const STORAGE_VERSION =
-  8
+  9
 
 const APP_VERSION =
-  "0.15"
+  "0.16"
 
 const BUILD_TIME =
   __BUILD_TIME__

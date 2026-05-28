@@ -1387,25 +1387,22 @@ export default function SessionView({
                                   }
 
                                   style={{
-
                                     display:
                                       "inline-block",
-
                                     maxWidth:
                                       "180px",
-
-                                    overflow:
-                                      "hidden",
-
-                                    textOverflow:
-                                      "ellipsis",
-
                                     whiteSpace:
-                                      "nowrap",
-
+                                      "normal",
+                                    wordBreak:
+                                      "break-word",
+                                    lineHeight:
+                                      "1.05",
+                                    fontSize:
+                                      "14px",
+                                    textAlign:
+                                      "left",
                                     verticalAlign:
                                       "middle",
-
                                     cursor:
                                       "pointer"
                                   }}

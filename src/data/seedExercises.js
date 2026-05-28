@@ -74,6 +74,14 @@ export const seedExercises = [
 {  id: 63, name:"Plank", equipment:["Bodyweight"], muscles:["Abs"], builtin: true },
 {  id: 64, name:"Crunch", equipment:["Cable"], muscles:["Abs"], builtin: true },
 {  id: 65, name:"Twist Crunch", equipment:["Cable"], muscles:["Abs"], builtin: true },
-{  id: 66, name:"Hanging Knee Raise", equipment:["Bodyweight"], muscles:["Abs","Hip Flexors"], builtin: true }
+{  id: 66, name:"Hanging Knee Raise", equipment:["Bodyweight"], muscles:["Abs","Hip Flexors"], builtin: true },
+{  id: 67, name:"Decline Crunch", equipment:["Bench"], muscles:["Abs"], builtin: true },
+{  id: 68, name:"Decline Twist Crunch", equipment:["Bench"], muscles:["Abs"], builtin: true },
+
+{  id: 69, name:"Twist Curl", equipment:["Dumbbells"], muscles:["Biceps","Forearms"], builtin: true },
+{  id: 70, name:"Curl", equipment:["EZ Curl Bar"], muscles:["Biceps","Forearms"], builtin: true },
+
+{  id: 71, name:"Reverse Lunge", equipment:["Dumbbells"], muscles:["Quads","Glutes"], builtin: true },
+{  id: 72, name:"Forward Lunge", equipment:["Dumbbells"], muscles:["Quads","Glutes"], builtin: true }
 
 ]
