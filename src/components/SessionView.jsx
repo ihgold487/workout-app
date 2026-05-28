@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react"
+import { equipmentOptions } from "../data/seedEquipment"
 
 export default function SessionView({
   session,
@@ -9,6 +10,7 @@ export default function SessionView({
   templates,
   setTemplates,
   exerciseLibrary,
+  setExerciseLibrary,
   setSelectedSessionId,
   setSelectedTemplateId
 }) {
@@ -113,6 +115,14 @@ export default function SessionView({
     
     const [confirmComplete, setConfirmComplete] =
       useState(false)
+      
+    const [showCreateExercise,setShowCreateExercise] = useState(false)
+    
+    const [newExercise,setNewExercise] = useState({
+      name:"",
+      muscle:"",
+      equipment:""
+    })
       
     const [confirmExitWorkout, setConfirmExitWorkout] =
       useState(false)
@@ -2361,6 +2371,24 @@ export default function SessionView({
             {showAddExercise ? "✕ Cancel" : "+ Add Exercise"}
           </button>
 
+          {showAddExercise && (
+
+            <button
+              style={{
+                padding:"10px 14px"
+            }}
+
+              onClick={() =>
+                setShowCreateExercise(true)
+              }
+            >
+
+              + Create Exercise
+
+            </button>
+
+          )}
+
           <button
             style={{
               padding:"10px 14px"
@@ -2376,6 +2404,191 @@ export default function SessionView({
           </button>
 
       </div>
+      
+      {showCreateExercise && (
+
+        <div style={{
+          position:"fixed",
+          top:0,
+          left:0,
+          width:"100%",
+          height:"100%",
+          background:"rgba(0,0,0,.45)",
+          display:"flex",
+          justifyContent:"center",
+          alignItems:"center",
+          zIndex:9999
+        }}>
+
+          <div style={{
+            background:"white",
+            borderRadius:"12px",
+            padding:"20px",
+            minWidth:"280px",
+            boxShadow:"0 0 20px rgba(0,0,0,.35)"
+          }}>
+
+           <h3>
+              Create Exercise
+            </h3>
+
+            <input
+              placeholder="Exercise name"
+              value={newExercise.name}
+              onChange={e =>
+                setNewExercise({
+                  ...newExercise,
+                  name:e.target.value
+                })
+              }
+
+              style={{
+                width:"100%",
+                marginTop:"12px",
+                padding:"8px",
+                boxSizing:"border-box"
+              }}
+            />
+
+            <select
+
+              value={newExercise.muscle}
+
+              onChange={e =>
+                setNewExercise({
+                  ...newExercise,
+                  muscle:e.target.value
+                })
+              }
+
+              style={{
+                width:"100%",
+                marginTop:"12px",
+                padding:"8px"
+              }}
+            >
+
+              <option value="">
+                Select muscle
+              </option>
+
+              {muscleGroups.map(m => (
+
+                <option
+                  key={m}
+                  value={m}
+                >
+                  {m}
+                </option>
+
+              ))}
+
+            </select>
+
+            <select
+              value={newExercise.equipment}
+
+              onChange={e =>
+                setNewExercise({
+                  ...newExercise,
+                  equipment:e.target.value
+                })
+              }
+
+              style={{
+                width:"100%",
+                marginTop:"12px",
+                padding:"8px"
+              }}
+            >
+
+              <option value="">
+                Select equipment
+              </option>
+
+              {equipmentOptions.map(equipment => (
+
+                <option
+                  key={equipment}
+                  value={equipment}
+                >
+                  {equipment}
+                </option>
+
+              ))}
+
+            </select>
+
+            <div style={{
+              marginTop:"20px",
+              display:"flex",
+              gap:"8px",
+              justifyContent:"flex-end"
+            }}>
+
+              <button
+                onClick={() =>
+                  setShowCreateExercise(false)
+                }
+              >
+                Cancel
+              </button>
+
+              <button
+
+                onClick={() => {
+
+                  if (!newExercise.name.trim())
+                    return
+
+                  const createdExercise = {
+
+                    id:Date.now(),
+
+                    name:newExercise.name.trim(),
+
+                    muscles:[
+                      newExercise.muscle
+                    ],
+
+                    equipment:[
+                      newExercise.equipment
+                    ]
+
+                  }
+
+                  setExerciseLibrary([
+                    ...exerciseLibrary,
+                    createdExercise
+                  ])
+
+                  setPendingExercise(
+                    createdExercise
+                  )
+
+                  setShowCreateExercise(false)
+
+                  setNewExercise({
+                    name:"",
+                    muscle:"",
+                    equipment:""
+                  })
+
+                }}
+
+              >
+
+                Save
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
       {confirmComplete && (
         <div style={{

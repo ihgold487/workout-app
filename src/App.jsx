@@ -575,8 +575,12 @@ export default function App() {
                 setTemplates
               }
 
-              exerciseLibrary={
+             exerciseLibrary={
                 exerciseLibrary
+              }
+
+              setExerciseLibrary={
+                setExerciseLibrary
               }
 
               setSelectedSessionId={
