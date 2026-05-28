@@ -4,6 +4,7 @@ import TemplateView from "./components/TemplateView"
 import SessionView from "./components/SessionView"
 import HistoryView from "./components/HistoryView"
 import ExerciseView from "./components/ExerciseView"
+import WorkoutCalendar from "./components/WorkoutCalendar"
 
 // STORAGE VERSION
 const STORAGE_VERSION =
@@ -654,31 +655,32 @@ export default function App() {
       }}
     >
 
-      <h1>
+     <h1>
+      Workout Log
+    </h1>
 
-        Workout Log
+    <div style={{
+      fontSize:"12px",
+      color:"#666",
+      marginBottom:"12px"
+    }}>
 
-      </h1>
+      v{
+        APP_VERSION
+      }
 
-      <div
-        style={{
-          fontSize:"0.8em",
-          opacity:0.7,
-          marginBottom:"20px"
-        }}
-      >
+      {" • built "}
 
-        v{
-          APP_VERSION
-        }
+      {
+        BUILD_TIME
+      }
 
-        {" • built "}
+    </div>
 
-        {
-          BUILD_TIME
-        }
+    <WorkoutCalendar
+      history={history}
+    />
 
-      </div>
       
       <button
 
