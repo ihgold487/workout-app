@@ -1,6 +1,12 @@
+import { useState } from "react"
+
 export default function WorkoutCalendar({
   history
 }) {
+
+  const [expanded,setExpanded] = useState(false)
+  
+  const [displayedMonth,setDisplayedMonth] = useState(new Date())
 
   const today = new Date()
 
@@ -47,12 +53,19 @@ export default function WorkoutCalendar({
 
   return (
 
-    <div style={{
-      marginBottom:"20px",
-      padding:"12px",
-      border:"1px solid #ccc",
-      borderRadius:"12px"
-    }}>
+    <div
+      onClick={() =>
+        setExpanded(!expanded)
+      }
+
+      style={{
+        marginBottom:"20px",
+        padding:"12px",
+        border:"1px solid #ccc",
+        borderRadius:"12px",
+        cursor:"pointer"
+      }}
+    >
 
       <div style={{
         display:"grid",
@@ -115,10 +128,208 @@ export default function WorkoutCalendar({
 
         ))}
 
+     </div>
+
+      {expanded && (() => {
+
+        const firstDay = new Date(
+          displayedMonth.getFullYear(),
+          displayedMonth.getMonth(),
+          1
+        )
+
+        const lastDay = new Date(
+          displayedMonth.getFullYear(),
+          displayedMonth.getMonth() + 1,
+          0
+        )
+
+          const startOffset =
+            (firstDay.getDay() + 6) % 7
+
+          const totalDays =
+            lastDay.getDate()
+
+          const cells = []
+
+          for (let i = 0; i < startOffset; i++)
+            cells.push(null)
+
+          for (let day = 1; day <= totalDays; day++)
+
+            cells.push(
+
+              new Date(
+                displayedMonth.getFullYear(),
+                displayedMonth.getMonth(),
+                day
+              )
+
+            )
+
+          return (
+
+            <div style={{
+              marginTop:"16px",
+              paddingTop:"12px",
+              borderTop:"1px solid #ddd"
+            }}>
+
+              <div style={{
+                  display:"flex",
+                  justifyContent:"space-between",
+                  alignItems:"center",
+                  marginBottom:"12px"
+                }}>
+
+                  <button
+                    onClick={e => {
+
+                      e.stopPropagation()
+
+                      setDisplayedMonth(
+
+                        new Date(
+                          displayedMonth.getFullYear(),
+                          displayedMonth.getMonth() - 1,
+                          1
+                        )
+
+                      )
+
+                    }}
+                  >
+
+                    ←
+
+                  </button>
+
+                  <div style={{
+                    fontWeight:"bold"
+                  }}>
+
+                    {
+                      displayedMonth.toLocaleDateString(
+                        undefined,
+                        {
+                          month:"long",
+                          year:"numeric"
+                        }
+                      )
+                    }
+
+                  </div>
+
+                  <button
+                    onClick={e => {
+
+                      e.stopPropagation()
+
+                      setDisplayedMonth(
+
+                        new Date(
+                          displayedMonth.getFullYear(),
+                          displayedMonth.getMonth() + 1,
+                          1
+                        )
+
+                      )
+
+                    }}
+                  >
+
+                    →
+
+                  </button>
+
+                </div>
+
+              <div style={{
+                display:"grid",
+                gridTemplateColumns:"repeat(7,1fr)",
+                gap:"6px",
+                textAlign:"center"
+              }}>
+
+                {
+
+                  ["Mo","Tu","We","Th","Fr","Sa","Su"]
+
+                    .map(day => (
+
+                      <div
+                        key={day}
+                        style={{
+                          fontSize:"12px",
+                          color:"#666",
+                          fontWeight:"bold"
+                        }}
+                      >
+
+                        {day}
+
+                      </div>
+
+                    ))
+                }
+
+                {
+
+                  cells.map((date,i) => (
+
+                    <div
+                      key={i}
+
+                      style={{
+
+                        height:"32px",
+
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+
+                        borderRadius:"999px",
+
+                        color:
+
+                          date && hasWorkout(date)
+                            ? "green"
+                            : "black",
+
+                        border:
+
+                          date &&
+                          date.toDateString()
+                          === today.toDateString()
+
+                            ? "2px solid #1976d2"
+
+                            : "2px solid transparent"
+
+                      }}
+                    >
+
+                      {
+                        date
+                          ? date.getDate()
+                          : ""
+                      }
+
+                    </div>
+
+                  ))
+                }
+
+              </div>
+
+            </div>
+
+          )
+
+        })()}
+
       </div>
 
-    </div>
-
-  )
+      )
 
 }
