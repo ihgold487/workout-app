@@ -75,6 +75,9 @@ export default function TemplateView({
                     "",
 
                   actualReps:
+                    "",
+
+                  rir:
                     ""
 
                 })
@@ -137,7 +140,10 @@ export default function TemplateView({
             weight,
 
           targetReps:
-            reps
+            reps,
+
+          rir:
+            ""
 
         })
 
@@ -1187,7 +1193,7 @@ showAdd && (
                 exercise.sets.map(
                   set => (
 
-                    <div
+                   <div
                       key={
                         set.id
                       }
@@ -1205,6 +1211,16 @@ showAdd && (
 
                       {
                         set.targetReps
+                      }
+
+                      {
+
+                        set.rir
+
+                          ? ` @ ${set.rir}`
+
+                          : ""
+
                       }
 
                     </div>

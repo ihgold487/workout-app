@@ -442,29 +442,28 @@ export default function SessionView({
     lastSet
   ) {
 
-        const newSet = {
+      const newSet = {
 
-      id:
-        Date.now(),
+        id: Date.now(),
 
-      targetWeight:
-        lastSet?.targetWeight
-        || "",
+        targetWeight:
+          lastSet?.targetWeight
+          || "",
 
-      targetReps:
-        lastSet?.targetReps
-        || "",
+        targetReps:
+          lastSet?.targetReps
+          || "",
 
-      actualWeight:
-        lastSet?.actualWeight
-        || lastSet?.targetWeight
-        || "",
-      actualReps:"",
+        actualWeight:
+          lastSet?.actualWeight
+          || lastSet?.targetWeight
+          || "",
 
-      completed:
-        false
+                actualReps:"",
+                rir:"",
+                completed:false
 
-    }
+      }
 
 
     updateSession(
@@ -1871,7 +1870,7 @@ export default function SessionView({
                                   }}
                                 >
 
-                             <span style={{whiteSpace:"nowrap"}}>
+                            <span style={{whiteSpace:"nowrap"}}>
 
                                 🎯
 
@@ -1883,6 +1882,12 @@ export default function SessionView({
 
                                 {
                                   set.targetReps
+                                }
+
+                                {
+                                  set.rir
+                                    ? ` @${set.rir}`
+                                    : ""
                                 }
 
                                 {" | "}
@@ -1966,36 +1971,69 @@ export default function SessionView({
 
                               ×
 
+                                <input
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    autoComplete="off"
 
-                              <input
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  autoComplete="off"
+                                    style={{
+                                        width:"52px",
+                                        marginLeft:"6px",
+                                        fontSize:"16px",
+                                        border:"1px solid #ccc",
+                                        outline:"none",
+                                        boxSizing:"border-box"
+                                      }}
 
-                                  style={{
-                                      width:"52px",
-                                      marginLeft:"6px",
-                                      fontSize:"16px",
-                                      border:"1px solid #ccc",
-                                      outline:"none",
-                                      boxSizing:"border-box"
-                                    }}
+                                    value={
+                                      set.actualReps
+                                    }
 
-                                  value={
-                                    set.actualReps
-                                  }
+                                    onChange={
+                                      e =>
+                                        updateActual(
+                                          exercise.id,
+                                          set.id,
+                                          "actualReps",
+                                          e.target.value
+                                        )
+                                    }
+                                     />
 
-                                  onChange={
-                                    e =>
-                                      updateActual(
-                                        exercise.id,
-                                        set.id,
-                                        "actualReps",
-                                        e.target.value
-                                      )
-                                  }
-                                   />
-                                  </span>
+                                    <input
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      autoComplete="off"
+
+                                      placeholder="RIR"
+
+                                      style={{
+                                        width:"36px",
+                                        marginLeft:"6px",
+                                        fontSize:"16px",
+                                        border:"1px solid #ccc",
+                                        outline:"none",
+                                        textAlign:"center",
+                                        boxSizing:"border-box"
+                                      }}
+
+                                      value={
+                                        set.rir || ""
+                                      }
+
+                                      onChange={
+                                        e =>
+                                          updateActual(
+                                            exercise.id,
+                                            set.id,
+                                            "rir",
+                                            e.target.value
+                                          )
+                                      }
+                                    />
+
+                                    </span>
+                                  
                                  <button
                                     style={{
                                       padding:"8px 6px",
@@ -2697,7 +2735,10 @@ export default function SessionView({
                                   set.actualWeight,
 
                                 targetReps:
-                                  set.actualReps
+                                  set.actualReps,
+
+                                rir:
+                                  set.rir || ""
                               })
                             )
                       })
@@ -2769,7 +2810,10 @@ export default function SessionView({
                                           set.actualWeight,
 
                                         targetReps:
-                                          set.actualReps
+                                          set.actualReps,
+
+                                        rir:
+                                          set.rir || ""
                                       })
                                     )
 
