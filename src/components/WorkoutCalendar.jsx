@@ -398,8 +398,7 @@ export default function WorkoutCalendar({
                             >
 
                               • {
-                                workout.name
-                                || "Workout"
+                                workout.templateName
                               }
 
                             </div>
