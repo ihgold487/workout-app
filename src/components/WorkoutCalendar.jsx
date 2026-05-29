@@ -7,6 +7,7 @@ export default function WorkoutCalendar({
   const [expanded,setExpanded] = useState(false)
   
   const [displayedMonth,setDisplayedMonth] = useState(new Date())
+  const [selectedDate,setSelectedDate] = useState(null)
 
   const today = new Date()
 
@@ -37,19 +38,33 @@ export default function WorkoutCalendar({
 
   const dateString = date.toLocaleDateString()
 
-    return history.some(session => {
+      return history.some(session => {
 
-      if (!session.completedAt)
-        return false
+          if (!session.completedAt)
+            return false
 
-      return (
-        session.completedAt
-          .split("T")[0] === dateString
-      )
+          return (
+            session.completedAt ===
+            dateString
+          )
 
-    })
+        })
 
-  }
+      }
+
+      const workoutsForDate = date => {
+
+        const dateString =
+          date.toLocaleDateString()
+
+        return history.filter(
+          session =>
+
+            session.completedAt ===
+            dateString
+        )
+
+      }
 
   return (
 
@@ -280,6 +295,27 @@ export default function WorkoutCalendar({
                     <div
                       key={i}
 
+                      onClick={e => {
+                        e.stopPropagation()
+
+                        if (
+                          date &&
+                          hasWorkout(date)
+                        )
+
+                          setSelectedDate(
+
+                            selectedDate &&
+                            selectedDate.toDateString()
+                              === date.toDateString()
+
+                              ? null
+
+                              : date
+
+                          )
+                      }}
+
                       style={{
 
                         height:"32px",
@@ -320,13 +356,68 @@ export default function WorkoutCalendar({
                   ))
                 }
 
-              </div>
+                   </div>
 
-            </div>
+                  {
 
-          )
+                    selectedDate && (
 
-        })()}
+                      <div style={{
+                        marginTop:"16px",
+                        paddingTop:"12px",
+                        borderTop:"1px solid #ddd"
+                      }}>
+
+                        <div style={{
+                          fontWeight:"bold",
+                          marginBottom:"8px"
+                        }}>
+
+                          Workouts on {
+
+                            selectedDate.toLocaleDateString()
+
+                          }
+
+                        </div>
+
+                        {
+
+                          workoutsForDate(
+                            selectedDate
+                          )
+
+                          .map(workout => (
+
+                            <div
+                              key={workout.id}
+
+                              style={{
+                                marginBottom:"6px"
+                              }}
+                            >
+
+                              • {
+                                workout.name
+                                || "Workout"
+                              }
+
+                            </div>
+
+                          ))
+                        }
+
+                      </div>
+
+                    )
+
+                  }
+
+                </div>
+
+              )
+
+            })()}
 
       </div>
 
