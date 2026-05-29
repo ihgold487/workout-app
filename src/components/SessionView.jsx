@@ -1885,8 +1885,8 @@ export default function SessionView({
                                 }
 
                                 {
-                                  set.rir
-                                    ? ` @${set.rir}`
+                                  set.targetRir
+                                    ? ` @${set.targetRir}`
                                     : ""
                                 }
 
@@ -2018,7 +2018,7 @@ export default function SessionView({
                                       }}
 
                                       value={
-                                        set.rir || ""
+                                        set.actualRir || ""
                                       }
 
                                       onChange={
@@ -2026,7 +2026,7 @@ export default function SessionView({
                                           updateActual(
                                             exercise.id,
                                             set.id,
-                                            "rir",
+                                            "actualRir",
                                             e.target.value
                                           )
                                       }
@@ -2737,8 +2737,8 @@ export default function SessionView({
                                 targetReps:
                                   set.actualReps,
 
-                                rir:
-                                  set.rir || ""
+                                targetRir:
+                                  set.actualRir || ""
                               })
                             )
                       })
@@ -2812,8 +2812,8 @@ export default function SessionView({
                                         targetReps:
                                           set.actualReps,
 
-                                        rir:
-                                          set.rir || ""
+                                        targetRir:
+                                          set.actualRir || ""
                                       })
                                     )
 

@@ -77,7 +77,10 @@ export default function TemplateView({
                   actualReps:
                     "",
 
-                  rir:
+                  targetRir:
+                   set.targetRir || set.rir || "",
+
+                  actualRir:
                     ""
 
                 })
@@ -142,7 +145,7 @@ export default function TemplateView({
           targetReps:
             reps,
 
-          rir:
+          targetRir:
             ""
 
         })
@@ -1215,9 +1218,9 @@ showAdd && (
 
                       {
 
-                        set.rir
+                          (set.targetRir || set.rir)
 
-                          ? ` @ ${set.rir}`
+                            ? ` @ ${set.targetRir || set.rir}`
 
                           : ""
 
