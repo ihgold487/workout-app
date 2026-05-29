@@ -2673,6 +2673,9 @@ export default function SessionView({
                   parentTemplateId:
                     original.id,
 
+                  lastCompleted:
+                    completedWorkout.completedAt,
+
                   exercises:
                     session.exercises.map(
                       ex => ({

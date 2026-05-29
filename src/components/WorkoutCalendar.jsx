@@ -398,7 +398,7 @@ export default function WorkoutCalendar({
                             >
 
                               • {
-                                JSON.stringify({templateName: workout.templateName})
+                                workout.templateName
                               }
 
                             </div>
