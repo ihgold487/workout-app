@@ -2707,7 +2707,10 @@ export default function SessionView({
                   ...completedWorkout,
 
                   templateId:
-                    derived.id
+                    derived.id,
+
+                  templateName:
+                    derived.name
 
                 }
 
