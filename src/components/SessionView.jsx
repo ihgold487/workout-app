@@ -1294,18 +1294,17 @@ export default function SessionView({
               }
 
               style={{
-
-                border:
+                background:
 
                   group.group
 
                     ?
 
-                    "2px solid #666"
+                    "#f5f5f5"
 
                     :
 
-                    "none",
+                    "transparent",
 
                 padding:
                   "12px",
@@ -1315,7 +1314,6 @@ export default function SessionView({
 
                 borderRadius:
                   "8px"
-
               }}
 
             >
@@ -1793,9 +1791,55 @@ export default function SessionView({
 
                         }
                       {
+                          <>
+                          
+                          <div
+                            style={{
+                              width:"120px",
+                              height:"1px",
+                              background:"#ddd",
+                              margin:"6px auto"
+                            }}
+                          />
+                          
+                            <div
+                              style={{
+                                display:"flex",
+                                alignItems:"center",
+                                fontSize:"15px",
+                                fontWeight:"bold",
+                                color:"#666",
+                                marginBottom:"6px",
+                                marginLeft:"16px"
+                              }}
+                            >
+                            
+                              <span style={{
+                                width:"90px",
+                                whiteSpace:"nowrap"}}>
+                                🎯 Target
+                              </span>
 
-                        exercise.sets.map(
-                          set => (
+                              <span style={{
+                                width:"130px",
+                                whiteSpace:"nowrap"}}>
+                                ✍️ Actual
+                              </span>
+
+                              <span
+                                style={{
+                                  marginLeft:"18px",
+                                  whiteSpace:"nowrap"
+                                }}
+                              >
+                                🔋 RIR
+                              </span>
+
+                            </div>
+
+                            {
+                              exercise.sets.map(
+                                set => (
 
                             <div
                                   key={
@@ -1872,8 +1916,6 @@ export default function SessionView({
 
                             <span style={{whiteSpace:"nowrap"}}>
 
-                                🎯
-
                                 {
                                   set.targetWeight
                                 }
@@ -1886,11 +1928,10 @@ export default function SessionView({
 
                                 {
                                   set.targetRir
-                                    ? ` @${set.targetRir}`
+                                    ? `@${set.targetRir}`
                                     : ""
                                 }
 
-                                {" | "}
 
                               </span>
 
@@ -1901,8 +1942,6 @@ export default function SessionView({
                                     whiteSpace:"nowrap"
                                   }}
                                 >
-
-                                ✍️
 
                                 <input
                                   ref={el => {
@@ -1920,9 +1959,9 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"72px",
+                                      width:"54px",
                                       marginLeft:"4px",
-                                      fontSize:"16px",
+                                      fontSize:"15px",
                                       border:"1px solid #ccc",
                                       outline:"none",
                                       boxSizing:"border-box"
@@ -1977,9 +2016,9 @@ export default function SessionView({
                                     autoComplete="off"
 
                                     style={{
-                                        width:"52px",
-                                        marginLeft:"6px",
-                                        fontSize:"16px",
+                                        width:"38px",
+                                        marginLeft:"0px",
+                                        fontSize:"15px",
                                         border:"1px solid #ccc",
                                         outline:"none",
                                         boxSizing:"border-box"
@@ -2000,16 +2039,25 @@ export default function SessionView({
                                     }
                                      />
 
+                                    <span
+                                      style={{
+                                        marginLeft:"2px",
+                                        marginRight:"2px"
+                                      }}
+                                    >
+                                      @
+                                    </span>
+
                                     <input
                                       inputMode="numeric"
                                       pattern="[0-9]*"
                                       autoComplete="off"
 
-                                      placeholder="RIR"
+                                      placeholder="R"
 
                                       style={{
                                         width:"36px",
-                                        marginLeft:"6px",
+                                        marginLeft:"0px",
                                         fontSize:"16px",
                                         border:"1px solid #ccc",
                                         outline:"none",
@@ -2087,7 +2135,8 @@ export default function SessionView({
                           ))
 
                       }
-
+  </>
+}
 
 
                       <button
