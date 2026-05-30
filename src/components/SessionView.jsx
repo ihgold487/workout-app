@@ -1293,7 +1293,7 @@ export default function SessionView({
                   .id
               }
 
-              style={{
+             style={{
                 background:
 
                   group.group
@@ -1305,6 +1305,30 @@ export default function SessionView({
                     :
 
                     "transparent",
+
+                borderTop:
+
+                  group.group
+
+                    ?
+
+                    "3px solid #777"
+
+                    :
+
+                    "none",
+
+                borderBottom:
+
+                  group.group
+
+                    ?
+
+                    "3px solid #777"
+
+                    :
+
+                    "none",
 
                 padding:
                   "12px",
