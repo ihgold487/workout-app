@@ -28,6 +28,8 @@ export default function SessionView({
       reps:"",
       sets:""
     })
+    
+    const [weightUnit, setWeightUnit] = useState("lb")
   
   const [selectedMuscle, setSelectedMuscle] = useState("")
   
@@ -1233,6 +1235,38 @@ export default function SessionView({
 
                 ↺
 
+                </button>
+                
+                <span
+                  style={{
+                    color:"#999",
+                    fontSize:"20px",
+                    fontWeight:"bold"
+                  }}
+                >
+                  |
+                </span>
+
+                <button
+                  onClick={() =>
+                    setWeightUnit(
+                      weightUnit === "lb"
+                        ? "kg"
+                        : "lb"
+                    )
+                  }
+                  style={{
+                    minWidth:"78px",
+                    padding:"6px 8px",
+                    fontWeight:"bold",
+                    fontSize:"16px"
+                  }}
+                >
+                  {
+                    weightUnit === "lb"
+                      ? "⚖️ LB"
+                      : "⚖️ KG"
+                  }
                 </button>
 
           </div>
