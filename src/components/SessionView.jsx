@@ -31,6 +31,8 @@ export default function SessionView({
     
     const [weightUnit, setWeightUnit] = useState("lb")
     
+    const [weightEditBuffer, setWeightEditBuffer] = useState({})
+    
     function lbsToKg(lbs) {
 
         const num = parseFloat(lbs)
@@ -2069,17 +2071,55 @@ export default function SessionView({
                                     }}
 
                                   value={
-                                    set.actualWeight
+                                    weightEditBuffer[
+                                      `${exercise.id}-${set.id}`
+                                    ]
+
+                                    ??
+
+                                    (
+                                      weightUnit === "kg"
+
+                                        ? lbsToKg(
+                                            set.actualWeight
+                                          )
+
+                                        : set.actualWeight
+                                    )
+
                                   }
 
                                   onChange={
-                                    e =>
+                                    e => {
+
+                                      const value =
+                                        e.target.value
+
+                                      setWeightEditBuffer(
+                                        prev => ({
+
+                                          ...prev,
+
+                                          [
+                                            `${exercise.id}-${set.id}`
+                                          ]: value
+
+                                        })
+                                      )
+
                                       updateActual(
                                         exercise.id,
                                         set.id,
                                         "actualWeight",
-                                        e.target.value
+
+                                        weightUnit === "kg"
+
+                                          ? kgToLbs(value)
+
+                                          : value
                                       )
+
+                                    }
                                   }
 
                                   onKeyDown={
