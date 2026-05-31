@@ -1810,7 +1810,7 @@ export default function SessionView({
                               }}
                             >
 
-                            ✕
+                            ❌ Cancel
 
                             </button>
 
