@@ -76,6 +76,48 @@ export default function SessionView({
 
       }
   
+  function calculateE1RM(
+    actualWeight,
+    actualReps,
+    actualRir,
+    targetWeight,
+    targetReps,
+    targetRir
+  )
+    {
+
+        const w =
+          parseFloat(
+            actualWeight || targetWeight
+          )
+
+        const r =
+          parseFloat(
+            actualReps || targetReps
+          )
+
+        const reserve =
+          parseFloat(
+            actualRir || targetRir || 0
+          )
+
+        if (
+          isNaN(w) ||
+          isNaN(r)
+        ) {
+          return ""
+        }
+
+        return Math.round(
+          w * (
+            1 + (
+              r + reserve
+            ) / 30
+          )
+        )
+
+  }
+  
   const [selectedMuscle, setSelectedMuscle] = useState("")
   
   const [activeSet, setActiveSet] =
@@ -1938,6 +1980,15 @@ export default function SessionView({
                                 🔋 RIR
                               </span>
 
+                              <span
+                                style={{
+                                  marginLeft:"18px",
+                                  whiteSpace:"nowrap"
+                                }}
+                              >
+                                🏋️ e1RM
+                              </span>
+
                             </div>
 
                             {
@@ -2017,7 +2068,21 @@ export default function SessionView({
                                   }}
                                 >
 
-                            <span style={{whiteSpace:"nowrap"}}>
+                            <span
+                              style={{
+                                whiteSpace:"nowrap",
+
+                                fontSize:
+
+                                  String(
+                                    set.targetWeight
+                                  ).length > 4
+
+                                    ? "12px"
+
+                                    : "14px"
+                              }}
+                            >
 
                                 {
                                   displayWeight(set.targetWeight)
@@ -2210,20 +2275,44 @@ export default function SessionView({
                                         set.actualRir || ""
                                       }
 
-                                      onChange={
-                                        e =>
-                                          updateActual(
-                                            exercise.id,
-                                            set.id,
-                                            "actualRir",
-                                            e.target.value
-                                          )
-                                      }
-                                    />
+                                       onChange={
+                                    e =>
+                                      updateActual(
+                                        exercise.id,
+                                        set.id,
+                                        "actualRir",
+                                        e.target.value
+                                      )
+                                  }
 
-                                    </span>
-                                  
-                                 <button
+                                  />
+
+                                  <span
+                                    style={{
+                                      display:"inline-block",
+                                      width:"42px",
+                                      textAlign:"center",
+                                      fontSize:"13px",
+                                      fontWeight:"bold",
+                                      color:"#555"
+                                    }}
+                                  >
+                                    {
+                                      calculateE1RM(
+                                        set.actualWeight,
+                                        set.actualReps,
+                                        set.actualRir,
+
+                                        set.targetWeight,
+                                        set.targetReps,
+                                        set.targetRir
+                                      )
+                                    }
+                                  </span>
+
+                                  </span>
+
+                                  <button
                                     style={{
                                       padding:"8px 6px",
                                       fontSize:"22px",
