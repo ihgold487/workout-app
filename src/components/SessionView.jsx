@@ -1994,12 +1994,22 @@ export default function SessionView({
 
                               <span
                                 style={{
-                                  marginLeft:"10px",
+                                  marginLeft:"12px",
                                   whiteSpace:"nowrap",
                                   fontSize:"14px"
                                 }}
                               >
                                 🏋️ {/* e1RM */}
+                              </span>
+
+                              <span
+                                style={{
+                                  marginLeft:"16px",
+                                  whiteSpace:"nowrap",
+                                  fontSize:"14px"
+                                }}
+                              >
+                                ✅
                               </span>
 
                             </div>
@@ -2312,15 +2322,29 @@ export default function SessionView({
                                     }}
                                   >
                                     {
-                                      calculateE1RM(
-                                        set.actualWeight,
-                                        set.actualReps,
-                                        set.actualRir,
+                                      weightUnit === "kg"
 
-                                        set.targetWeight,
-                                        set.targetReps,
-                                        set.targetRir
-                                      )
+                                        ? lbsToKg(
+                                            calculateE1RM(
+                                              set.actualWeight,
+                                              set.actualReps,
+                                              set.actualRir,
+
+                                              set.targetWeight,
+                                              set.targetReps,
+                                              set.targetRir
+                                            )
+                                          )
+
+                                        : calculateE1RM(
+                                            set.actualWeight,
+                                            set.actualReps,
+                                            set.actualRir,
+
+                                            set.targetWeight,
+                                            set.targetReps,
+                                            set.targetRir
+                                          )
                                     }
                                   </span>
 
