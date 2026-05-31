@@ -1036,17 +1036,54 @@ export default function SessionView({
       }}
     >
 
-      <button
-        onClick={() =>
-          setConfirmExitWorkout(
-            true
-          )
-        }
+      <div
+        style={{
+          display:"flex",
+          justifyContent:"space-between",
+          alignItems:"center"
+        }}
       >
 
-        ← End Workout
+        <button
+          onClick={() =>
+            setConfirmExitWorkout(
+              true
+            )
+          }
+          style={{
+            minWidth:"78px",
+            padding:"6px 8px",
+            fontSize:"14px"
+          }}
+        >
 
-      </button>
+          ← End Workout
+
+        </button>
+
+        <button
+          onClick={() =>
+            setWeightUnit(
+              weightUnit === "lb"
+                ? "kg"
+                : "lb"
+            )
+          }
+          style={{
+            minWidth:"78px",
+            padding:"6px 8px",
+            fontWeight:"bold",
+            fontSize:"14px"
+          }}
+        >
+          {
+            weightUnit === "lb"
+              ? "⚖️ LB"
+              : "⚖️ KG"
+          }
+        </button>
+
+      </div>
 
           {confirmExitWorkout && (
             <div style={{
@@ -1322,38 +1359,6 @@ export default function SessionView({
 
                 ↺
 
-                </button>
-                
-                <span
-                  style={{
-                    color:"#999",
-                    fontSize:"20px",
-                    fontWeight:"bold"
-                  }}
-                >
-                  |
-                </span>
-
-                <button
-                  onClick={() =>
-                    setWeightUnit(
-                      weightUnit === "lb"
-                        ? "kg"
-                        : "lb"
-                    )
-                  }
-                  style={{
-                    minWidth:"78px",
-                    padding:"6px 8px",
-                    fontWeight:"bold",
-                    fontSize:"16px"
-                  }}
-                >
-                  {
-                    weightUnit === "lb"
-                      ? "⚖️ LB"
-                      : "⚖️ KG"
-                  }
                 </button>
 
           </div>
@@ -1951,42 +1956,50 @@ export default function SessionView({
                               style={{
                                 display:"flex",
                                 alignItems:"center",
-                                fontSize:"15px",
+                                fontSize:"14px",
                                 fontWeight:"bold",
                                 color:"#666",
                                 marginBottom:"6px",
-                                marginLeft:"16px"
+                                marginLeft:"0px"
                               }}
                             >
-                            
-                              <span style={{
-                                width:"90px",
-                                whiteSpace:"nowrap"}}>
+
+                              <span
+                                style={{
+                                  width:"78px",
+                                  whiteSpace:"nowrap",
+                                  fontSize:"14px"
+                                }}
+                              >
                                 🎯 Target
                               </span>
 
                               <span style={{
-                                width:"130px",
-                                whiteSpace:"nowrap"}}>
+                                width:"112px",
+                                whiteSpace:"nowrap",
+                                fontSize:"14px"
+                              }}>
                                 ✍️ Actual
                               </span>
 
                               <span
                                 style={{
-                                  marginLeft:"18px",
-                                  whiteSpace:"nowrap"
+                                  marginLeft:"10px",
+                                  whiteSpace:"nowrap",
+                                  fontSize:"14px"
                                 }}
                               >
-                                🔋 RIR
+                                🔋 {/* RIR */}
                               </span>
 
                               <span
                                 style={{
-                                  marginLeft:"18px",
-                                  whiteSpace:"nowrap"
+                                  marginLeft:"10px",
+                                  whiteSpace:"nowrap",
+                                  fontSize:"14px"
                                 }}
                               >
-                                🏋️ e1RM
+                                🏋️ {/* e1RM */}
                               </span>
 
                             </div>
@@ -2068,19 +2081,13 @@ export default function SessionView({
                                   }}
                                 >
 
-                            <span
+                           <span
                               style={{
+                                display:"inline-block",
+                                flex:"0 0 76px",
+                                textAlign:"left",
                                 whiteSpace:"nowrap",
-
-                                fontSize:
-
-                                  String(
-                                    set.targetWeight
-                                  ).length > 4
-
-                                    ? "12px"
-
-                                    : "14px"
+                                fontSize:"12px"
                               }}
                             >
 
@@ -2107,7 +2114,7 @@ export default function SessionView({
                                   style={{
                                     display:"inline-flex",
                                     alignItems:"center",
-                                    whiteSpace:"nowrap"
+                                    whiteSpace:"nowrap",
                                   }}
                                 >
 
@@ -2127,9 +2134,9 @@ export default function SessionView({
                                   autoComplete="off"
 
                                   style={{
-                                      width:"54px",
+                                      width:"50px",
                                       marginLeft:"4px",
-                                      fontSize:"15px",
+                                      fontSize:"12px",
                                       border:"1px solid #ccc",
                                       outline:"none",
                                       boxSizing:"border-box"
@@ -2214,7 +2221,13 @@ export default function SessionView({
 
                                 />
 
-                              ×
+                              <span
+                                  style={{
+                                    fontSize:"12px"
+                                  }}
+                                >
+                                  ×
+                                </span>
 
                                 <input
                                     inputMode="numeric"
@@ -2222,9 +2235,9 @@ export default function SessionView({
                                     autoComplete="off"
 
                                     style={{
-                                        width:"38px",
+                                        width:"34px",
                                         marginLeft:"0px",
-                                        fontSize:"15px",
+                                        fontSize:"12px",
                                         border:"1px solid #ccc",
                                         outline:"none",
                                         boxSizing:"border-box"
@@ -2247,8 +2260,9 @@ export default function SessionView({
 
                                     <span
                                       style={{
-                                        marginLeft:"2px",
-                                        marginRight:"2px"
+                                        marginLeft:"1px",
+                                        marginRight:"1px",
+                                        fontSize:"12px"
                                       }}
                                     >
                                       @
@@ -2259,12 +2273,12 @@ export default function SessionView({
                                       pattern="[0-9]*"
                                       autoComplete="off"
 
-                                      placeholder="R"
+                                      placeholder="RIR"
 
                                       style={{
-                                        width:"36px",
+                                        width:"32px",
                                         marginLeft:"0px",
-                                        fontSize:"16px",
+                                        fontSize:"12px",
                                         border:"1px solid #ccc",
                                         outline:"none",
                                         textAlign:"center",
@@ -2293,7 +2307,7 @@ export default function SessionView({
                                       width:"42px",
                                       textAlign:"center",
                                       fontSize:"13px",
-                                      fontWeight:"bold",
+                                      fontWeight:"normal",
                                       color:"#555"
                                     }}
                                   >
@@ -2314,8 +2328,8 @@ export default function SessionView({
 
                                   <button
                                     style={{
-                                      padding:"8px 6px",
-                                      fontSize:"22px",
+                                      padding:"4px 2px",
+                                      fontSize:"16px",
                                       lineHeight:"1"
                                     }}
 
@@ -2345,8 +2359,8 @@ export default function SessionView({
 
                                 <button
                                     style={{
-                                      padding:"8px 6px",
-                                      fontSize:"20px",
+                                      padding:"4px 2px",
+                                      fontSize:"16px",
                                       lineHeight:"1"
                                     }}
 
