@@ -30,6 +30,49 @@ export default function SessionView({
     })
     
     const [weightUnit, setWeightUnit] = useState("lb")
+    
+    function lbsToKg(lbs) {
+
+        const num = parseFloat(lbs)
+
+        if (isNaN(num))
+          return ""
+
+        return (
+          num / 2.20462
+        ).toFixed(1)
+
+      }
+
+      function kgToLbs(kg) {
+
+        const num = parseFloat(kg)
+
+        if (isNaN(num))
+          return ""
+
+        return (
+          num * 2.20462
+        ).toFixed(1)
+
+      }
+
+      function displayWeight(weight) {
+
+        if (
+          weight === "" ||
+          weight == null
+        ) {
+          return ""
+        }
+
+        return weightUnit === "kg"
+
+          ? lbsToKg(weight)
+
+          : weight
+
+      }
   
   const [selectedMuscle, setSelectedMuscle] = useState("")
   
@@ -1975,7 +2018,7 @@ export default function SessionView({
                             <span style={{whiteSpace:"nowrap"}}>
 
                                 {
-                                  set.targetWeight
+                                  displayWeight(set.targetWeight)
                                 }
 
                                 ×
