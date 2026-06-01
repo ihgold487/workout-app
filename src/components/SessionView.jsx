@@ -2153,34 +2153,56 @@ export default function SessionView({
                                   }}
                                 >
 
-                           <span
+                           <div
+                            style={{
+                              width:"80px",
+                              lineHeight:"1.1"
+                            }}
+                          >
+                            <div
                               style={{
-                                display:"inline-block",
-                                flex:"0 0 76px",
-                                textAlign:"left",
-                                whiteSpace:"nowrap",
-                                fontSize:"12px"
+                                fontSize:"11px",
+                                textAlign:"left"
                               }}
                             >
+                              {
+                                displayWeight(set.targetWeight)
+                              }
 
-                                {
-                                  displayWeight(set.targetWeight)
-                                }
+                              ×
 
-                                ×
+                              {
+                                set.targetReps
+                              }
 
-                                {
-                                  set.targetReps
-                                }
+                              {
+                                set.targetRir
+                                  ? `@${set.targetRir}`
+                                  : ""
+                              }
+                            </div>
 
-                                {
+                            <div
+                              style={{
+                                fontSize:"10px",
+                                color:"#666",
+                                textAlign:"left"
+                              }}
+                            >
+                              (
+                              {
+                                calculateE1RM(
+                                  "",
+                                  "",
+                                  "",
+                                  set.targetWeight,
+                                  set.targetReps,
                                   set.targetRir
-                                    ? `@${set.targetRir}`
-                                    : ""
-                                }
-
-
-                              </span>
+                                )
+                              }
+                              )
+                            </div>
+                          </div>
 
                                 <span
                                   style={{
