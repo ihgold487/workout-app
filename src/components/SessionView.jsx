@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { equipmentOptions } from "../data/seedEquipment"
 import E1RMExplorerModal from "./E1RMExplorerSheet"
+import WeightPickerModal from "./WeightPickerModal"
 
 export default function SessionView({
   session,
@@ -36,6 +37,10 @@ export default function SessionView({
     const [showE1RMExplorer, setShowE1RMExplorer] = useState(false)
 
     const [e1RMExplorerData, setE1RMExplorerData] = useState(null)
+   
+    const [showWeightPicker, setShowWeightPicker] = useState(false)
+
+    const [weightPickerData, setWeightPickerData] = useState(null)
     
     function lbsToKg(lbs) {
 
@@ -2314,6 +2319,38 @@ export default function SessionView({
                                   }
 
                                 />
+                                
+                                <button
+                                  type="button"
+
+                                  onClick={() => {
+
+                                    setWeightPickerData({
+
+                                      exerciseId:
+                                        exercise.id,
+
+                                      setId:
+                                        set.id,
+
+                                      value:
+                                        set.actualWeight
+                                        || set.targetWeight
+
+                                    })
+
+                                    setShowWeightPicker(true)
+
+                                  }}
+
+                                  style={{
+                                    marginLeft:"2px",
+                                    padding:"0 4px",
+                                    fontSize:"10px"
+                                  }}
+                                >
+                                  🎛️
+                                </button>
 
                               <span
                                   style={{
@@ -3330,6 +3367,38 @@ export default function SessionView({
               return next
 
             }
+          )
+
+        }}
+      />
+      
+      <WeightPickerModal
+
+        isOpen={showWeightPicker}
+
+        onClose={() =>
+          setShowWeightPicker(false)
+        }
+
+        value={
+          weightPickerData?.value
+        }
+
+        weightUnit={weightUnit}
+
+        onSelect={value => {
+
+          if (
+            !weightPickerData
+          ) {
+            return
+          }
+
+          updateActual(
+            weightPickerData.exerciseId,
+            weightPickerData.setId,
+            "actualWeight",
+            String(value)
           )
 
         }}
