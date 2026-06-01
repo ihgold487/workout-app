@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { equipmentOptions } from "../data/seedEquipment"
+import E1RMExplorerModal from "./E1RMExplorerSheet"
 
 export default function SessionView({
   session,
@@ -15,8 +16,7 @@ export default function SessionView({
   setSelectedTemplateId
 }) {
 
-  const [showAddExercise, setShowAddExercise] =
-    useState(false)
+  const [showAddExercise, setShowAddExercise] = useState(false)
 
   const [search, setSearch] = useState("")
   
@@ -32,6 +32,10 @@ export default function SessionView({
     const [weightUnit, setWeightUnit] = useState("lb")
     
     const [weightEditBuffer, setWeightEditBuffer] = useState({})
+    
+    const [showE1RMExplorer, setShowE1RMExplorer] = useState(false)
+
+    const [e1RMExplorerData, setE1RMExplorerData] = useState(null)
     
     function lbsToKg(lbs) {
 
@@ -2312,15 +2316,39 @@ export default function SessionView({
                                   />
 
                                   <span
-                                    style={{
-                                      display:"inline-block",
-                                      width:"42px",
-                                      textAlign:"center",
-                                      fontSize:"13px",
-                                      fontWeight:"normal",
-                                      color:"#555"
-                                    }}
-                                  >
+                                      onClick={() => {
+
+                                        setE1RMExplorerData({
+
+                                          weight:
+                                            set.actualWeight
+                                            || set.targetWeight,
+
+                                          reps:
+                                            set.actualReps
+                                            || set.targetReps,
+
+                                          rir:
+                                            set.actualRir
+                                            || set.targetRir
+
+                                        })
+
+                                        setShowE1RMExplorer(
+                                          true
+                                        )
+
+                                      }}
+
+                                      style={{
+                                        display:"inline-block",
+                                        width:"42px",
+                                        textAlign:"center",
+                                        fontSize:"13px",
+                                        color:"#555",
+                                        cursor:"pointer"
+                                      }}
+                                    >
                                     {
                                       weightUnit === "kg"
 
@@ -3170,6 +3198,14 @@ export default function SessionView({
       </div>
 
       )}
+      
+      <E1RMExplorerModal
+        isOpen={showE1RMExplorer}
+        onClose={() =>
+          setShowE1RMExplorer(false)
+        }
+        setData={e1RMExplorerData}
+      />
 
       </>
 
