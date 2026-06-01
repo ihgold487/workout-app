@@ -148,59 +148,115 @@ export default function SessionView({
     
     useEffect(() => {
 
-      if (!activeSet) return
+        if (!activeSet) return
 
-      const exercise =
-        session.exercises.find(
-          ex =>
-            ex.id === activeSet.exerciseId
-        )
+        const exercise =
+          session.exercises.find(
+            ex =>
+              ex.id === activeSet.exerciseId
+          )
 
-      const setIndex =
-        exercise?.sets.findIndex(
-          s =>
-            s.id === activeSet.setId
-        )
+        const setIndex =
+          exercise?.sets.findIndex(
+            s =>
+              s.id === activeSet.setId
+          )
 
-      const currentSet =
-        exercise?.sets[setIndex]
+        const currentSet =
+          exercise?.sets[setIndex]
 
-      const previousSet =
-        setIndex > 0
-          ? exercise.sets[
-              setIndex - 1
-            ]
-          : null
+        const previousSet =
+          setIndex > 0
+            ? exercise.sets[
+                setIndex - 1
+              ]
+            : null
 
-      if (
-        currentSet &&
-        !currentSet.actualWeight
-      ) {
+        if (
+          currentSet &&
+          !currentSet.actualWeight
+        ) {
 
-        updateActual(
+          updateActual(
 
-          exercise.id,
+            exercise.id,
 
-          currentSet.id,
+            currentSet.id,
 
-          "actualWeight",
+            "actualWeight",
 
-          previousSet
-            ?.actualWeight
+            previousSet
+              ?.actualWeight
 
-            ||
+              ||
 
-          currentSet.targetWeight
+            currentSet.targetWeight
 
-            ||
+              ||
 
-          ""
+            ""
 
-        )
+          )
 
-      }
+        }
 
-    }, [activeSet])
+        if (
+          currentSet &&
+          !currentSet.actualReps
+        ) {
+
+          updateActual(
+
+            exercise.id,
+
+            currentSet.id,
+
+            "actualReps",
+
+            previousSet
+              ?.actualReps
+
+              ||
+
+            currentSet.targetReps
+
+              ||
+
+            ""
+
+          )
+
+        }
+
+        if (
+          currentSet &&
+          !currentSet.actualRir
+        ) {
+
+          updateActual(
+
+            exercise.id,
+
+            currentSet.id,
+
+            "actualRir",
+
+            previousSet
+              ?.actualRir
+
+              ||
+
+            currentSet.targetRir
+
+              ||
+
+            ""
+
+          )
+          
+        }
+
+      }, [activeSet])
     
     const [expandedNotes, setExpandedNotes] = useState({})
 
@@ -420,15 +476,17 @@ export default function SessionView({
 
         setSessions(
 
-          sessions.map(
-            s =>
+          prevSessions =>
 
-              s.id === session.id
+            prevSessions.map(
+              s =>
 
-                ? updater(s)
+                s.id === session.id
 
-                : s
-          )
+                  ? updater(s)
+
+                  : s
+            )
 
         )
 
@@ -441,7 +499,7 @@ export default function SessionView({
     field,
     value
   ) {
-
+  
     updateSession(
 
       s => ({
@@ -553,7 +611,7 @@ export default function SessionView({
           || "",
 
                 actualReps:"",
-                rir:"",
+                actualRir:"",
                 completed:false
 
       }
@@ -2320,6 +2378,12 @@ export default function SessionView({
 
                                         setE1RMExplorerData({
 
+                                          exerciseId:
+                                            exercise.id,
+
+                                          setId:
+                                            set.id,
+
                                           weight:
                                             set.actualWeight
                                             || set.targetWeight,
@@ -2332,7 +2396,7 @@ export default function SessionView({
                                             set.actualRir
                                             || set.targetRir
 
-                                        })
+                                              })
 
                                         setShowE1RMExplorer(
                                           true
@@ -3201,10 +3265,52 @@ export default function SessionView({
       
       <E1RMExplorerModal
         isOpen={showE1RMExplorer}
+
         onClose={() =>
           setShowE1RMExplorer(false)
         }
+
         setData={e1RMExplorerData}
+
+        onSelectOption={option => {
+
+          if (
+            !e1RMExplorerData
+          ) {
+            return
+          }
+
+          updateActual(
+            e1RMExplorerData.exerciseId,
+            e1RMExplorerData.setId,
+            "actualWeight",
+            String(option.weight)
+          )
+
+          updateActual(
+            e1RMExplorerData.exerciseId,
+            e1RMExplorerData.setId,
+            "actualReps",
+            String(option.reps)
+          )
+          
+          setWeightEditBuffer(
+            prev => {
+
+              const next = {
+                ...prev
+              }
+
+              delete next[
+                `${e1RMExplorerData.exerciseId}-${e1RMExplorerData.setId}`
+              ]
+
+              return next
+
+            }
+          )
+
+        }}
       />
 
       </>
