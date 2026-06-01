@@ -9,38 +9,46 @@ export default function E1RMExplorerModal({
 
   const [increment, setIncrement] = React.useState(5)
   
-  function calculateSimpleE1RM() {
+  function calculateE1RM(
+    actualWeight,
+    actualReps,
+    actualRir,
+    targetWeight,
+    targetReps,
+    targetRir
+  ) {
 
-    if (!setData) return ""
+    const w =
+      parseFloat(
+        actualWeight || targetWeight
+      )
 
-    const weight =
-      Number(setData.weight)
+    const r =
+      parseFloat(
+        actualReps || targetReps
+      )
 
-    const reps =
-      Number(setData.reps)
-
-    const rir =
-      Number(setData.rir)
+    const reserve =
+      parseFloat(
+        actualRir || targetRir || 0
+      )
 
     if (
-      !weight ||
-      !reps
+      isNaN(w) ||
+      isNaN(r)
     ) {
       return ""
     }
 
     return Math.round(
-      weight *
-      (
-        1 +
-        (
-          reps + rir
+      w * (
+        1 + (
+          r + reserve
         ) / 30
       )
     )
 
-  }
-  
+  }  
   function getProgressionOption() {
 
     if (!setData) return null
@@ -64,15 +72,11 @@ export default function E1RMExplorerModal({
       rir,
 
       e1rm:
-        Math.round(
-          (weight + increment) *
-          (
-            1 +
-            (
-              reps + rir
-            ) / 30
-          )
-        )
+        calculateE1RM(
+          weight + increment,
+          reps,
+          rir
+      )
 
     }
 
@@ -138,15 +142,11 @@ export default function E1RMExplorerModal({
           rir,
 
           e1rm:
-            Math.round(
-              option.weight *
-              (
-                1 +
-                (
-                  option.reps + rir
-                ) / 30
-              )
-            )
+            calculateE1RM(
+              option.weight,
+              option.reps,
+              rir
+          )
 
         })
       )
@@ -216,7 +216,11 @@ export default function E1RMExplorerModal({
           🏋️
 
           {
-            calculateSimpleE1RM()
+            calculateE1RM(
+              setData?.weight,
+              setData?.reps,
+              setData?.rir
+            )
           }
 
         </div>
