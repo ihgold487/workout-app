@@ -38,6 +38,9 @@ export default function TemplateView({
       rir:""
 
     })
+    
+    const [editingExercise, setEditingExercise] = useState(null)
+    const [editingExerciseDraft, setEditingExerciseDraft] = useState(null)
 
     // ACTION BUTTONS: keep icon sizes consistent app-wide
     const iconButton = {
@@ -1249,6 +1252,24 @@ showAdd && (
                       key={
                         set.id
                       }
+
+                      style={{
+                        cursor:"pointer"
+                      }}
+
+                      onClick={() => {
+
+                        setEditingExercise(
+                          exercise
+                        )
+
+                        setEditingExerciseDraft(
+                          structuredClone(
+                            exercise
+                          )
+                        )
+
+                      }}
                     >
 
                       🎯
@@ -1285,6 +1306,329 @@ showAdd && (
 
           ))
 
+      }
+      
+      {
+        editingExercise && (
+
+          <div
+            style={{
+              position:"fixed",
+              inset:0,
+              background:"rgba(0,0,0,0.5)",
+              display:"flex",
+              alignItems:"center",
+              justifyContent:"center",
+              zIndex:1000
+            }}
+          >
+
+            <div
+              style={{
+                background:"white",
+                padding:"20px",
+                borderRadius:"8px",
+                minWidth:"300px"
+              }}
+            >
+
+              <h3>
+                {
+                  editingExercise.name
+                }
+              </h3>
+
+              <div>
+
+                {
+                  editingExerciseDraft.sets.map(
+                    (set, index) => (
+
+                      <div
+                        key={set.id}
+                        style={{
+                          border:"1px solid #ccc",
+                          padding:"8px",
+                          marginBottom:"8px",
+                          borderRadius:"6px"
+                        }}
+                      >
+
+                        <div
+                          style={{
+                            display:"flex",
+                            justifyContent:"space-between",
+                            alignItems:"center"
+                          }}
+                        >
+
+                        <div>
+                          Set {index + 1}
+                        </div>
+
+                          <button
+                            onClick={() => {
+
+                              if (
+                                editingExerciseDraft.sets.length
+                                <= 1
+                              ) {
+                                return
+                              }
+
+                              const updated =
+                                structuredClone(
+                                  editingExerciseDraft
+                                )
+
+                              updated.sets.splice(
+                                index,
+                                1
+                              )
+
+                              setEditingExerciseDraft(
+                                updated
+                              )
+
+                            }}
+                          >
+
+                            🗑
+
+                          </button>
+                        </div>
+
+                        <div>
+                          Weight:
+                          <input
+                            type="number"
+                            value={
+                              set.targetWeight
+                            }
+
+                            onChange={e => {
+
+                              const updated =
+                                structuredClone(
+                                  editingExerciseDraft
+                                )
+
+                              updated.sets[index]
+                                .targetWeight =
+                                  e.target.value
+
+                              setEditingExerciseDraft(
+                                updated
+                              )
+
+                            }}
+
+                            style={{
+                              width:"70px",
+                              marginLeft:"8px"
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          Reps:
+                          <input
+                            type="number"
+                            value={
+                              set.targetReps
+                            }
+
+                            onChange={e => {
+
+                              const updated =
+                                structuredClone(
+                                  editingExerciseDraft
+                                )
+
+                              updated.sets[index]
+                                .targetReps =
+                                  e.target.value
+
+                              setEditingExerciseDraft(
+                                updated
+                              )
+
+                            }}
+
+                            style={{
+                              width:"70px",
+                              marginLeft:"8px"
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          RIR:
+                          <input
+                            type="number"
+                            value={
+                              set.targetRir
+                            }
+
+                            onChange={e => {
+
+                              const updated =
+                                structuredClone(
+                                  editingExerciseDraft
+                                )
+
+                              updated.sets[index]
+                                .targetRir =
+                                  e.target.value
+
+                              setEditingExerciseDraft(
+                                updated
+                              )
+
+                            }}
+
+                            style={{
+                              width:"70px",
+                              marginLeft:"8px"
+                            }}
+                          />
+                        </div>
+
+                      </div>
+
+                    )
+                  )
+                }
+                
+                <button
+                  onClick={() => {
+
+                    const updated =
+                      structuredClone(
+                        editingExerciseDraft
+                      )
+
+                    updated.sets.push({
+
+                      id:
+                        Date.now()
+                        + Math.random(),
+
+                      targetWeight:
+                        updated.sets.at(-1)
+                          ?.targetWeight
+                        || "",
+
+                      targetReps:
+                        updated.sets.at(-1)
+                          ?.targetReps
+                        || "",
+
+                      targetRir:
+                        updated.sets.at(-1)
+                          ?.targetRir
+                        || ""
+
+                    })
+
+                    setEditingExerciseDraft(
+                      updated
+                    )
+
+                  }}
+                >
+
+                  + Add Set
+
+                </button>
+
+              </div>
+
+              <div
+                style={{
+                  display:"flex",
+                  justifyContent:"space-between",
+                  marginTop:"12px"
+                }}
+              >
+
+                <button
+                  onClick={() => {
+
+                    setEditingExercise(
+                      null
+                    )
+
+                    setEditingExerciseDraft(
+                      null
+                    )
+
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setTemplates(
+
+                      templates.map(
+                        t =>
+
+                          t.id === template.id
+
+                            ? {
+
+                                ...t,
+
+                                exercises:
+
+                                  t.exercises.map(
+                                    ex =>
+
+                                      ex.id ===
+                                      editingExercise.id
+
+                                        ?
+
+                                        editingExerciseDraft
+
+                                        :
+
+                                        ex
+                                  )
+
+                              }
+
+                            :
+
+                            t
+
+                      )
+
+                    )
+
+                    setEditingExercise(
+                      null
+                    )
+
+                    setEditingExerciseDraft(
+                      null
+                    )
+
+                  }}
+                >
+                  Save
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        )
       }
 
     </div>
