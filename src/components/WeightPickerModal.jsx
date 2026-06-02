@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, {useState, useRef, useEffect} from "react"
 
 export default function WeightPickerModal({
   isOpen,
@@ -21,6 +21,44 @@ export default function WeightPickerModal({
     Number(value) || 0
     
     const [manualValue, setManualValue] = useState(String(current))
+    const scrollRef = useRef(null)
+    
+    useEffect(() => {
+
+      if (
+        !isOpen ||
+        !scrollRef.current
+      ) {
+        return
+      }
+
+      setTimeout(() => {
+
+        const selectedIndex =
+        options.findIndex(
+          option =>
+            option ===
+            Number(manualValue)
+        )
+
+      if (
+        selectedIndex < 0
+      ) {
+        return
+      }
+
+      const selectedButton =
+        scrollRef.current.children[
+          selectedIndex
+        ]
+
+      selectedButton?.scrollIntoView({
+        block:"center"
+      })
+
+          }, 0)
+
+        }, [isOpen])
 
   const options = []
 
@@ -84,6 +122,7 @@ export default function WeightPickerModal({
         </div>
 
         <div
+          ref={scrollRef}
           style={{
             maxHeight:"320px",
             overflowY:"auto",
