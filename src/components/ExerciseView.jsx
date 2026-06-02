@@ -35,11 +35,11 @@ export default function ExerciseView({
 
   return (
 
-    <div style={{
-      padding:
-        "20px"
-    }}>
-
+    <div
+      style={{
+        padding: "20px"
+      }}
+    >
       <button
         onClick={() =>
           setShowExercises(

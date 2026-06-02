@@ -288,10 +288,12 @@ export default function SessionView({
       useState(0)
     
     const [restSeconds, setRestSeconds] =
-      useState(120)
+      useState(90)
 
     const [timerRunning, setTimerRunning] =
       useState(false)
+      
+    const [timerFinished, setTimerFinished] = useState(false)
       
     const [timerPaused, setTimerPaused] =
       useState(false)
@@ -458,9 +460,8 @@ export default function SessionView({
               2000
             )
 
-            setTimerRunning(
-              false
-            )
+            setTimerFinished(true)
+            setTimerRunning(false)
 
             setRestSeconds(
 
@@ -1251,16 +1252,29 @@ export default function SessionView({
 
             )}
           <div style={{
-                  border:"1px solid #ccc",
-                  padding:"6px",
-                  marginTop:"10px",
-                  marginBottom:"12px",
-                  display:"flex",
-                  alignItems:"center",
-                  justifyContent:"center",
-                  gap:"8px",
-                  flexWrap:"nowrap"
-                }}>
+            background:
+              timerFinished
+                ? "#e6f7ea"
+                : timerRunning
+                  ? "#ffe5e5"
+                  : "white",
+
+            border:
+              timerFinished
+                ? "2px solid #5aa469"
+                : timerRunning
+                  ? "2px solid #c66"
+                  : "1px solid #ccc",
+
+            padding:"6px",
+            marginTop:"10px",
+            marginBottom:"12px",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            gap:"8px",
+            flexWrap:"nowrap"
+          }}>
 
                 <span style={{
                   fontSize:"28px"
@@ -1389,9 +1403,8 @@ export default function SessionView({
                         ) * 1000
                       )
 
-                      setTimerRunning(
-                        true
-                      )
+                      setTimerFinished(false)
+                      setTimerRunning(true)
 
                     }
 
@@ -1416,13 +1429,9 @@ export default function SessionView({
                       false
                     )
 
-                    setTimerRunning(
-                      false
-                    )
-
-                    setTimerStartedAt(
-                      null
-                    )
+                    setTimerRunning(false)
+                    setTimerStartedAt(null)                    
+                    setTimerFinished(false)
 
                     setRestSeconds(
                       restMinutes * 60 +
