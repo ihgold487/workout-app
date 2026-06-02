@@ -38,6 +38,8 @@ export default function SessionView({
     const [weightPickerData, setWeightPickerData] = useState(null)
     const [showRepsPicker, setShowRepsPicker] = useState(false)
     const [repsPickerData, setRepsPickerData] = useState(null)
+    const [showRirPicker, setShowRirPicker] = useState(false)
+    const [rirPickerData, setRirPickerData] = useState(null)
     
     function lbsToKg(lbs) {
 
@@ -2321,12 +2323,31 @@ export default function SessionView({
                                       @
                                     </span>
 
-                                    <input
-                                      inputMode="numeric"
-                                      pattern="[0-9]*"
-                                      autoComplete="off"
+                                    <button
+                                      type="button"
 
-                                      placeholder="RIR"
+                                      onClick={() => {
+
+                                        setRirPickerData({
+
+                                          exerciseId:
+                                            exercise.id,
+
+                                          setId:
+                                            set.id,
+
+                                          value:
+                                            Number(
+                                              set.actualRir
+                                              || set.targetRir
+                                              || 0
+                                            )
+
+                                        })
+
+                                        setShowRirPicker(true)
+
+                                      }}
 
                                       style={{
                                         width:"34px",
@@ -2334,26 +2355,16 @@ export default function SessionView({
                                         marginLeft:"0px",
                                         fontSize:"12px",
                                         border:"1px solid #ccc",
-                                        outline:"none",
-                                        boxSizing:"border-box",
-                                        textAlign:"center"
+                                        background:"#fff",
+                                        boxSizing:"border-box"
                                       }}
-
-                                      value={
-                                        set.actualRir || ""
+                                    >
+                                      {
+                                        set.actualRir
+                                        || set.targetRir
+                                        || 0
                                       }
-
-                                       onChange={
-                                    e =>
-                                      updateActual(
-                                        exercise.id,
-                                        set.id,
-                                        "actualRir",
-                                        e.target.value
-                                      )
-                                  }
-
-                                  />
+                                    </button>
 
                                   <span
                                       onClick={() => {
@@ -3321,6 +3332,40 @@ export default function SessionView({
             weightPickerData.exerciseId,
             weightPickerData.setId,
             "actualWeight",
+            String(value)
+          )
+
+        }}
+      />
+      
+      <WeightPickerModal
+
+        isOpen={showRirPicker}
+
+        onClose={() =>
+          setShowRirPicker(false)
+        }
+
+        value={
+          rirPickerData?.value
+        }
+
+        title="Select RIR"
+
+        values={[0,1,2,3,4,5,6]}
+
+        onSelect={value => {
+
+          if (
+            !rirPickerData
+          ) {
+            return
+          }
+
+          updateActual(
+            rirPickerData.exerciseId,
+            rirPickerData.setId,
+            "actualRir",
             String(value)
           )
 
