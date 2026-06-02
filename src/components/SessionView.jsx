@@ -30,17 +30,14 @@ export default function SessionView({
       sets:""
     })
     
-    const [weightUnit, setWeightUnit] = useState("lb")
-    
-    const [weightEditBuffer, setWeightEditBuffer] = useState({})
-    
+    const [weightUnit, setWeightUnit] = useState("lb")    
+    const [weightEditBuffer, setWeightEditBuffer] = useState({})    
     const [showE1RMExplorer, setShowE1RMExplorer] = useState(false)
-
-    const [e1RMExplorerData, setE1RMExplorerData] = useState(null)
-   
+    const [e1RMExplorerData, setE1RMExplorerData] = useState(null)  
     const [showWeightPicker, setShowWeightPicker] = useState(false)
-
     const [weightPickerData, setWeightPickerData] = useState(null)
+    const [showRepsPicker, setShowRepsPicker] = useState(false)
+    const [repsPickerData, setRepsPickerData] = useState(null)
     
     function lbsToKg(lbs) {
 
@@ -2217,140 +2214,53 @@ export default function SessionView({
                                   }}
                                 >
 
-                                <input
-                                  ref={el => {
+                                  <button
+                                    type="button"
 
-                                    if (!el) return
+                                    onClick={() => {
 
-                                    inputRefs.current[
-                                      set.id
-                                    ] = el
+                                      setWeightPickerData({
 
-                                  }}
+                                        exerciseId:
+                                          exercise.id,
 
-                                  inputMode="decimal"
-                                  pattern="[0-9.]*"
-                                  autoComplete="off"
+                                        setId:
+                                          set.id,
 
-                                  style={{
+                                        value:
+                                          set.actualWeight
+                                          || set.targetWeight
+
+                                      })
+
+                                      setShowWeightPicker(true)
+
+                                    }}
+
+                                    style={{
                                       width:"50px",
                                       marginLeft:"4px",
                                       fontSize:"12px",
                                       border:"1px solid #ccc",
-                                      outline:"none",
-                                      boxSizing:"border-box"
+                                      background:"#fff",
+                                      padding:"2px",
+                                      textAlign:"center"
                                     }}
-
-                                  value={
-                                    weightEditBuffer[
-                                      `${exercise.id}-${set.id}`
-                                    ]
-
-                                    ??
-
-                                    (
+                                  >
+                                    {
                                       weightUnit === "kg"
 
                                         ? lbsToKg(
                                             set.actualWeight
+                                            || set.targetWeight
                                           )
 
-                                        : set.actualWeight
-                                    )
-
-                                  }
-
-                                  onChange={
-                                    e => {
-
-                                      const value =
-                                        e.target.value
-
-                                      setWeightEditBuffer(
-                                        prev => ({
-
-                                          ...prev,
-
-                                          [
-                                            `${exercise.id}-${set.id}`
-                                          ]: value
-
-                                        })
-                                      )
-
-                                      updateActual(
-                                        exercise.id,
-                                        set.id,
-                                        "actualWeight",
-
-                                        weightUnit === "kg"
-
-                                          ? kgToLbs(value)
-
-                                          : value
-                                      )
-
+                                        : (
+                                            set.actualWeight
+                                            || set.targetWeight
+                                          )
                                     }
-                                  }
-
-                                  onKeyDown={
-                                    e => {
-
-                                      if (
-                                        e.key === "Enter"
-                                      ) {
-
-                                        e.preventDefault()
-
-                                        const row =
-                                          e.target.closest(
-                                            "[data-set-row]"
-                                          )
-
-                                        row
-                                          ?.querySelector(
-                                            '[data-reps-input]'
-                                          )
-                                          ?.focus()
-
-                                      }
-
-                                    }
-                                  }
-
-                                />
-                                
-                                <button
-                                  type="button"
-
-                                  onClick={() => {
-
-                                    setWeightPickerData({
-
-                                      exerciseId:
-                                        exercise.id,
-
-                                      setId:
-                                        set.id,
-
-                                      value:
-                                        set.actualWeight
-                                        || set.targetWeight
-
-                                    })
-
-                                    setShowWeightPicker(true)
-
-                                  }}
-
-                                  style={{
-                                    marginLeft:"2px",
-                                    padding:"0 4px",
-                                    fontSize:"10px"
-                                  }}
-                                >
-                                  🎛️
-                                </button>
+                                  </button>
 
                               <span
                                   style={{
@@ -2360,34 +2270,46 @@ export default function SessionView({
                                   ×
                                 </span>
 
-                                <input
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    autoComplete="off"
+                                <button
+                                  type="button"
 
-                                    style={{
-                                        width:"34px",
-                                        marginLeft:"0px",
-                                        fontSize:"12px",
-                                        border:"1px solid #ccc",
-                                        outline:"none",
-                                        boxSizing:"border-box"
-                                      }}
+                                  onClick={() => {
 
-                                    value={
-                                      set.actualReps
-                                    }
+                                    setRepsPickerData({
 
-                                    onChange={
-                                      e =>
-                                        updateActual(
-                                          exercise.id,
-                                          set.id,
-                                          "actualReps",
-                                          e.target.value
+                                      exerciseId:
+                                        exercise.id,
+
+                                      setId:
+                                        set.id,
+
+                                      value:
+                                        Number(
+                                          set.actualReps
+                                          || set.targetReps
+                                          || 0
                                         )
-                                    }
-                                     />
+
+                                    })
+
+                                    setShowRepsPicker(true)
+
+                                  }}
+
+                                  style={{
+                                    width:"34px",
+                                    marginLeft:"0px",
+                                    fontSize:"12px",
+                                    border:"1px solid #ccc",
+                                    background:"#fff",
+                                    boxSizing:"border-box"
+                                  }}
+                                >
+                                  {
+                                    set.actualReps
+                                    || set.targetReps
+                                  }
+                                </button>
 
                                     <span
                                       style={{
@@ -2407,13 +2329,14 @@ export default function SessionView({
                                       placeholder="RIR"
 
                                       style={{
-                                        width:"32px",
+                                        width:"34px",
+                                        height:"24px",
                                         marginLeft:"0px",
                                         fontSize:"12px",
                                         border:"1px solid #ccc",
                                         outline:"none",
-                                        textAlign:"center",
-                                        boxSizing:"border-box"
+                                        boxSizing:"border-box",
+                                        textAlign:"center"
                                       }}
 
                                       value={
@@ -3398,6 +3321,47 @@ export default function SessionView({
             weightPickerData.exerciseId,
             weightPickerData.setId,
             "actualWeight",
+            String(value)
+          )
+
+        }}
+      />
+      
+      <WeightPickerModal
+
+        isOpen={showRepsPicker}
+
+        onClose={() =>
+          setShowRepsPicker(false)
+        }
+
+        value={
+          repsPickerData?.value
+        }
+
+        increment={1}
+
+        title="Select Reps"
+        
+        values={
+          Array.from(
+            { length: 20 },
+            (_, i) => i + 1
+          )
+        }
+
+        onSelect={value => {
+
+          if (
+            !repsPickerData
+          ) {
+            return
+          }
+
+          updateActual(
+            repsPickerData.exerciseId,
+            repsPickerData.setId,
+            "actualReps",
             String(value)
           )
 

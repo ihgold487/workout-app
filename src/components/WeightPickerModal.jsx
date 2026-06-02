@@ -5,20 +5,27 @@ export default function WeightPickerModal({
   onClose,
   value,
   onSelect,
-  weightUnit
+  weightUnit,
+  increment,
+  title,
+  values
 }) {
 
   if (!isOpen) {
     return null
   }
 
-  const increment =
+  const current =
+    Number(value) || 0
+    
+  const step =
+  increment
+  ??
+  (
     weightUnit === "kg"
       ? 1
       : 2.5
-
-  const current =
-    Number(value) || 0
+  )
     
     const [manualValue, setManualValue] = useState(String(current))
     const scrollRef = useRef(null)
@@ -60,20 +67,28 @@ export default function WeightPickerModal({
 
         }, [isOpen])
 
-  const options = []
-
-    for (
-      let value = current - (20 * increment);
-      value <= current + (20 * increment);
-      value += increment
+  let options = []
+    if (
+      values
     ) {
 
-      options.push(
-        Number(
-          value.toFixed(2)
-        )
-      )
+      options = values
 
+    } else {
+
+      for (
+        let value = current - (20 * step);
+        value <= current + (20 * step);
+        value += step
+      ) {
+
+        options.push(
+          Number(
+            value.toFixed(2)
+          )
+        )
+
+      }
     }
 
   return (
@@ -107,7 +122,9 @@ export default function WeightPickerModal({
             marginBottom:"12px"
           }}
         >
-          Select Weight
+          {
+              title || "Select Value"
+          }
         </div>
         
         <div
