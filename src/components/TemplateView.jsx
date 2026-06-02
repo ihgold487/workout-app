@@ -34,7 +34,8 @@ export default function TemplateView({
 
       weight:"",
       reps:"",
-      sets:""
+      sets:"",
+      rir:""
 
     })
 
@@ -122,6 +123,9 @@ export default function TemplateView({
           Number(
             newExerciseValues.sets
           )
+          
+        const rir =
+          newExerciseValues.rir
 
 
     const sets =
@@ -146,7 +150,7 @@ export default function TemplateView({
             reps,
 
           targetRir:
-            ""
+            rir
 
         })
 
@@ -676,6 +680,51 @@ showAdd && (
                       ...v,
                       sets:
                         e.target.value
+                    })
+                  )
+                }
+              />
+
+            </div>
+            
+            <div
+              style={{
+                display:"flex",
+                alignItems:"center",
+                gap:"10px",
+                marginBottom:"12px"
+              }}
+            >
+
+              <span
+                style={{
+                  fontSize:"28px"
+                }}
+              >
+                🔋
+              </span>
+
+              <input
+                type="number"
+                inputMode="decimal"
+
+                placeholder="RIR"
+
+                style={{
+                  width:"70px",
+                  fontSize:"20px",
+                  padding:"10px"
+                }}
+
+                value={
+                  newExerciseValues.rir || ""
+                }
+
+                onChange={e =>
+                  setNewExerciseValues(
+                    v => ({
+                      ...v,
+                      rir:e.target.value
                     })
                   )
                 }

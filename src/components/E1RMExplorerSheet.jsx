@@ -116,6 +116,14 @@ export default function E1RMExplorerModal({
         reps:
           reps + 1
       },
+      
+      {
+        weight:
+          weight - (2 * increment),
+
+        reps:
+          reps + 3
+      },
 
       {
         weight:

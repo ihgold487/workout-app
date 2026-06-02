@@ -27,7 +27,8 @@ export default function SessionView({
     useState({
       weight:"",
       reps:"",
-      sets:""
+      sets:"",
+      rir:""
     })
     
     const [weightUnit, setWeightUnit] = useState("lb")    
@@ -911,7 +912,13 @@ export default function SessionView({
     }
 
 
-  function addExercise(exercise, weight, reps, numSets) {
+  function addExercise(
+    exercise,
+    weight,
+    reps,
+    numSets,
+    rir
+  ) {
 
     const sets = Array.from(
       { length:Number(numSets) },
@@ -919,8 +926,10 @@ export default function SessionView({
         id:Date.now()+Math.random(),
         targetWeight:weight,
         targetReps:reps,
+        targetRir:rir,
         actualWeight:"",
-        actualReps:""
+        actualReps:"",
+        actualRir:""
       })
     )
 
@@ -2682,7 +2691,7 @@ export default function SessionView({
                   gap:"10px",
                   marginBottom:"16px"
                 }}>
-                  #️⃣
+                  🔢
                   <input
                     type="number"
                     placeholder="Sets"
@@ -2691,6 +2700,26 @@ export default function SessionView({
                       setNewExerciseValues({
                         ...newExerciseValues,
                         sets:e.target.value
+                      })
+                    }
+                  />
+                </div>
+                
+                <div style={{
+                  display:"flex",
+                  alignItems:"center",
+                  gap:"10px",
+                  marginBottom:"16px"
+                }}>
+                  🔋
+                  <input
+                    type="number"
+                    placeholder="RIR"
+                    value={newExerciseValues.rir || ""}
+                    onChange={e =>
+                      setNewExerciseValues({
+                        ...newExerciseValues,
+                        rir:e.target.value
                       })
                     }
                   />
@@ -2713,11 +2742,12 @@ export default function SessionView({
                   <button
                     onClick={() =>
                       addExercise(
-                        pendingExercise,
-                        newExerciseValues.weight,
-                        newExerciseValues.reps,
-                        newExerciseValues.sets
-                      )
+                      pendingExercise,
+                      newExerciseValues.weight,
+                      newExerciseValues.reps,
+                      newExerciseValues.sets,
+                      newExerciseValues.rir
+                    )
                     }
                   >
                     ✔️
