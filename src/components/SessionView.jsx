@@ -2100,7 +2100,22 @@ export default function SessionView({
 
                             {
                               exercise.sets.map(
-                                set => (
+                                set => {
+
+                                  const isActive =
+                                    activeSet?.setId === set.id
+
+                                  const isCompleted =
+                                    !!set.completed
+
+                                  const valueColor =
+                                    isActive
+                                      ? "#1976d2"
+                                      : isCompleted
+                                        ? "#444"
+                                        : "#aaa"
+
+                                  return (
 
                             <div
                                   key={
@@ -2264,7 +2279,9 @@ export default function SessionView({
                                       border:"1px solid #ccc",
                                       background:"#fff",
                                       padding:"2px",
-                                      textAlign:"center"
+                                      textAlign:"center",
+                                      color:valueColor,
+                                      fontWeight:isActive ? "bold" : "normal"
                                     }}
                                   >
                                     {
@@ -2322,7 +2339,9 @@ export default function SessionView({
                                     fontSize:"12px",
                                     border:"1px solid #ccc",
                                     background:"#fff",
-                                    boxSizing:"border-box"
+                                    boxSizing:"border-box",
+                                    color:valueColor,
+                                    fontWeight:isActive ? "bold" : "normal"
                                   }}
                                 >
                                   {
@@ -2374,7 +2393,9 @@ export default function SessionView({
                                         fontSize:"12px",
                                         border:"1px solid #ccc",
                                         background:"#fff",
-                                        boxSizing:"border-box"
+                                        boxSizing:"border-box",
+                                        color:valueColor,
+                                        fontWeight:isActive ? "bold" : "normal"
                                       }}
                                     >
                                       {
@@ -2503,7 +2524,11 @@ export default function SessionView({
                                 </button>
                             </div>
 
-                          ))
+                             )
+
+                          }
+
+                        )
 
                       }
   </>
