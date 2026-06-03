@@ -1,4 +1,5 @@
 import { useState } from "react"
+import WeightPickerModal from "./WeightPickerModal"
 
 export default function TemplateView({
   template,
@@ -41,6 +42,9 @@ export default function TemplateView({
     
     const [editingExercise, setEditingExercise] = useState(null)
     const [editingExerciseDraft, setEditingExerciseDraft] = useState(null)
+    const [editingWeightSetIndex, setEditingWeightSetIndex] = useState(null)
+    const [editingRepsSetIndex, setEditingRepsSetIndex] = useState(null)
+    const [editingRirSetIndex, setEditingRirSetIndex] = useState(null)
 
     // ACTION BUTTONS: keep icon sizes consistent app-wide
     const iconButton = {
@@ -1340,158 +1344,112 @@ showAdd && (
 
               <div>
 
-                {
-                  editingExerciseDraft.sets.map(
+              <div
+                style={{
+                  display:"grid",
+                  gridTemplateColumns:
+                    "30px 60px 60px 60px 40px",
+                  alignItems:"center",
+                  marginBottom:"8px",
+                  paddingBottom:"4px",
+                  borderBottom:
+                    "1px solid #ccc",
+                  textAlign:"center"
+                }}
+              >
+
+                <div>#</div>
+                <div>🎯</div>
+                <div>🔁</div>
+                <div>🔋</div>
+                <div></div>
+
+              </div>
+
+              {
+                editingExerciseDraft.sets.map(
                     (set, index) => (
 
                       <div
                         key={set.id}
                         style={{
-                          border:"1px solid #ccc",
-                          padding:"8px",
-                          marginBottom:"8px",
-                          borderRadius:"6px"
+                          display:"grid",
+                          gridTemplateColumns:
+                            "30px 60px 60px 60px 40px",
+                          alignItems:"center",
+                          marginBottom:"6px"
                         }}
                       >
+
+                        <div>
+                          {index + 1}
+                        </div>
 
                         <div
                           style={{
                             display:"flex",
-                            justifyContent:"space-between",
-                            alignItems:"center"
+                            gap:"12px",
+                            alignItems:"center",
+                            flexWrap:"wrap"
                           }}
                         >
 
-                        <div>
-                          Set {index + 1}
-                        </div>
-
-                          <button
-                            onClick={() => {
-
-                              if (
-                                editingExerciseDraft.sets.length
-                                <= 1
-                              ) {
-                                return
-                              }
-
-                              const updated =
-                                structuredClone(
-                                  editingExerciseDraft
-                                )
-
-                              updated.sets.splice(
-                                index,
-                                1
-                              )
-
-                              setEditingExerciseDraft(
-                                updated
-                              )
-
+                          <div
+                            style={{
+                              display:"flex",
+                              alignItems:"center",
+                              gap:"6px",
+                              marginTop:"6px"
                             }}
                           >
 
-                            🗑
+                            <div
+                              style={{
+                                cursor:"pointer",
+                                textAlign:"center"
+                              }}
 
-                          </button>
-                        </div>
-
-                        <div>
-                          Weight:
-                          <input
-                            type="number"
-                            value={
-                              set.targetWeight
-                            }
-
-                            onChange={e => {
-
-                              const updated =
-                                structuredClone(
-                                  editingExerciseDraft
+                              onClick={() =>
+                                setEditingWeightSetIndex(
+                                  index
                                 )
+                              }
+                            >
+                              {set.targetWeight}
+                            </div>
 
-                              updated.sets[index]
-                                .targetWeight =
-                                  e.target.value
+                            <div
+                              style={{
+                                cursor:"pointer",
+                                textAlign:"center"
+                              }}
 
-                              setEditingExerciseDraft(
-                                updated
-                              )
-
-                            }}
-
-                            style={{
-                              width:"70px",
-                              marginLeft:"8px"
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          Reps:
-                          <input
-                            type="number"
-                            value={
-                              set.targetReps
-                            }
-
-                            onChange={e => {
-
-                              const updated =
-                                structuredClone(
-                                  editingExerciseDraft
+                              onClick={() =>
+                                setEditingRepsSetIndex(
+                                  index
                                 )
+                              }
+                            >
+                              {set.targetReps}
+                            </div>
 
-                              updated.sets[index]
-                                .targetReps =
-                                  e.target.value
+                            <div
+                              style={{
+                                cursor:"pointer",
+                                textAlign:"center"
+                              }}
 
-                              setEditingExerciseDraft(
-                                updated
-                              )
-
-                            }}
-
-                            style={{
-                              width:"70px",
-                              marginLeft:"8px"
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          RIR:
-                          <input
-                            type="number"
-                            value={
-                              set.targetRir
-                            }
-
-                            onChange={e => {
-
-                              const updated =
-                                structuredClone(
-                                  editingExerciseDraft
+                              onClick={() =>
+                                setEditingRirSetIndex(
+                                  index
                                 )
+                              }
+                            >
+                              {set.targetRir}
+                            </div>
 
-                              updated.sets[index]
-                                .targetRir =
-                                  e.target.value
+                          </div>
 
-                              setEditingExerciseDraft(
-                                updated
-                              )
-
-                            }}
-
-                            style={{
-                              width:"70px",
-                              marginLeft:"8px"
-                            }}
-                          />
                         </div>
 
                       </div>
@@ -1543,6 +1501,173 @@ showAdd && (
                 </button>
 
               </div>
+
+              {
+                editingWeightSetIndex !== null && (
+
+                  <WeightPickerModal
+
+                    isOpen={
+                      editingWeightSetIndex !== null
+                    }
+
+                    onClose={() =>
+                      setEditingWeightSetIndex(
+                        null
+                      )
+                    }
+
+                    value={
+                      editingExerciseDraft
+                        ?.sets[
+                          editingWeightSetIndex
+                        ]
+                        ?.targetWeight
+                    }
+
+                    onSelect={value => {
+
+                      const updated =
+                        structuredClone(
+                          editingExerciseDraft
+                        )
+
+                      updated.sets[
+                        editingWeightSetIndex
+                      ].targetWeight =
+                        String(value)
+
+                      setEditingExerciseDraft(
+                        updated
+                      )
+
+                      setEditingWeightSetIndex(
+                        null
+                      )
+
+                    }}
+
+                   />
+
+                               )
+              }
+
+              {
+                editingRepsSetIndex !== null && (
+
+                  <WeightPickerModal
+
+                    isOpen={
+                      editingRepsSetIndex !== null
+                    }
+
+                    onClose={() =>
+                      setEditingRepsSetIndex(
+                        null
+                      )
+                    }
+
+                    value={
+                      editingExerciseDraft
+                        ?.sets[
+                          editingRepsSetIndex
+                        ]
+                        ?.targetReps
+                    }
+
+                    increment={1}
+
+                    title="Select Reps"
+
+                    values={
+                      Array.from(
+                        { length: 20 },
+                        (_, i) => i + 1
+                      )
+                    }
+
+                    onSelect={value => {
+
+                      const updated =
+                        structuredClone(
+                          editingExerciseDraft
+                        )
+
+                      updated.sets[
+                        editingRepsSetIndex
+                      ].targetReps =
+                        String(value)
+
+                      setEditingExerciseDraft(
+                        updated
+                      )
+
+                      setEditingRepsSetIndex(
+                        null
+                      )
+
+                    }}
+
+                  />
+
+                )
+              }
+              
+                            {
+                editingRirSetIndex !== null && (
+
+                <WeightPickerModal
+
+                    isOpen={
+                      editingRirSetIndex !== null
+                    }
+
+                    onClose={() =>
+                      setEditingRirSetIndex(
+                        null
+                      )
+                    }
+
+                    value={
+                      editingExerciseDraft
+                        ?.sets[
+                          editingRirSetIndex
+                        ]
+                        ?.targetRir
+                    }
+
+                    title="Select RIR"
+
+                    values={[
+                      0,1,2,3,4,5,6
+                    ]}
+
+                    onSelect={value => {
+
+                      const updated =
+                        structuredClone(
+                          editingExerciseDraft
+                        )
+
+                      updated.sets[
+                        editingRirSetIndex
+                      ].targetRir =
+                        String(value)
+
+                      setEditingExerciseDraft(
+                        updated
+                      )
+
+                      setEditingRirSetIndex(
+                        null
+                      )
+
+                    }}
+
+                  />
+
+                )
+              }
 
               <div
                 style={{
