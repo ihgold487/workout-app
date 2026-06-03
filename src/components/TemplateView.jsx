@@ -274,6 +274,34 @@ const filteredExercises =
 
     )
 
+    function calculateE1RM(
+    weight,
+    reps,
+    rir
+  ) {
+
+    const w = Number(weight)
+    const r = Number(reps)
+    const reserve = Number(rir)
+
+    if (
+      !w ||
+      !r
+    ) {
+      return ""
+    }
+
+    const repsToFailure =
+      r + reserve
+
+    return Math.round(
+      w * (
+        1 +
+        repsToFailure / 30
+      )
+    )
+
+  }
 
     const muscleGroups =
 
@@ -547,6 +575,21 @@ showAdd && (
 
         </h3>
 
+        <div
+                  style={{
+                    marginBottom:"12px",
+                    fontWeight:"bold",
+                    textAlign:"center"
+                  }}
+                >
+                  🏋️ e1RM: {
+                    calculateE1RM(
+                      newExerciseValues.weight,
+                      newExerciseValues.reps,
+                      newExerciseValues.rir
+                    )
+                  }
+                </div>
 
         <div
           style={{
@@ -563,7 +606,7 @@ showAdd && (
             }}
           >
 
-            🏋️
+            🎯 {/* Weight */}
 
           </span>
 
@@ -612,7 +655,7 @@ showAdd && (
                 }}
               >
 
-                🔁
+                🔁 {/* Reps */}
 
               </span>
 
@@ -661,7 +704,7 @@ showAdd && (
                 }}
               >
 
-                🔢 
+                🔢 {/* Sets */}
 
               </span>
 
@@ -708,7 +751,7 @@ showAdd && (
                   fontSize:"28px"
                 }}
               >
-                🔋
+                🔋 {/* RIR */}
               </span>
 
               <input
@@ -737,13 +780,12 @@ showAdd && (
                 }
               />
 
-            </div>
+              </div>
 
-
-        <div
-          style={{
-            marginTop:
-              "12px",
+            <div
+              style={{
+                marginTop:
+                  "12px",
 
             display:
               "flex",
@@ -1299,6 +1341,16 @@ showAdd && (
                           : ""
 
                       }
+
+                      {" "}
+
+                      (🏋️‍♂️ {
+                        calculateE1RM(
+                          set.targetWeight,
+                          set.targetReps,
+                          set.targetRir || set.rir
+                        )
+                      })
 
                     </div>
 
