@@ -1,5 +1,47 @@
 import { useState } from "react"
 import WeightPickerModal from "./WeightPickerModal"
+import {DndContext, closestCenter} from "@dnd-kit/core"
+import {SortableContext, useSortable, verticalListSortingStrategy, arrayMove} from "@dnd-kit/sortable"
+import {CSS} from "@dnd-kit/utilities"
+
+function SortableExerciseRow({
+  exercise,
+  children
+}) {
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition
+  } = useSortable({
+    id: exercise.id
+  })
+
+  const style = {
+    transform:
+      CSS.Transform.toString(
+        transform
+      ),
+    transition
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+    >
+      {
+        children({
+          attributes,
+          listeners
+        })
+      }
+    </div>
+  )
+
+}
 
 export default function TemplateView({
   template,
@@ -873,9 +915,79 @@ showAdd && (
 
 
       {
+        <DndContext
+        collisionDetection={closestCenter}
+        onDragEnd={({active, over}) => {
 
-        template.exercises.map(
-          exercise => (
+          if (
+            !over ||
+            active.id === over.id
+          ) {
+            return
+          }
+
+          const oldIndex =
+            template.exercises.findIndex(
+              ex => ex.id === active.id
+            )
+
+          const newIndex =
+            template.exercises.findIndex(
+              ex => ex.id === over.id
+            )
+
+          const reordered =
+            arrayMove(
+              template.exercises,
+              oldIndex,
+              newIndex
+            )
+
+          setTemplates(
+
+            templates.map(
+              t =>
+
+                t.id === template.id
+
+                  ? {
+                      ...t,
+                      exercises: reordered
+                    }
+
+                  : t
+
+            )
+
+          )
+
+        }}
+      >
+
+      <SortableContext
+        items={
+          template.exercises.map(
+            exercise => exercise.id
+          )
+        }
+        strategy={
+          verticalListSortingStrategy
+        }
+      >
+
+        {
+          template.exercises.map(
+            exercise => (
+
+              <SortableExerciseRow
+                key={exercise.id}
+                exercise={exercise}
+              >
+                {
+                  ({
+                    attributes,
+                    listeners
+                  }) => (
 
             <div
               key={
@@ -938,7 +1050,10 @@ showAdd && (
                 >
 
                 <button
-                  style={iconButton}
+                  style={{
+                    ...iconButton,
+                    fontSize:"0.85rem"
+                  }}
                   onClick={() => {
 
                     const note =
@@ -1003,155 +1118,26 @@ showAdd && (
                 <div
                   style={{
                     display:"flex",
-                    gap:"2px",
-                    marginLeft:"auto"
+                    gap:"4px",
+                    marginLeft:"auto",
+                    flexShrink:0
                   }}
                 >
-
-                <button
-                    style={iconButton}
-
-                  onClick={() => {
-
-                    const index =
-                      template.exercises.findIndex(
-                        ex =>
-                          ex.id ===
-                          exercise.id
-                      )
-
-                    if (index <= 0)
-                      return
-
-
-                    const reordered =
-                      [...template.exercises]
-
-
-                    ;[
-                      reordered[index - 1],
-                      reordered[index]
-
-                    ] = [
-
-                      reordered[index],
-                      reordered[index - 1]
-
-                    ]
-
-
-                    setTemplates(
-
-                      templates.map(
-                        t =>
-
-                          t.id ===
-                          template.id
-
-                            ?
-
-                            {
-
-                              ...t,
-
-                              exercises:
-                                reordered
-
-                            }
-
-                            :
-
-                            t
-
-                      )
-
-                    )
-
+                
+                <span
+                  {...attributes}
+                  {...listeners}
+                  style={{
+                    cursor:"grab",
+                    padding:"0 10px",
+                    fontSize:"1.4rem",
+                    fontWeight:"bold",
+                    userSelect:"none",
+                    touchAction:"none"
                   }}
                 >
-
-                  ⬆️
-
-                </button>
-
-
-
-                <button
-                    style={iconButton}
-
-                  onClick={() => {
-
-                    const index =
-                      template.exercises.findIndex(
-                        ex =>
-                          ex.id ===
-                          exercise.id
-                      )
-
-
-                    if (
-
-                      index >=
-
-                      template.exercises
-                      .length - 1
-
-                    )
-
-                      return
-
-
-                    const reordered =
-                      [...template.exercises]
-
-
-                    ;[
-                      reordered[index + 1],
-                      reordered[index]
-
-                    ] = [
-
-                      reordered[index],
-                      reordered[index + 1]
-
-                    ]
-
-
-                    setTemplates(
-
-                      templates.map(
-                        t =>
-
-                          t.id ===
-                          template.id
-
-                            ?
-
-                            {
-
-                              ...t,
-
-                              exercises:
-                                reordered
-
-                            }
-
-                            :
-
-                            t
-
-                      )
-
-                    )
-
-                  }}
-                >
-
-                  ⬇️
-
-                </button>
-
-
+                  ☰
+                </span>
 
                 <button
                     style={iconButton}
@@ -1359,8 +1345,19 @@ showAdd && (
               }
 
             </div>
+            
+                )
+              }
+
+            </SortableExerciseRow>
 
           ))
+          
+            }
+
+          </SortableContext>
+
+        </DndContext>
 
       }
       
