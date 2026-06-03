@@ -324,7 +324,12 @@ const filteredExercises =
 
     const w = Number(weight)
     const r = Number(reps)
-    const reserve = Number(rir)
+    const reserve =
+      rir === undefined ||
+      rir === null ||
+      rir === ""
+        ? 0
+        : Number(rir)
 
     if (
       !w ||
