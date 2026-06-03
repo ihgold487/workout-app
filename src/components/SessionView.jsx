@@ -2278,8 +2278,9 @@ export default function SessionView({
                                       fontSize:"12px",
                                       border:"1px solid #ccc",
                                       background:"#fff",
-                                      padding:"2px",
+                                      height:"24px",
                                       textAlign:"center",
+                                      boxSizing:"border-box",
                                       color:valueColor,
                                       fontWeight:isActive ? "bold" : "normal"
                                     }}
@@ -2339,6 +2340,7 @@ export default function SessionView({
                                     fontSize:"12px",
                                     border:"1px solid #ccc",
                                     background:"#fff",
+                                    height:"24px",
                                     boxSizing:"border-box",
                                     color:valueColor,
                                     fontWeight:isActive ? "bold" : "normal"
