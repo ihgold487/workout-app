@@ -1400,7 +1400,7 @@ showAdd && (
                 style={{
                   display:"grid",
                   gridTemplateColumns:
-                    "30px 60px 60px 60px 40px",
+                    "30px 60px 60px 60px 70px 40px",
                   alignItems:"center",
                   marginBottom:"8px",
                   paddingBottom:"4px",
@@ -1414,6 +1414,7 @@ showAdd && (
                 <div>🎯</div>
                 <div>🔁</div>
                 <div>🔋</div>
+                <div>🏋️</div>
                 <div></div>
 
               </div>
@@ -1427,7 +1428,7 @@ showAdd && (
                         style={{
                           display:"grid",
                           gridTemplateColumns:
-                            "30px 60px 60px 60px 40px",
+                            "30px 60px 60px 60px 70px 40px",
                           alignItems:"center",
                           marginBottom:"6px"
                         }}
@@ -1480,6 +1481,21 @@ showAdd && (
                           }
                         >
                           {set.targetRir}
+                        </div>
+
+                        <div
+                          style={{
+                            textAlign:"center",
+                            fontSize:"0.9em"
+                          }}
+                        >
+                          {
+                            calculateE1RM(
+                              set.targetWeight,
+                              set.targetReps,
+                              set.targetRir
+                            )
+                          }
                         </div>
 
                         <button
@@ -1748,7 +1764,7 @@ showAdd && (
 
                   }}
                 >
-                  Cancel
+                  ❌ Cancel
                 </button>
 
                 <button
@@ -1802,7 +1818,7 @@ showAdd && (
 
                   }}
                 >
-                  Save
+                  ✅ Save
                 </button>
 
               </div>
