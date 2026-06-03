@@ -1387,79 +1387,85 @@ showAdd && (
 
                         <div
                           style={{
-                            display:"flex",
-                            gap:"12px",
-                            alignItems:"center",
-                            flexWrap:"wrap"
+                            cursor:"pointer",
+                            textAlign:"center"
                           }}
+
+                          onClick={() =>
+                            setEditingWeightSetIndex(
+                              index
+                            )
+                          }
                         >
-
-                          <div
-                            style={{
-                              display:"flex",
-                              alignItems:"center",
-                              gap:"6px",
-                              marginTop:"6px"
-                            }}
-                          >
-
-                            <div
-                              style={{
-                                cursor:"pointer",
-                                textAlign:"center"
-                              }}
-
-                              onClick={() =>
-                                setEditingWeightSetIndex(
-                                  index
-                                )
-                              }
-                            >
-                              {set.targetWeight}
-                            </div>
-
-                            <div
-                              style={{
-                                cursor:"pointer",
-                                textAlign:"center"
-                              }}
-
-                              onClick={() =>
-                                setEditingRepsSetIndex(
-                                  index
-                                )
-                              }
-                            >
-                              {set.targetReps}
-                            </div>
-
-                            <div
-                              style={{
-                                cursor:"pointer",
-                                textAlign:"center"
-                              }}
-
-                              onClick={() =>
-                                setEditingRirSetIndex(
-                                  index
-                                )
-                              }
-                            >
-                              {set.targetRir}
-                            </div>
-
-                          </div>
-
+                          {set.targetWeight}
                         </div>
 
-                      </div>
+                        <div
+                          style={{
+                            cursor:"pointer",
+                            textAlign:"center"
+                          }}
 
-                    )
-                  )
-                }
-                
-                <button
-                  onClick={() => {
+                          onClick={() =>
+                            setEditingRepsSetIndex(
+                              index
+                            )
+                          }
+                        >
+                          {set.targetReps}
+                        </div>
+
+                        <div
+                          style={{
+                            cursor:"pointer",
+                            textAlign:"center"
+                          }}
+
+                          onClick={() =>
+                            setEditingRirSetIndex(
+                              index
+                            )
+                          }
+                        >
+                          {set.targetRir}
+                        </div>
+
+                        <button
+                          onClick={() => {
+
+                            if (
+                              editingExerciseDraft.sets.length <= 1
+                            ) {
+                              return
+                            }
+
+                            const updated =
+                              structuredClone(
+                                editingExerciseDraft
+                              )
+
+                            updated.sets.splice(
+                              index,
+                              1
+                            )
+
+                            setEditingExerciseDraft(
+                              updated
+                            )
+
+                          }}
+                     >
+                      🗑
+                    </button>
+
+                  </div>
+                )
+
+              )
+            }
+
+                  <button
+                    onClick={() => {
 
                     const updated =
                       structuredClone(
