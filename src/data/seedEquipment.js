@@ -1,7 +1,6 @@
 // BUILT-IN EQUIPMENT LIBRARY
 
 export const equipmentOptions = [
-
   "Barbell",
   "Dumbbells",
   "Cable",
@@ -13,6 +12,5 @@ export const equipmentOptions = [
   "Resistance Band",
   "Landmine",
   "Bench",
-  "Pullup Bar"
-
-]
+  "Pullup Bar",
+];

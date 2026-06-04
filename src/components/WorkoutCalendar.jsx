@@ -1,425 +1,287 @@
-import { useState } from "react"
+import { useState } from "react";
 
-export default function WorkoutCalendar({
-  history
-}) {
+export default function WorkoutCalendar({ history }) {
+  const [expanded, setExpanded] = useState(false);
 
-  const [expanded,setExpanded] = useState(false)
-  
-  const [displayedMonth,setDisplayedMonth] = useState(new Date())
-  const [selectedDate,setSelectedDate] = useState(null)
+  const [displayedMonth, setDisplayedMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
 
-  const today = new Date()
+  const today = new Date();
 
-  const startOfWeek = new Date(today)
+  const startOfWeek = new Date(today);
 
-  const day = startOfWeek.getDay()
+  const day = startOfWeek.getDay();
 
-  const mondayOffset =
-    day === 0 ? -6 : 1 - day
+  const mondayOffset = day === 0 ? -6 : 1 - day;
 
-  startOfWeek.setDate(
-    today.getDate() + mondayOffset
-  )
+  startOfWeek.setDate(today.getDate() + mondayOffset);
 
-  const days = [...Array(7)].map((_,i) => {
+  const days = [...Array(7)].map((_, i) => {
+    const date = new Date(startOfWeek);
 
-    const date = new Date(startOfWeek)
+    date.setDate(startOfWeek.getDate() + i);
 
-    date.setDate(
-      startOfWeek.getDate() + i
-    )
+    return date;
+  });
 
-    return date
+  const hasWorkout = (date) => {
+    const dateString = date.toLocaleDateString();
 
-  })
+    return history.some((session) => {
+      if (!session.completedAt) return false;
 
-  const hasWorkout = date => {
+      return session.completedAt === dateString;
+    });
+  };
 
-  const dateString = date.toLocaleDateString()
+  const workoutsForDate = (date) => {
+    const dateString = date.toLocaleDateString();
 
-      return history.some(session => {
-
-          if (!session.completedAt)
-            return false
-
-          return (
-            session.completedAt ===
-            dateString
-          )
-
-        })
-
-      }
-
-      const workoutsForDate = date => {
-
-        const dateString =
-          date.toLocaleDateString()
-
-        return history.filter(
-          session =>
-
-            session.completedAt ===
-            dateString
-        )
-
-      }
+    return history.filter((session) => session.completedAt === dateString);
+  };
 
   return (
-
     <div
-      onClick={() =>
-        setExpanded(!expanded)
-      }
-
+      onClick={() => setExpanded(!expanded)}
       style={{
-        marginBottom:"20px",
-        padding:"12px",
-        border:"1px solid #ccc",
-        borderRadius:"12px",
-        cursor:"pointer"
+        marginBottom: "20px",
+        padding: "12px",
+        border: "1px solid #ccc",
+        borderRadius: "12px",
+        cursor: "pointer",
       }}
     >
-
-      <div style={{
-        display:"grid",
-        gridTemplateColumns:"repeat(7,1fr)",
-        textAlign:"center",
-        gap:"4px"
-      }}>
-
-        {days.map(date => (
-
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7,1fr)",
+          textAlign: "center",
+          gap: "4px",
+        }}
+      >
+        {days.map((date) => (
           <div key={date.toISOString()}>
-
-            <div style={{
-              fontSize:"12px",
-              color:"#666"
-            }}>
-
-              {date.toLocaleDateString(
-                undefined,
-                { weekday:"short" }
-              ).slice(0,2)}
-
+            <div
+              style={{
+                fontSize: "12px",
+                color: "#666",
+              }}
+            >
+              {date
+                .toLocaleDateString(undefined, { weekday: "short" })
+                .slice(0, 2)}
             </div>
 
-            <div style={{
-              fontSize:"18px",
-              fontWeight:"bold",
+            <div
+              style={{
+                fontSize: "18px",
+                fontWeight: "bold",
 
-              color:
-                hasWorkout(date)
-                  ? "green"
-                  : "black",
+                color: hasWorkout(date) ? "green" : "black",
 
-              border:
+                border:
+                  date.toDateString() === today.toDateString()
+                    ? "2px solid #1976d2"
+                    : "2px solid transparent",
 
-                date.toDateString() ===
-                today.toDateString()
+                borderRadius: "999px",
 
-                  ? "2px solid #1976d2"
+                width: "32px",
+                height: "32px",
 
-                  : "2px solid transparent",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
 
-              borderRadius:"999px",
-
-              width:"32px",
-              height:"32px",
-
-              display:"flex",
-              alignItems:"center",
-              justifyContent:"center",
-
-              margin:"0 auto"
-            }}>
-
+                margin: "0 auto",
+              }}
+            >
               {date.getDate()}
-
             </div>
-
           </div>
-
         ))}
+      </div>
 
-     </div>
+      {expanded &&
+        (() => {
+          const firstDay = new Date(
+            displayedMonth.getFullYear(),
+            displayedMonth.getMonth(),
+            1,
+          );
 
-      {expanded && (() => {
+          const lastDay = new Date(
+            displayedMonth.getFullYear(),
+            displayedMonth.getMonth() + 1,
+            0,
+          );
 
-        const firstDay = new Date(
-          displayedMonth.getFullYear(),
-          displayedMonth.getMonth(),
-          1
-        )
+          const startOffset = (firstDay.getDay() + 6) % 7;
 
-        const lastDay = new Date(
-          displayedMonth.getFullYear(),
-          displayedMonth.getMonth() + 1,
-          0
-        )
+          const totalDays = lastDay.getDate();
 
-          const startOffset =
-            (firstDay.getDay() + 6) % 7
+          const cells = [];
 
-          const totalDays =
-            lastDay.getDate()
-
-          const cells = []
-
-          for (let i = 0; i < startOffset; i++)
-            cells.push(null)
+          for (let i = 0; i < startOffset; i++) cells.push(null);
 
           for (let day = 1; day <= totalDays; day++)
-
             cells.push(
-
               new Date(
                 displayedMonth.getFullYear(),
                 displayedMonth.getMonth(),
-                day
-              )
-
-            )
+                day,
+              ),
+            );
 
           return (
+            <div
+              style={{
+                marginTop: "16px",
+                paddingTop: "12px",
+                borderTop: "1px solid #ddd",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "12px",
+                }}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
 
-            <div style={{
-              marginTop:"16px",
-              paddingTop:"12px",
-              borderTop:"1px solid #ddd"
-            }}>
+                    setDisplayedMonth(
+                      new Date(
+                        displayedMonth.getFullYear(),
+                        displayedMonth.getMonth() - 1,
+                        1,
+                      ),
+                    );
+                  }}
+                >
+                  ←
+                </button>
 
-              <div style={{
-                  display:"flex",
-                  justifyContent:"space-between",
-                  alignItems:"center",
-                  marginBottom:"12px"
-                }}>
+                <div
+                  style={{
+                    fontWeight: "bold",
+                  }}
+                >
+                  {displayedMonth.toLocaleDateString(undefined, {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </div>
 
-                  <button
-                    onClick={e => {
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
 
-                      e.stopPropagation()
+                    setDisplayedMonth(
+                      new Date(
+                        displayedMonth.getFullYear(),
+                        displayedMonth.getMonth() + 1,
+                        1,
+                      ),
+                    );
+                  }}
+                >
+                  →
+                </button>
+              </div>
 
-                      setDisplayedMonth(
-
-                        new Date(
-                          displayedMonth.getFullYear(),
-                          displayedMonth.getMonth() - 1,
-                          1
-                        )
-
-                      )
-
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7,1fr)",
+                  gap: "6px",
+                  textAlign: "center",
+                }}
+              >
+                {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
+                  <div
+                    key={day}
+                    style={{
+                      fontSize: "12px",
+                      color: "#666",
+                      fontWeight: "bold",
                     }}
                   >
+                    {day}
+                  </div>
+                ))}
 
-                    ←
+                {cells.map((date, i) => (
+                  <div
+                    key={i}
+                    onClick={(e) => {
+                      e.stopPropagation();
 
-                  </button>
+                      if (date && hasWorkout(date))
+                        setSelectedDate(
+                          selectedDate &&
+                            selectedDate.toDateString() === date.toDateString()
+                            ? null
+                            : date,
+                        );
+                    }}
+                    style={{
+                      height: "32px",
 
-                  <div style={{
-                    fontWeight:"bold"
-                  }}>
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
 
-                    {
-                      displayedMonth.toLocaleDateString(
-                        undefined,
-                        {
-                          month:"long",
-                          year:"numeric"
-                        }
-                      )
-                    }
+                      borderRadius: "999px",
 
+                      color: date && hasWorkout(date) ? "green" : "black",
+
+                      border:
+                        date && date.toDateString() === today.toDateString()
+                          ? "2px solid #1976d2"
+                          : "2px solid transparent",
+                    }}
+                  >
+                    {date ? date.getDate() : ""}
+                  </div>
+                ))}
+              </div>
+
+              {selectedDate && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    paddingTop: "12px",
+                    borderTop: "1px solid #ddd",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Workouts on {selectedDate.toLocaleDateString()}
                   </div>
 
-                  <button
-                    onClick={e => {
-
-                      e.stopPropagation()
-
-                      setDisplayedMonth(
-
-                        new Date(
-                          displayedMonth.getFullYear(),
-                          displayedMonth.getMonth() + 1,
-                          1
-                        )
-
-                      )
-
-                    }}
-                  >
-
-                    →
-
-                  </button>
-
-                </div>
-
-              <div style={{
-                display:"grid",
-                gridTemplateColumns:"repeat(7,1fr)",
-                gap:"6px",
-                textAlign:"center"
-              }}>
-
-                {
-
-                  ["Mo","Tu","We","Th","Fr","Sa","Su"]
-
-                    .map(day => (
-
-                      <div
-                        key={day}
-                        style={{
-                          fontSize:"12px",
-                          color:"#666",
-                          fontWeight:"bold"
-                        }}
-                      >
-
-                        {day}
-
-                      </div>
-
-                    ))
-                }
-
-                {
-
-                  cells.map((date,i) => (
-
+                  {workoutsForDate(selectedDate).map((workout) => (
                     <div
-                      key={i}
-
-                      onClick={e => {
-                        e.stopPropagation()
-
-                        if (
-                          date &&
-                          hasWorkout(date)
-                        )
-
-                          setSelectedDate(
-
-                            selectedDate &&
-                            selectedDate.toDateString()
-                              === date.toDateString()
-
-                              ? null
-
-                              : date
-
-                          )
-                      }}
-
+                      key={workout.id}
                       style={{
-
-                        height:"32px",
-
-                        display:"flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-
-                        borderRadius:"999px",
-
-                        color:
-
-                          date && hasWorkout(date)
-                            ? "green"
-                            : "black",
-
-                        border:
-
-                          date &&
-                          date.toDateString()
-                          === today.toDateString()
-
-                            ? "2px solid #1976d2"
-
-                            : "2px solid transparent"
-
+                        marginBottom: "6px",
                       }}
                     >
-
-                      {
-                        date
-                          ? date.getDate()
-                          : ""
-                      }
-
+                      • {workout.templateName}
                     </div>
-
-                  ))
-                }
-
-                   </div>
-
-                  {
-
-                    selectedDate && (
-
-                      <div style={{
-                        marginTop:"16px",
-                        paddingTop:"12px",
-                        borderTop:"1px solid #ddd"
-                      }}>
-
-                        <div style={{
-                          fontWeight:"bold",
-                          marginBottom:"8px"
-                        }}>
-
-                          Workouts on {
-
-                            selectedDate.toLocaleDateString()
-
-                          }
-
-                        </div>
-
-                        {
-
-                          workoutsForDate(
-                            selectedDate
-                          )
-
-                          .map(workout => (
-
-                            <div
-                              key={workout.id}
-
-                              style={{
-                                marginBottom:"6px"
-                              }}
-                            >
-
-                              • {
-                                workout.templateName
-                              }
-
-                            </div>
-
-                          ))
-                        }
-
-                      </div>
-
-                    )
-
-                  }
-
+                  ))}
                 </div>
-
-              )
-
-            })()}
-
-      </div>
-
-      )
-
+              )}
+            </div>
+          );
+        })()}
+    </div>
+  );
 }
