@@ -874,8 +874,8 @@ export default function SessionView({
                     originalExerciseId:
                       newExercise.id,
                       
-                    note:
-                      newExercise.note || ""
+                    exerciseId:
+                      newExercise.id
                   }
 
                   :
@@ -920,7 +920,9 @@ export default function SessionView({
                 ...notes,
 
                 [oldExerciseId]:
-                  !!newExercise.note?.trim()
+                  !!exerciseMetadata?.[
+                      newExercise.id
+                    ]?.note?.trim()
               })
             )
 
@@ -959,7 +961,6 @@ export default function SessionView({
             equipment:exercise.equipment,
             muscles:exercise.muscles,
             supersetGroup:null,
-            note: exercise.note || "",
             sets
           }
         ]
