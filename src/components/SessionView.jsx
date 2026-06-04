@@ -1755,7 +1755,9 @@ export default function SessionView({
 
                             ||
 
-                            exercise.note?.trim()
+                            exerciseMetadata?.[
+                              exercise.exerciseId
+                            ]?.note?.trim()
 
                           )
 
@@ -1778,46 +1780,32 @@ export default function SessionView({
                                   }}
 
                                   value={
-                                    exercise.note
-                                    ||
-                                    ""
+                                    exerciseMetadata?.[
+                                      exercise.exerciseId
+                                    ]?.note || ""
                                   }
 
                                   onChange={
                                     e =>
 
-                                      updateSession(
+                                      setExerciseMetadata({
 
-                                        s => ({
+                                        ...exerciseMetadata,
 
-                                          ...s,
+                                        [exercise.exerciseId]: {
 
-                                          exercises:
+                                          ...(
+                                            exerciseMetadata?.[
+                                              exercise.exerciseId
+                                            ] || {}
+                                          ),
 
-                                            s.exercises.map(
-                                              ex =>
+                                          note:
+                                            e.target.value
 
-                                                ex.id ===
-                                                exercise.id
+                                        }
 
-                                                ?
-
-                                                {
-                                                  ...ex,
-
-                                                  note:
-                                                    e.target.value
-
-                                                }
-
-                                                :
-
-                                                ex
-                                            )
-
-                                        })
-
-                                      )
+                                      })
 
                                   }
 
@@ -1827,36 +1815,16 @@ export default function SessionView({
 
                               onClick={() => {
 
-                                updateSession(
+                                const updated = {
+                                  ...exerciseMetadata
+                                }
 
-                                  s => ({
+                                delete updated[
+                                  exercise.exerciseId
+                                ]
 
-                                    ...s,
-
-                                    exercises:
-
-                                      s.exercises.map(
-                                        ex =>
-
-                                          ex.id ===
-                                          exercise.id
-
-                                          ?
-
-                                          {
-                                            ...ex,
-
-                                            note: ""
-
-                                          }
-
-                                          :
-
-                                          ex
-                                      )
-
-                                  })
-
+                                setExerciseMetadata(
+                                  updated
                                 )
 
                                 setExpandedNotes(
