@@ -107,13 +107,13 @@ export default function WorkoutCalendar({ history }) {
           const firstDay = new Date(
             displayedMonth.getFullYear(),
             displayedMonth.getMonth(),
-            1,
+            1
           );
 
           const lastDay = new Date(
             displayedMonth.getFullYear(),
             displayedMonth.getMonth() + 1,
-            0,
+            0
           );
 
           const startOffset = (firstDay.getDay() + 6) % 7;
@@ -129,8 +129,8 @@ export default function WorkoutCalendar({ history }) {
               new Date(
                 displayedMonth.getFullYear(),
                 displayedMonth.getMonth(),
-                day,
-              ),
+                day
+              )
             );
 
           return (
@@ -157,8 +157,8 @@ export default function WorkoutCalendar({ history }) {
                       new Date(
                         displayedMonth.getFullYear(),
                         displayedMonth.getMonth() - 1,
-                        1,
-                      ),
+                        1
+                      )
                     );
                   }}
                 >
@@ -184,8 +184,8 @@ export default function WorkoutCalendar({ history }) {
                       new Date(
                         displayedMonth.getFullYear(),
                         displayedMonth.getMonth() + 1,
-                        1,
-                      ),
+                        1
+                      )
                     );
                   }}
                 >
@@ -225,7 +225,7 @@ export default function WorkoutCalendar({ history }) {
                           selectedDate &&
                             selectedDate.toDateString() === date.toDateString()
                             ? null
-                            : date,
+                            : date
                         );
                     }}
                     style={{
@@ -238,6 +238,7 @@ export default function WorkoutCalendar({ history }) {
                       borderRadius: "999px",
 
                       color: date && hasWorkout(date) ? "green" : "black",
+                      fontWeight: date && hasWorkout(date) ? "bold" : "normal",
 
                       border:
                         date && date.toDateString() === today.toDateString()

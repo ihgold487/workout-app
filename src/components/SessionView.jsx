@@ -72,7 +72,7 @@ export default function SessionView({
     actualRir,
     targetWeight,
     targetReps,
-    targetRir,
+    targetRir
   ) {
     const w = parseFloat(actualWeight || targetWeight);
 
@@ -101,7 +101,7 @@ export default function SessionView({
     if (!activeSet) return;
 
     const exercise = session.exercises.find(
-      (ex) => ex.id === activeSet.exerciseId,
+      (ex) => ex.id === activeSet.exerciseId
     );
 
     const setIndex = exercise?.sets.findIndex((s) => s.id === activeSet.setId);
@@ -118,7 +118,7 @@ export default function SessionView({
 
         "actualWeight",
 
-        previousSet?.actualWeight || currentSet.targetWeight || "",
+        previousSet?.actualWeight || currentSet.targetWeight || ""
       );
     }
 
@@ -130,7 +130,7 @@ export default function SessionView({
 
         "actualReps",
 
-        previousSet?.actualReps || currentSet.targetReps || "",
+        previousSet?.actualReps || currentSet.targetReps || ""
       );
     }
 
@@ -142,7 +142,7 @@ export default function SessionView({
 
         "actualRir",
 
-        previousSet?.actualRir || currentSet.targetRir || "",
+        previousSet?.actualRir || currentSet.targetRir || ""
       );
     }
   }, [activeSet]);
@@ -227,7 +227,7 @@ export default function SessionView({
             ctx.close();
           },
 
-          200,
+          200
         );
       } catch {}
 
@@ -237,7 +237,7 @@ export default function SessionView({
 
           {
             body: "Ready for next set",
-          },
+          }
         );
       }
 
@@ -254,7 +254,7 @@ export default function SessionView({
 
   function updateSession(updater) {
     setSessions((prevSessions) =>
-      prevSessions.map((s) => (s.id === session.id ? updater(s) : s)),
+      prevSessions.map((s) => (s.id === session.id ? updater(s) : s))
     );
   }
 
@@ -273,10 +273,10 @@ export default function SessionView({
                       ...set,
                       [field]: value,
                     }
-                  : set,
+                  : set
               ),
             }
-          : ex,
+          : ex
       ),
     }));
   }
@@ -292,7 +292,7 @@ export default function SessionView({
 
               sets: ex.sets.filter((set) => set.id !== setId),
             }
-          : ex,
+          : ex
       ),
     }));
   }
@@ -322,7 +322,7 @@ export default function SessionView({
 
               sets: [...ex.sets, newSet],
             }
-          : ex,
+          : ex
       ),
     }));
   }
@@ -350,10 +350,10 @@ export default function SessionView({
                       actualWeight: undo ? "" : set.actualWeight,
                       actualReps: undo ? "" : set.actualReps,
                     }
-                  : set,
+                  : set
               ),
             }
-          : ex,
+          : ex
       ),
     }));
 
@@ -366,11 +366,11 @@ export default function SessionView({
 
     if (group) {
       const superset = session.exercises.filter(
-        (ex) => ex.supersetGroup === group,
+        (ex) => ex.supersetGroup === group
       );
 
       const currentSupersetIndex = superset.findIndex(
-        (ex) => ex.id === exerciseId,
+        (ex) => ex.id === exerciseId
       );
 
       const nextExercise = superset[currentSupersetIndex + 1];
@@ -410,7 +410,7 @@ export default function SessionView({
     }
 
     const exerciseIndex = session.exercises.findIndex(
-      (ex) => ex.id === exerciseId,
+      (ex) => ex.id === exerciseId
     );
 
     const nextExercise = session.exercises[exerciseIndex + 1];
@@ -452,7 +452,7 @@ export default function SessionView({
 
               exerciseId: newExercise.id,
             }
-          : ex,
+          : ex
       ),
     }));
 
@@ -513,7 +513,7 @@ export default function SessionView({
         exercise.name
           .toLowerCase()
 
-          .includes(search.toLowerCase()),
+          .includes(search.toLowerCase())
     )
 
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -541,8 +541,8 @@ export default function SessionView({
         return groups;
       },
 
-      {},
-    ),
+      {}
+    )
   );
 
   function hasStructuralChanges() {
@@ -689,14 +689,14 @@ export default function SessionView({
             background: timerFinished
               ? "#e6f7ea"
               : timerRunning
-                ? "#ffe5e5"
-                : "white",
+              ? "#ffe5e5"
+              : "white",
 
             border: timerFinished
               ? "2px solid #5aa469"
               : timerRunning
-                ? "2px solid #c66"
-                : "1px solid #ccc",
+              ? "2px solid #c66"
+              : "1px solid #ccc",
 
             padding: "6px",
             marginTop: "10px",
@@ -776,7 +776,7 @@ export default function SessionView({
 
                 setTimerStartedAt(
                   Date.now() -
-                    (restMinutes * 60 + restRemainder - restSeconds) * 1000,
+                    (restMinutes * 60 + restRemainder - restSeconds) * 1000
                 );
 
                 setTimerFinished(false);
@@ -889,7 +889,7 @@ export default function SessionView({
                               exercise.equipment?.[0]
                                 ? ", " + exercise.equipment[0]
                                 : ""
-                            }`,
+                            }`
                           )
                         }
                         style={{
@@ -924,11 +924,11 @@ export default function SessionView({
                         setReplacingExerciseId(
                           replacingExerciseId === exercise.id
                             ? null
-                            : exercise.id,
+                            : exercise.id
                         );
 
                         const originalExercise = exerciseLibrary.find(
-                          (ex) => ex.name === exercise.name,
+                          (ex) => ex.name === exercise.name
                         );
 
                         setSelectedMuscle(originalExercise?.muscles?.[0] || "");
@@ -1057,14 +1057,14 @@ export default function SessionView({
 
                       .filter(
                         (ex) =>
-                          !selectedMuscle || ex.muscles?.[0] === selectedMuscle,
+                          !selectedMuscle || ex.muscles?.[0] === selectedMuscle
                       )
 
                       .filter((ex) =>
                         ex.name
                           .toLowerCase()
 
-                          .includes(search.toLowerCase()),
+                          .includes(search.toLowerCase())
                       )
 
                       .map((ex) => (
@@ -1160,8 +1160,8 @@ export default function SessionView({
                       const valueColor = isActive
                         ? "#1976d2"
                         : isCompleted
-                          ? "#444"
-                          : "#aaa";
+                        ? "#444"
+                        : "#aaa";
 
                       return (
                         <div
@@ -1172,7 +1172,7 @@ export default function SessionView({
                               .slice(
                                 0,
 
-                                exercise.sets.findIndex((s) => s.id === set.id),
+                                exercise.sets.findIndex((s) => s.id === set.id)
                               )
 
                               .some((s) => !s.completed);
@@ -1240,7 +1240,7 @@ export default function SessionView({
                                 "",
                                 set.targetWeight,
                                 set.targetReps,
-                                set.targetRir,
+                                set.targetRir
                               )}
                               )
                             </div>
@@ -1301,7 +1301,7 @@ export default function SessionView({
                                   setId: set.id,
 
                                   value: Number(
-                                    set.actualReps || set.targetReps || 0,
+                                    set.actualReps || set.targetReps || 0
                                   ),
                                 });
 
@@ -1341,7 +1341,7 @@ export default function SessionView({
                                   setId: set.id,
 
                                   value: Number(
-                                    set.actualRir || set.targetRir || 0,
+                                    set.actualRir || set.targetRir || 0
                                   ),
                                 });
 
@@ -1396,8 +1396,8 @@ export default function SessionView({
 
                                       set.targetWeight,
                                       set.targetReps,
-                                      set.targetRir,
-                                    ),
+                                      set.targetRir
+                                    )
                                   )
                                 : calculateE1RM(
                                     set.actualWeight,
@@ -1406,7 +1406,7 @@ export default function SessionView({
 
                                     set.targetWeight,
                                     set.targetReps,
-                                    set.targetRir,
+                                    set.targetRir
                                   )}
                             </span>
                           </span>
@@ -1422,8 +1422,8 @@ export default function SessionView({
                                 ? exercise.sets
                                     .slice(
                                       exercise.sets.findIndex(
-                                        (s) => s.id === set.id,
-                                      ) + 1,
+                                        (s) => s.id === set.id
+                                      ) + 1
                                     )
                                     .some((s) => s.completed)
                                 : activeSet?.setId !== set.id
@@ -1464,7 +1464,7 @@ export default function SessionView({
 
                         .reverse()
 
-                        .find((s) => s.actualWeight || s.targetWeight),
+                        .find((s) => s.actualWeight || s.targetWeight)
                     )
                   }
                 >
@@ -1626,7 +1626,7 @@ export default function SessionView({
                         newExerciseValues.weight,
                         newExerciseValues.reps,
                         newExerciseValues.sets,
-                        newExerciseValues.rir,
+                        newExerciseValues.rir
                       )
                     }
                   >
@@ -1906,7 +1906,7 @@ export default function SessionView({
 
                       if (hasStructuralChanges()) {
                         const original = templates.find(
-                          (t) => t.id === session.templateId,
+                          (t) => t.id === session.templateId
                         );
 
                         const derived = {
@@ -1924,7 +1924,7 @@ export default function SessionView({
                             ...ex,
                             sets: ex.sets
                               .filter(
-                                (set) => set.actualWeight && set.actualReps,
+                                (set) => set.actualWeight && set.actualReps
                               )
                               .map((set) => ({
                                 id: Date.now() + Math.random(),
@@ -1949,6 +1949,53 @@ export default function SessionView({
                         setTemplates([...templates, derived]);
                       }
 
+                      const metadataUpdates = {
+                        ...exerciseMetadata,
+                      };
+
+                      completedWorkout.exercises.forEach((exercise) => {
+                        let bestE1RM = null;
+
+                        exercise.sets.forEach((set) => {
+                          const e1rm = calculateE1RM(
+                            set.actualWeight || set.targetWeight,
+                            set.actualReps || set.targetReps,
+                            set.actualRir ?? set.targetRir
+                          );
+
+                          if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
+                            bestE1RM = e1rm;
+                          }
+                        });
+
+                        if (bestE1RM === null) {
+                          return;
+                        }
+
+                        const existing =
+                          metadataUpdates[exercise.exerciseId] || {};
+
+                        metadataUpdates[exercise.exerciseId] = {
+                          ...existing,
+
+                          latestE1RM: {
+                            value: bestE1RM,
+                            date: completedWorkout.completedAt,
+                          },
+
+                          maxE1RM:
+                            !existing.maxE1RM ||
+                            bestE1RM > existing.maxE1RM.value
+                              ? {
+                                  value: bestE1RM,
+                                  date: completedWorkout.completedAt,
+                                }
+                              : existing.maxE1RM,
+                        };
+                      });
+
+                      setExerciseMetadata(metadataUpdates);
+
                       setHistory([completedWorkout, ...history]);
 
                       if (!hasStructuralChanges()) {
@@ -1966,7 +2013,7 @@ export default function SessionView({
                                     sets: ex.sets
                                       .filter(
                                         (set) =>
-                                          set.actualWeight && set.actualReps,
+                                          set.actualWeight && set.actualReps
                                       )
                                       .map((set) => ({
                                         id: Date.now() + Math.random(),
@@ -1979,8 +2026,8 @@ export default function SessionView({
                                       })),
                                   })),
                                 }
-                              : t,
-                          ),
+                              : t
+                          )
                         );
                       }
 
@@ -2011,14 +2058,14 @@ export default function SessionView({
                 e1RMExplorerData.exerciseId,
                 e1RMExplorerData.setId,
                 "actualWeight",
-                String(option.weight),
+                String(option.weight)
               );
 
               updateActual(
                 e1RMExplorerData.exerciseId,
                 e1RMExplorerData.setId,
                 "actualReps",
-                String(option.reps),
+                String(option.reps)
               );
 
               setWeightEditBuffer((prev) => {
@@ -2049,7 +2096,7 @@ export default function SessionView({
                 weightPickerData.exerciseId,
                 weightPickerData.setId,
                 "actualWeight",
-                String(value),
+                String(value)
               );
             }}
           />
@@ -2069,7 +2116,7 @@ export default function SessionView({
                 rirPickerData.exerciseId,
                 rirPickerData.setId,
                 "actualRir",
-                String(value),
+                String(value)
               );
             }}
           />
@@ -2090,7 +2137,7 @@ export default function SessionView({
                 repsPickerData.exerciseId,
                 repsPickerData.setId,
                 "actualReps",
-                String(value),
+                String(value)
               );
             }}
           />
