@@ -80,7 +80,7 @@ export default function TemplateView({
 
       exercises: template.exercises.map((exercise) => {
         const libraryExercise = exerciseLibrary.find(
-          (ex) => ex.id === exercise.exerciseId,
+          (ex) => ex.id === exercise.exerciseId
         );
 
         return {
@@ -130,7 +130,7 @@ export default function TemplateView({
         targetReps: reps,
 
         targetRir: rir,
-      }),
+      })
     );
 
     setTemplates(
@@ -157,8 +157,8 @@ export default function TemplateView({
                 },
               ],
             }
-          : t,
-      ),
+          : t
+      )
     );
 
     setShowAdd(false);
@@ -182,7 +182,7 @@ export default function TemplateView({
         exercise.name
           .toLowerCase()
 
-          .includes(search.toLowerCase()),
+          .includes(search.toLowerCase())
     )
 
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -229,8 +229,8 @@ export default function TemplateView({
 
                     name: e.target.value,
                   }
-                : t,
-            ),
+                : t
+            )
           )
         }
       />
@@ -267,7 +267,9 @@ export default function TemplateView({
 
           {filteredExercises.map((exercise) => (
             <div
-              key={`${exercise.name}-${exercise.equipment?.[0] || ""}-${exercise.id}`}
+              key={`${exercise.name}-${exercise.equipment?.[0] || ""}-${
+                exercise.id
+              }`}
               style={{
                 marginTop: "10px",
               }}
@@ -316,6 +318,22 @@ export default function TemplateView({
 
               <div
                 style={{
+                  fontSize: "0.9em",
+                  color: "#666",
+                  textAlign: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                Latest e1RM:{" "}
+                {exerciseMetadata?.[pendingExercise.id]?.latestE1RM?.value ??
+                  "—"}
+                {" | "}
+                Max e1RM:{" "}
+                {exerciseMetadata?.[pendingExercise.id]?.maxE1RM?.value ?? "—"}
+              </div>
+
+              <div
+                style={{
                   marginBottom: "12px",
                   fontWeight: "bold",
                   textAlign: "center",
@@ -325,7 +343,7 @@ export default function TemplateView({
                 {calculateE1RM(
                   newExerciseValues.weight,
                   newExerciseValues.reps,
-                  newExerciseValues.rir,
+                  newExerciseValues.rir
                 )}
               </div>
 
@@ -412,23 +430,23 @@ export default function TemplateView({
                     fontSize: "28px",
                   }}
                 >
-                  🔢 {/* Sets */}
+                  🔋 {/* RIR */}
                 </span>
 
                 <input
                   type="number"
-                  inputMode="numeric"
-                  placeholder="Sets"
+                  inputMode="decimal"
+                  placeholder="RIR"
                   style={{
                     width: "70px",
                     fontSize: "20px",
                     padding: "10px",
                   }}
-                  value={newExerciseValues.sets}
+                  value={newExerciseValues.rir || ""}
                   onChange={(e) =>
                     setNewExerciseValues((v) => ({
                       ...v,
-                      sets: e.target.value,
+                      rir: e.target.value,
                     }))
                   }
                 />
@@ -447,23 +465,23 @@ export default function TemplateView({
                     fontSize: "28px",
                   }}
                 >
-                  🔋 {/* RIR */}
+                  🔢 {/* Sets */}
                 </span>
 
                 <input
                   type="number"
-                  inputMode="decimal"
-                  placeholder="RIR"
+                  inputMode="numeric"
+                  placeholder="Sets"
                   style={{
                     width: "70px",
                     fontSize: "20px",
                     padding: "10px",
                   }}
-                  value={newExerciseValues.rir || ""}
+                  value={newExerciseValues.sets}
                   onChange={(e) =>
                     setNewExerciseValues((v) => ({
                       ...v,
-                      rir: e.target.value,
+                      sets: e.target.value,
                     }))
                   }
                 />
@@ -532,11 +550,11 @@ export default function TemplateView({
             }
 
             const oldIndex = template.exercises.findIndex(
-              (ex) => ex.id === active.id,
+              (ex) => ex.id === active.id
             );
 
             const newIndex = template.exercises.findIndex(
-              (ex) => ex.id === over.id,
+              (ex) => ex.id === over.id
             );
 
             const reordered = arrayMove(template.exercises, oldIndex, newIndex);
@@ -548,8 +566,8 @@ export default function TemplateView({
                       ...t,
                       exercises: reordered,
                     }
-                  : t,
-              ),
+                  : t
+              )
             );
           }}
         >
@@ -601,13 +619,13 @@ export default function TemplateView({
                             }}
                             onClick={() => {
                               const libraryExercise = exerciseLibrary.find(
-                                (ex) => ex.id === exercise.exerciseId,
+                                (ex) => ex.id === exercise.exerciseId
                               );
 
                               const note = prompt(
                                 "Exercise note",
                                 exerciseMetadata[exercise.exerciseId]?.note ||
-                                  "",
+                                  ""
                               );
 
                               if (note === null) return;
@@ -662,7 +680,7 @@ export default function TemplateView({
                           style={iconButton}
                           onClick={() => {
                             const group = prompt(
-                              "Superset group (A, B, etc). Leave empty to clear.",
+                              "Superset group (A, B, etc). Leave empty to clear."
                             );
 
                             setTemplates(
@@ -678,11 +696,11 @@ export default function TemplateView({
 
                                               supersetGroup: group || null,
                                             }
-                                          : ex,
+                                          : ex
                                       ),
                                     }
-                                  : t,
-                              ),
+                                  : t
+                              )
                             );
                           }}
                         >
@@ -701,11 +719,11 @@ export default function TemplateView({
                                       ...t,
 
                                       exercises: t.exercises.filter(
-                                        (ex) => ex.id !== exercise.id,
+                                        (ex) => ex.id !== exercise.id
                                       ),
                                     }
-                                  : t,
-                              ),
+                                  : t
+                              )
                             );
                           }}
                         >
@@ -776,7 +794,7 @@ export default function TemplateView({
                         {calculateE1RM(
                           set.targetWeight,
                           set.targetReps,
-                          set.targetRir || set.rir,
+                          set.targetRir || set.rir
                         )}
                         )
                       </div>
@@ -808,7 +826,24 @@ export default function TemplateView({
               minWidth: "300px",
             }}
           >
-            <h3>{editingExercise.name}</h3>
+            <div>
+              <h3>{editingExercise.name}</h3>
+
+              <div
+                style={{
+                  fontSize: "0.9em",
+                  color: "#666",
+                  marginBottom: "12px",
+                }}
+              >
+                Latest e1RM:{" "}
+                {exerciseMetadata?.[editingExercise.id]?.latestE1RM?.value ??
+                  "—"}
+                {" | "}
+                Max e1RM:{" "}
+                {exerciseMetadata?.[editingExercise.id]?.maxE1RM?.value ?? "—"}
+              </div>
+            </div>
 
             <div>
               <div
@@ -881,7 +916,7 @@ export default function TemplateView({
                     {calculateE1RM(
                       set.targetWeight,
                       set.targetReps,
-                      set.targetRir,
+                      set.targetRir
                     )}
                   </div>
 
@@ -1016,11 +1051,11 @@ export default function TemplateView({
                             exercises: t.exercises.map((ex) =>
                               ex.id === editingExercise.id
                                 ? editingExerciseDraft
-                                : ex,
+                                : ex
                             ),
                           }
-                        : t,
-                    ),
+                        : t
+                    )
                   );
 
                   setEditingExercise(null);
