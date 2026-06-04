@@ -182,7 +182,10 @@ export default function ExerciseView({
                       ?
                       [equipment]
                       :
-                      []
+                      [],
+
+                  note:
+                    ""
                 }
 
               ])

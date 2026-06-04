@@ -13,6 +13,8 @@ export default function SessionView({
   setTemplates,
   exerciseLibrary,
   setExerciseLibrary,
+  exerciseMetadata,
+  setExerciseMetadata,
   setSelectedSessionId,
   setSelectedTemplateId
 }) {
@@ -870,7 +872,10 @@ export default function SessionView({
                       newExercise.muscles,
 
                     originalExerciseId:
-                      newExercise.id
+                      newExercise.id,
+                      
+                    note:
+                      newExercise.note || ""
                   }
 
                   :
@@ -909,6 +914,15 @@ export default function SessionView({
             )
 
             setSearch("")
+            
+            setExpandedNotes(
+              notes => ({
+                ...notes,
+
+                [oldExerciseId]:
+                  !!newExercise.note?.trim()
+              })
+            )
 
     }
 
@@ -945,6 +959,7 @@ export default function SessionView({
             equipment:exercise.equipment,
             muscles:exercise.muscles,
             supersetGroup:null,
+            note: exercise.note || "",
             sets
           }
         ]

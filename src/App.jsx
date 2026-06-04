@@ -62,15 +62,11 @@ export default function App() {
     function exportBackup() {
 
       const data = {
-
         templates,
-
         history,
-
-        sessions,
-
+        sessions,   
+        exerciseMetadata,
         exerciseLibrary
-
       }
 
 
@@ -249,7 +245,28 @@ export default function App() {
       ]
 
     })
+    
+    const [
+      exerciseMetadata,
+      setExerciseMetadata
+    ] = useState(
 
+      () =>
+
+        JSON.parse(
+
+          localStorage.getItem(
+            "exerciseMetadata"
+          )
+
+        )
+
+        ||
+
+        {}
+
+    )
+  
     const [
       selectedTemplateId,
       setSelectedTemplateId
@@ -335,6 +352,16 @@ export default function App() {
           templates
         )
       )
+      
+      localStorage.setItem(
+
+      "exerciseMetadata",
+
+      JSON.stringify(
+        exerciseMetadata
+      )
+
+    )
 
 
       localStorage.setItem(
@@ -368,6 +395,7 @@ export default function App() {
       history,
       sessions,
       exerciseLibrary,
+      exerciseMetadata,
       selectedSessionId
     ])
 
@@ -432,6 +460,14 @@ export default function App() {
 
           setExerciseLibrary={
             setExerciseLibrary
+          }
+          
+          exerciseMetadata={
+            exerciseMetadata
+          }
+
+          setExerciseMetadata={
+            setExerciseMetadata
           }
 
           setShowExercises={
@@ -583,6 +619,14 @@ export default function App() {
               setExerciseLibrary={
                 setExerciseLibrary
               }
+              
+              exerciseMetadata={
+                exerciseMetadata
+              }
+
+              setExerciseMetadata={
+                setExerciseMetadata
+              }
 
               setSelectedSessionId={
                 setSelectedSessionId
@@ -606,37 +650,17 @@ export default function App() {
 
       <TemplateView
 
-        template={
-          selectedTemplate
-        }
-
-        templates={
-          templates
-        }
-
-        setTemplates={
-          setTemplates
-        }
-
-        exerciseLibrary={
-          exerciseLibrary
-        }
-
-        setSelectedTemplateId={
-          setSelectedTemplateId
-        }
-
-        setSelectedSessionId={
-          setSelectedSessionId
-        }
-
-        sessions={
-          sessions
-        }
-
-        setSessions={
-          setSessions
-        }
+        template={selectedTemplate}
+        templates={templates}
+        setTemplates={setTemplates}
+        exerciseLibrary={exerciseLibrary}
+        setSelectedTemplateId={setSelectedTemplateId}
+        setSelectedSessionId={setSelectedSessionId}
+        sessions={sessions}
+        setSessions={setSessions}        
+        setExerciseLibrary={setExerciseLibrary}
+        exerciseMetadata={exerciseMetadata}
+        setExerciseMetadata={setExerciseMetadata}
 
       />
 

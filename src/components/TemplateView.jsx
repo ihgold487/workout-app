@@ -48,6 +48,9 @@ export default function TemplateView({
   templates,
   setTemplates,
   exerciseLibrary,
+  setExerciseLibrary,
+  exerciseMetadata,
+  setExerciseMetadata,
   sessions,
   setSessions,
   setSelectedSessionId,
@@ -110,11 +113,21 @@ export default function TemplateView({
       exercises:
 
         template.exercises.map(
-          exercise => ({
+          exercise => {
 
-            ...exercise,
+            const libraryExercise =
+              exerciseLibrary.find(
+                ex => ex.id === exercise.exerciseId
+              )
 
-            sets:
+            return {
+
+              ...exercise,
+
+              note:
+                libraryExercise?.note || "",
+
+              sets:
 
               exercise.sets.map(
                 set => ({
@@ -133,13 +146,13 @@ export default function TemplateView({
                   actualRir:
                     ""
 
-                })
+                                })
 
-              )
+                      )
 
-          })
+                    }
 
-        )
+                  })
 
     }
 
@@ -227,17 +240,15 @@ export default function TemplateView({
 
                 {
 
-                  id:
-                    Date.now(),
+                  id: Date.now(),
+                    
+                  exerciseId: exercise.id,
 
-                  name:
-                    exercise.name,
+                  name: exercise.name,
 
-                  equipment:
-                    exercise.equipment,
+                  equipment: exercise.equipment,
 
-                  muscles:
-                    exercise.muscles,
+                  muscles: exercise.muscles,
 
                   sets
 
@@ -1025,16 +1036,7 @@ showAdd && (
 
                 <span
 
-                  onClick={() =>
-                    alert(
-                      `${exercise.name}${
-                        exercise.equipment?.[0]
-                          ? ", " + exercise.equipment[0]
-                          : ""
-                      }`
-
-                    )
-                  }
+                  onClick={() => {}}
 
                   style={{
 
@@ -1061,44 +1063,43 @@ showAdd && (
                   }}
                   onClick={() => {
 
+                    const libraryExercise =
+                      exerciseLibrary.find(
+                        ex => ex.id === exercise.exerciseId
+                      )
+
                     const note =
                       prompt(
                         "Exercise note",
-                        exercise.note || ""
+                        exerciseMetadata[
+                          exercise.exerciseId
+                        ]?.note || ""
                       )
+                      
 
                     if (note === null)
                       return
 
-                    setTemplates(
+                    setExerciseMetadata(
 
-                      templates.map(
-                        t =>
+                    {
+                      ...exerciseMetadata,
 
-                          t.id === template.id
+                      [exercise.exerciseId]: {
 
-                            ? {
-                                ...t,
-                                exercises:
-                                  t.exercises.map(
-                                    ex =>
+                        ...(
+                          exerciseMetadata[
+                            exercise.exerciseId
+                          ] || {}
+                        ),
 
-                                      ex.id ===
-                                      exercise.id
+                        note
 
-                                        ? {
-                                            ...ex,
-                                            note
-                                          }
+                      }
 
-                                        : ex
-                                  )
-                              }
+                    }
 
-                            : t
-                      )
-
-                    )
+                  )
 
                   }}
 
@@ -1229,8 +1230,6 @@ showAdd && (
 
                 </button>
 
-
-
                 <button
                     style={iconButton}
 
@@ -1280,6 +1279,79 @@ showAdd && (
                 </div>
 
             </h3>
+            
+            {
+                  (() => {
+
+                    const note =
+                      exerciseMetadata?.[
+                        exercise.exerciseId
+                      ]?.note
+
+                    return note &&
+                      note.trim().length > 0
+
+                      ? (
+
+                          <div
+                            style={{
+                              fontSize:"0.75rem",
+                              color:"#666",
+                              marginTop:"2px",
+                              marginLeft:"28px",
+                              textAlign:"left",
+                              width:"100%"
+                            }}
+                          >
+
+                            <span>
+
+                              📝 {
+                                exerciseMetadata[
+                                  exercise.exerciseId
+                                ]?.note
+                              }
+
+                            </span>
+
+                            <button
+                              onClick={() => {
+
+                                const updated = {
+                                  ...exerciseMetadata
+                                }
+
+                                delete updated[
+                                  exercise.exerciseId
+                                ]
+
+                                setExerciseMetadata(
+                                  updated
+                                )
+
+                              }}
+                              style={{
+                                marginLeft:"8px",
+                                border:"none",
+                                background:"none",
+                                cursor:"pointer"
+                              }}
+                            >
+
+                              ×
+
+                            </button>
+
+                          </div>
+
+                        )
+
+                      : null
+
+                  })()
+                }
+            
+            
               {
 
                 exercise.sets.map(
