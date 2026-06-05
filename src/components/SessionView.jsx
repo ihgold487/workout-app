@@ -52,6 +52,8 @@ export default function SessionView({
   const [repsPickerData, setRepsPickerData] = useState(null);
   const [showRirPicker, setShowRirPicker] = useState(false);
   const [rirPickerData, setRirPickerData] = useState(null);
+  const wakeLockRef = useRef(null);
+  const [keepScreenAwake, setKeepScreenAwake] = useState(true);
 
   function lbsToKg(lbs) {
     const num = parseFloat(lbs);
@@ -265,6 +267,54 @@ export default function SessionView({
       setRestSeconds(restMinutes * 60 + restRemainder);
     }
   }, [restSeconds, timerRunning]);
+
+  useEffect(() => {
+    if (!keepScreenAwake) {
+      wakeLockRef.current?.release();
+
+      wakeLockRef.current = null;
+
+      return;
+    }
+    async function requestWakeLock() {
+      if (!keepScreenAwake) {
+        return;
+      }
+      try {
+        if ("wakeLock" in navigator && !wakeLockRef.current) {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+        }
+      } catch (err) {
+        console.error("Wake lock failed:", err);
+      }
+    }
+
+    requestWakeLock();
+
+    const handleVisibilityChange = async () => {
+      if (
+        keepScreenAwake &&
+        document.visibilityState === "visible" &&
+        "wakeLock" in navigator
+      ) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+        } catch (err) {
+          console.error("Wake lock re-request failed:", err);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      wakeLockRef.current?.release();
+
+      wakeLockRef.current = null;
+    };
+  }, [keepScreenAwake]);
 
   function updateSession(updater) {
     setSessions((prevSessions) =>
@@ -637,6 +687,17 @@ export default function SessionView({
             }}
           >
             {weightUnit === "lb" ? "⚖️ LB" : "⚖️ KG"}
+          </button>
+          <button
+            onClick={() => setKeepScreenAwake((v) => !v)}
+            style={{
+              minWidth: "78px",
+              padding: "6px 8px",
+              fontWeight: "bold",
+              fontSize: "14px",
+            }}
+          >
+            {keepScreenAwake ? "☀️ Auto-Lock Off" : "🌙 Auto-Lock On"}
           </button>
         </div>
 
