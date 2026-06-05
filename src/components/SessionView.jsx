@@ -2008,7 +2008,7 @@ export default function SessionView({
                             set.actualWeight || set.targetWeight,
                             set.actualReps || set.targetReps,
                             set.actualRir ?? set.targetRir
-                          )?.toFixed(1);
+                          );
 
                           if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
                             bestE1RM = e1rm;
