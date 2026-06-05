@@ -9,6 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
+import { calculateE1RM } from "../utils/e1rm";
 
 function SortableExerciseRow({ exercise, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -188,21 +189,6 @@ export default function TemplateView({
     )
 
     .sort((a, b) => a.name.localeCompare(b.name));
-
-  function calculateE1RM(weight, reps, rir) {
-    const w = Number(weight);
-    const r = Number(reps);
-    const reserve =
-      rir === undefined || rir === null || rir === "" ? 0 : Number(rir);
-
-    if (!w || !r) {
-      return "";
-    }
-
-    const repsToFailure = r + reserve;
-
-    return Math.round(w * (1 + repsToFailure / 30));
-  }
 
   function getLatestWorkoutPerformance(exerciseId) {
     const workout = history.find((workout) =>
@@ -655,10 +641,11 @@ export default function TemplateView({
                           : ""}{" "}
                         (🏋️‍♂️{" "}
                         {calculateE1RM(
-                          set.targetWeight,
+                          null,
                           set.targetReps,
-                          set.targetRir || set.rir
-                        )}
+                          set.targetRir || set.rir,
+                          set.targetWeight
+                        )?.toFixed(1)}
                         )
                       </div>
                     ))}
@@ -777,10 +764,11 @@ export default function TemplateView({
                     }}
                   >
                     {calculateE1RM(
-                      set.targetWeight,
+                      null,
                       set.targetReps,
-                      set.targetRir
-                    )}
+                      set.targetRir || set.rir,
+                      set.targetWeight
+                    )?.toFixed(1)}
                   </div>
 
                   <button

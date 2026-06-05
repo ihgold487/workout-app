@@ -58,7 +58,12 @@ export default function ExerciseSetupDialog({
               {set.actualReps}
               {" @ "}
               {set.actualRir} (e1RM{" "}
-              {calculateE1RM(set.actualWeight, set.actualReps, set.actualRir)})
+              {calculateE1RM(
+                set.actualWeight,
+                set.actualReps,
+                set.actualRir
+              )?.toFixed(1)}
+              )
             </div>
           ))}
         </div>
@@ -70,7 +75,8 @@ export default function ExerciseSetupDialog({
           textAlign: "center",
         }}
       >
-        🏋️ e1RM: {calculateE1RM(values.weight, values.reps, values.rir)}
+        🏋️ e1RM:{" "}
+        {calculateE1RM(values.weight, values.reps, values.rir)?.toFixed(1)}
       </div>
       <div
         style={{

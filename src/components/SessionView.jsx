@@ -3,6 +3,7 @@ import { equipmentOptions } from "../data/seedEquipment";
 import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
+import { calculateE1RM } from "../utils/e1rm";
 
 export default function SessionView({
   session,
@@ -43,7 +44,6 @@ export default function SessionView({
   const [replacementExercise, setReplacementExercise] = useState(null);
   const [replacementTarget, setReplacementTarget] = useState(null);
   const [weightUnit, setWeightUnit] = useState("lb");
-  const [weightEditBuffer, setWeightEditBuffer] = useState({});
   const [showE1RMExplorer, setShowE1RMExplorer] = useState(false);
   const [e1RMExplorerData, setE1RMExplorerData] = useState(null);
   const [showWeightPicker, setShowWeightPicker] = useState(false);
@@ -75,27 +75,6 @@ export default function SessionView({
     }
 
     return weightUnit === "kg" ? lbsToKg(weight) : weight;
-  }
-
-  function calculateE1RM(
-    actualWeight,
-    actualReps,
-    actualRir,
-    targetWeight,
-    targetReps,
-    targetRir
-  ) {
-    const w = parseFloat(actualWeight || targetWeight);
-
-    const r = parseFloat(actualReps || targetReps);
-
-    const reserve = parseFloat(actualRir || targetRir || 0);
-
-    if (isNaN(w) || isNaN(r)) {
-      return "";
-    }
-
-    return Math.round(w * (1 + (r + reserve) / 30));
   }
 
   function getLatestWorkoutPerformance(exerciseId) {
@@ -1308,7 +1287,7 @@ export default function SessionView({
                                 set.targetWeight,
                                 set.targetReps,
                                 set.targetRir
-                              )}
+                              )?.toFixed(1)}
                               )
                             </div>
                           </div>
@@ -1464,7 +1443,7 @@ export default function SessionView({
                                       set.targetWeight,
                                       set.targetReps,
                                       set.targetRir
-                                    )
+                                    )?.toFixed(1)
                                   )
                                 : calculateE1RM(
                                     set.actualWeight,
@@ -1474,7 +1453,7 @@ export default function SessionView({
                                     set.targetWeight,
                                     set.targetReps,
                                     set.targetRir
-                                  )}
+                                  )?.toFixed(1)}
                             </span>
                           </span>
 
@@ -2029,7 +2008,7 @@ export default function SessionView({
                             set.actualWeight || set.targetWeight,
                             set.actualReps || set.targetReps,
                             set.actualRir ?? set.targetRir
-                          );
+                          )?.toFixed(1);
 
                           if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
                             bestE1RM = e1rm;
@@ -2135,18 +2114,6 @@ export default function SessionView({
                 "actualReps",
                 String(option.reps)
               );
-
-              setWeightEditBuffer((prev) => {
-                const next = {
-                  ...prev,
-                };
-
-                delete next[
-                  `${e1RMExplorerData.exerciseId}-${e1RMExplorerData.setId}`
-                ];
-
-                return next;
-              });
             }}
           />
 

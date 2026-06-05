@@ -1,4 +1,5 @@
 import React from "react";
+import { calculateE1RM } from "../utils/e1rm";
 
 export default function E1RMExplorerModal({
   isOpen,
@@ -8,26 +9,6 @@ export default function E1RMExplorerModal({
 }) {
   const [increment, setIncrement] = React.useState(5);
 
-  function calculateE1RM(
-    actualWeight,
-    actualReps,
-    actualRir,
-    targetWeight,
-    targetReps,
-    targetRir,
-  ) {
-    const w = parseFloat(actualWeight || targetWeight);
-
-    const r = parseFloat(actualReps || targetReps);
-
-    const reserve = parseFloat(actualRir || targetRir || 0);
-
-    if (isNaN(w) || isNaN(r)) {
-      return "";
-    }
-
-    return Math.round(w * (1 + (r + reserve) / 30));
-  }
   function getProgressionOption() {
     if (!setData) return null;
 
@@ -44,7 +25,7 @@ export default function E1RMExplorerModal({
 
       rir,
 
-      e1rm: calculateE1RM(weight + increment, reps, rir),
+      e1rm: calculateE1RM(weight + increment, reps, rir)?.toFixed(1),
     };
   }
 
@@ -94,7 +75,7 @@ export default function E1RMExplorerModal({
 
         rir,
 
-        e1rm: calculateE1RM(option.weight, option.reps, rir),
+        e1rm: calculateE1RM(option.weight, option.reps, rir)?.toFixed(1),
       }));
   }
 
@@ -150,7 +131,9 @@ export default function E1RMExplorerModal({
             }}
           />
           🏋️
-          {calculateE1RM(setData?.weight, setData?.reps, setData?.rir)}
+          {calculateE1RM(setData?.weight, setData?.reps, setData?.rir)?.toFixed(
+            1
+          )}
         </div>
 
         <div
@@ -205,7 +188,9 @@ export default function E1RMExplorerModal({
               cursor: "pointer",
             }}
           >
-            {`${getProgressionOption().weight}×${getProgressionOption().reps}@${getProgressionOption().rir}`}
+            {`${getProgressionOption().weight}×${getProgressionOption().reps}@${
+              getProgressionOption().rir
+            }`}
             {"  "}({getProgressionOption().e1rm})
           </div>
         )}
