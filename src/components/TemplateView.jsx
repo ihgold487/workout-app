@@ -38,6 +38,7 @@ export default function TemplateView({
   setExerciseLibrary,
   exerciseMetadata,
   setExerciseMetadata,
+  history,
   sessions,
   setSessions,
   setSelectedSessionId,
@@ -202,6 +203,29 @@ export default function TemplateView({
     return Math.round(w * (1 + repsToFailure / 30));
   }
 
+  function getLatestWorkoutPerformance(exerciseId) {
+    const workout = history.find((workout) =>
+      workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
+    );
+
+    if (!workout) {
+      return null;
+    }
+
+    const exercise = workout.exercises.find(
+      (exercise) => exercise.exerciseId === exerciseId
+    );
+
+    if (!exercise) {
+      return null;
+    }
+
+    return {
+      completedAt: workout.completedAt,
+      sets: exercise.sets,
+    };
+  }
+
   const muscleGroups = [...new Set(exerciseLibrary.map((e) => e.muscles?.[0]))];
 
   return (
@@ -324,14 +348,67 @@ export default function TemplateView({
                   marginBottom: "8px",
                 }}
               >
-                Latest e1RM:{" "}
-                {exerciseMetadata?.[pendingExercise.id]?.latestE1RM?.value ??
-                  "—"}
-                {" | "}
                 Max e1RM:{" "}
                 {exerciseMetadata?.[pendingExercise.id]?.maxE1RM?.value ?? "—"}
               </div>
+              {(() => {
+                const performance = getLatestWorkoutPerformance(
+                  pendingExercise.id
+                );
 
+                if (!performance) {
+                  return (
+                    <div
+                      style={{
+                        marginBottom: "12px",
+                        fontSize: "0.9em",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Last workout: none
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    style={{
+                      marginBottom: "12px",
+                      fontSize: "0.9em",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Last workout ({performance.completedAt})
+                    </div>
+
+                    {performance.sets.map((set) => (
+                      <div key={set.id}>
+                        {set.actualWeight}
+                        {" × "}
+                        {set.actualReps}
+                        {" @ "}
+                        {set.actualRir} (e1RM{" "}
+                        {calculateE1RM(
+                          set.actualWeight,
+                          set.actualReps,
+                          set.actualRir
+                        )}
+                        )
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               <div
                 style={{
                   marginBottom: "12px",

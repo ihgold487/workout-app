@@ -25,7 +25,7 @@ export default function App() {
         "Migrating storage:",
         savedStorageVersion,
         "→",
-        STORAGE_VERSION,
+        STORAGE_VERSION
       );
 
       localStorage.removeItem("exerciseLibrary");
@@ -51,7 +51,7 @@ export default function App() {
 
       {
         type: "application/json",
-      },
+      }
     );
 
     const url = URL.createObjectURL(blob);
@@ -86,15 +86,15 @@ export default function App() {
   }
 
   const [templates, setTemplates] = useState(
-    () => JSON.parse(localStorage.getItem("templates")) || [],
+    () => JSON.parse(localStorage.getItem("templates")) || []
   );
 
   const [sessions, setSessions] = useState(
-    () => JSON.parse(localStorage.getItem("sessions")) || [],
+    () => JSON.parse(localStorage.getItem("sessions")) || []
   );
 
   const [history, setHistory] = useState(
-    () => JSON.parse(localStorage.getItem("history")) || [],
+    () => JSON.parse(localStorage.getItem("history")) || []
   );
 
   // EXERCISE LIBRARY
@@ -112,7 +112,7 @@ export default function App() {
   });
 
   const [exerciseMetadata, setExerciseMetadata] = useState(
-    () => JSON.parse(localStorage.getItem("exerciseMetadata")) || {},
+    () => JSON.parse(localStorage.getItem("exerciseMetadata")) || {}
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -122,7 +122,7 @@ export default function App() {
   const [templateSort, setTemplateSort] = useState("recent");
 
   const [selectedSessionId, setSelectedSessionId] = useState(
-    () => JSON.parse(localStorage.getItem("selectedSessionId")) || null,
+    () => JSON.parse(localStorage.getItem("selectedSessionId")) || null
   );
   const [selectedHistory, setSelectedHistory] = useState(null);
 
@@ -134,43 +134,43 @@ export default function App() {
     localStorage.setItem(
       "exerciseLibrary",
 
-      JSON.stringify(exerciseLibrary),
+      JSON.stringify(exerciseLibrary)
     );
 
     localStorage.setItem(
       "storageVersion",
 
-      JSON.stringify(STORAGE_VERSION),
+      JSON.stringify(STORAGE_VERSION)
     );
 
     localStorage.setItem(
       "templates",
 
-      JSON.stringify(templates),
+      JSON.stringify(templates)
     );
 
     localStorage.setItem(
       "exerciseMetadata",
 
-      JSON.stringify(exerciseMetadata),
+      JSON.stringify(exerciseMetadata)
     );
 
     localStorage.setItem(
       "history",
 
-      JSON.stringify(history),
+      JSON.stringify(history)
     );
 
     localStorage.setItem(
       "sessions",
 
-      JSON.stringify(sessions),
+      JSON.stringify(sessions)
     );
 
     localStorage.setItem(
       "selectedSessionId",
 
-      JSON.stringify(selectedSessionId),
+      JSON.stringify(selectedSessionId)
     );
   }, [
     templates,
@@ -287,6 +287,7 @@ export default function App() {
         setExerciseLibrary={setExerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
+        history={history}
       />
     );
   }
@@ -466,8 +467,8 @@ export default function App() {
                         onClick={() => {
                           setTemplates(
                             templates.filter(
-                              (t) => t.id !== confirmDeleteTemplate.id,
-                            ),
+                              (t) => t.id !== confirmDeleteTemplate.id
+                            )
                           );
 
                           setConfirmDeleteTemplate(null);
@@ -481,7 +482,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     const matches = history.filter(
-                      (h) => h.templateId === template.id,
+                      (h) => h.templateId === template.id
                     );
 
                     if (matches.length) {
