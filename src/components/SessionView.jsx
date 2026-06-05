@@ -1556,7 +1556,45 @@ export default function SessionView({
                   boxShadow: "0 4px 12px rgba(0,0,0,.2)",
                 }}
               >
-                <h3>{pendingExercise.name}</h3>
+                <h3>
+                  {`${pendingExercise.name}${
+                    pendingExercise.equipment?.[0]
+                      ? ", " + pendingExercise.equipment[0]
+                      : ""
+                  }`}
+                </h3>
+
+                <div
+                  style={{
+                    fontSize: "0.9em",
+                    color: "#666",
+                    marginBottom: "12px",
+                    textAlign: "center",
+                  }}
+                >
+                  Latest e1RM:{" "}
+                  {exerciseMetadata?.[pendingExercise.id]?.latestE1RM?.value ??
+                    "—"}
+                  {" | "}
+                  Max e1RM:{" "}
+                  {exerciseMetadata?.[pendingExercise.id]?.maxE1RM?.value ??
+                    "—"}
+                </div>
+
+                <div
+                  style={{
+                    marginBottom: "12px",
+                    fontWeight: "bold",
+                    textAlign: "center",
+                  }}
+                >
+                  🏋️ e1RM:{" "}
+                  {calculateE1RM(
+                    newExerciseValues.weight,
+                    newExerciseValues.reps,
+                    newExerciseValues.rir
+                  ) || "—"}
+                </div>
 
                 <div
                   style={{
