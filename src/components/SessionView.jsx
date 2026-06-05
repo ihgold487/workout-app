@@ -485,6 +485,8 @@ export default function SessionView({
 
         setId: nextExercise.sets[0].id,
       });
+    } else {
+      setActiveSet(null);
     }
   }
   function deleteExercise(exerciseId) {
@@ -627,6 +629,12 @@ export default function SessionView({
       {}
     )
   );
+
+  const allSetsCompleted =
+    session.exercises.length > 0 &&
+    session.exercises.every((exercise) =>
+      exercise.sets.every((set) => set.completed)
+    );
 
   function hasStructuralChanges() {
     const original = templates.find((t) => t.id === session.templateId);
@@ -1303,18 +1311,11 @@ export default function SessionView({
                             boxSizing: "border-box",
                             gap: "4px",
 
-                            borderLeft:
-                              activeSet?.setId === set.id
-                                ? "4px solid #1976d2"
-                                : "none",
+                            borderLeft: isActive ? "4px solid #1976d2" : "none",
 
-                            background:
-                              activeSet?.setId === set.id
-                                ? "#e3f2fd"
-                                : "transparent",
+                            background: isActive ? "#e3f2fd" : "transparent",
 
-                            fontWeight:
-                              activeSet?.setId === set.id ? "bold" : "normal",
+                            fontWeight: isActive ? "bold" : "normal",
                           }}
                         >
                           <div
@@ -1803,6 +1804,14 @@ export default function SessionView({
             <button
               style={{
                 padding: "10px 14px",
+
+                border: allSetsCompleted ? "3px solid #4caf50" : undefined,
+
+                boxShadow: allSetsCompleted
+                  ? "0 0 8px rgba(76,175,80,.5)"
+                  : undefined,
+
+                fontWeight: allSetsCompleted ? "bold" : undefined,
               }}
               onClick={() => setConfirmComplete(true)}
             >
