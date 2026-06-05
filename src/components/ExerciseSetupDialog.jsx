@@ -3,6 +3,8 @@ export default function ExerciseSetupDialog({
   exerciseMetadata,
   getLatestWorkoutPerformance,
   calculateE1RM,
+  values,
+  setValues,
 }) {
   const performance = getLatestWorkoutPerformance(exercise.id);
 
@@ -61,6 +63,102 @@ export default function ExerciseSetupDialog({
           ))}
         </div>
       )}
+      <div
+        style={{
+          marginBottom: "12px",
+          fontWeight: "bold",
+          textAlign: "center",
+        }}
+      >
+        🏋️ e1RM: {calculateE1RM(values.weight, values.reps, values.rir)}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "12px",
+        }}
+      >
+        🏋️
+        <input
+          type="number"
+          placeholder="Weight"
+          value={values?.weight || ""}
+          onChange={(e) =>
+            setValues({
+              ...values,
+              weight: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "12px",
+        }}
+      >
+        🔁
+        <input
+          type="number"
+          placeholder="Reps"
+          value={values?.reps || ""}
+          onChange={(e) =>
+            setValues({
+              ...values,
+              reps: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "12px",
+        }}
+      >
+        🔋
+        <input
+          type="number"
+          placeholder="RIR"
+          value={values?.rir || ""}
+          onChange={(e) =>
+            setValues({
+              ...values,
+              rir: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "16px",
+        }}
+      >
+        🔢
+        <input
+          type="number"
+          placeholder="Sets"
+          value={values?.sets || ""}
+          onChange={(e) =>
+            setValues({
+              ...values,
+              sets: e.target.value,
+            })
+          }
+        />
+      </div>
     </>
   );
 }
