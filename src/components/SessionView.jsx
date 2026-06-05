@@ -31,6 +31,16 @@ export default function SessionView({
     rir: "",
   });
 
+  const [replacementValues, setReplacementValues] = useState({
+    weight: "",
+    reps: "",
+    rir: "",
+    sets: "",
+  });
+
+  const [showReplaceExercise, setShowReplaceExercise] = useState(false);
+  const [replacementExercise, setReplacementExercise] = useState(null);
+  const [replacementTarget, setReplacementTarget] = useState(null);
   const [weightUnit, setWeightUnit] = useState("lb");
   const [weightEditBuffer, setWeightEditBuffer] = useState({});
   const [showE1RMExplorer, setShowE1RMExplorer] = useState(false);
@@ -431,7 +441,7 @@ export default function SessionView({
     }));
   }
 
-  function replaceExercise(oldExerciseId, newExercise) {
+  function replaceExercise(oldExerciseId, newExercise, replacementValues) {
     updateSession((s) => ({
       ...s,
 
@@ -451,6 +461,25 @@ export default function SessionView({
               originalExerciseId: newExercise.id,
 
               exerciseId: newExercise.id,
+
+              sets: Array.from(
+                {
+                  length: Number(replacementValues.sets) || 1,
+                },
+                (_, i) => ({
+                  id: Date.now() + i,
+
+                  targetWeight: replacementValues.weight,
+
+                  targetReps: replacementValues.reps,
+
+                  targetRir: replacementValues.rir,
+
+                  actualWeight: "",
+                  actualReps: "",
+                  actualRir: "",
+                })
+              ),
             }
           : ex
       ),
@@ -1070,7 +1099,20 @@ export default function SessionView({
                       .map((ex) => (
                         <button
                           key={`${ex.name}-${ex.equipment?.[0] || ""}-${ex.id}`}
-                          onClick={() => replaceExercise(exercise.id, ex)}
+                          onClick={() => {
+                            setReplacementTarget(exercise.id);
+
+                            setReplacementExercise(ex);
+
+                            setReplacementValues({
+                              weight: "",
+                              reps: "",
+                              rir: "",
+                              sets: "",
+                            });
+
+                            setShowReplaceExercise(true);
+                          }}
                         >
                           {`${ex.name}${
                             ex.equipment?.[0] ? ", " + ex.equipment[0] : ""
@@ -1654,6 +1696,190 @@ export default function SessionView({
                 {`${ex.name}${ex.equipment?.[0] ? ", " + ex.equipment[0] : ""}`}
               </button>
             ))}
+          </div>
+        )}
+
+        {showReplaceExercise && replacementExercise && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+            }}
+          >
+            <div
+              style={{
+                background: "white",
+                padding: "20px",
+                borderRadius: "8px",
+                minWidth: "300px",
+              }}
+            >
+              <h3>
+                {`${replacementExercise.name}${
+                  replacementExercise.equipment?.[0]
+                    ? ", " + replacementExercise.equipment[0]
+                    : ""
+                }`}
+              </h3>
+
+              <div
+                style={{
+                  fontSize: "0.9em",
+                  color: "#666",
+                  marginBottom: "12px",
+                }}
+              >
+                Latest e1RM:{" "}
+                {exerciseMetadata?.[replacementExercise.id]?.latestE1RM
+                  ?.value ?? "—"}
+                {" | "}
+                Max e1RM:{" "}
+                {exerciseMetadata?.[replacementExercise.id]?.maxE1RM?.value ??
+                  "—"}
+              </div>
+
+              <div
+                style={{
+                  marginBottom: "12px",
+                  fontWeight: "bold",
+                  textAlign: "center",
+                }}
+              >
+                🏋️ e1RM:{" "}
+                {calculateE1RM(
+                  replacementValues.weight,
+                  replacementValues.reps,
+                  replacementValues.rir
+                ) || "—"}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "12px",
+                }}
+              >
+                🏋️
+                <input
+                  type="number"
+                  placeholder="Weight"
+                  value={replacementValues.weight}
+                  onChange={(e) =>
+                    setReplacementValues({
+                      ...replacementValues,
+                      weight: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "12px",
+                }}
+              >
+                🔁
+                <input
+                  type="number"
+                  placeholder="Reps"
+                  value={replacementValues.reps}
+                  onChange={(e) =>
+                    setReplacementValues({
+                      ...replacementValues,
+                      reps: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "12px",
+                }}
+              >
+                🔋
+                <input
+                  type="number"
+                  placeholder="RIR"
+                  value={replacementValues.rir}
+                  onChange={(e) =>
+                    setReplacementValues({
+                      ...replacementValues,
+                      rir: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "16px",
+                }}
+              >
+                🔢
+                <input
+                  type="number"
+                  placeholder="Sets"
+                  value={replacementValues.sets}
+                  onChange={(e) =>
+                    setReplacementValues({
+                      ...replacementValues,
+                      sets: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: "20px",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    setShowReplaceExercise(false);
+                    setReplacementExercise(null);
+                    setReplacementTarget(null);
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => {
+                    replaceExercise(
+                      replacementTarget,
+                      replacementExercise,
+                      replacementValues
+                    );
+
+                    setShowReplaceExercise(false);
+                    setReplacementExercise(null);
+                    setReplacementTarget(null);
+                  }}
+                >
+                  Replace
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
