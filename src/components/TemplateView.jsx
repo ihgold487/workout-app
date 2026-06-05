@@ -8,6 +8,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import ExerciseSetupDialog from "./ExerciseSetupDialog";
 
 function SortableExerciseRow({ exercise, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -340,75 +341,12 @@ export default function TemplateView({
                 }`}
               </h3>
 
-              <div
-                style={{
-                  fontSize: "0.9em",
-                  color: "#666",
-                  textAlign: "center",
-                  marginBottom: "8px",
-                }}
-              >
-                Max e1RM:{" "}
-                {exerciseMetadata?.[pendingExercise.id]?.maxE1RM?.value ?? "—"}
-              </div>
-              {(() => {
-                const performance = getLatestWorkoutPerformance(
-                  pendingExercise.id
-                );
-
-                if (!performance) {
-                  return (
-                    <div
-                      style={{
-                        marginBottom: "12px",
-                        fontSize: "0.9em",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontWeight: "bold",
-                        }}
-                      >
-                        Last workout: none
-                      </div>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    style={{
-                      marginBottom: "12px",
-                      fontSize: "0.9em",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      Last workout ({performance.completedAt})
-                    </div>
-
-                    {performance.sets.map((set) => (
-                      <div key={set.id}>
-                        {set.actualWeight}
-                        {" × "}
-                        {set.actualReps}
-                        {" @ "}
-                        {set.actualRir} (e1RM{" "}
-                        {calculateE1RM(
-                          set.actualWeight,
-                          set.actualReps,
-                          set.actualRir
-                        )}
-                        )
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+              <ExerciseSetupDialog
+                exercise={pendingExercise}
+                exerciseMetadata={exerciseMetadata}
+                getLatestWorkoutPerformance={getLatestWorkoutPerformance}
+                calculateE1RM={calculateE1RM}
+              />
               <div
                 style={{
                   marginBottom: "12px",
