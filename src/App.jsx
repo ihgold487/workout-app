@@ -310,6 +310,18 @@ export default function App() {
         v{APP_VERSION}
         {" • built "}
         {BUILD_TIME}
+        <button
+          onClick={() => {
+            window.location.reload();
+          }}
+          style={{
+            marginLeft: "8px",
+            padding: "2px 6px",
+            fontSize: "0.8em",
+          }}
+        >
+          🔄 Update
+        </button>
       </div>
 
       <WorkoutCalendar history={history} />
