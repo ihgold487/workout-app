@@ -112,6 +112,8 @@ export default function SessionView({
   });
 
   const inputRefs = useRef({});
+  const setRowRefs = useRef({});
+  const completeWorkoutButtonRef = useRef(null);
 
   useEffect(() => {
     if (!activeSet) return;
@@ -267,6 +269,58 @@ export default function SessionView({
       setRestSeconds(restMinutes * 60 + restRemainder);
     }
   }, [restSeconds, timerRunning]);
+
+  useEffect(() => {
+    if (!activeSet?.setId) {
+      return;
+    }
+
+    const element = setRowRefs.current[activeSet.setId];
+
+    if (!element) {
+      return;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+    if (!visible) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [activeSet]);
+
+  useEffect(() => {
+    const allSetsCompleted =
+      session.exercises.length > 0 &&
+      session.exercises.every((exercise) =>
+        exercise.sets.every((set) => set.completed)
+      );
+
+    if (!allSetsCompleted) {
+      return;
+    }
+
+    const element = completeWorkoutButtonRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+    if (!visible) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [session.exercises]);
 
   useEffect(() => {
     if (!keepScreenAwake) {
@@ -1281,6 +1335,11 @@ export default function SessionView({
                       return (
                         <div
                           key={set.id}
+                          ref={(el) => {
+                            if (el) {
+                              setRowRefs.current[set.id] = el;
+                            }
+                          }}
                           onClick={() => {
                             const blocked = exercise.sets
 
@@ -1802,6 +1861,7 @@ export default function SessionView({
             )}
 
             <button
+              ref={completeWorkoutButtonRef}
               style={{
                 padding: "10px 14px",
 
