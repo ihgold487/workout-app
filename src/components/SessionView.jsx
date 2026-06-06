@@ -181,6 +181,8 @@ export default function SessionView({
 
   const [confirmExitWorkout, setConfirmExitWorkout] = useState(false);
 
+  const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
+
   const [restMinutes, setRestMinutes] = useState(2);
 
   const [restRemainder, setRestRemainder] = useState(0);
@@ -400,6 +402,13 @@ export default function SessionView({
   }
 
   function deleteSet(exerciseId, setId) {
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+
+    const currentIndex = exercise.sets.findIndex((s) => s.id === setId);
+
+    const deletingActiveSet =
+      activeSet?.exerciseId === exerciseId && activeSet?.setId === setId;
+
     updateSession((s) => ({
       ...s,
 
@@ -413,6 +422,36 @@ export default function SessionView({
           : ex
       ),
     }));
+
+    if (!deletingActiveSet) {
+      return;
+    }
+
+    const nextSet = exercise.sets[currentIndex + 1];
+
+    if (nextSet) {
+      setActiveSet({
+        exerciseId,
+        setId: nextSet.id,
+      });
+
+      return;
+    }
+
+    const exerciseIndex = session.exercises.findIndex(
+      (ex) => ex.id === exerciseId
+    );
+
+    const nextExercise = session.exercises[exerciseIndex + 1];
+
+    if (nextExercise?.sets?.[0]) {
+      setActiveSet({
+        exerciseId: nextExercise.id,
+        setId: nextExercise.sets[0].id,
+      });
+    } else {
+      setActiveSet(null);
+    }
   }
 
   function addSet(exerciseId, lastSet) {
@@ -832,6 +871,71 @@ export default function SessionView({
                     setSelectedSessionId(null);
 
                     setSelectedTemplateId(null);
+                  }}
+                >
+                  ✔️
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {pendingDeleteSet && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
+            }}
+          >
+            <div
+              style={{
+                background: "#ffe5e5",
+                color: "#400",
+                border: "2px solid #c66",
+                borderRadius: "12px",
+                padding: "20px",
+                width: "280px",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  marginBottom: "16px",
+                  fontWeight: "bold",
+                  fontSize: "18px",
+                }}
+              >
+                <span style={{ fontSize: "22px" }}>⚠️</span>
+                <span>Delete Set?</span>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <button onClick={() => setPendingDeleteSet(null)}>✖️</button>
+
+                <button
+                  onClick={() => {
+                    deleteSet(
+                      pendingDeleteSet.exerciseId,
+                      pendingDeleteSet.setId
+                    );
+
+                    setPendingDeleteSet(null);
                   }}
                 >
                   ✔️
@@ -1611,7 +1715,11 @@ export default function SessionView({
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteSet(exercise.id, set.id);
+
+                              setPendingDeleteSet({
+                                exerciseId: exercise.id,
+                                setId: set.id,
+                              });
                             }}
                           >
                             🗑
