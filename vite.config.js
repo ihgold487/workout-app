@@ -14,7 +14,7 @@ export default defineConfig({
     react(),
 
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
 
       includeAssets: ["icon-192.png", "icon-512.png"],
 
@@ -57,9 +57,9 @@ export default defineConfig({
 
         cleanupOutdatedCaches: true,
 
-        clientsClaim: true,
+        clientsClaim: false,
 
-        skipWaiting: true,
+        skipWaiting: false,
       },
     }),
   ],

@@ -1,3 +1,4 @@
+/* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
@@ -12,6 +13,87 @@ const STORAGE_VERSION = 9;
 const APP_VERSION = "0.16";
 
 const BUILD_TIME = __BUILD_TIME__;
+
+const PENDING_UPDATE_KEY = "pendingPwaUpdate";
+const LAST_SEEN_BUILD_KEY = "lastSeenBuildTime";
+const UPDATE_CONFIRMATION_KEY = "pwaUpdateConfirmation";
+const UPDATE_CONFIRMATION_DURATION = 10 * 60 * 1000;
+
+const UPDATE_STATUS_COPY = {
+  checking: "Checking for update...",
+  current: "No new build found.",
+  error: "Update check failed. Try closing and reopening the app.",
+  found: "Update found. Reloading...",
+  unsupported: "Updates are unavailable in this browser.",
+};
+
+const BUILD_NOTICE_COPY = {
+  updated: "Updated to the latest build.",
+};
+
+function getInitialBuildNotice() {
+  const lastSeenBuildTime = localStorage.getItem(LAST_SEEN_BUILD_KEY);
+  const pendingUpdate = JSON.parse(
+    localStorage.getItem(PENDING_UPDATE_KEY) || "null"
+  );
+
+  if (!lastSeenBuildTime) {
+    localStorage.setItem(LAST_SEEN_BUILD_KEY, BUILD_TIME);
+
+    if (pendingUpdate?.buildTime && pendingUpdate.buildTime !== BUILD_TIME) {
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+      rememberUpdateConfirmation();
+
+      return "updated";
+    }
+  } else if (lastSeenBuildTime !== BUILD_TIME) {
+    localStorage.setItem(LAST_SEEN_BUILD_KEY, BUILD_TIME);
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+    rememberUpdateConfirmation();
+
+    return "updated";
+  }
+
+  const updateConfirmation = getSavedUpdateConfirmation();
+
+  if (!updateConfirmation) return "";
+
+  return "updated";
+}
+
+function getSavedUpdateConfirmation() {
+  const updateConfirmation = JSON.parse(
+    localStorage.getItem(UPDATE_CONFIRMATION_KEY) || "null"
+  );
+
+  if (!updateConfirmation) return null;
+
+  if (updateConfirmation.expiresAt < Date.now()) {
+    localStorage.removeItem(UPDATE_CONFIRMATION_KEY);
+    return null;
+  }
+
+  return updateConfirmation;
+}
+
+function rememberPendingUpdate() {
+  localStorage.setItem(
+    PENDING_UPDATE_KEY,
+    JSON.stringify({
+      buildTime: BUILD_TIME,
+      checkedAt: Date.now(),
+    })
+  );
+}
+
+function rememberUpdateConfirmation() {
+  localStorage.setItem(
+    UPDATE_CONFIRMATION_KEY,
+    JSON.stringify({
+      expiresAt: Date.now() + UPDATE_CONFIRMATION_DURATION,
+    })
+  );
+}
 
 // STORAGE MIGRATION BASELINE
 const savedStorageVersion =
@@ -129,6 +211,89 @@ export default function App() {
   const [selectedHistoryList, setSelectedHistoryList] = useState(null);
 
   const [showExercises, setShowExercises] = useState(false);
+
+  const [updateStatus, setUpdateStatus] = useState("");
+
+  const [buildNotice, setBuildNotice] = useState(getInitialBuildNotice);
+
+  const [lastUpdateCheck, setLastUpdateCheck] = useState(null);
+
+  useEffect(() => {
+    function handlePwaUpdateStatus(event) {
+      const status = event.detail?.status;
+
+      if (status) {
+        if (status === "found") {
+          rememberPendingUpdate();
+        }
+
+        setUpdateStatus(status);
+      }
+    }
+
+    window.addEventListener("pwa-update-status", handlePwaUpdateStatus);
+
+    return () => {
+      window.removeEventListener("pwa-update-status", handlePwaUpdateStatus);
+    };
+  }, []);
+
+  async function checkForUpdate() {
+    if (!("serviceWorker" in navigator)) {
+      setUpdateStatus("unsupported");
+      return;
+    }
+
+    setUpdateStatus("checking");
+    rememberPendingUpdate();
+    localStorage.removeItem(UPDATE_CONFIRMATION_KEY);
+    setBuildNotice("");
+
+    try {
+      let result;
+
+      if (window.checkForAppUpdate) {
+        result = await window.checkForAppUpdate();
+      } else {
+        result = await navigator.serviceWorker.ready.then(
+          async (registration) => {
+            await registration.update();
+
+            if (registration.waiting) {
+              registration.waiting.postMessage({
+                type: "SKIP_WAITING",
+              });
+            }
+
+            return {
+              shouldReload: Boolean(registration.waiting),
+              status: registration.waiting ? "found" : "current",
+            };
+          }
+        );
+      }
+
+      if (result.status === "found") {
+        setUpdateStatus("found");
+
+        if (result.shouldReload) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 750);
+        }
+
+        return;
+      }
+
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+      setLastUpdateCheck(new Date());
+      setUpdateStatus(result.status || "current");
+    } catch (error) {
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+      console.error("Update check failed:", error);
+      setUpdateStatus("error");
+    }
+  }
 
   useEffect(() => {
     localStorage.setItem(
@@ -311,17 +476,40 @@ export default function App() {
         {" • built "}
         {BUILD_TIME}
         <button
-          onClick={() => {
-            window.location.reload();
-          }}
+          onClick={checkForUpdate}
+          disabled={updateStatus === "checking" || updateStatus === "found"}
           style={{
             marginLeft: "8px",
             padding: "2px 6px",
             fontSize: "0.8em",
           }}
         >
-          🔄 Update
+          {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
         </button>
+        {(updateStatus || buildNotice) && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: "4px",
+            }}
+          >
+            {updateStatus && (
+              <div>
+                {UPDATE_STATUS_COPY[updateStatus]}
+                {updateStatus === "current" && lastUpdateCheck
+                  ? ` (${lastUpdateCheck.toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })})`
+                  : ""}
+              </div>
+            )}
+            {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
+          </div>
+        )}
       </div>
 
       <WorkoutCalendar history={history} />
