@@ -37,7 +37,6 @@ export default function TemplateView({
   templates,
   setTemplates,
   exerciseLibrary,
-  setExerciseLibrary,
   exerciseMetadata,
   setExerciseMetadata,
   history,
@@ -467,10 +466,6 @@ export default function TemplateView({
                               fontSize: "0.85rem",
                             }}
                             onClick={() => {
-                              const libraryExercise = exerciseLibrary.find(
-                                (ex) => ex.id === exercise.exerciseId
-                              );
-
                               const note = prompt(
                                 "Exercise note",
                                 exerciseMetadata[exercise.exerciseId]?.note ||

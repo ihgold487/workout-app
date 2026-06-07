@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 
 export default function WeightPickerModal({
   isOpen,
@@ -10,16 +10,30 @@ export default function WeightPickerModal({
   title,
   values,
 }) {
-  if (!isOpen) {
-    return null;
-  }
-
   const current = Number(value) || 0;
 
   const step = increment ?? (weightUnit === "kg" ? 1 : 2.5);
 
   const [manualValue, setManualValue] = useState(String(current));
   const scrollRef = useRef(null);
+
+  const options = useMemo(() => {
+    if (values) {
+      return values;
+    }
+
+    const generatedOptions = [];
+
+    for (
+      let value = current - 20 * step;
+      value <= current + 20 * step;
+      value += step
+    ) {
+      generatedOptions.push(Number(value.toFixed(2)));
+    }
+
+    return generatedOptions;
+  }, [current, step, values]);
 
   useEffect(() => {
     if (!isOpen || !scrollRef.current) {
@@ -41,19 +55,10 @@ export default function WeightPickerModal({
         block: "center",
       });
     }, 0);
-  }, [isOpen]);
+  }, [isOpen, manualValue, options]);
 
-  let options = [];
-  if (values) {
-    options = values;
-  } else {
-    for (
-      let value = current - 20 * step;
-      value <= current + 20 * step;
-      value += step
-    ) {
-      options.push(Number(value.toFixed(2)));
-    }
+  if (!isOpen) {
+    return null;
   }
 
   return (

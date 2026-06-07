@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { equipmentOptions } from "../data/seedEquipment";
 import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
@@ -63,14 +63,6 @@ export default function SessionView({
     return (num / 2.20462).toFixed(1);
   }
 
-  function kgToLbs(kg) {
-    const num = parseFloat(kg);
-
-    if (isNaN(num)) return "";
-
-    return (num * 2.20462).toFixed(1);
-  }
-
   function displayWeight(weight) {
     if (weight === "" || weight == null) {
       return "";
@@ -111,9 +103,43 @@ export default function SessionView({
     setId: session.exercises[0]?.sets[0]?.id,
   });
 
-  const inputRefs = useRef({});
   const setRowRefs = useRef({});
   const completeWorkoutButtonRef = useRef(null);
+
+  const updateSession = useCallback(
+    (updater) => {
+      setSessions((prevSessions) =>
+        prevSessions.map((s) => (s.id === session.id ? updater(s) : s))
+      );
+    },
+    [session.id, setSessions]
+  );
+
+  const updateActual = useCallback(
+    (exerciseId, setId, field, value) => {
+      updateSession((s) => ({
+        ...s,
+
+        exercises: s.exercises.map((ex) =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+
+                sets: ex.sets.map((set) =>
+                  set.id === setId
+                    ? {
+                        ...set,
+                        [field]: value,
+                      }
+                    : set
+                ),
+              }
+            : ex
+        ),
+      }));
+    },
+    [updateSession]
+  );
 
   useEffect(() => {
     if (!activeSet) return;
@@ -163,7 +189,7 @@ export default function SessionView({
         previousSet?.actualRir || currentSet.targetRir || ""
       );
     }
-  }, [activeSet]);
+  }, [activeSet, session.exercises, updateActual]);
 
   const [expandedNotes, setExpandedNotes] = useState({});
 
@@ -222,8 +248,11 @@ export default function SessionView({
   }, [timerRunning, timerStartedAt, restMinutes, restRemainder]);
 
   useEffect(() => {
-    if (!timerRunning && !timerPaused)
-      setRestSeconds(restMinutes * 60 + restRemainder);
+    if (!timerRunning && !timerPaused) {
+      setTimeout(() => {
+        setRestSeconds(restMinutes * 60 + restRemainder);
+      }, 0);
+    }
   }, [restMinutes, restRemainder, timerRunning, timerPaused]);
 
   useEffect(() => {
@@ -249,7 +278,9 @@ export default function SessionView({
 
           200
         );
-      } catch {}
+      } catch {
+        // Audio feedback is optional.
+      }
 
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification(
@@ -261,16 +292,18 @@ export default function SessionView({
         );
       }
 
-      setRestComplete(true);
+      setTimeout(() => {
+        setRestComplete(true);
 
-      setTimeout(() => setRestComplete(false), 2000);
+        setTimeout(() => setRestComplete(false), 2000);
 
-      setTimerFinished(true);
-      setTimerRunning(false);
+        setTimerFinished(true);
+        setTimerRunning(false);
 
-      setRestSeconds(restMinutes * 60 + restRemainder);
+        setRestSeconds(restMinutes * 60 + restRemainder);
+      }, 0);
     }
-  }, [restSeconds, timerRunning]);
+  }, [restSeconds, timerRunning, restMinutes, restRemainder]);
 
   useEffect(() => {
     if (!activeSet?.setId) {
@@ -371,35 +404,6 @@ export default function SessionView({
       wakeLockRef.current = null;
     };
   }, [keepScreenAwake]);
-
-  function updateSession(updater) {
-    setSessions((prevSessions) =>
-      prevSessions.map((s) => (s.id === session.id ? updater(s) : s))
-    );
-  }
-
-  function updateActual(exerciseId, setId, field, value) {
-    updateSession((s) => ({
-      ...s,
-
-      exercises: s.exercises.map((ex) =>
-        ex.id === exerciseId
-          ? {
-              ...ex,
-
-              sets: ex.sets.map((set) =>
-                set.id === setId
-                  ? {
-                      ...set,
-                      [field]: value,
-                    }
-                  : set
-              ),
-            }
-          : ex
-      ),
-    }));
-  }
 
   function deleteSet(exerciseId, setId) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
