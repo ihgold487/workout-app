@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
-import { calculateE1RM } from "../utils/e1rm";
+import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 
 function SortableExerciseRow({ exercise, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -682,11 +682,14 @@ export default function TemplateView({
                 }}
               >
                 Latest e1RM:{" "}
-                {exerciseMetadata?.[editingExercise.id]?.latestE1RM?.value ??
-                  "—"}
+                {formatE1RM(
+                  exerciseMetadata?.[editingExercise.id]?.latestE1RM?.value
+                )}
                 {" | "}
                 Max e1RM:{" "}
-                {exerciseMetadata?.[editingExercise.id]?.maxE1RM?.value ?? "—"}
+                {formatE1RM(
+                  exerciseMetadata?.[editingExercise.id]?.maxE1RM?.value
+                )}
               </div>
             </div>
 

@@ -18,6 +18,13 @@ import {
   saveWorkoutData,
   saveWorkoutDataToIndexedDb,
 } from "./storage/workoutStorage";
+import {
+  getCurrentSession,
+  sendMagicLink,
+  signOut,
+  subscribeToAuthChanges,
+} from "./sync/auth";
+import { isSupabaseConfigured } from "./sync/supabaseClient";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -310,6 +317,94 @@ export default function App() {
   const [indexedDbReady, setIndexedDbReady] = useState(false);
 
   const [backupStatus, setBackupStatus] = useState("");
+
+  const [authSession, setAuthSession] = useState(null);
+
+  const [authEmail, setAuthEmail] = useState("");
+
+  const [authStatus, setAuthStatus] = useState(
+    isSupabaseConfigured
+      ? "Sync sign-in is optional."
+      : "Sync is not configured."
+  );
+
+  const [authLoading, setAuthLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAuthSession() {
+      if (!isSupabaseConfigured) {
+        return;
+      }
+
+      try {
+        const session = await getCurrentSession();
+
+        if (!cancelled) {
+          setAuthSession(session);
+          setAuthStatus(
+            session ? "Signed in. Cloud sync is not active yet." : "Signed out."
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load auth session:", error);
+
+        if (!cancelled) {
+          setAuthStatus(`Sync sign-in failed: ${error.message}`);
+        }
+      }
+    }
+
+    loadAuthSession();
+
+    const unsubscribe = subscribeToAuthChanges((session) => {
+      setAuthSession(session);
+      setAuthStatus(
+        session ? "Signed in. Cloud sync is not active yet." : "Signed out."
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  async function requestMagicLink() {
+    const email = authEmail.trim();
+
+    if (!email) {
+      setAuthStatus("Enter an email address first.");
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      await sendMagicLink(email);
+      setAuthStatus("Check your email for a sign-in link.");
+    } catch (error) {
+      console.error("Magic link failed:", error);
+      setAuthStatus(`Sign-in failed: ${error.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setAuthLoading(true);
+
+    try {
+      await signOut();
+      setAuthStatus("Signed out.");
+    } catch (error) {
+      console.error("Sign out failed:", error);
+      setAuthStatus(`Sign out failed: ${error.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -652,6 +747,75 @@ export default function App() {
             }}
           />
         </label>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "6px",
+          margin: "8px auto 12px",
+          maxWidth: "360px",
+          padding: "10px",
+        }}
+      >
+        {authSession ? (
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "12px",
+              }}
+            >
+              Signed in as {authSession.user.email}
+            </span>
+            <button disabled={authLoading} onClick={handleSignOut}>
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              justifyContent: "center",
+            }}
+          >
+            <input
+              type="email"
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+              placeholder="email for sync"
+              disabled={!isSupabaseConfigured || authLoading}
+              style={{
+                minWidth: 0,
+                width: "180px",
+              }}
+            />
+            <button
+              disabled={!isSupabaseConfigured || authLoading}
+              onClick={requestMagicLink}
+            >
+              Sign In
+            </button>
+          </div>
+        )}
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            color: "#666",
+            fontSize: "12px",
+            marginTop: "6px",
+          }}
+        >
+          {authStatus}
+        </div>
       </div>
 
       {backupStatus && (

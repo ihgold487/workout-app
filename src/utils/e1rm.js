@@ -18,3 +18,9 @@ export function calculateE1RM(
 
   return w * (1 + (r + reserve) / 30);
 }
+
+export function formatE1RM(value) {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) ? numericValue.toFixed(1) : "—";
+}

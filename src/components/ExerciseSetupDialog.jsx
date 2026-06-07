@@ -1,3 +1,5 @@
+import { formatE1RM } from "../utils/e1rm";
+
 export default function ExerciseSetupDialog({
   exercise,
   exerciseMetadata,
@@ -7,6 +9,7 @@ export default function ExerciseSetupDialog({
   setValues,
 }) {
   const performance = getLatestWorkoutPerformance(exercise.id);
+  const maxE1RM = exerciseMetadata?.[exercise.id]?.maxE1RM?.value;
 
   return (
     <>
@@ -17,7 +20,7 @@ export default function ExerciseSetupDialog({
           marginBottom: "12px",
         }}
       >
-        Max e1RM: {exerciseMetadata?.[exercise.id]?.maxE1RM?.value ?? "—"}
+        Max e1RM: {formatE1RM(maxE1RM)}
       </div>
 
       {!performance ? (
