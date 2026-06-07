@@ -137,8 +137,36 @@ export function createWorkoutBackup(data) {
   };
 }
 
+export function getWorkoutDataSummary(data) {
+  return {
+    customExercises: arrayOrEmpty(data.exerciseLibrary).filter(
+      (exercise) => !exercise.builtin
+    ).length,
+    history: arrayOrEmpty(data.history).length,
+    sessions: arrayOrEmpty(data.sessions).length,
+    templates: arrayOrEmpty(data.templates).length,
+  };
+}
+
 export function parseWorkoutBackup(rawData, { seedExercises }) {
   const data = rawData?.data && rawData.schemaVersion ? rawData.data : rawData;
+
+  if (!data || typeof data !== "object") {
+    throw new Error("This file is not a valid workout backup.");
+  }
+
+  const hasWorkoutData =
+    Array.isArray(data.templates) ||
+    Array.isArray(data.history) ||
+    Array.isArray(data.sessions) ||
+    Array.isArray(data.exerciseLibrary) ||
+    (data.exerciseMetadata &&
+      typeof data.exerciseMetadata === "object" &&
+      !Array.isArray(data.exerciseMetadata));
+
+  if (!hasWorkoutData) {
+    throw new Error("This file does not contain workout backup data.");
+  }
 
   return normalizeWorkoutData(data, {
     seedExercises,

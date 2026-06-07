@@ -10,6 +10,7 @@ import {
   clearLegacyEquipmentStorage,
   createWorkoutBackup,
   getSavedStorageVersion,
+  getWorkoutDataSummary,
   loadWorkoutData,
   loadWorkoutDataFromIndexedDb,
   markStorageVersion,
@@ -40,6 +41,29 @@ const UPDATE_STATUS_COPY = {
 
 const BUILD_NOTICE_COPY = {
   updated: "Updated to the latest build.",
+};
+
+function formatBackupSummary(summary) {
+  return `${summary.templates} templates, ${summary.customExercises} custom exercises, ${summary.history} completed workouts`;
+}
+
+const backupButtonStyle = {
+  alignItems: "center",
+  appearance: "none",
+  background: "buttonface",
+  border: "1px solid #888",
+  borderRadius: "4px",
+  boxSizing: "border-box",
+  color: "buttontext",
+  cursor: "pointer",
+  display: "inline-flex",
+  font: "inherit",
+  gap: "4px",
+  justifyContent: "center",
+  lineHeight: 1.2,
+  margin: 0,
+  minHeight: "32px",
+  padding: "4px 8px",
 };
 
 function getInitialBuildNotice() {
@@ -134,7 +158,14 @@ export default function App() {
     }
   }, []);
 
-  function exportBackup() {
+  async function exportBackup() {
+    const summary = getWorkoutDataSummary({
+      templates,
+      history,
+      sessions,
+      exerciseLibrary,
+    });
+
     const backup = createWorkoutBackup({
       templates,
       history,
@@ -152,17 +183,44 @@ export default function App() {
       }
     );
 
+    const filename = `workout-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+    const file = new File([blob], filename, {
+      type: "application/json",
+    });
+
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          text: `Workout backup: ${formatBackupSummary(summary)}`,
+          title: "Workout Backup",
+        });
+
+        setBackupStatus(
+          `Backup exported: ${formatBackupSummary(summary)}. Save it in Files or iCloud Drive.`
+        );
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Backup share failed:", error);
+          setBackupStatus(`Backup export failed: ${error.message}`);
+        }
+      }
+
+      return;
+    }
+
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
 
     a.href = url;
 
-    a.download = `workout-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
 
     a.click();
 
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   async function importBackup(event) {
@@ -170,25 +228,45 @@ export default function App() {
 
     if (!file) return;
 
-    const text = await file.text();
+    try {
+      const text = await file.text();
 
-    const data = JSON.parse(text);
+      const data = JSON.parse(text);
 
-    const importedData = parseWorkoutBackup(data, {
-      seedExercises,
-    });
+      const importedData = parseWorkoutBackup(data, {
+        seedExercises,
+      });
 
-    setTemplates(importedData.templates);
+      const summary = getWorkoutDataSummary(importedData);
 
-    setHistory(importedData.history);
+      const confirmed = window.confirm(
+        `Import this backup and replace the current app data?\n\n${formatBackupSummary(summary)}`
+      );
 
-    setSessions(importedData.sessions);
+      if (!confirmed) {
+        setBackupStatus("Import canceled. Current data was not changed.");
+        return;
+      }
 
-    setExerciseLibrary(importedData.exerciseLibrary);
+      setTemplates(importedData.templates);
 
-    setExerciseMetadata(importedData.exerciseMetadata);
+      setHistory(importedData.history);
 
-    setSelectedSessionId(importedData.selectedSessionId);
+      setSessions(importedData.sessions);
+
+      setExerciseLibrary(importedData.exerciseLibrary);
+
+      setExerciseMetadata(importedData.exerciseMetadata);
+
+      setSelectedSessionId(importedData.selectedSessionId);
+
+      setBackupStatus(`Backup imported: ${formatBackupSummary(summary)}.`);
+    } catch (error) {
+      console.error("Backup import failed:", error);
+      setBackupStatus(`Import failed: ${error.message}`);
+    } finally {
+      event.target.value = "";
+    }
   }
 
   const [templates, setTemplates] = useState(initialWorkoutData.templates);
@@ -230,6 +308,8 @@ export default function App() {
   const [lastUpdateCheck, setLastUpdateCheck] = useState(null);
 
   const [indexedDbReady, setIndexedDbReady] = useState(false);
+
+  const [backupStatus, setBackupStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -538,11 +618,105 @@ export default function App() {
         )}
       </div>
 
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "8px",
+          justifyContent: "center",
+          margin: "12px 0",
+        }}
+      >
+        <button onClick={exportBackup} style={backupButtonStyle}>
+          <span aria-hidden="true">⬇️</span>
+          <span>Export Backup</span>
+        </button>
+
+        <label
+          style={{
+            ...backupButtonStyle,
+          }}
+        >
+          <span aria-hidden="true">⬆️</span>
+          <span>Import Backup</span>
+          <input
+            type="file"
+            accept="application/json,.json"
+            onChange={importBackup}
+            style={{
+              height: "1px",
+              opacity: 0,
+              pointerEvents: "none",
+              position: "absolute",
+              width: "1px",
+            }}
+          />
+        </label>
+      </div>
+
+      {backupStatus && (
+        <div
+          role="dialog"
+          aria-live="polite"
+          aria-label="Backup status"
+          style={{
+            background: "rgba(0,0,0,0.4)",
+            inset: 0,
+            position: "fixed",
+            zIndex: 1000,
+          }}
+          onClick={() => setBackupStatus("")}
+        >
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+              color: "#333",
+              left: "50%",
+              maxWidth: "320px",
+              padding: "14px",
+              position: "fixed",
+              top: "18px",
+              transform: "translateX(-50%)",
+              width: "calc(100% - 32px)",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Dismiss backup status"
+              onClick={() => setBackupStatus("")}
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "22px",
+                lineHeight: 1,
+                padding: "2px 6px",
+                position: "absolute",
+                right: "6px",
+                top: "6px",
+              }}
+            >
+              ×
+            </button>
+            <div
+              style={{
+                fontSize: "14px",
+                marginBottom: "12px",
+                paddingRight: "28px",
+                textAlign: "left",
+              }}
+            >
+              {backupStatus}
+            </div>
+            <button onClick={() => setBackupStatus("")}>OK</button>
+          </div>
+        </div>
+      )}
+
       <WorkoutCalendar history={history} />
-
-      <button onClick={exportBackup}>Export Backup</button>
-
-      <input type="file" accept=".json" onChange={importBackup} />
 
       <hr />
 
