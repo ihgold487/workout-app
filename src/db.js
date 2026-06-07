@@ -14,3 +14,13 @@ db.version(1).stores({
   // COMPLETED WORKOUTS
   sessions: "++id,date",
 });
+
+db.version(2).stores({
+  // SNAPSHOT OF CURRENT APP DATA
+  appData: "&id,updatedAt",
+
+  // LEGACY TABLES RESERVED FOR FUTURE NORMALIZED STORAGE
+  exerciseLibrary: "++id,name,muscleGroup",
+  templates: "++id,name",
+  sessions: "++id,date",
+});

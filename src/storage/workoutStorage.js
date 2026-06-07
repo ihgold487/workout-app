@@ -1,6 +1,9 @@
+import { db } from "../db";
+
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
 const STORAGE_VERSION_KEY = "storageVersion";
+const WORKOUT_DATA_RECORD_ID = "current";
 
 const WORKOUT_DATA_KEYS = {
   exerciseLibrary: "exerciseLibrary",
@@ -37,6 +40,20 @@ function objectOrEmpty(value) {
     : {};
 }
 
+function normalizeWorkoutData(data, { seedExercises }) {
+  return {
+    exerciseLibrary: mergeExerciseLibraryWithSeed(
+      data?.exerciseLibrary,
+      seedExercises
+    ),
+    exerciseMetadata: objectOrEmpty(data?.exerciseMetadata),
+    history: arrayOrEmpty(data?.history),
+    selectedSessionId: data?.selectedSessionId ?? null,
+    sessions: arrayOrEmpty(data?.sessions),
+    templates: arrayOrEmpty(data?.templates),
+  };
+}
+
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const customExercises = arrayOrEmpty(exerciseLibrary).filter(
     (exercise) => !exercise.builtin
@@ -46,19 +63,19 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
 }
 
 export function loadWorkoutData({ seedExercises }) {
-  return {
-    exerciseLibrary: mergeExerciseLibraryWithSeed(
-      readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
-      seedExercises
-    ),
-    exerciseMetadata: objectOrEmpty(
-      readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {})
-    ),
-    history: arrayOrEmpty(readJson(WORKOUT_DATA_KEYS.history, [])),
-    selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
-    sessions: arrayOrEmpty(readJson(WORKOUT_DATA_KEYS.sessions, [])),
-    templates: arrayOrEmpty(readJson(WORKOUT_DATA_KEYS.templates, [])),
-  };
+  return normalizeWorkoutData(
+    {
+      exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
+      exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
+      history: readJson(WORKOUT_DATA_KEYS.history, []),
+      selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
+      sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
+      templates: readJson(WORKOUT_DATA_KEYS.templates, []),
+    },
+    {
+      seedExercises,
+    }
+  );
 }
 
 export function saveWorkoutData(data, storageVersion) {
@@ -69,6 +86,28 @@ export function saveWorkoutData(data, storageVersion) {
   writeJson(WORKOUT_DATA_KEYS.sessions, data.sessions);
   writeJson(WORKOUT_DATA_KEYS.templates, data.templates);
   writeJson(STORAGE_VERSION_KEY, storageVersion);
+}
+
+export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
+  const record = await db.appData.get(WORKOUT_DATA_RECORD_ID);
+
+  if (!record?.data) {
+    return null;
+  }
+
+  return normalizeWorkoutData(record.data, {
+    seedExercises,
+  });
+}
+
+export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
+  await db.appData.put({
+    data: createWorkoutBackup(data).data,
+    id: WORKOUT_DATA_RECORD_ID,
+    schemaVersion: WORKOUT_DATA_SCHEMA_VERSION,
+    storageVersion,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function getSavedStorageVersion() {
@@ -101,15 +140,7 @@ export function createWorkoutBackup(data) {
 export function parseWorkoutBackup(rawData, { seedExercises }) {
   const data = rawData?.data && rawData.schemaVersion ? rawData.data : rawData;
 
-  return {
-    exerciseLibrary: mergeExerciseLibraryWithSeed(
-      data?.exerciseLibrary,
-      seedExercises
-    ),
-    exerciseMetadata: objectOrEmpty(data?.exerciseMetadata),
-    history: arrayOrEmpty(data?.history),
-    selectedSessionId: data?.selectedSessionId ?? null,
-    sessions: arrayOrEmpty(data?.sessions),
-    templates: arrayOrEmpty(data?.templates),
-  };
+  return normalizeWorkoutData(data, {
+    seedExercises,
+  });
 }

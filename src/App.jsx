@@ -11,9 +11,11 @@ import {
   createWorkoutBackup,
   getSavedStorageVersion,
   loadWorkoutData,
+  loadWorkoutDataFromIndexedDb,
   markStorageVersion,
   parseWorkoutBackup,
   saveWorkoutData,
+  saveWorkoutDataToIndexedDb,
 } from "./storage/workoutStorage";
 
 // STORAGE VERSION
@@ -227,6 +229,45 @@ export default function App() {
 
   const [lastUpdateCheck, setLastUpdateCheck] = useState(null);
 
+  const [indexedDbReady, setIndexedDbReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateFromIndexedDb() {
+      try {
+        const indexedDbData = await loadWorkoutDataFromIndexedDb({
+          seedExercises,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (indexedDbData) {
+          setTemplates(indexedDbData.templates);
+          setHistory(indexedDbData.history);
+          setSessions(indexedDbData.sessions);
+          setExerciseLibrary(indexedDbData.exerciseLibrary);
+          setExerciseMetadata(indexedDbData.exerciseMetadata);
+          setSelectedSessionId(indexedDbData.selectedSessionId);
+        }
+      } catch (error) {
+        console.error("Failed to load workout data from IndexedDB:", error);
+      } finally {
+        if (!cancelled) {
+          setIndexedDbReady(true);
+        }
+      }
+    }
+
+    hydrateFromIndexedDb();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     function handlePwaUpdateStatus(event) {
       const status = event.detail?.status;
@@ -305,17 +346,22 @@ export default function App() {
   }
 
   useEffect(() => {
-    saveWorkoutData(
-      {
-        exerciseLibrary,
-        exerciseMetadata,
-        history,
-        selectedSessionId,
-        sessions,
-        templates,
-      },
-      STORAGE_VERSION
-    );
+    const data = {
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      selectedSessionId,
+      sessions,
+      templates,
+    };
+
+    saveWorkoutData(data, STORAGE_VERSION);
+
+    if (indexedDbReady) {
+      saveWorkoutDataToIndexedDb(data, STORAGE_VERSION).catch((error) => {
+        console.error("Failed to save workout data to IndexedDB:", error);
+      });
+    }
   }, [
     templates,
     history,
@@ -323,6 +369,7 @@ export default function App() {
     exerciseLibrary,
     exerciseMetadata,
     selectedSessionId,
+    indexedDbReady,
   ]);
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
