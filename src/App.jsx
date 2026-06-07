@@ -6,6 +6,15 @@ import SessionView from "./components/SessionView";
 import HistoryView from "./components/HistoryView";
 import ExerciseView from "./components/ExerciseView";
 import WorkoutCalendar from "./components/WorkoutCalendar";
+import {
+  clearLegacyEquipmentStorage,
+  createWorkoutBackup,
+  getSavedStorageVersion,
+  loadWorkoutData,
+  markStorageVersion,
+  parseWorkoutBackup,
+  saveWorkoutData,
+} from "./storage/workoutStorage";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -96,10 +105,15 @@ function rememberUpdateConfirmation() {
 }
 
 // STORAGE MIGRATION BASELINE
-const savedStorageVersion =
-  JSON.parse(localStorage.getItem("storageVersion")) || 0;
+const savedStorageVersion = getSavedStorageVersion();
 
 export default function App() {
+  const initialWorkoutData = useState(() =>
+    loadWorkoutData({
+      seedExercises,
+    })
+  )[0];
+
   // STORAGE MIGRATIONS
   useEffect(() => {
     if (savedStorageVersion < STORAGE_VERSION) {
@@ -110,26 +124,26 @@ export default function App() {
         STORAGE_VERSION
       );
 
-      localStorage.removeItem("exerciseLibrary");
-      localStorage.removeItem("equipmentOptions");
+      clearLegacyEquipmentStorage();
 
-      localStorage.setItem("storageVersion", JSON.stringify(STORAGE_VERSION));
+      markStorageVersion(STORAGE_VERSION);
 
       window.location.reload();
     }
   }, []);
 
   function exportBackup() {
-    const data = {
+    const backup = createWorkoutBackup({
       templates,
       history,
       sessions,
       exerciseMetadata,
       exerciseLibrary,
-    };
+      selectedSessionId,
+    });
 
     const blob = new Blob(
-      [JSON.stringify(data, null, 2)],
+      [JSON.stringify(backup, null, 2)],
 
       {
         type: "application/json",
@@ -158,43 +172,38 @@ export default function App() {
 
     const data = JSON.parse(text);
 
-    if (data.templates) setTemplates(data.templates);
+    const importedData = parseWorkoutBackup(data, {
+      seedExercises,
+    });
 
-    if (data.history) setHistory(data.history);
+    setTemplates(importedData.templates);
 
-    if (data.sessions) setSessions(data.sessions);
+    setHistory(importedData.history);
 
-    if (data.exerciseLibrary) setExerciseLibrary(data.exerciseLibrary);
+    setSessions(importedData.sessions);
+
+    setExerciseLibrary(importedData.exerciseLibrary);
+
+    setExerciseMetadata(importedData.exerciseMetadata);
+
+    setSelectedSessionId(importedData.selectedSessionId);
   }
 
-  const [templates, setTemplates] = useState(
-    () => JSON.parse(localStorage.getItem("templates")) || []
-  );
+  const [templates, setTemplates] = useState(initialWorkoutData.templates);
 
-  const [sessions, setSessions] = useState(
-    () => JSON.parse(localStorage.getItem("sessions")) || []
-  );
+  const [sessions, setSessions] = useState(initialWorkoutData.sessions);
 
-  const [history, setHistory] = useState(
-    () => JSON.parse(localStorage.getItem("history")) || []
-  );
+  const [history, setHistory] = useState(initialWorkoutData.history);
 
   // EXERCISE LIBRARY
   // merge saved exercises + missing built-in exercises
 
   const [exerciseLibrary, setExerciseLibrary] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem("exerciseLibrary")) || [];
-
-    // MERGE built-ins + saved exercises
-    // uniqueness = name + equipment
-
-    const customExercises = saved.filter((ex) => !ex.builtin);
-
-    return [...seedExercises, ...customExercises];
+    return initialWorkoutData.exerciseLibrary;
   });
 
   const [exerciseMetadata, setExerciseMetadata] = useState(
-    () => JSON.parse(localStorage.getItem("exerciseMetadata")) || {}
+    initialWorkoutData.exerciseMetadata
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -204,7 +213,7 @@ export default function App() {
   const [templateSort, setTemplateSort] = useState("recent");
 
   const [selectedSessionId, setSelectedSessionId] = useState(
-    () => JSON.parse(localStorage.getItem("selectedSessionId")) || null
+    initialWorkoutData.selectedSessionId
   );
   const [selectedHistory, setSelectedHistory] = useState(null);
 
@@ -296,46 +305,16 @@ export default function App() {
   }
 
   useEffect(() => {
-    localStorage.setItem(
-      "exerciseLibrary",
-
-      JSON.stringify(exerciseLibrary)
-    );
-
-    localStorage.setItem(
-      "storageVersion",
-
-      JSON.stringify(STORAGE_VERSION)
-    );
-
-    localStorage.setItem(
-      "templates",
-
-      JSON.stringify(templates)
-    );
-
-    localStorage.setItem(
-      "exerciseMetadata",
-
-      JSON.stringify(exerciseMetadata)
-    );
-
-    localStorage.setItem(
-      "history",
-
-      JSON.stringify(history)
-    );
-
-    localStorage.setItem(
-      "sessions",
-
-      JSON.stringify(sessions)
-    );
-
-    localStorage.setItem(
-      "selectedSessionId",
-
-      JSON.stringify(selectedSessionId)
+    saveWorkoutData(
+      {
+        exerciseLibrary,
+        exerciseMetadata,
+        history,
+        selectedSessionId,
+        sessions,
+        templates,
+      },
+      STORAGE_VERSION
     );
   }, [
     templates,
