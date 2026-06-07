@@ -308,6 +308,8 @@ export default function App() {
 
   const [showExercises, setShowExercises] = useState(false);
 
+  const [showSettings, setShowSettings] = useState(false);
+
   const [updateStatus, setUpdateStatus] = useState("");
 
   const [buildNotice, setBuildNotice] = useState(getInitialBuildNotice);
@@ -571,6 +573,258 @@ export default function App() {
     ]);
   }
 
+  function renderBackupStatusDialog() {
+    if (!backupStatus) return null;
+
+    return (
+      <div
+        role="dialog"
+        aria-live="polite"
+        aria-label="Backup status"
+        style={{
+          background: "rgba(0,0,0,0.4)",
+          inset: 0,
+          position: "fixed",
+          zIndex: 1000,
+        }}
+        onClick={() => setBackupStatus("")}
+      >
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #ddd",
+            borderRadius: "8px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+            color: "#333",
+            left: "50%",
+            maxWidth: "320px",
+            padding: "14px",
+            position: "fixed",
+            top: "18px",
+            transform: "translateX(-50%)",
+            width: "calc(100% - 32px)",
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            aria-label="Dismiss backup status"
+            onClick={() => setBackupStatus("")}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "22px",
+              lineHeight: 1,
+              padding: "2px 6px",
+              position: "absolute",
+              right: "6px",
+              top: "6px",
+            }}
+          >
+            ×
+          </button>
+          <div
+            style={{
+              fontSize: "14px",
+              marginBottom: "12px",
+              paddingRight: "28px",
+              textAlign: "left",
+            }}
+          >
+            {backupStatus}
+          </div>
+          <button onClick={() => setBackupStatus("")}>OK</button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSettings() {
+    return (
+      <div
+        style={{
+          padding: "20px",
+        }}
+      >
+        <button onClick={() => setShowSettings(false)}>← Back</button>
+
+        <h2>Settings</h2>
+
+        <section
+          style={{
+            margin: "18px auto",
+            maxWidth: "420px",
+          }}
+        >
+          <h3>App</h3>
+          <div
+            style={{
+              color: "#666",
+              fontSize: "12px",
+              marginBottom: "10px",
+            }}
+          >
+            v{APP_VERSION}
+            {" • built "}
+            {BUILD_TIME}
+          </div>
+          <button
+            onClick={checkForUpdate}
+            disabled={updateStatus === "checking" || updateStatus === "found"}
+          >
+            {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
+          </button>
+          {(updateStatus || buildNotice) && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                color: "#666",
+                fontSize: "12px",
+                marginTop: "6px",
+              }}
+            >
+              {updateStatus && (
+                <div>
+                  {UPDATE_STATUS_COPY[updateStatus]}
+                  {updateStatus === "current" && lastUpdateCheck
+                    ? ` (${lastUpdateCheck.toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })})`
+                    : ""}
+                </div>
+              )}
+              {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
+            </div>
+          )}
+        </section>
+
+        <section
+          style={{
+            margin: "18px auto",
+            maxWidth: "420px",
+          }}
+        >
+          <h3>Backup</h3>
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "center",
+              margin: "12px 0",
+            }}
+          >
+            <button onClick={exportBackup} style={backupButtonStyle}>
+              <span aria-hidden="true">⬇️</span>
+              <span>Export Backup</span>
+            </button>
+
+            <label
+              style={{
+                ...backupButtonStyle,
+              }}
+            >
+              <span aria-hidden="true">⬆️</span>
+              <span>Import Backup</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={importBackup}
+                style={{
+                  height: "1px",
+                  opacity: 0,
+                  pointerEvents: "none",
+                  position: "absolute",
+                  width: "1px",
+                }}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: "6px",
+            margin: "18px auto",
+            maxWidth: "420px",
+            padding: "10px",
+          }}
+        >
+          <h3>Profile & Sync</h3>
+          {authSession ? (
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: "8px",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "12px",
+                }}
+              >
+                Signed in as {authSession.user.email}
+              </span>
+              <button disabled={authLoading} onClick={handleSignOut}>
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                justifyContent: "center",
+              }}
+            >
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                placeholder="email for sync"
+                disabled={!isSupabaseConfigured || authLoading}
+                style={{
+                  minWidth: 0,
+                  width: "180px",
+                }}
+              />
+              <button
+                disabled={!isSupabaseConfigured || authLoading}
+                onClick={requestMagicLink}
+              >
+                Sign In
+              </button>
+            </div>
+          )}
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              color: "#666",
+              fontSize: "12px",
+              marginTop: "6px",
+            }}
+          >
+            {authStatus}
+          </div>
+        </section>
+
+        {renderBackupStatusDialog()}
+      </div>
+    );
+  }
+
+  if (showSettings) {
+    return renderSettings();
+  }
+
   if (showExercises) {
     return (
       <ExerciseView
@@ -668,217 +922,11 @@ export default function App() {
 
       <div
         style={{
-          fontSize: "12px",
-          color: "#666",
           marginBottom: "12px",
         }}
       >
-        v{APP_VERSION}
-        {" • built "}
-        {BUILD_TIME}
-        <button
-          onClick={checkForUpdate}
-          disabled={updateStatus === "checking" || updateStatus === "found"}
-          style={{
-            marginLeft: "8px",
-            padding: "2px 6px",
-            fontSize: "0.8em",
-          }}
-        >
-          {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
-        </button>
-        {(updateStatus || buildNotice) && (
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              marginTop: "4px",
-            }}
-          >
-            {updateStatus && (
-              <div>
-                {UPDATE_STATUS_COPY[updateStatus]}
-                {updateStatus === "current" && lastUpdateCheck
-                  ? ` (${lastUpdateCheck.toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })})`
-                  : ""}
-              </div>
-            )}
-            {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
-          </div>
-        )}
+        <button onClick={() => setShowSettings(true)}>⚙️ Settings</button>
       </div>
-
-      <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "12px 0",
-        }}
-      >
-        <button onClick={exportBackup} style={backupButtonStyle}>
-          <span aria-hidden="true">⬇️</span>
-          <span>Export Backup</span>
-        </button>
-
-        <label
-          style={{
-            ...backupButtonStyle,
-          }}
-        >
-          <span aria-hidden="true">⬆️</span>
-          <span>Import Backup</span>
-          <input
-            type="file"
-            accept="application/json,.json"
-            onChange={importBackup}
-            style={{
-              height: "1px",
-              opacity: 0,
-              pointerEvents: "none",
-              position: "absolute",
-              width: "1px",
-            }}
-          />
-        </label>
-      </div>
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "6px",
-          margin: "8px auto 12px",
-          maxWidth: "360px",
-          padding: "10px",
-        }}
-      >
-        {authSession ? (
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: "8px",
-              justifyContent: "center",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "12px",
-              }}
-            >
-              Signed in as {authSession.user.email}
-            </span>
-            <button disabled={authLoading} onClick={handleSignOut}>
-              Sign Out
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              justifyContent: "center",
-            }}
-          >
-            <input
-              type="email"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              placeholder="email for sync"
-              disabled={!isSupabaseConfigured || authLoading}
-              style={{
-                minWidth: 0,
-                width: "180px",
-              }}
-            />
-            <button
-              disabled={!isSupabaseConfigured || authLoading}
-              onClick={requestMagicLink}
-            >
-              Sign In
-            </button>
-          </div>
-        )}
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            color: "#666",
-            fontSize: "12px",
-            marginTop: "6px",
-          }}
-        >
-          {authStatus}
-        </div>
-      </div>
-
-      {backupStatus && (
-        <div
-          role="dialog"
-          aria-live="polite"
-          aria-label="Backup status"
-          style={{
-            background: "rgba(0,0,0,0.4)",
-            inset: 0,
-            position: "fixed",
-            zIndex: 1000,
-          }}
-          onClick={() => setBackupStatus("")}
-        >
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-              color: "#333",
-              left: "50%",
-              maxWidth: "320px",
-              padding: "14px",
-              position: "fixed",
-              top: "18px",
-              transform: "translateX(-50%)",
-              width: "calc(100% - 32px)",
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              aria-label="Dismiss backup status"
-              onClick={() => setBackupStatus("")}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "22px",
-                lineHeight: 1,
-                padding: "2px 6px",
-                position: "absolute",
-                right: "6px",
-                top: "6px",
-              }}
-            >
-              ×
-            </button>
-            <div
-              style={{
-                fontSize: "14px",
-                marginBottom: "12px",
-                paddingRight: "28px",
-                textAlign: "left",
-              }}
-            >
-              {backupStatus}
-            </div>
-            <button onClick={() => setBackupStatus("")}>OK</button>
-          </div>
-        </div>
-      )}
 
       <WorkoutCalendar history={history} />
 
