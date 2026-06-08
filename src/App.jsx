@@ -20,8 +20,9 @@ import {
 } from "./storage/workoutStorage";
 import {
   getCurrentSession,
-  sendMagicLink,
+  signInWithPassword,
   signOut,
+  signUpWithPassword,
   subscribeToAuthChanges,
 } from "./sync/auth";
 import { isSupabaseConfigured } from "./sync/supabaseClient";
@@ -328,6 +329,8 @@ export default function App() {
 
   const [authEmail, setAuthEmail] = useState("");
 
+  const [authPassword, setAuthPassword] = useState("");
+
   const [authStatus, setAuthStatus] = useState(
     isSupabaseConfigured
       ? "Sync sign-in is optional."
@@ -383,22 +386,51 @@ export default function App() {
     };
   }, []);
 
-  async function requestMagicLink() {
+  async function signInWithEmailPassword() {
     const email = authEmail.trim();
+    const password = authPassword;
 
-    if (!email) {
-      setAuthStatus("Enter an email address first.");
+    if (!email || !password) {
+      setAuthStatus("Enter your email and password.");
       return;
     }
 
     setAuthLoading(true);
 
     try {
-      await sendMagicLink(email);
-      setAuthStatus("Check your email for a sign-in link.");
+      const session = await signInWithPassword(email, password);
+      setAuthSession(session);
+      setAuthStatus("Signed in. Cloud sync is manual.");
     } catch (error) {
-      console.error("Magic link failed:", error);
+      console.error("Password sign-in failed:", error);
       setAuthStatus(`Sign-in failed: ${error.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function createAccountWithEmailPassword() {
+    const email = authEmail.trim();
+    const password = authPassword;
+
+    if (!email || !password) {
+      setAuthStatus("Enter your email and password.");
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const session = await signUpWithPassword(email, password);
+      setAuthSession(session);
+      setAuthStatus(
+        session
+          ? "Account created. Cloud sync is manual."
+          : "Account created. Check your email if confirmation is required."
+      );
+    } catch (error) {
+      console.error("Account creation failed:", error);
+      setAuthStatus(`Account creation failed: ${error.message}`);
     } finally {
       setAuthLoading(false);
     }
@@ -868,27 +900,48 @@ export default function App() {
           ) : (
             <div
               style={{
-                display: "flex",
+                alignItems: "center",
+                display: "grid",
                 gap: "6px",
-                justifyContent: "center",
+                gridTemplateColumns: "1fr auto",
               }}
             >
+              {/* Keep access control server-side; frontend allowlists are not security. */}
               <input
                 type="email"
                 value={authEmail}
                 onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="email for sync"
+                placeholder="email"
+                disabled={!isSupabaseConfigured || authLoading}
+                style={{
+                  gridColumn: "1 / -1",
+                  minWidth: 0,
+                }}
+              />
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                placeholder="password"
                 disabled={!isSupabaseConfigured || authLoading}
                 style={{
                   minWidth: 0,
-                  width: "180px",
                 }}
               />
               <button
                 disabled={!isSupabaseConfigured || authLoading}
-                onClick={requestMagicLink}
+                onClick={signInWithEmailPassword}
               >
                 Sign In
+              </button>
+              <button
+                disabled={!isSupabaseConfigured || authLoading}
+                onClick={createAccountWithEmailPassword}
+                style={{
+                  gridColumn: "1 / -1",
+                }}
+              >
+                Create Account
               </button>
             </div>
           )}

@@ -28,21 +28,38 @@ export function subscribeToAuthChanges(callback) {
   };
 }
 
-export async function sendMagicLink(email) {
+export async function signInWithPassword(email, password) {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase is not configured.");
   }
 
-  const { error } = await supabase.auth.signInWithOtp({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
-    options: {
-      emailRedirectTo: window.location.href,
-    },
+    password,
   });
 
   if (error) {
     throw error;
   }
+
+  return data.session;
+}
+
+export async function signUpWithPassword(email, password) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.session;
 }
 
 export async function signOut() {
