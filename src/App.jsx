@@ -25,6 +25,10 @@ import {
   subscribeToAuthChanges,
 } from "./sync/auth";
 import { isSupabaseConfigured } from "./sync/supabaseClient";
+import {
+  downloadWorkoutSnapshot,
+  uploadWorkoutSnapshot,
+} from "./sync/workoutCloudSnapshot";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -332,6 +336,12 @@ export default function App() {
 
   const [authLoading, setAuthLoading] = useState(false);
 
+  const [syncStatus, setSyncStatus] = useState(
+    "Cloud upload/download is manual for now."
+  );
+
+  const [syncLoading, setSyncLoading] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -346,7 +356,7 @@ export default function App() {
         if (!cancelled) {
           setAuthSession(session);
           setAuthStatus(
-            session ? "Signed in. Cloud sync is not active yet." : "Signed out."
+            session ? "Signed in. Cloud sync is manual." : "Signed out."
           );
         }
       } catch (error) {
@@ -363,7 +373,7 @@ export default function App() {
     const unsubscribe = subscribeToAuthChanges((session) => {
       setAuthSession(session);
       setAuthStatus(
-        session ? "Signed in. Cloud sync is not active yet." : "Signed out."
+        session ? "Signed in. Cloud sync is manual." : "Signed out."
       );
     });
 
@@ -405,6 +415,85 @@ export default function App() {
       setAuthStatus(`Sign out failed: ${error.message}`);
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  function getCurrentWorkoutData() {
+    return {
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      selectedSessionId,
+      sessions,
+      templates,
+    };
+  }
+
+  function replaceWorkoutData(data) {
+    setTemplates(data.templates);
+    setHistory(data.history);
+    setSessions(data.sessions);
+    setExerciseLibrary(data.exerciseLibrary);
+    setExerciseMetadata(data.exerciseMetadata);
+    setSelectedSessionId(data.selectedSessionId);
+  }
+
+  async function uploadCurrentDataToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const data = getCurrentWorkoutData();
+
+      await uploadWorkoutSnapshot(data, STORAGE_VERSION, authSession);
+      setSyncStatus(
+        `Uploaded to cloud: ${formatBackupSummary(getWorkoutDataSummary(data))}.`
+      );
+    } catch (error) {
+      console.error("Cloud upload failed:", error);
+      setSyncStatus(`Cloud upload failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function downloadCloudData() {
+    setSyncLoading(true);
+
+    try {
+      const snapshot = await downloadWorkoutSnapshot(authSession);
+
+      if (!snapshot) {
+        setSyncStatus("No cloud snapshot found for this account.");
+        return;
+      }
+
+      const importedData = parseWorkoutBackup(
+        {
+          data: snapshot.data,
+          schemaVersion: snapshot.schema_version,
+        },
+        {
+          seedExercises,
+        }
+      );
+
+      const summary = getWorkoutDataSummary(importedData);
+      const confirmed = window.confirm(
+        `Download cloud data and replace this device's current app data?\n\n${formatBackupSummary(summary)}`
+      );
+
+      if (!confirmed) {
+        setSyncStatus("Cloud download canceled. Current data was not changed.");
+        return;
+      }
+
+      replaceWorkoutData(importedData);
+      setSyncStatus(`Downloaded from cloud: ${formatBackupSummary(summary)}.`);
+    } catch (error) {
+      console.error("Cloud download failed:", error);
+      setSyncStatus(`Cloud download failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
     }
   }
 
@@ -813,6 +902,38 @@ export default function App() {
             }}
           >
             {authStatus}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              justifyContent: "center",
+              marginTop: "10px",
+            }}
+          >
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={uploadCurrentDataToCloud}
+            >
+              ⬆️ Upload to Cloud
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={downloadCloudData}
+            >
+              ⬇️ Download from Cloud
+            </button>
+          </div>
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              color: "#666",
+              fontSize: "12px",
+              marginTop: "6px",
+            }}
+          >
+            {syncStatus}
           </div>
         </section>
 
