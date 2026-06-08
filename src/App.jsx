@@ -30,6 +30,10 @@ import {
   downloadWorkoutSnapshot,
   uploadWorkoutSnapshot,
 } from "./sync/workoutCloudSnapshot";
+import {
+  getCustomExercises,
+  uploadCustomExercises,
+} from "./sync/exerciseCloudSync";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -529,6 +533,23 @@ export default function App() {
     }
   }
 
+  async function uploadCustomExerciseLibraryToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await uploadCustomExercises(exerciseLibrary, authSession);
+
+      setSyncStatus(
+        `Custom exercises synced: ${result.uploaded} uploaded, ${result.deleted} removed from active cloud library.`
+      );
+    } catch (error) {
+      console.error("Custom exercise sync failed:", error);
+      setSyncStatus(`Custom exercise sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -987,6 +1008,30 @@ export default function App() {
             }}
           >
             {syncStatus}
+          </div>
+          <div
+            style={{
+              borderTop: "1px solid #eee",
+              marginTop: "10px",
+              paddingTop: "10px",
+            }}
+          >
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={uploadCustomExerciseLibraryToCloud}
+            >
+              Sync Custom Exercises
+            </button>
+            <div
+              style={{
+                color: "#666",
+                fontSize: "12px",
+                marginTop: "6px",
+              }}
+            >
+              {getCustomExercises(exerciseLibrary).length} custom exercises
+              ready for the normalized exercise table.
+            </div>
           </div>
         </section>
 

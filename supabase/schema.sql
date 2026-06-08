@@ -113,6 +113,8 @@ create table if not exists public.exercises (
 
 create index if not exists exercises_user_id_idx on public.exercises (user_id);
 create index if not exists exercises_name_idx on public.exercises (lower(name));
+create unique index if not exists exercises_user_source_key_idx
+on public.exercises (user_id, source, source_key);
 
 drop trigger if exists exercises_set_updated_at on public.exercises;
 create trigger exercises_set_updated_at
