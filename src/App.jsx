@@ -34,6 +34,7 @@ import {
   getCustomExercises,
   uploadCustomExercises,
 } from "./sync/exerciseCloudSync";
+import { uploadWorkouts } from "./sync/workoutCloudSync";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -550,6 +551,23 @@ export default function App() {
     }
   }
 
+  async function uploadWorkoutsToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await uploadWorkouts(templates, exerciseLibrary, authSession);
+
+      setSyncStatus(
+        `Workouts synced: ${result.syncedWorkouts} workouts, ${result.syncedExercises} exercises, ${result.syncedSets} sets. Removed ${result.removedWorkouts} workouts.`
+      );
+    } catch (error) {
+      console.error("Workout sync failed:", error);
+      setSyncStatus(`Workout sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1021,6 +1039,15 @@ export default function App() {
               onClick={uploadCustomExerciseLibraryToCloud}
             >
               Sync Custom Exercises
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={uploadWorkoutsToCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Sync Workouts
             </button>
             <div
               style={{

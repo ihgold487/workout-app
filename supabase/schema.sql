@@ -197,6 +197,8 @@ comment on table public.workouts is
 
 create index if not exists workouts_user_id_idx on public.workouts (user_id);
 create index if not exists workouts_user_updated_at_idx on public.workouts (user_id, updated_at desc);
+create unique index if not exists workouts_user_source_key_idx
+on public.workouts (user_id, source, source_key);
 
 drop trigger if exists workouts_set_updated_at on public.workouts;
 create trigger workouts_set_updated_at
