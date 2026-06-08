@@ -35,6 +35,7 @@ import {
   uploadCustomExercises,
 } from "./sync/exerciseCloudSync";
 import { uploadWorkouts } from "./sync/workoutCloudSync";
+import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -568,6 +569,28 @@ export default function App() {
     }
   }
 
+  async function uploadWorkoutHistoryToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await uploadWorkoutHistory(
+        history,
+        templates,
+        exerciseLibrary,
+        authSession
+      );
+
+      setSyncStatus(
+        `History synced: ${result.syncedSessions} workouts, ${result.syncedExercises} exercises, ${result.syncedSets} sets. Removed ${result.removedSessions} workouts.`
+      );
+    } catch (error) {
+      console.error("Workout history sync failed:", error);
+      setSyncStatus(`Workout history sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1048,6 +1071,15 @@ export default function App() {
               }}
             >
               Sync Workouts
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={uploadWorkoutHistoryToCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Sync History
             </button>
             <div
               style={{

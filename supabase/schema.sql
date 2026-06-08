@@ -332,6 +332,8 @@ comment on table public.workout_sessions is
 
 create index if not exists workout_sessions_user_completed_at_idx
 on public.workout_sessions (user_id, completed_at desc);
+create unique index if not exists workout_sessions_user_source_key_idx
+on public.workout_sessions (user_id, source, source_key);
 
 drop trigger if exists workout_sessions_set_updated_at on public.workout_sessions;
 create trigger workout_sessions_set_updated_at
