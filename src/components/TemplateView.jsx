@@ -9,6 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
+import ExercisePickerSheet from "./ExercisePickerSheet";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 
 function SortableExerciseRow({ exercise, children }) {
@@ -175,19 +176,6 @@ export default function TemplateView({
     });
   }
 
-  const filteredExercises = exerciseLibrary
-
-    .filter(
-      (exercise) =>
-        (!selectedMuscle || exercise.muscles?.[0] === selectedMuscle) &&
-        exercise.name
-          .toLowerCase()
-
-          .includes(search.toLowerCase())
-    )
-
-    .sort((a, b) => a.name.localeCompare(b.name));
-
   function getLatestWorkoutPerformance(exerciseId) {
     const workout = history.find((workout) =>
       workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
@@ -210,8 +198,6 @@ export default function TemplateView({
       sets: exercise.sets,
     };
   }
-
-  const muscleGroups = [...new Set(exerciseLibrary.map((e) => e.muscles?.[0]))];
 
   return (
     <div
@@ -243,54 +229,28 @@ export default function TemplateView({
         }
       />
       <button onClick={startWorkout}>Start Workout</button>{" "}
-      <button onClick={() => setShowAdd(!showAdd)}>+ Add Exercise</button>
+      <button onClick={() => setShowAdd(true)}>+ Add Exercise</button>
+
       {showAdd && (
-        <div
-          style={{
-            marginTop: "20px",
-            border: "1px solid #ccc",
-            padding: "10px",
+        <ExercisePickerSheet
+          title="Add exercise"
+          exerciseLibrary={exerciseLibrary}
+          search={search}
+          selectedMuscle={selectedMuscle}
+          setSearch={setSearch}
+          setSelectedMuscle={setSelectedMuscle}
+          onClose={() => {
+            setShowAdd(false);
+            setSearch("");
           }}
-        >
-          <div>
-            <select
-              value={selectedMuscle}
-              onChange={(e) => setSelectedMuscle(e.target.value)}
-            >
-              <option value="">All Muscles</option>
+          onSelect={(exercise) => {
+            setPendingExercise(exercise);
+            setShowAdd(false);
+          }}
+        />
+      )}
 
-              {muscleGroups.map((muscle) => (
-                <option key={muscle} value={muscle}>
-                  {muscle}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <input
-            placeholder="Search exercise"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-
-          {filteredExercises.map((exercise) => (
-            <div
-              key={`${exercise.name}-${exercise.equipment?.[0] || ""}-${
-                exercise.id
-              }`}
-              style={{
-                marginTop: "10px",
-              }}
-            >
-              <button onClick={() => setPendingExercise(exercise)}>
-                {`${exercise.name}${
-                  exercise.equipment?.[0] ? ", " + exercise.equipment[0] : ""
-                }`}
-              </button>
-            </div>
-          ))}
-
-          {pendingExercise && (
+      {pendingExercise && (
             <div
               style={{
                 position: "fixed",
@@ -383,8 +343,6 @@ export default function TemplateView({
                 </button>
               </div>
             </div>
-          )}
-        </div>
       )}
       <hr />
       {

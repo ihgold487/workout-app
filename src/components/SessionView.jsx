@@ -3,6 +3,7 @@ import { equipmentOptions } from "../data/seedEquipment";
 import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
+import ExercisePickerSheet from "./ExercisePickerSheet";
 import { calculateE1RM } from "../utils/e1rm";
 
 export default function SessionView({
@@ -687,19 +688,6 @@ export default function SessionView({
     setShowAddExercise(false);
   }
 
-  const filteredExercises = exerciseLibrary
-
-    .filter(
-      (exercise) =>
-        (!selectedMuscle || exercise.muscles?.[0] === selectedMuscle) &&
-        exercise.name
-          .toLowerCase()
-
-          .includes(search.toLowerCase())
-    )
-
-    .sort((a, b) => a.name.localeCompare(b.name));
-
   // UNIQUE muscle filter options
   const muscleGroups = [...new Set(exerciseLibrary.map((e) => e.muscles?.[0]))]
     .filter(Boolean)
@@ -1185,6 +1173,7 @@ export default function SessionView({
                         lineHeight: "1",
                       }}
                       onClick={() => {
+                        setShowAddExercise(false);
                         setReplacingExerciseId(
                           replacingExerciseId === exercise.id
                             ? null
@@ -1269,93 +1258,6 @@ export default function SessionView({
                   </div>
                 )}
 
-                {replacingExerciseId === exercise.id && (
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      padding: "6px",
-                      border: "1px solid #ccc",
-                      background: "#f8f8f8",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "4px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-start",
-                        marginBottom: "2px",
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          setReplacingExerciseId(null);
-                          setSearch("");
-                        }}
-                      >
-                        ❌ Cancel
-                      </button>
-                    </div>
-
-                    <select
-                      value={selectedMuscle}
-                      onChange={(e) => setSelectedMuscle(e.target.value)}
-                    >
-                      <option value="">All Muscles</option>
-
-                      {muscleGroups.map((muscle) => (
-                        <option key={muscle} value={muscle}>
-                          {muscle}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      placeholder="Search exercise"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-
-                    {exerciseLibrary
-
-                      .filter(
-                        (ex) =>
-                          !selectedMuscle || ex.muscles?.[0] === selectedMuscle
-                      )
-
-                      .filter((ex) =>
-                        ex.name
-                          .toLowerCase()
-
-                          .includes(search.toLowerCase())
-                      )
-
-                      .map((ex) => (
-                        <button
-                          key={`${ex.name}-${ex.equipment?.[0] || ""}-${ex.id}`}
-                          onClick={() => {
-                            setReplacementTarget(exercise.id);
-
-                            setReplacementExercise(ex);
-
-                            setReplacementValues({
-                              weight: "",
-                              reps: "",
-                              rir: "",
-                              sets: "",
-                            });
-
-                            setShowReplaceExercise(true);
-                          }}
-                        >
-                          {`${ex.name}${
-                            ex.equipment?.[0] ? ", " + ex.equipment[0] : ""
-                          }`}
-                        </button>
-                      ))}
-                  </div>
-                )}
                 {
                   <>
                     <div
@@ -1757,27 +1659,36 @@ export default function SessionView({
         <hr />
 
         {showAddExercise && (
-          <div>
-            <select
-              value={selectedMuscle}
-              onChange={(e) => setSelectedMuscle(e.target.value)}
-            >
-              <option value="">All Muscles</option>
+          <ExercisePickerSheet
+            title="Add exercise"
+            actionLabel="Create exercise"
+            exerciseLibrary={exerciseLibrary}
+            search={search}
+            selectedMuscle={selectedMuscle}
+            setSearch={setSearch}
+            setSelectedMuscle={setSelectedMuscle}
+            onAction={() => {
+              setShowAddExercise(false);
+              setShowCreateExercise(true);
+            }}
+            onClose={() => {
+              setShowAddExercise(false);
+              setSearch("");
+            }}
+            onSelect={(exercise) => {
+              setPendingExercise(exercise);
+              setShowAddExercise(false);
 
-              {muscleGroups.map((muscle) => (
-                <option key={muscle} value={muscle}>
-                  {muscle}
-                </option>
-              ))}
-            </select>
+              setNewExerciseValues({
+                weight: exercise.lastWeight || "",
+                reps: exercise.lastReps || "",
+                sets: "",
+              });
+            }}
+          />
+        )}
 
-            <input
-              placeholder="Search exercise"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-
-            {pendingExercise && (
+        {pendingExercise && (
               <div
                 style={{
                   position: "fixed",
@@ -1840,27 +1751,32 @@ export default function SessionView({
                   </button>
                 </div>
               </div>
-            )}
+        )}
 
-            {filteredExercises.map((ex) => (
-              <button
-                key={`${ex.name}-${ex.equipment?.[0] || ""}-${ex.id}`}
-                onClick={() => {
-                  setPendingExercise(ex);
-
-                  setNewExerciseValues({
-                    weight: ex.lastWeight || "",
-
-                    reps: ex.lastReps || "",
-
-                    sets: "",
-                  });
-                }}
-              >
-                {`${ex.name}${ex.equipment?.[0] ? ", " + ex.equipment[0] : ""}`}
-              </button>
-            ))}
-          </div>
+        {replacingExerciseId && !showReplaceExercise && (
+          <ExercisePickerSheet
+            title="Replace exercise"
+            exerciseLibrary={exerciseLibrary}
+            search={search}
+            selectedMuscle={selectedMuscle}
+            setSearch={setSearch}
+            setSelectedMuscle={setSelectedMuscle}
+            onClose={() => {
+              setReplacingExerciseId(null);
+              setSearch("");
+            }}
+            onSelect={(exercise) => {
+              setReplacementTarget(replacingExerciseId);
+              setReplacementExercise(exercise);
+              setReplacementValues({
+                weight: "",
+                reps: "",
+                rir: "",
+                sets: "",
+              });
+              setShowReplaceExercise(true);
+            }}
+          />
         )}
 
         {showReplaceExercise && replacementExercise && (
@@ -1910,6 +1826,7 @@ export default function SessionView({
                 <button
                   onClick={() => {
                     setShowReplaceExercise(false);
+                    setReplacingExerciseId(null);
                     setReplacementExercise(null);
                     setReplacementTarget(null);
                   }}
@@ -1956,21 +1873,14 @@ export default function SessionView({
               style={{
                 padding: "10px 14px",
               }}
-              onClick={() => setShowAddExercise(!showAddExercise)}
+              onClick={() => {
+                setShowAddExercise((isOpen) => !isOpen);
+                setReplacingExerciseId(null);
+                setSearch("");
+              }}
             >
               {showAddExercise ? "✕ Cancel" : "+ Add Exercise"}
             </button>
-
-            {showAddExercise && (
-              <button
-                style={{
-                  padding: "10px 14px",
-                }}
-                onClick={() => setShowCreateExercise(true)}
-              >
-                + Create Exercise
-              </button>
-            )}
 
             <button
               ref={completeWorkoutButtonRef}
