@@ -84,6 +84,42 @@ function exerciseHasMuscle(exercise, muscle) {
   );
 }
 
+function exercisePrimaryMuscleMatches(exercise, muscle) {
+  return normalizeMuscle(exercise.muscles?.[0]) === normalizeMuscle(muscle);
+}
+
+function getExerciseEquipmentKey(exercise) {
+  return (exercise.equipment || [])
+    .map((equipment) => String(equipment).toLowerCase())
+    .sort()
+    .join("|");
+}
+
+function getExerciseVariantKey(exercise) {
+  const name = exercise.name.toLowerCase();
+
+  if (name.includes("hammer")) return "hammer";
+  if (name.includes("supinated")) return "supinated";
+  if (name.includes("wide neutral")) return "wide-neutral";
+  if (name.includes("wide")) return "wide";
+  if (name.includes("narrow")) return "narrow";
+  if (name.includes("neutral")) return "neutral";
+  if (name.includes("pushdown")) return "pushdown";
+  if (name.includes("extension")) return "extension";
+  if (name.includes("skull")) return "skull-crusher";
+  if (name.includes("row")) return "row";
+  if (name.includes("pulldown")) return "pulldown";
+  if (name.includes("curl")) return "curl";
+  if (name.includes("incline")) return "incline";
+  if (name.includes("decline")) return "decline";
+
+  return name.replace(/[^a-z0-9]+/g, "-");
+}
+
+function getMuscleUsageKey(muscle) {
+  return normalizeMuscle(muscle);
+}
+
 function getExerciseE1RM(exercise, exerciseMetadata, history) {
   const metadata = exerciseMetadata?.[exercise.id] || {};
 
@@ -137,9 +173,17 @@ function estimateTargetWeight(exercise, exerciseMetadata, history, reps, rir) {
   return rounded > 0 ? String(rounded) : "";
 }
 
-function chooseExercise(exerciseLibrary, muscle, usedExerciseIds, offset) {
-  const candidates = exerciseLibrary
-    .filter((exercise) => exerciseHasMuscle(exercise, muscle))
+function chooseExercise(exerciseLibrary, muscle, usage, offset) {
+  const matchingCandidates = exerciseLibrary.filter((exercise) =>
+    exerciseHasMuscle(exercise, muscle)
+  );
+  const primaryCandidates = matchingCandidates.filter((exercise) =>
+    exercisePrimaryMuscleMatches(exercise, muscle)
+  );
+  const candidates = (primaryCandidates.length
+    ? primaryCandidates
+    : matchingCandidates
+  )
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (!candidates.length) {
@@ -147,11 +191,55 @@ function chooseExercise(exerciseLibrary, muscle, usedExerciseIds, offset) {
   }
 
   const unusedCandidates = candidates.filter(
-    (exercise) => !usedExerciseIds.has(exercise.id)
+    (exercise) => !usage.exerciseIds.has(exercise.id)
   );
   const pool = unusedCandidates.length ? unusedCandidates : candidates;
+  const muscleKey = getMuscleUsageKey(muscle);
+  const usedEquipment = usage.equipmentByMuscle.get(muscleKey) || new Set();
+  const usedVariants = usage.variantByMuscle.get(muscleKey) || new Set();
+  const scoredPool = pool
+    .map((exercise) => {
+      let score = 0;
 
-  return pool[offset % pool.length];
+      if (!usedEquipment.has(getExerciseEquipmentKey(exercise))) {
+        score += 2;
+      }
+
+      if (!usedVariants.has(getExerciseVariantKey(exercise))) {
+        score += 2;
+      }
+
+      if (exercisePrimaryMuscleMatches(exercise, muscle)) {
+        score += 3;
+      }
+
+      return {
+        exercise,
+        score,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score || a.exercise.name.localeCompare(b.exercise.name)
+    );
+  const bestScore = scoredPool[0]?.score ?? 0;
+  const bestPool = scoredPool
+    .filter((item) => item.score === bestScore)
+    .map((item) => item.exercise);
+
+  return bestPool[offset % bestPool.length];
+}
+
+function rememberExerciseUsage(usage, muscle, exercise) {
+  const muscleKey = getMuscleUsageKey(muscle);
+  const equipment = usage.equipmentByMuscle.get(muscleKey) || new Set();
+  const variants = usage.variantByMuscle.get(muscleKey) || new Set();
+
+  equipment.add(getExerciseEquipmentKey(exercise));
+  variants.add(getExerciseVariantKey(exercise));
+  usage.equipmentByMuscle.set(muscleKey, equipment);
+  usage.variantByMuscle.set(muscleKey, variants);
+  usage.exerciseIds.add(exercise.id);
 }
 
 function createSets(count, exercise, options) {
@@ -210,9 +298,14 @@ export function generatePlanWorkouts({
   seed = 0,
 }) {
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
-  const workoutCount = Math.max(1, Number(daysPerWeek) || 2);
+  const requestedWorkoutCount = Math.max(1, Number(daysPerWeek) || 2);
+  const workoutCount = Math.min(requestedWorkoutCount, config.workouts.length);
   const workoutDefinitions = config.workouts.slice(0, workoutCount);
-  const usedExerciseIds = new Set();
+  const usage = {
+    equipmentByMuscle: new Map(),
+    exerciseIds: new Set(),
+    variantByMuscle: new Map(),
+  };
   const gaps = [];
 
   const workouts = workoutDefinitions.map((workout, workoutIndex) => {
@@ -221,7 +314,7 @@ export function generatePlanWorkouts({
         const exercise = chooseExercise(
           exerciseLibrary,
           muscle,
-          usedExerciseIds,
+          usage,
           seed + workoutIndex + groupIndex + muscleIndex
         );
 
@@ -230,7 +323,7 @@ export function generatePlanWorkouts({
           return [];
         }
 
-        usedExerciseIds.add(exercise.id);
+        rememberExerciseUsage(usage, muscle, exercise);
 
         return [
           createPlanExercise({

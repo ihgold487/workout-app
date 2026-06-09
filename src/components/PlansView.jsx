@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BarChart3, RefreshCw, Save, X } from "lucide-react";
 import ExercisePickerSheet from "./ExercisePickerSheet";
+import WeightPickerModal from "./WeightPickerModal";
 import {
   createPlanExercise,
   generatePlanWorkouts,
@@ -364,6 +365,29 @@ function getPlanTypeLabel(planType) {
   return planType === "type-1" ? "Plan Type 1" : "Plan Type 2";
 }
 
+function PlanPickerButton({ disabled = false, label, onClick, value }) {
+  return (
+    <label
+      style={{
+        display: "grid",
+        gap: "4px",
+      }}
+    >
+      {label}
+      <button
+        disabled={disabled}
+        onClick={onClick}
+        style={{
+          minHeight: "40px",
+          textAlign: "left",
+        }}
+      >
+        {value}
+      </button>
+    </label>
+  );
+}
+
 export default function PlansView({
   exerciseLibrary,
   exerciseMetadata,
@@ -383,6 +407,7 @@ export default function PlansView({
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState("");
   const [summaryWorkout, setSummaryWorkout] = useState(null);
+  const [activeValuePicker, setActiveValuePicker] = useState(null);
 
   const generatedPlan = useMemo(
     () =>
@@ -451,7 +476,10 @@ export default function PlansView({
     const workouts = previewWorkouts.map((workout, workoutIndex) => ({
       ...workout,
       id: savedAt + workoutIndex,
-      name: `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`,
+      name:
+        daysPerWeek === "1"
+          ? `${workout.name} (single)`
+          : `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`,
       exercises: workout.exercises.map((exercise, exerciseIndex) => {
         const savedExercise = { ...exercise };
 
@@ -510,78 +538,43 @@ export default function PlansView({
               setReplacementBySlot({});
               setSaveStatus("");
             }}
+            style={{
+              boxSizing: "border-box",
+              font: "inherit",
+              minHeight: "40px",
+              padding: "6px 10px",
+              width: "100%",
+            }}
           >
             <option value="type-1">Type 1</option>
             <option value="type-2">Type 2</option>
           </select>
         </label>
 
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          Days per week
-          <select
-            value={daysPerWeek}
-            onChange={(event) => {
-              setDaysPerWeek(event.target.value);
-              setReplacementBySlot({});
-              setSaveStatus("");
-            }}
-          >
-            <option value="2">2 days/week</option>
-            <option value="3">3 days/week</option>
-          </select>
-        </label>
+        <PlanPickerButton
+          label="Days per week"
+          value={`${daysPerWeek} ${daysPerWeek === "1" ? "day" : "days"}`}
+          onClick={() => setActiveValuePicker("days")}
+        />
 
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          Duration
-          <select
-            value={durationWeeks}
-            onChange={(event) => setDurationWeeks(event.target.value)}
-          >
-            <option value="4">4 weeks</option>
-            <option value="5">5 weeks</option>
-            <option value="6">6 weeks</option>
-          </select>
-        </label>
+        <PlanPickerButton
+          disabled={daysPerWeek === "1"}
+          label="Duration in weeks"
+          value={daysPerWeek === "1" ? "Single workout" : durationWeeks}
+          onClick={() => setActiveValuePicker("duration")}
+        />
 
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          Reps
-          <input
-            inputMode="numeric"
-            type="number"
-            value={reps}
-            onChange={(event) => setReps(event.target.value)}
-          />
-        </label>
+        <PlanPickerButton
+          label="Reps"
+          value={reps}
+          onClick={() => setActiveValuePicker("reps")}
+        />
 
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          RIR
-          <input
-            inputMode="decimal"
-            type="number"
-            value={rir}
-            onChange={(event) => setRir(event.target.value)}
-          />
-        </label>
+        <PlanPickerButton
+          label="RIR"
+          value={rir}
+          onClick={() => setActiveValuePicker("rir")}
+        />
 
         <div
           style={{
@@ -599,6 +592,8 @@ export default function PlansView({
               alignItems: "center",
               display: "inline-flex",
               gap: "6px",
+              minHeight: "40px",
+              padding: "6px 10px",
             }}
           >
             <RefreshCw size={16} />
@@ -611,6 +606,8 @@ export default function PlansView({
               alignItems: "center",
               display: "inline-flex",
               gap: "6px",
+              minHeight: "40px",
+              padding: "6px 10px",
             }}
           >
             <Save size={16} />
@@ -687,6 +684,58 @@ export default function PlansView({
           onClose={() => setSummaryWorkout(null)}
         />
       )}
+
+      <WeightPickerModal
+        isOpen={activeValuePicker === "days"}
+        onClose={() => setActiveValuePicker(null)}
+        value={daysPerWeek}
+        title="Days per week"
+        values={[1, 2, 3, 4, 5, 6]}
+        onSelect={(value) => {
+          setDaysPerWeek(String(value));
+          setReplacementBySlot({});
+          setSaveStatus("");
+        }}
+      />
+
+      <WeightPickerModal
+        isOpen={activeValuePicker === "duration"}
+        onClose={() => setActiveValuePicker(null)}
+        value={durationWeeks}
+        title="Duration in weeks"
+        values={[3, 4, 5, 6]}
+        onSelect={(value) => {
+          setDurationWeeks(String(value));
+          setSaveStatus("");
+        }}
+      />
+
+      <WeightPickerModal
+        isOpen={activeValuePicker === "reps"}
+        onClose={() => setActiveValuePicker(null)}
+        value={reps}
+        increment={1}
+        title="Select Reps"
+        values={Array.from({ length: 20 }, (_, index) => index + 1)}
+        onSelect={(value) => {
+          setReps(String(value));
+          setReplacementBySlot({});
+          setSaveStatus("");
+        }}
+      />
+
+      <WeightPickerModal
+        isOpen={activeValuePicker === "rir"}
+        onClose={() => setActiveValuePicker(null)}
+        value={rir}
+        title="Select RIR"
+        values={[0, 1, 2, 3, 4, 5, 6]}
+        onSelect={(value) => {
+          setRir(String(value));
+          setReplacementBySlot({});
+          setSaveStatus("");
+        }}
+      />
     </div>
   );
 }
