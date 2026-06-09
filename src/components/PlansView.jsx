@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
-import { RefreshCw, Save } from "lucide-react";
-import { generatePlanType2Workouts } from "../plans/planType2Generator";
+import { BarChart3, RefreshCw, Save, X } from "lucide-react";
+import ExercisePickerSheet from "./ExercisePickerSheet";
+import {
+  createPlanExercise,
+  generatePlanType2Workouts,
+} from "../plans/planType2Generator";
 
 function formatEquipment(equipment) {
   if (Array.isArray(equipment)) {
@@ -10,7 +14,199 @@ function formatEquipment(equipment) {
   return equipment || "";
 }
 
-function PlanWorkoutPreview({ workout }) {
+function getWorkoutSummary(workouts) {
+  const workoutList = Array.isArray(workouts) ? workouts : [workouts];
+  const exercises = workoutList.flatMap((workout) => workout.exercises);
+  const muscleSets = exercises.reduce((summary, exercise) => {
+    const muscle = exercise.planMuscle || exercise.muscles?.[0] || "Unknown";
+
+    summary[muscle] = (summary[muscle] || 0) + exercise.sets.length;
+
+    return summary;
+  }, {});
+  const totalSets = Object.values(muscleSets).reduce(
+    (total, sets) => total + sets,
+    0
+  );
+  const tbdWeightExercises = exercises.filter(
+    (exercise) => !exercise.sets[0]?.targetWeight
+  );
+
+  return {
+    muscleSets: Object.entries(muscleSets).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    ),
+    tbdWeightExercises,
+    totalSets,
+  };
+}
+
+function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
+  const [summaryScope, setSummaryScope] = useState("workout");
+  const displayedWorkouts =
+    summaryScope === "plan" ? workouts : [selectedWorkout];
+  const summary = getWorkoutSummary(displayedWorkouts);
+  const title =
+    summaryScope === "plan" ? "Combined Plan" : selectedWorkout.name;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} summary`}
+      style={{
+        background: "rgba(0,0,0,.38)",
+        inset: 0,
+        position: "fixed",
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "18px 18px 0 0",
+          bottom: 0,
+          boxShadow: "0 -8px 28px rgba(0,0,0,.18)",
+          left: 0,
+          maxHeight: "78vh",
+          overflowY: "auto",
+          padding: "14px 16px calc(16px + env(safe-area-inset-bottom))",
+          position: "absolute",
+          right: 0,
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+            justifyContent: "space-between",
+            marginBottom: "12px",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                fontSize: "18px",
+                lineHeight: 1.15,
+                margin: 0,
+              }}
+            >
+              {title}
+            </h2>
+            <div
+              style={{
+                color: "#666",
+                fontSize: "12px",
+                marginTop: "3px",
+              }}
+            >
+              {summary.totalSets} planned sets
+            </div>
+          </div>
+
+          <button
+            aria-label="Close summary"
+            onClick={onClose}
+            style={{
+              alignItems: "center",
+              borderRadius: "999px",
+              display: "inline-flex",
+              height: "36px",
+              justifyContent: "center",
+              width: "36px",
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Summary scope"
+          style={{
+            background: "#f1f3f4",
+            borderRadius: "999px",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            marginBottom: "12px",
+            padding: "3px",
+          }}
+        >
+          {[
+            ["workout", "Workout"],
+            ["plan", "Plan"],
+          ].map(([value, label]) => {
+            const active = summaryScope === value;
+
+            return (
+              <button
+                key={value}
+                aria-selected={active}
+                role="tab"
+                onClick={() => setSummaryScope(value)}
+                style={{
+                  background: active ? "#fff" : "transparent",
+                  border: "none",
+                  borderRadius: "999px",
+                  boxShadow: active ? "0 1px 4px rgba(0,0,0,.12)" : "none",
+                  fontWeight: active ? "bold" : "normal",
+                  minHeight: "34px",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          {summary.muscleSets.map(([muscle, sets]) => (
+            <div
+              key={muscle}
+              style={{
+                alignItems: "center",
+                borderBottom: "1px solid #eee",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                padding: "8px 0",
+              }}
+            >
+              <strong>{muscle}</strong>
+              <span>{sets} sets</span>
+            </div>
+          ))}
+        </div>
+
+        {summary.tbdWeightExercises.length > 0 && (
+          <div
+            style={{
+              background: "#f6f7f8",
+              borderRadius: "8px",
+              color: "#555",
+              fontSize: "13px",
+              marginTop: "14px",
+              padding: "10px",
+            }}
+          >
+            Weight TBD:{" "}
+            {summary.tbdWeightExercises
+              .map((exercise) => exercise.name)
+              .join(", ")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanWorkoutPreview({ onReplaceExercise, onShowSummary, workout }) {
   const groupedExercises = workout.exercises.reduce((groups, exercise) => {
     const key = exercise.supersetGroup || `single-${exercise.id}`;
 
@@ -33,13 +229,39 @@ function PlanWorkoutPreview({ workout }) {
         padding: "14px 0",
       }}
     >
-      <h3
+      <div
         style={{
-          margin: "0 0 10px",
+          alignItems: "center",
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          marginBottom: "10px",
         }}
       >
-        {workout.name}
-      </h3>
+        <h3
+          style={{
+            lineHeight: 1.15,
+            margin: 0,
+          }}
+        >
+          {workout.name}
+        </h3>
+
+        <button
+          aria-label={`${workout.name} summary`}
+          onClick={() => onShowSummary(workout)}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            justifyContent: "center",
+            minHeight: "34px",
+            minWidth: "38px",
+            padding: "4px 8px",
+          }}
+        >
+          <BarChart3 size={18} />
+        </button>
+      </div>
 
       {Object.values(groupedExercises).map((group) => (
         <div
@@ -77,13 +299,37 @@ function PlanWorkoutPreview({ workout }) {
                   marginBottom: "8px",
                 }}
               >
-                <strong
+                <div
                   style={{
-                    lineHeight: 1.15,
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
                   }}
                 >
-                  {exercise.name}
-                </strong>
+                  <strong
+                    style={{
+                      lineHeight: 1.15,
+                      minWidth: 0,
+                    }}
+                  >
+                    {exercise.name}
+                  </strong>
+
+                  <button
+                    aria-label={`Replace ${exercise.name}`}
+                    onClick={() => onReplaceExercise(exercise)}
+                    style={{
+                      fontSize: "18px",
+                      lineHeight: 1,
+                      minHeight: "30px",
+                      minWidth: "34px",
+                      padding: "4px 6px",
+                    }}
+                  >
+                    🔄
+                  </button>
+                </div>
                 <span
                   style={{
                     color: "#666",
@@ -126,6 +372,11 @@ export default function PlansView({
   const [rir, setRir] = useState("2");
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
+  const [replacementBySlot, setReplacementBySlot] = useState({});
+  const [pickerTarget, setPickerTarget] = useState(null);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerMuscle, setPickerMuscle] = useState("");
+  const [summaryWorkout, setSummaryWorkout] = useState(null);
 
   const generatedPlan = useMemo(
     () =>
@@ -141,20 +392,62 @@ export default function PlansView({
     [durationWeeks, exerciseLibrary, exerciseMetadata, history, reps, rir, seed]
   );
 
+  const previewWorkouts = useMemo(
+    () =>
+      generatedPlan.workouts.map((workout, workoutIndex) => ({
+        ...workout,
+        exercises: workout.exercises.map((exercise) => {
+          const slotKey = `${workoutIndex}:${exercise.id}`;
+          const replacementExercise = replacementBySlot[slotKey];
+          const previewExercise = replacementExercise
+            ? createPlanExercise({
+                exercise: replacementExercise,
+                exerciseMetadata,
+                history,
+                planMuscle: exercise.planMuscle,
+                reps,
+                rir,
+                setCount: exercise.sets.length,
+                supersetGroup: exercise.supersetGroup,
+              })
+            : exercise;
+
+          return {
+            ...previewExercise,
+            previewSlotKey: slotKey,
+          };
+        }),
+      })),
+    [
+      exerciseMetadata,
+      generatedPlan.workouts,
+      history,
+      replacementBySlot,
+      reps,
+      rir,
+    ]
+  );
+
   function saveGeneratedWorkouts() {
     const savedAt = Date.now();
-    const workouts = generatedPlan.workouts.map((workout, workoutIndex) => ({
+    const workouts = previewWorkouts.map((workout, workoutIndex) => ({
       ...workout,
       id: savedAt + workoutIndex,
       name: `${workout.name} (${durationWeeks} wk)`,
-      exercises: workout.exercises.map((exercise, exerciseIndex) => ({
-        ...exercise,
-        id: savedAt + workoutIndex * 100 + exerciseIndex,
-        sets: exercise.sets.map((set, setIndex) => ({
-          ...set,
-          id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
-        })),
-      })),
+      exercises: workout.exercises.map((exercise, exerciseIndex) => {
+        const savedExercise = { ...exercise };
+
+        delete savedExercise.previewSlotKey;
+
+        return {
+          ...savedExercise,
+          id: savedAt + workoutIndex * 100 + exerciseIndex,
+          sets: exercise.sets.map((set, setIndex) => ({
+            ...set,
+            id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
+          })),
+        };
+      }),
     }));
 
     setTemplates([...templates, ...workouts]);
@@ -241,6 +534,7 @@ export default function PlansView({
           <button
             onClick={() => {
               setSeed((value) => value + 1);
+              setReplacementBySlot({});
               setSaveStatus("");
             }}
             style={{
@@ -295,9 +589,46 @@ export default function PlansView({
         )}
       </section>
 
-      {generatedPlan.workouts.map((workout) => (
-        <PlanWorkoutPreview key={workout.name} workout={workout} />
+      {previewWorkouts.map((workout) => (
+        <PlanWorkoutPreview
+          key={workout.name}
+          workout={workout}
+          onShowSummary={setSummaryWorkout}
+          onReplaceExercise={(exercise) => {
+            setPickerTarget(exercise);
+            setPickerMuscle(exercise.planMuscle || "");
+            setPickerSearch("");
+          }}
+        />
       ))}
+
+      {pickerTarget && (
+        <ExercisePickerSheet
+          title={`Replace ${pickerTarget.planMuscle}`}
+          exerciseLibrary={exerciseLibrary}
+          search={pickerSearch}
+          selectedMuscle={pickerMuscle}
+          setSearch={setPickerSearch}
+          setSelectedMuscle={setPickerMuscle}
+          onClose={() => setPickerTarget(null)}
+          onSelect={(exercise) => {
+            setReplacementBySlot({
+              ...replacementBySlot,
+              [pickerTarget.previewSlotKey]: exercise,
+            });
+            setPickerTarget(null);
+            setSaveStatus("");
+          }}
+        />
+      )}
+
+      {summaryWorkout && (
+        <WorkoutSummarySheet
+          selectedWorkout={summaryWorkout}
+          workouts={previewWorkouts}
+          onClose={() => setSummaryWorkout(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@ const PLAN_TYPE_2_WORKOUTS = [
       { label: "B", muscles: ["Glutes", "Chest"], sets: 3 },
       { label: "C", muscles: ["Lats", "Upper Chest"], sets: 2 },
       { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
-      { label: "Abs", muscles: ["Abs"], sets: 2, supersetGroup: null },
+      { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
     ],
   },
   {
@@ -18,7 +18,7 @@ const PLAN_TYPE_2_WORKOUTS = [
       { label: "B", muscles: ["Glutes", "Lats"], sets: 3 },
       { label: "C", muscles: ["Upper Back", "Upper Chest"], sets: 2 },
       { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
-      { label: "Abs", muscles: ["Abs"], sets: 2, supersetGroup: null },
+      { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
     ],
   },
 ];
@@ -122,6 +122,33 @@ function createSets(count, exercise, options) {
   }));
 }
 
+export function createPlanExercise({
+  exercise,
+  exerciseMetadata,
+  history,
+  planMuscle,
+  reps,
+  rir,
+  setCount,
+  supersetGroup,
+}) {
+  return {
+    id: Date.now() + Math.random(),
+    exerciseId: exercise.id,
+    equipment: exercise.equipment,
+    muscles: exercise.muscles,
+    name: exercise.name,
+    planMuscle,
+    sets: createSets(setCount, exercise, {
+      exerciseMetadata,
+      history,
+      reps,
+      rir,
+    }),
+    supersetGroup,
+  };
+}
+
 export function generatePlanType2Workouts({
   durationWeeks,
   exerciseLibrary,
@@ -152,22 +179,16 @@ export function generatePlanType2Workouts({
         usedExerciseIds.add(exercise.id);
 
         return [
-          {
-            id: Date.now() + Math.random(),
-            exerciseId: exercise.id,
-            equipment: exercise.equipment,
-            muscles: exercise.muscles,
-            name: exercise.name,
+          createPlanExercise({
+            exercise,
+            exerciseMetadata,
+            history,
             planMuscle: muscle,
-            sets: createSets(group.sets, exercise, {
-              exerciseMetadata,
-              history,
-              reps,
-              rir,
-            }),
-            supersetGroup:
-              group.supersetGroup === null ? null : group.label,
-          },
+            reps,
+            rir,
+            setCount: group.sets,
+            supersetGroup: group.supersetGroup === null ? null : group.label,
+          }),
         ];
       })
     );
