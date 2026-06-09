@@ -64,7 +64,7 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
     >
       <div
         style={{
-          background: "#fff",
+          background: "var(--surface-raised)",
           borderRadius: "18px 18px 0 0",
           bottom: 0,
           boxShadow: "0 -8px 28px rgba(0,0,0,.18)",
@@ -97,7 +97,7 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
             </h2>
             <div
               style={{
-                color: "#666",
+                color: "var(--text-muted)",
                 fontSize: "12px",
                 marginTop: "3px",
               }}
@@ -126,7 +126,7 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
           role="tablist"
           aria-label="Summary scope"
           style={{
-            background: "#f1f3f4",
+            background: "var(--surface-muted)",
             borderRadius: "999px",
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
@@ -147,7 +147,7 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
                 role="tab"
                 onClick={() => setSummaryScope(value)}
                 style={{
-                  background: active ? "#fff" : "transparent",
+                  background: active ? "var(--surface-raised)" : "transparent",
                   border: "none",
                   borderRadius: "999px",
                   boxShadow: active ? "0 1px 4px rgba(0,0,0,.12)" : "none",
@@ -172,7 +172,7 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
               key={muscle}
               style={{
                 alignItems: "center",
-                borderBottom: "1px solid #eee",
+                borderBottom: "1px solid var(--border)",
                 display: "grid",
                 gap: "8px",
                 gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -188,9 +188,9 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
         {summary.tbdWeightExercises.length > 0 && (
           <div
             style={{
-              background: "#f6f7f8",
+              background: "var(--surface-muted)",
               borderRadius: "8px",
-              color: "#555",
+              color: "var(--text-muted)",
               fontSize: "13px",
               marginTop: "14px",
               padding: "10px",
@@ -237,7 +237,7 @@ function PlanWorkoutPreview({
   return (
     <section
       style={{
-        borderTop: "1px solid #ddd",
+        borderTop: "1px solid var(--border)",
         padding: "14px 0",
       }}
     >
@@ -286,7 +286,7 @@ function PlanWorkoutPreview({
         <div
           key={group.label || group.exercises[0].id}
           style={{
-            background: group.label ? "#f6f7f8" : "transparent",
+            background: group.label ? "var(--surface-muted)" : "transparent",
             borderLeft: group.label ? "4px solid #1769aa" : "none",
             borderRadius: "6px",
             marginBottom: "10px",
@@ -351,7 +351,7 @@ function PlanWorkoutPreview({
                 </div>
                 <span
                   style={{
-                    color: "#666",
+                    color: "var(--text-muted)",
                     fontSize: "12px",
                   }}
                 >
@@ -663,10 +663,10 @@ export default function PlansView({
         {generatedPlan.gaps.length > 0 && (
           <div
             style={{
-              background: "#fff8e1",
+              background: "var(--warning-bg)",
               border: "1px solid #e6c86e",
               borderRadius: "6px",
-              color: "#5b4700",
+              color: "var(--warning-text)",
               fontSize: "13px",
               padding: "8px",
             }}

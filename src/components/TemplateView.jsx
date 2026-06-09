@@ -236,7 +236,7 @@ export default function TemplateView({
         style={{
           background: "transparent",
           border: "none",
-          color: "#111",
+          color: "var(--text-h)",
           display: "block",
           fontSize: "2rem",
           fontWeight: "bold",
@@ -274,7 +274,7 @@ export default function TemplateView({
         >
           <div
             style={{
-              background: "#fff",
+              background: "var(--surface-raised)",
               borderRadius: "12px",
               boxShadow: "0 10px 28px rgba(0,0,0,.25)",
               boxSizing: "border-box",
@@ -355,9 +355,9 @@ export default function TemplateView({
 
                 transform: "translate(-50%, -50%)",
 
-                background: "white",
+                background: "var(--surface-raised)",
 
-                border: "1px solid #ccc",
+                border: "1px solid var(--border)",
 
                 borderRadius: "12px",
 
@@ -634,7 +634,7 @@ export default function TemplateView({
                         <div
                           style={{
                             fontSize: "0.75rem",
-                            color: "#666",
+                            color: "var(--text-muted)",
                             marginTop: "2px",
                             marginLeft: "28px",
                             textAlign: "left",
@@ -715,7 +715,7 @@ export default function TemplateView({
         >
           <div
             style={{
-              background: "white",
+              background: "var(--surface-raised)",
               padding: "20px",
               borderRadius: "8px",
               minWidth: "300px",
@@ -727,7 +727,7 @@ export default function TemplateView({
               <div
                 style={{
                   fontSize: "0.9em",
-                  color: "#666",
+                  color: "var(--text-muted)",
                   marginBottom: "12px",
                 }}
               >
@@ -751,7 +751,7 @@ export default function TemplateView({
                   alignItems: "center",
                   marginBottom: "8px",
                   paddingBottom: "4px",
-                  borderBottom: "1px solid #ccc",
+                  borderBottom: "1px solid var(--border)",
                   textAlign: "center",
                 }}
               >

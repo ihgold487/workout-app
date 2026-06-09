@@ -168,10 +168,30 @@ export default function NutritionView() {
   }
 
   const macroCards = [
-    ["Calories", formatMacro(totals.calories, "cal"), "#1769aa", "#eaf3fb"],
-    ["Protein", formatMacro(totals.protein), "#137333", "#e7f4ea"],
-    ["Carbs", formatMacro(totals.carbs), "#b06000", "#fff4e5"],
-    ["Fat", formatMacro(totals.fat), "#7b3fc7", "#f2eafa"],
+    [
+      "Calories",
+      formatMacro(totals.calories, "cal"),
+      "#1769aa",
+      "color-mix(in srgb, #1769aa 14%, var(--surface))",
+    ],
+    [
+      "Protein",
+      formatMacro(totals.protein),
+      "#137333",
+      "color-mix(in srgb, #137333 16%, var(--surface))",
+    ],
+    [
+      "Carbs",
+      formatMacro(totals.carbs),
+      "#b06000",
+      "color-mix(in srgb, #b06000 16%, var(--surface))",
+    ],
+    [
+      "Fat",
+      formatMacro(totals.fat),
+      "#7b3fc7",
+      "color-mix(in srgb, #7b3fc7 16%, var(--surface))",
+    ],
   ];
 
   return (
@@ -192,7 +212,7 @@ export default function NutritionView() {
         <div
           style={{
             alignItems: "center",
-            background: "#eaf3fb",
+            background: "var(--accent-bg)",
             borderRadius: "999px",
             color: "#1769aa",
             display: "inline-flex",
@@ -215,7 +235,7 @@ export default function NutritionView() {
           </h1>
           <div
             style={{
-              color: "#666",
+              color: "var(--text-muted)",
               fontSize: "13px",
               marginTop: "4px",
             }}
@@ -276,7 +296,7 @@ export default function NutritionView() {
             </div>
             <div
               style={{
-                color: "#222",
+                color: "var(--text-h)",
                 fontSize: "24px",
                 fontWeight: "bold",
                 lineHeight: 1.1,
@@ -291,7 +311,7 @@ export default function NutritionView() {
 
       <section
         style={{
-          borderTop: "1px solid #e5e5e5",
+          borderTop: "1px solid var(--border)",
           marginBottom: "16px",
           paddingTop: "14px",
         }}
@@ -374,7 +394,7 @@ export default function NutritionView() {
                 key={entry.date}
                 style={{
                   alignItems: "center",
-                  color: "#555",
+                  color: "var(--text-muted)",
                   display: "grid",
                   fontSize: "13px",
                   gap: "8px",
@@ -407,7 +427,7 @@ export default function NutritionView() {
 
       <section
         style={{
-          borderTop: "1px solid #e5e5e5",
+          borderTop: "1px solid var(--border)",
           paddingTop: "14px",
         }}
       >
@@ -512,9 +532,9 @@ export default function NutritionView() {
         {dayEntries.length === 0 ? (
           <div
             style={{
-              background: "#f6f7f8",
+              background: "var(--surface-muted)",
               borderRadius: "8px",
-              color: "#666",
+              color: "var(--text-muted)",
               fontSize: "14px",
               padding: "12px",
               textAlign: "center",
@@ -534,7 +554,7 @@ export default function NutritionView() {
                 key={entry.id}
                 style={{
                   alignItems: "center",
-                  borderBottom: "1px solid #eee",
+                  borderBottom: "1px solid var(--border)",
                   display: "grid",
                   gap: "8px",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -558,7 +578,7 @@ export default function NutritionView() {
                   </strong>
                   <span
                     style={{
-                      color: "#666",
+                      color: "var(--text-muted)",
                       fontSize: "12px",
                     }}
                   >

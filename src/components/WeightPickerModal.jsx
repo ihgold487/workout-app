@@ -1,42 +1,17 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 
-export default function WeightPickerModal({
-  isOpen,
+function WeightPickerModalContent({
+  current,
   onClose,
-  value,
   onSelect,
-  weightUnit,
-  increment,
+  options,
   title,
-  values,
 }) {
-  const current = Number(value) || 0;
-
-  const step = increment ?? (weightUnit === "kg" ? 1 : 2.5);
-
   const [manualValue, setManualValue] = useState(String(current));
   const scrollRef = useRef(null);
 
-  const options = useMemo(() => {
-    if (values) {
-      return values;
-    }
-
-    const generatedOptions = [];
-
-    for (
-      let value = current - 20 * step;
-      value <= current + 20 * step;
-      value += step
-    ) {
-      generatedOptions.push(Number(value.toFixed(2)));
-    }
-
-    return generatedOptions;
-  }, [current, step, values]);
-
   useEffect(() => {
-    if (!isOpen || !scrollRef.current) {
+    if (!scrollRef.current) {
       return;
     }
 
@@ -55,11 +30,7 @@ export default function WeightPickerModal({
         block: "center",
       });
     }, 0);
-  }, [isOpen, manualValue, options]);
-
-  if (!isOpen) {
-    return null;
-  }
+  }, [manualValue, options]);
 
   return (
     <div
@@ -77,7 +48,8 @@ export default function WeightPickerModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#fff",
+          background: "var(--surface-raised)",
+          color: "var(--text)",
           padding: "16px",
           borderRadius: "8px",
           minWidth: "220px",
@@ -96,7 +68,7 @@ export default function WeightPickerModal({
           style={{
             textAlign: "center",
             fontSize: "12px",
-            color: "#666",
+            color: "var(--text-muted)",
             marginBottom: "8px",
           }}
         >
@@ -108,7 +80,7 @@ export default function WeightPickerModal({
           style={{
             maxHeight: "320px",
             overflowY: "auto",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             padding: "4px",
           }}
         >
@@ -162,6 +134,7 @@ export default function WeightPickerModal({
 
           <input
             inputMode="decimal"
+            min="0"
             value={manualValue}
             onChange={(e) => setManualValue(e.target.value)}
             style={{
@@ -174,7 +147,7 @@ export default function WeightPickerModal({
 
           <button
             onClick={() => {
-              const weight = Number(manualValue);
+              const weight = Math.max(0, Number(manualValue));
 
               if (!isNaN(weight)) {
                 onSelect(weight);
@@ -193,5 +166,48 @@ export default function WeightPickerModal({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WeightPickerModal({
+  isOpen,
+  onClose,
+  value,
+  onSelect,
+  weightUnit,
+  increment,
+  title,
+  values,
+}) {
+  const current = Number(value) || 0;
+  const step = increment ?? (weightUnit === "kg" ? 1 : 2.5);
+  const options = useMemo(() => {
+    if (values) {
+      return values;
+    }
+
+    const generatedOptions = [];
+    const start = Math.max(0, current - 20 * step);
+
+    for (let value = start; value <= current + 20 * step; value += step) {
+      generatedOptions.push(Number(value.toFixed(2)));
+    }
+
+    return generatedOptions;
+  }, [current, step, values]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <WeightPickerModalContent
+      key={`${title || "value"}-${current}`}
+      current={current}
+      onClose={onClose}
+      onSelect={onSelect}
+      options={options}
+      title={title}
+    />
   );
 }

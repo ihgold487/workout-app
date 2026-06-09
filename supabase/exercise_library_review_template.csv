@@ -1,0 +1,167 @@
+name,equipment,primary_muscle,secondary_muscles,include_in_seed,history_count,notes,source_key
+Arnold Press,Dumbbells,Front Delts,"Side Delts; Traps",yes,10,"inferred; review",history-csv-2026-06-07:arnold-press-dumbbells
+Behind-the-Back Curls,Cable,Biceps,"Forearms",yes,5,"inferred; review",history-csv-2026-06-07:behind-the-back-curls-cable
+Bench Press,Barbell,Chest,"Triceps; Front Delts; Forearms",yes,71,existing seed match,history-csv-2026-06-07:bench-press-barbell
+Bench Press,Dumbbells,Chest,"Triceps; Front Delts; Forearms",yes,61,existing seed match,history-csv-2026-06-07:bench-press-dumbbells
+Bench Press with Close Grip,Barbell,Triceps,"Chest; Front Delts; Forearms",yes,12,"inferred; review",history-csv-2026-06-07:bench-press-with-close-grip-barbell
+Bent-Over Lateral Raises,Dumbbells,Rear Delts,"Traps; Side Delts; Upper Back; Forearms",yes,18,"inferred; review",history-csv-2026-06-07:bent-over-lateral-raises-dumbbells
+Bent-Over One-Arm Rows,Landmine,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:bent-over-one-arm-rows-barbell
+Bent-Over Rows,Barbell,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,12,"inferred; review",history-csv-2026-06-07:bent-over-rows-barbell
+Bent-Over Rows,Dumbbells,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:bent-over-rows-dumbbells
+Bent-Over Rows with Reverse Grip,Barbell,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:bent-over-rows-with-reverse-grip-barbell
+Bent-Over Rows with Reverse Grip,Dumbbells,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,7,"inferred; review",history-csv-2026-06-07:bent-over-rows-with-reverse-grip-dumbbells
+Bent-Over Rows with Wide Grip,Barbell,Upper Back,"Lats; Traps; Lower Back; Biceps; Rear Delts; Abs; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:bent-over-rows-with-wide-grip-barbell
+Bent-Over Shrugs,Barbell,Traps,"Forearms; Lower Back; Abs",yes,6,"inferred; review",history-csv-2026-06-07:bent-over-shrugs-barbell
+Bent-Over Shrugs,Dumbbells,Traps,"Forearms; Lower Back; Abs",yes,7,"inferred; review",history-csv-2026-06-07:bent-over-shrugs-dumbbells
+Bulgarian Split Squats,Barbell,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:bulgarian-split-squats-barbell
+Bulgarian Split Squats,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Forearms",yes,18,"inferred; review",history-csv-2026-06-07:bulgarian-split-squats-dumbbells
+Chin-Ups,Bodyweight,Lats,"Upper Back; Forearms; Biceps; Rear Delts",yes,7,"inferred; review",history-csv-2026-06-07:chin-ups-bodyweight
+Concentration Curls,Dumbbells,Biceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:concentration-curls-dumbbells
+Concentration Hammer Curls,Dumbbells,Biceps,Forearms,yes,12,"inferred; review",history-csv-2026-06-07:concentration-hammer-curls-dumbbells
+Concentration Twist Curls,Dumbbells,Biceps,Forearms,yes,10,"inferred; review",history-csv-2026-06-07:concentration-twist-curls-dumbbells
+Cross body curls,Dumbbells,Biceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:cross-body-curls-dumbbells
+Crunches,Bodyweight,Abs,,yes,18,"inferred; review",history-csv-2026-06-07:crunches-bodyweight
+Crunches on Exercise Ball,Bodyweight,Abs,,yes,6,"inferred; review",history-csv-2026-06-07:crunches-on-exercise-ball-bodyweight
+Curls,Barbell,Biceps,Forearms,yes,10,"inferred; review",history-csv-2026-06-07:curls-barbell
+Curls,Cable,Biceps,Forearms,yes,12,"inferred; review",history-csv-2026-06-07:curls-cable
+Curls,Dumbbells,Biceps,Forearms,yes,15,"inferred; review",history-csv-2026-06-07:curls-dumbbells
+Curls (one arm),Cable,Biceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:curls-one-arm-cable
+Cycling on Stationary Bike,Machine,Cardio,Quads,yes,1,"inferred; review",history-csv-2026-06-07:cycling-on-stationary-bike-machine
+Deadlifts,Barbell,Glutes,"Hamstrings; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs; Calves",yes,18,"inferred; review",history-csv-2026-06-07:deadlifts-barbell
+Deadlifts,Trap Bar,Glutes,"Hamstrings; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs; Calves",yes,5,"inferred; review",history-csv-2026-06-07:deadlifts-trap-bar
+Decline Bench Press,Barbell,Chest,"Forearms; Triceps; Front Delts",yes,7,existing seed match,history-csv-2026-06-07:decline-bench-press-barbell
+Decline Bench Press,Dumbbells,Chest,"Forearms; Triceps; Front Delts",yes,17,existing seed match,history-csv-2026-06-07:decline-bench-press-dumbbells
+Decline Crunches,Bodyweight,Abs,,yes,10,"inferred; review",history-csv-2026-06-07:decline-crunches-bodyweight
+Decline Side Crunches,Bodyweight,Abs,Obliques,yes,18,"inferred; review",history-csv-2026-06-07:decline-side-crunches-bodyweight
+Decline Side Sit-Ups,Bodyweight,Abs,Obliques,yes,5,"inferred; review",history-csv-2026-06-07:decline-side-sit-ups-bodyweight
+Decline Sit-Ups,Bodyweight,Abs,,yes,7,"inferred; review",history-csv-2026-06-07:decline-sit-ups-bodyweight
+Deficit Deadlifts,Trap Bar,Hamstrings,"Hamstrings; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs; Calves",yes,10,"inferred; review",history-csv-2026-06-07:deficit-deadlifts-trap-bar
+Dips,Bodyweight,Triceps,"Chest; Front Delts; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:dips-bodyweight
+Drag Curls,Barbell,Biceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:drag-curls-barbell
+Face Pulls with Rope,Cable,Rear Delts,"Upper Back; Traps; Side Delts; Biceps; Forearms",yes,18,"inferred; review",history-csv-2026-06-07:face-pulls-with-rope-cable
+Flys,Cable,Chest,"Triceps; Front Delts",yes,5,"inferred; review",history-csv-2026-06-07:flys-cable
+Flys,Dumbbells,Chest,"Biceps; Front Delts; Forearms",yes,29,"inferred; review",history-csv-2026-06-07:flys-dumbbells
+Forward Lunges,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Forearms",yes,7,"inferred; review",history-csv-2026-06-07:forward-lunges-dumbbells
+Front Squats,Barbell,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Upper Back; Traps; Front Delts",yes,21,"inferred; review",history-csv-2026-06-07:front-squats-barbell
+Goblet Squats,Dumbbells,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Upper Back; Traps; Front Delts; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:goblet-squats-dumbbells
+Good Mornings,Barbell,Hamstrings,"Glutes; Quads; Abductors; Adductors; Lower Back; Abs; Calves",yes,11,"inferred; review",history-csv-2026-06-07:good-mornings-barbell
+Hammer Curls,Dumbbells,Biceps,Forearms,yes,12,"inferred; review",history-csv-2026-06-07:hammer-curls-dumbbells
+Hammer Curls (Tri bar),EZ Curl Bar,Biceps,Forearms,yes,10,"inferred; review",history-csv-2026-06-07:hammer-curls-tri-bar-ez-curl-bar
+Hanging Leg Raises,Bodyweight,Abs,,yes,37,"inferred; review",history-csv-2026-06-07:hanging-leg-raises-bodyweight
+Hanging Leg Raises with Twist,Bodyweight,Abs,Obliques,yes,13,"inferred; review",history-csv-2026-06-07:hanging-leg-raises-with-twist-bodyweight
+High Cable Flys,Cable,Chest,"Biceps; Front Delts",yes,8,"inferred; review",history-csv-2026-06-07:high-cable-flys-cable
+Hip Thrusts,Barbell,Glutes,"Hamstrings; Quads; Abductors; Adductors; Lower Back; Abs",yes,41,"inferred; review",history-csv-2026-06-07:hip-thrusts-barbell
+Hyperextensions on Roman Chair,Bodyweight,Hamstrings,"Glutes; Abductors; Adductors; Lower Back",yes,12,"inferred; review",history-csv-2026-06-07:hyperextensions-on-roman-chair-bodyweight
+Incline Bench Hex Press,Dumbbells,Upper Chest,"Triceps; Front Delts",yes,6,"inferred; review",history-csv-2026-06-07:incline-bench-hex-press-dumbbells
+Incline Bench Press,Barbell,Chest,"Upper Chest; Triceps; Front Delts",yes,55,existing seed match,history-csv-2026-06-07:incline-bench-press-barbell
+Incline Bench Press,Dumbbells,Chest,"Upper Chest; Triceps; Front Delts",yes,38,existing seed match,history-csv-2026-06-07:incline-bench-press-dumbbells
+Incline Bench Press 20°,Dumbbells,Chest,"Upper Chest; Triceps; Front Delts",yes,16,"inferred; review",history-csv-2026-06-07:incline-bench-press-20-dumbbells
+Incline Bench Press 60°,Dumbbells,Chest,"Upper Chest; Triceps; Front Delts",yes,18,"inferred; review",history-csv-2026-06-07:incline-bench-press-60-dumbbells
+Incline Bench Press with Close Grip,Barbell,Triceps,"Chest; Front Delts",yes,17,"inferred; review",history-csv-2026-06-07:incline-bench-press-with-close-grip-barbell
+Incline Curls,Dumbbells,Biceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:incline-curls-dumbbells
+Incline Flys,Dumbbells,Chest,"Upper Chest; Biceps; Forearms",yes,22,"inferred; review",history-csv-2026-06-07:incline-flys-dumbbells
+Incline Flys 20-deg,Dumbbells,Chest,"Upper Chest; Biceps; Front Delts",yes,6,"inferred; review",history-csv-2026-06-07:incline-flys-20-deg-dumbbells
+Incline Hammer Curls,Dumbbells,Biceps,Forearms,yes,13,"inferred; review",history-csv-2026-06-07:incline-hammer-curls-dumbbells
+Incline Lateral Raises,Dumbbells,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,13,"inferred; review",history-csv-2026-06-07:incline-lateral-raises-dumbbells
+Incline Reverse Flys,Dumbbells,Rear Delts,"Traps; Side Delts; Upper Back; Forearms",yes,40,"inferred; review",history-csv-2026-06-07:incline-reverse-flys-dumbbells
+Incline Rows,Dumbbells,Upper Back,"Lats; Traps; Biceps; Rear Delts; Forearms",yes,4,"inferred; review",history-csv-2026-06-07:incline-rows-dumbbells
+Incline Shrugs,Dumbbells,Traps,Forearms,yes,4,"inferred; review",history-csv-2026-06-07:incline-shrugs-dumbbells
+Incline Skull Crushers,Dumbbells,Triceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:incline-skull-crushers-dumbbells
+Incline Skull Crushers,EZ Curl Bar,Triceps,Forearms,yes,4,"inferred; review",history-csv-2026-06-07:incline-skull-crushers-ez-curl-bar
+Incline Twist Curls,Dumbbells,Biceps,Forearms,yes,1,"inferred; review",history-csv-2026-06-07:incline-twist-curls-dumbbells
+JM Press,Barbell,Triceps,"Chest; Front Delts; Forearms",yes,24,"inferred; review",history-csv-2026-06-07:jm-press-barbell
+JM Press,EZ Curl Bar,Triceps,"Chest; Front Delts; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:jm-press-ez-curl-bar
+Kneeling Crunches,Cable,Abs,,yes,33,"inferred; review",history-csv-2026-06-07:kneeling-crunches-cable
+Kneeling Side Crunches,Cable,Abs,Obliques,yes,19,"inferred; review",history-csv-2026-06-07:kneeling-side-crunches-cable
+Landmine Hack Squats,Landmine,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves",yes,6,"inferred; review",history-csv-2026-06-07:landmine-hack-squats-bodyweight
+Lat Pulldowns with Close Neutral Grip,Cable,Lats,"Upper Back; Rear Delts; Biceps; Forearms",yes,8,"inferred; review",history-csv-2026-06-07:lat-pulldowns-with-close-neutral-grip-cable
+Lat Pulldowns with Close Overhand Grip,Cable,Lats,"Upper Back; Rear Delts; Biceps; Forearms",yes,37,"inferred; review",history-csv-2026-06-07:lat-pulldowns-with-close-overhand-grip-cable
+Lat Pulldowns with Reverse Grip,Cable,Lats,"Upper Back; Rear Delts; Biceps; Forearms",yes,12,"inferred; review",history-csv-2026-06-07:lat-pulldowns-with-reverse-grip-cable
+Lat Pulldowns with Wide Neutral Grip,Cable,Lats,"Upper Back; Rear Delts; Biceps; Forearms",yes,29,"inferred; review",history-csv-2026-06-07:lat-pulldowns-with-wide-neutral-grip-cable
+Lat Pulldowns with Wide Overhand Grip,Cable,Lats,"Upper Back; Rear Delts; Biceps; Forearms",yes,35,"inferred; review",history-csv-2026-06-07:lat-pulldowns-with-wide-overhand-grip-cable
+Lateral Raises,Dumbbells,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,36,"inferred; review",history-csv-2026-06-07:lateral-raises-dumbbells
+Lean Away Lateral Raises,Cable,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:lean-away-lateral-raises-cable
+Lean Away Lateral Raises,Dumbbells,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:lean-away-lateral-raises-dumbbells
+Leg Extensions,Machine,Quads,,yes,65,"inferred; review",history-csv-2026-06-07:leg-extensions-machine
+Lying Leg Curls,Resistance Band,Hamstrings,"Abductors; Adductors; Calves",yes,5,"inferred; review",history-csv-2026-06-07:lying-leg-curls-resistance-band
+One-Arm Lateral Raises at Hip Height,Cable,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,4,"inferred; review",history-csv-2026-06-07:one-arm-lateral-raises-at-hip-height-cable
+One-Arm Rows,Dumbbells,Upper Back,"Lats; Biceps;Traps; Rear Delts; Forearms",yes,27,"inferred; review",history-csv-2026-06-07:one-arm-rows-dumbbells
+One-Arm Rows with Reverse Grip,Dumbbells,Upper Back,"Lats; Biceps; Rear Delts; Forearms",yes,13,"inferred; review",history-csv-2026-06-07:one-arm-rows-with-reverse-grip-dumbbells
+One-Arm Rows with Wide Grip,Dumbbells,Upper Back,"Lats; Biceps; Rear Delts; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:one-arm-rows-with-wide-grip-dumbbells
+Overhead Shrugs,Barbell,Traps,"Forearms; Lower Back; Abs",yes,6,"inferred; review",history-csv-2026-06-07:overhead-shrugs-barbell
+Overhead Triceps Extensions,Cable,Triceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:overhead-triceps-extensions-cable
+Overhead Triceps Extensions,Dumbbells,Triceps,Forearms,yes,26,"inferred; review",history-csv-2026-06-07:overhead-triceps-extensions-dumbbells
+Overhead Triceps Extensions,EZ Curl Bar,Triceps,Forearms,yes,5,"inferred; review",history-csv-2026-06-07:overhead-triceps-extensions-ez-curl-bar
+Preacher Curls,EZ Curl Bar,Biceps,Forearms,yes,8,"inferred; review",history-csv-2026-06-07:preacher-curls-ez-curl-bar
+Preacher Hammer Curls,Dumbbells,Biceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:preacher-hammer-curls-dumbbells
+Preacher Twist Curls,Dumbbells,Biceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:preacher-twist-curls-dumbbells
+Pull-Ups with Close Neutral Grip,Bodyweight,Lats,"Upper Back; Biceps; Rear Delts; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:pull-ups-with-close-neutral-grip-bodyweight
+Pull-Ups with Close Overhand Grip,Bodyweight,Lats,"Upper Back; Biceps; Rear Delts; Forearms",yes,4,"inferred; review",history-csv-2026-06-07:pull-ups-with-close-overhand-grip-bodyweight
+Pull-Ups with Wide Overhand Grip,Bodyweight,Lats,"Upper Back; Biceps; Rear Delts; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:pull-ups-with-wide-overhand-grip-bodyweight
+Pullovers,Cable,Lats,"Chest; Triceps; Upper Back; Rear Delts; Forearms",yes,9,"inferred; review",history-csv-2026-06-07:pullovers-cable
+Pullovers on Bench,Dumbbells,Lats,"Chest; Triceps; Upper Back; Rear Delts; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:pullovers-on-bench-dumbbells
+Pullovers on Bench,EZ Curl Bar,Lats,"Chest; Triceps; Upper Back; Rear Delts; Forearms",yes,3,"inferred; review",history-csv-2026-06-07:pullovers-on-bench-ez-curl-bar
+Pullovers with Rope,Cable,Lats,"Chest; Triceps; Upper Back; Rear Delts; Forearms",yes,17,"inferred; review",history-csv-2026-06-07:pullovers-with-rope-cable
+Push-Ups with Close Grip,Bodyweight,Triceps,"Chest; Front Delts; Forearms",yes,5,"inferred; review",history-csv-2026-06-07:push-ups-with-close-grip-bodyweight
+Reverse Curls,Dumbbells,Biceps,Forearms,yes,1,"inferred; review",history-csv-2026-06-07:reverse-curls-dumbbells
+Reverse Curls,EZ Curl Bar,Biceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:reverse-curls-ez-curl-bar
+Reverse Flys,Cable,Rear Delts,"Traps; Side Delts; Upper Back; Forearms",yes,6,"inferred; review",history-csv-2026-06-07:reverse-flys-cable
+Reverse Lunges,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Forearms",yes,19,"inferred; review",history-csv-2026-06-07:reverse-lunges-dumbbells
+Reverse Spider Curls,EZ Curl Bar,Biceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:reverse-spider-curls-ez-curl-bar
+Romanian Deadlifts,Barbell,Hamstrings,"Glutes; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs",yes,47,"inferred; review",history-csv-2026-06-07:romanian-deadlifts-barbell
+Romanian Deadlifts,Dumbbells,Hamstrings,"Glutes; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs",yes,23,"inferred; review",history-csv-2026-06-07:romanian-deadlifts-dumbbells
+Romanian Deadlifts,Trap Bar,Hamstrings,"Glutes; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs",yes,8,"inferred; review",history-csv-2026-06-07:romanian-deadlifts-trap-bar
+Rows with Close Grip,Cable,Upper Back,"Lats; Traps; Biceps; Rear Delts; Lower Back; Abs; Forearms",yes,28,"inferred; review",history-csv-2026-06-07:rows-with-close-grip-cable
+Rows with Reverse Grip,Cable,Upper Back,"Lats; Traps; Biceps; Rear Delts; Lower Back; Abs; Forearms",yes,13,"inferred; review",history-csv-2026-06-07:rows-with-reverse-grip-cable
+Rows with Wide Grip,Cable,Upper Back,"Lats; Traps; Biceps; Rear Delts; Lower Back; Abs; Forearms",yes,19,"inferred; review",history-csv-2026-06-07:rows-with-wide-grip-cable
+Rows with Wide Neutral Grip,Cable,Upper Back,"Lats; Traps; Biceps; Rear Delts; Lower Back; Abs; Forearms",yes,29,"inferred; review",history-csv-2026-06-07:rows-with-wide-neutral-grip-cable
+Russian Twists,Bodyweight,Abs,Obliques,yes,4,"inferred; review",history-csv-2026-06-07:russian-twists-bodyweight
+Seated Bent-Over Lateral Raises,Dumbbells,Rear Delts,"Traps; Side Delts; Upper Back; Forearms",yes,7,"inferred; review",history-csv-2026-06-07:seated-bent-over-lateral-raises-dumbbells
+Seated Calf Raises,Bodyweight,Calves,,yes,12,"inferred; review",history-csv-2026-06-07:seated-calf-raises-bodyweight
+Seated Calf Raises (BB),Barbell,Calves,,yes,25,"inferred; review",history-csv-2026-06-07:seated-calf-raises-bb-barbell
+Seated Lateral Raises,Dumbbells,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,12,"inferred; review",history-csv-2026-06-07:seated-lateral-raises-dumbbells
+Seated Leg Curls,Machine,Hamstrings,"Abductors; Adductors",yes,37,"inferred; review",history-csv-2026-06-07:seated-leg-curls-machine
+Seated Shoulder Press,Barbell,Front Delts,"Side Delts; Traps; Triceps; Chest; Forearms",yes,5,"inferred; review",history-csv-2026-06-07:seated-shoulder-press-barbell
+Seated Shoulder Press,Dumbbells,Shoulders,"Side Delts; Traps; Triceps; Chest; Forearms",yes,1,"inferred; review",history-csv-2026-06-07:seated-shoulder-press-dumbbells
+Seated Shoulder Press with Close Grip,Dumbbells,Shoulders,"Side Delts; Traps; Triceps; Chest; Forearms",yes,7,"inferred; review",history-csv-2026-06-07:seated-shoulder-press-with-close-grip-dumbbells
+Shrugs,Barbell,Traps,Forearms,yes,19,"inferred; review",history-csv-2026-06-07:shrugs-barbell
+Shrugs,Dumbbells,Traps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:shrugs-dumbbells
+Shrugs,Trap Bar,Traps,Forearms,yes,2,"inferred; review",history-csv-2026-06-07:shrugs-trap-bar
+Side Bends,Dumbbells,Abs,Obliques,yes,6,"inferred; review",history-csv-2026-06-07:side-bends-dumbbells
+Side Crunches,Bodyweight,Abs,Obliques,yes,11,"inferred; review",history-csv-2026-06-07:side-crunches-bodyweight
+Side Sit-Ups,Bodyweight,Abs,Obliques,yes,19,"inferred; review",history-csv-2026-06-07:side-sit-ups-bodyweight
+Sit-Ups,Bodyweight,Abs,,yes,4,"inferred; review",history-csv-2026-06-07:sit-ups-bodyweight
+Skull Crushers,Dumbbells,Triceps,Forearms,yes,5,"inferred; review",history-csv-2026-06-07:skull-crushers-dumbbells
+Skull Crushers,EZ Curl Bar,Triceps,Forearms,yes,12,"inferred; review",history-csv-2026-06-07:skull-crushers-ez-curl-bar
+Skull Crushers with Rope,Cable,Triceps,Forearms,yes,7,"inferred; review",history-csv-2026-06-07:skull-crushers-with-rope-cable
+Spider Curls,Barbell,Biceps,Forearms,yes,5,"inferred; review",history-csv-2026-06-07:spider-curls-barbell
+Split Squats,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Forearms",yes,5,"inferred; review",history-csv-2026-06-07:split-squats-dumbbells
+Squats,Barbell,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs",yes,41,"inferred; review",history-csv-2026-06-07:squats-barbell
+Squats (Belt),Bodyweight,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs",yes,21,"inferred; review",history-csv-2026-06-07:squats-belt-bodyweight
+Standing Calf Raises,Bodyweight,Calves,,yes,13,"inferred; review",history-csv-2026-06-07:standing-calf-raises-bodyweight
+Standing Calf Raises,Smith Machine,Calves,,yes,40,"inferred; review",history-csv-2026-06-07:standing-calf-raises-smith-machine
+Standing Leg Curls,Cable,Hamstrings,"Abductors; Adductors",yes,1,"inferred; review",history-csv-2026-06-07:standing-leg-curls-cable
+Standing Russian Twists,Cable,Abs,Obliques,yes,6,"inferred; review",history-csv-2026-06-07:standing-russian-twists-cable
+Standing Shoulder Press,Barbell,Front Delts,"Side Delts; Traps; Triceps; Chest; Forearms; Lower Back",yes,25,"inferred; review",history-csv-2026-06-07:standing-shoulder-press-barbell
+Standing Shoulder Press with Close Grip,Dumbbells,Shoulders,"Side Delts; Traps; Triceps; Chest; Forearms; Lower Back",yes,6,"inferred; review",history-csv-2026-06-07:standing-shoulder-press-with-close-grip-dumbbells
+Step-Ups,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs",yes,7,"inferred; review",history-csv-2026-06-07:step-ups-dumbbells
+Sumo Deadlifts,Barbell,Glutes,"Hamstrings; Quads; Upper Back; Lats; Traps; Rear Delts; Forearms; Abductors; Adductors; Lower Back; Abs; Calves",yes,20,"inferred; review",history-csv-2026-06-07:sumo-deadlifts-barbell
+T-Bar Reverse Lunges,Landmine,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs",yes,5,"inferred; review",history-csv-2026-06-07:t-bar-reverse-lunges-barbell
+T-Bar Rows with Wide Grip,Landmine,Upper Back,"Lats; Traps; Rear Delts; Biceps; Forearms; Lower Back; Abs",yes,5,"inferred; review",history-csv-2026-06-07:t-bar-rows-with-wide-grip-barbell
+Triceps Kickbacks,Cable,Triceps,Forearms,yes,5,"inferred; review",history-csv-2026-06-07:triceps-kickbacks-cable
+Triceps Kickbacks,Dumbbells,Triceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:triceps-kickbacks-dumbbells
+Triceps Pushdowns,Cable,Triceps,Forearms,yes,13,"inferred; review",history-csv-2026-06-07:triceps-pushdowns-cable
+Triceps Pushdowns (Vbar),Cable,Triceps,Forearms,yes,6,"inferred; review",history-csv-2026-06-07:triceps-pushdowns-vbar-cable
+Triceps Pushdowns with Rope,Cable,Triceps,Forearms,yes,18,"inferred; review",history-csv-2026-06-07:triceps-pushdowns-with-rope-cable
+Twist Curls,Dumbbells,Biceps,Forearms,yes,29,"inferred; review",history-csv-2026-06-07:twist-curls-dumbbells
+Upright Rows,Dumbbells,Side Delts,"Traps; Front Delts; Rear Delts; Biceps; Forearms",yes,18,"inferred; review",history-csv-2026-06-07:upright-rows-dumbbells
+Upright Rows,EZ Curl Bar,Shoulders,"Traps; Front Delts; Rear Delts; Biceps; Forearms",yes,37,"inferred; review",history-csv-2026-06-07:upright-rows-ez-curl-bar
+Walking Lunges,Dumbbells,Glutes,"Quads; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs",yes,17,"inferred; review",history-csv-2026-06-07:walking-lunges-dumbbells
+Y Raises,Cable,Side Delts,"Traps; Front Delts; Rear Delts; Forearms",yes,18,"inferred; review",history-csv-2026-06-07:y-raises-cable
+Zercher Squats,Barbell,Quads,"Glutes; Hamstrings; Abductors; Adductors; Calves; Lower Back; Abs; Upper Back; Traps; Front Delts",yes,14,"inferred; review",history-csv-2026-06-07:zercher-squats-barbell
+Push-Ups,Bodyweight,Chest,"Front Delts; Triceps; Forearms",yes,0,manual addition,manual-2026-06-09:push-ups-bodyweight
+Pull-Ups with Wide Neutral Grip,Bodyweight,Lats,"Upper Back; Biceps; Rear Delts; Forearms",yes,0,manual addition,manual-2026-06-09:pull-ups-with-wide-neutral-grip-bodyweight
+T-Bar Rows with Narrow Grip,Landmine,Upper Back,"Lats; Traps; Rear Delts; Biceps; Forearms; Lower Back; Abs",yes,0,manual addition,manual-2026-06-09:t-bar-rows-with-narrow-grip-landmine
+Front Raises,Barbell,Front Delts,"Side Delts; Traps; Forearms",yes,0,manual addition,manual-2026-06-09:front-raises-barbell
+Front Raises,Dumbbells,Front Delts,"Side Delts; Traps; Forearms",yes,0,manual addition,manual-2026-06-09:front-raises-dumbbells
+Front Raises,EZ Curl Bar,Front Delts,"Side Delts; Traps; Forearms",yes,0,manual addition,manual-2026-06-09:front-raises-ez-curl-bar

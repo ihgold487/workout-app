@@ -97,7 +97,8 @@ export default function E1RMExplorerModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#fff",
+          background: "var(--surface-raised)",
+          color: "var(--text)",
           width: "100%",
           maxWidth: "500px",
           borderTopLeftRadius: "16px",

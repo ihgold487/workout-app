@@ -51,7 +51,7 @@ export default function ExercisePickerSheet({
     >
       <div
         style={{
-          background: "#fff",
+          background: "var(--surface-raised)",
           borderRadius: "18px 18px 0 0",
           bottom: 0,
           boxShadow: "0 -8px 28px rgba(0,0,0,.18)",
@@ -66,7 +66,7 @@ export default function ExercisePickerSheet({
       >
         <div
           style={{
-            borderBottom: "1px solid #eee",
+            borderBottom: "1px solid var(--border)",
             padding: "12px 14px 10px",
           }}
         >
@@ -142,7 +142,7 @@ export default function ExercisePickerSheet({
             <label
               style={{
                 alignItems: "center",
-                border: "1px solid #ccc",
+                border: "1px solid var(--border)",
                 borderRadius: "8px",
                 display: "flex",
                 gap: "8px",
@@ -192,7 +192,7 @@ export default function ExercisePickerSheet({
           {filteredExercises.length === 0 ? (
             <div
               style={{
-                color: "#666",
+                color: "var(--text-muted)",
                 fontSize: "14px",
                 padding: "18px 8px",
                 textAlign: "center",
@@ -213,7 +213,7 @@ export default function ExercisePickerSheet({
                     alignItems: "center",
                     background: "transparent",
                     border: "none",
-                    borderBottom: "1px solid #f0f0f0",
+                    borderBottom: "1px solid var(--border)",
                     display: "grid",
                     gap: "3px",
                     justifyItems: "start",
@@ -234,7 +234,7 @@ export default function ExercisePickerSheet({
                   {(equipment || primaryMuscle) && (
                     <span
                       style={{
-                        color: "#666",
+                        color: "var(--text-muted)",
                         fontSize: "12px",
                         lineHeight: 1.2,
                       }}

@@ -289,12 +289,12 @@ export default function SessionView({
   }, [timerRunning, timerStartedAt, restMinutes, restRemainder]);
 
   useEffect(() => {
-    if (!timerRunning && !timerPaused) {
+    if (!timerRunning && !timerPaused && !timerFinished) {
       setTimeout(() => {
         setRestSeconds(restMinutes * 60 + restRemainder);
       }, 0);
     }
-  }, [restMinutes, restRemainder, timerRunning, timerPaused]);
+  }, [restMinutes, restRemainder, timerRunning, timerPaused, timerFinished]);
 
   useEffect(() => {
     if (restSeconds === 0 && timerRunning) {
@@ -340,8 +340,6 @@ export default function SessionView({
 
         setTimerFinished(true);
         setTimerRunning(false);
-
-        setRestSeconds(restMinutes * 60 + restRemainder);
       }, 0);
     }
   }, [restSeconds, timerRunning, restMinutes, restRemainder]);
@@ -503,9 +501,11 @@ export default function SessionView({
     const newSet = {
       id: Date.now(),
 
-      targetWeight: lastSet?.targetWeight || "",
+      targetWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
 
-      targetReps: lastSet?.targetReps || "",
+      targetReps: lastSet?.actualReps || lastSet?.targetReps || "",
+
+      targetRir: lastSet?.actualRir || lastSet?.targetRir || "",
 
       actualWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
 
@@ -544,16 +544,35 @@ export default function SessionView({
         ex.id === exerciseId
           ? {
               ...ex,
-              sets: ex.sets.map((set) =>
-                set.id === setId
-                  ? {
-                      ...set,
-                      completed: !undo,
-                      actualWeight: undo ? "" : set.actualWeight,
-                      actualReps: undo ? "" : set.actualReps,
-                    }
-                  : set
-              ),
+              sets: ex.sets.map((set, index) => {
+                if (set.id === setId) {
+                  return {
+                    ...set,
+                    completed: !undo,
+                    actualWeight: undo ? "" : set.actualWeight,
+                    actualReps: undo ? "" : set.actualReps,
+                    actualRir: undo ? "" : set.actualRir,
+                  };
+                }
+
+                if (!undo && index === currentIndex + 1) {
+                  return {
+                    ...set,
+                    targetWeight:
+                      currentSet.actualWeight ||
+                      currentSet.targetWeight ||
+                      set.targetWeight,
+                    targetReps:
+                      currentSet.actualReps ||
+                      currentSet.targetReps ||
+                      set.targetReps,
+                    targetRir:
+                      currentSet.actualRir || currentSet.targetRir || set.targetRir,
+                  };
+                }
+
+                return set;
+              }),
             }
           : ex
       ),
@@ -836,10 +855,10 @@ export default function SessionView({
         style={{
           position: "sticky",
           top: 0,
-          background: "white",
+          background: "var(--surface)",
           zIndex: 10,
           padding: "20px",
-          borderBottom: "1px solid #ddd",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <div
@@ -901,8 +920,8 @@ export default function SessionView({
           >
             <div
               style={{
-                background: "#ffe5e5",
-                color: "#400",
+                background: "var(--danger-bg)",
+                color: "var(--danger-text)",
                 border: "2px solid #c66",
                 borderRadius: "12px",
                 padding: "20px",
@@ -978,8 +997,8 @@ export default function SessionView({
           >
             <div
               style={{
-                background: "#ffe5e5",
-                color: "#400",
+                background: "var(--danger-bg)",
+                color: "var(--danger-text)",
                 border: "2px solid #c66",
                 borderRadius: "12px",
                 padding: "20px",
@@ -1051,8 +1070,8 @@ export default function SessionView({
           >
             <div
               style={{
-                background: "#ffe5e5",
-                color: "#400",
+                background: "var(--danger-bg)",
+                color: "var(--danger-text)",
                 border: "2px solid #c66",
                 borderRadius: "12px",
                 padding: "20px",
@@ -1102,16 +1121,16 @@ export default function SessionView({
         <div
           style={{
             background: timerFinished
-              ? "#e6f7ea"
+              ? "var(--success-bg)"
               : timerRunning
-              ? "#ffe5e5"
-              : "white",
+              ? "var(--danger-bg)"
+              : "var(--surface-raised)",
 
             border: timerFinished
               ? "2px solid #5aa469"
               : timerRunning
               ? "2px solid #c66"
-              : "1px solid #ccc",
+              : "1px solid var(--border)",
 
             padding: "6px",
             marginTop: "10px",
@@ -1254,7 +1273,7 @@ export default function SessionView({
           style={{
             background: "transparent",
             border: "none",
-            color: "#111",
+            color: "var(--text-h)",
             display: "block",
             fontSize: "36px",
             fontWeight: "bold",
@@ -1290,7 +1309,7 @@ export default function SessionView({
           >
             <div
               style={{
-                background: "#fff",
+                background: "var(--surface-raised)",
                 borderRadius: "12px",
                 boxShadow: "0 10px 28px rgba(0,0,0,.25)",
                 boxSizing: "border-box",
@@ -1347,7 +1366,7 @@ export default function SessionView({
           <div
             key={group.group || group.exercises[0].id}
             style={{
-              background: group.group ? "#f5f5f5" : "transparent",
+            background: group.group ? "var(--surface-muted)" : "transparent",
 
               borderTop: group.group ? "3px solid #777" : "none",
 
@@ -1515,7 +1534,7 @@ export default function SessionView({
                       style={{
                         width: "120px",
                         height: "1px",
-                        background: "#ddd",
+                        background: "var(--border)",
                         margin: "6px auto",
                       }}
                     />
@@ -1526,7 +1545,7 @@ export default function SessionView({
                         alignItems: "center",
                         fontSize: "14px",
                         fontWeight: "bold",
-                        color: "#666",
+                        color: "var(--text-muted)",
                         marginBottom: "6px",
                         marginLeft: "0px",
                       }}
@@ -1657,7 +1676,7 @@ export default function SessionView({
                             <div
                               style={{
                                 fontSize: "10px",
-                                color: "#666",
+                                color: "var(--text-muted)",
                                 textAlign: "left",
                               }}
                             >
@@ -1698,8 +1717,8 @@ export default function SessionView({
                                 width: "50px",
                                 marginLeft: "4px",
                                 fontSize: "12px",
-                                border: "1px solid #ccc",
-                                background: "#fff",
+                                border: "1px solid var(--border)",
+                                background: "var(--surface-raised)",
                                 height: "24px",
                                 textAlign: "center",
                                 boxSizing: "border-box",
@@ -1739,8 +1758,8 @@ export default function SessionView({
                                 width: "34px",
                                 marginLeft: "0px",
                                 fontSize: "12px",
-                                border: "1px solid #ccc",
-                                background: "#fff",
+                                border: "1px solid var(--border)",
+                                background: "var(--surface-raised)",
                                 height: "24px",
                                 boxSizing: "border-box",
                                 color: valueColor,
@@ -1780,8 +1799,8 @@ export default function SessionView({
                                 height: "24px",
                                 marginLeft: "0px",
                                 fontSize: "12px",
-                                border: "1px solid #ccc",
-                                background: "#fff",
+                                border: "1px solid var(--border)",
+                                background: "var(--surface-raised)",
                                 boxSizing: "border-box",
                                 color: valueColor,
                                 fontWeight: isActive ? "bold" : "normal",
@@ -1811,7 +1830,7 @@ export default function SessionView({
                                 width: "42px",
                                 textAlign: "center",
                                 fontSize: "13px",
-                                color: "#555",
+                                color: "var(--text-muted)",
                                 cursor: "pointer",
                               }}
                             >
@@ -1933,6 +1952,7 @@ export default function SessionView({
               setNewExerciseValues({
                 weight: exercise.lastWeight || "",
                 reps: exercise.lastReps || "",
+                rir: "",
                 sets: "",
               });
             }}
@@ -1946,8 +1966,8 @@ export default function SessionView({
                   top: "50%",
                   left: "50%",
                   transform: "translate(-50%,-50%)",
-                  background: "white",
-                  border: "1px solid #ccc",
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
                   borderRadius: "12px",
                   padding: "20px",
                   width: "280px",
@@ -2044,7 +2064,7 @@ export default function SessionView({
           >
             <div
               style={{
-                background: "white",
+                background: "var(--surface-raised)",
                 padding: "20px",
                 borderRadius: "8px",
                 minWidth: "300px",
@@ -2175,7 +2195,7 @@ export default function SessionView({
             >
               <div
                 style={{
-                  background: "white",
+                  background: "var(--surface-raised)",
                   borderRadius: "18px 18px 0 0",
                   boxSizing: "border-box",
                   maxHeight: "78vh",
@@ -2212,7 +2232,7 @@ export default function SessionView({
                     key={exercise.id}
                     style={{
                       alignItems: "center",
-                      borderBottom: "1px solid #eee",
+                      borderBottom: "1px solid var(--border)",
                       display: "grid",
                       gap: "8px",
                       gridTemplateColumns: "minmax(0, 1fr) auto auto",
@@ -2235,7 +2255,7 @@ export default function SessionView({
 
                       <div
                         style={{
-                          color: "#666",
+                          color: "var(--text-muted)",
                           fontSize: "12px",
                           marginTop: "3px",
                         }}
@@ -2297,7 +2317,7 @@ export default function SessionView({
             >
               <div
                 style={{
-                  background: "white",
+                  background: "var(--surface-raised)",
                   borderRadius: "12px",
                   padding: "20px",
                   minWidth: "280px",
@@ -2432,8 +2452,8 @@ export default function SessionView({
             >
               <div
                 style={{
-                  background: "#e6f7ea",
-                  color: "#153a1f",
+                  background: "var(--success-bg)",
+                  color: "var(--success-text)",
                   border: "2px solid #5aa469",
                   borderRadius: "12px",
                   padding: "20px",
@@ -2652,7 +2672,10 @@ export default function SessionView({
 
           <WeightPickerModal
             isOpen={showWeightPicker}
-            onClose={() => setShowWeightPicker(false)}
+            onClose={() => {
+              setShowWeightPicker(false);
+              setWeightPickerData(null);
+            }}
             value={weightPickerData?.value}
             weightUnit={weightUnit}
             onSelect={(value) => {
@@ -2671,7 +2694,10 @@ export default function SessionView({
 
           <WeightPickerModal
             isOpen={showRirPicker}
-            onClose={() => setShowRirPicker(false)}
+            onClose={() => {
+              setShowRirPicker(false);
+              setRirPickerData(null);
+            }}
             value={rirPickerData?.value}
             title="Select RIR"
             values={[0, 1, 2, 3, 4, 5, 6]}
@@ -2691,7 +2717,10 @@ export default function SessionView({
 
           <WeightPickerModal
             isOpen={showRepsPicker}
-            onClose={() => setShowRepsPicker(false)}
+            onClose={() => {
+              setShowRepsPicker(false);
+              setRepsPickerData(null);
+            }}
             value={repsPickerData?.value}
             increment={1}
             title="Select Reps"

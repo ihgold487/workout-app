@@ -42,7 +42,7 @@ import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
-const STORAGE_VERSION = 9;
+const STORAGE_VERSION = 10;
 
 const APP_VERSION = "0.16";
 
@@ -107,7 +107,7 @@ const bottomNavButtonStyle = {
   alignItems: "center",
   background: "transparent",
   border: "none",
-  color: "#5f6368",
+  color: "var(--text-muted)",
   display: "flex",
   flex: 1,
   flexDirection: "column",
@@ -119,7 +119,7 @@ const bottomNavButtonStyle = {
 
 const activeBottomNavButtonStyle = {
   ...bottomNavButtonStyle,
-  color: "#1769aa",
+  color: "var(--accent)",
   fontWeight: "bold",
 };
 
@@ -955,8 +955,8 @@ export default function App() {
       <nav
         aria-label="Primary"
         style={{
-          background: "rgba(255,255,255,.96)",
-          borderTop: "1px solid #ddd",
+          background: "color-mix(in srgb, var(--surface) 96%, transparent)",
+          borderTop: "1px solid var(--border)",
           bottom: 0,
           boxShadow: "0 -4px 16px rgba(0,0,0,.06)",
           display: "flex",
@@ -1021,11 +1021,11 @@ export default function App() {
       >
         <div
           style={{
-            background: "#fff",
-            border: "1px solid #ddd",
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-            color: "#333",
+            color: "var(--text)",
             left: "50%",
             maxWidth: "320px",
             padding: "14px",
@@ -1087,7 +1087,7 @@ export default function App() {
           <h3>App</h3>
           <div
             style={{
-              color: "#666",
+              color: "var(--text-muted)",
               fontSize: "12px",
               marginBottom: "10px",
             }}
@@ -1107,7 +1107,7 @@ export default function App() {
               role="status"
               aria-live="polite"
               style={{
-                color: "#666",
+                color: "var(--text-muted)",
                 fontSize: "12px",
                 marginTop: "6px",
               }}
@@ -1176,7 +1176,7 @@ export default function App() {
 
         <section
           style={{
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: "6px",
             margin: "18px auto",
             maxWidth: "420px",
@@ -1256,7 +1256,7 @@ export default function App() {
             role="status"
             aria-live="polite"
             style={{
-              color: "#666",
+              color: "var(--text-muted)",
               fontSize: "12px",
               marginTop: "6px",
             }}
@@ -1288,7 +1288,7 @@ export default function App() {
             role="status"
             aria-live="polite"
             style={{
-              color: "#666",
+              color: "var(--text-muted)",
               fontSize: "12px",
               marginTop: "6px",
             }}
@@ -1297,7 +1297,7 @@ export default function App() {
           </div>
           <div
             style={{
-              borderTop: "1px solid #eee",
+              borderTop: "1px solid var(--border)",
               marginTop: "10px",
               paddingTop: "10px",
             }}
@@ -1337,7 +1337,7 @@ export default function App() {
             </button>
             <div
               style={{
-                color: "#666",
+                color: "var(--text-muted)",
                 fontSize: "12px",
                 marginTop: "6px",
               }}
@@ -1574,8 +1574,8 @@ export default function App() {
                       top: "50%",
                       left: "50%",
                       transform: "translate(-50%,-50%)",
-                      background: "white",
-                      border: "1px solid #ccc",
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
                       borderRadius: "12px",
                       padding: "20px",
                       zIndex: 1000,

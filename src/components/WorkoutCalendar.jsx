@@ -46,7 +46,7 @@ export default function WorkoutCalendar({ history }) {
       style={{
         marginBottom: "20px",
         padding: "12px",
-        border: "1px solid #ccc",
+        border: "1px solid var(--border)",
         borderRadius: "12px",
         cursor: "pointer",
       }}
@@ -64,7 +64,7 @@ export default function WorkoutCalendar({ history }) {
             <div
               style={{
                 fontSize: "12px",
-                color: "#666",
+                color: "var(--text-muted)",
               }}
             >
               {date
@@ -138,7 +138,7 @@ export default function WorkoutCalendar({ history }) {
               style={{
                 marginTop: "16px",
                 paddingTop: "12px",
-                borderTop: "1px solid #ddd",
+                borderTop: "1px solid var(--border)",
               }}
             >
               <div
@@ -206,7 +206,7 @@ export default function WorkoutCalendar({ history }) {
                     key={day}
                     style={{
                       fontSize: "12px",
-                      color: "#666",
+                      color: "var(--text-muted)",
                       fontWeight: "bold",
                     }}
                   >
@@ -256,7 +256,7 @@ export default function WorkoutCalendar({ history }) {
                   style={{
                     marginTop: "16px",
                     paddingTop: "12px",
-                    borderTop: "1px solid #ddd",
+                    borderTop: "1px solid var(--border)",
                   }}
                 >
                   <div

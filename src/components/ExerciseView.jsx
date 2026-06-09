@@ -323,7 +323,7 @@ export default function ExerciseView({
       >
         <div
           style={{
-            color: "#666",
+            color: "var(--text-muted)",
             fontSize: "12px",
           }}
         >
@@ -342,7 +342,7 @@ export default function ExerciseView({
 
       <section
         style={{
-          border: "1px solid #ddd",
+          border: "1px solid var(--border)",
           borderRadius: "6px",
           marginBottom: "14px",
           padding: "12px",
@@ -434,7 +434,7 @@ export default function ExerciseView({
             <div
               key={exercise.id}
               style={{
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--border)",
                 borderRadius: "6px",
                 padding: "10px",
               }}
@@ -457,7 +457,7 @@ export default function ExerciseView({
                   </div>
                   <div
                     style={{
-                      color: "#666",
+                      color: "var(--text-muted)",
                       fontSize: "12px",
                       marginTop: "2px",
                     }}
@@ -490,7 +490,7 @@ export default function ExerciseView({
 
               <div
                 style={{
-                  color: "#333",
+                  color: "var(--text)",
                   fontSize: "13px",
                   marginTop: "8px",
                 }}
@@ -504,7 +504,7 @@ export default function ExerciseView({
               {(exercise.description || exercise.note || exercise.imageUrl) && (
                 <div
                   style={{
-                    color: "#666",
+                    color: "var(--text-muted)",
                     fontSize: "12px",
                     marginTop: "6px",
                   }}
@@ -543,7 +543,7 @@ export default function ExerciseView({
         >
           <div
             style={{
-              background: "#fff",
+              background: "var(--surface-raised)",
               borderRadius: "8px",
               maxHeight: "calc(100vh - 32px)",
               maxWidth: "520px",
