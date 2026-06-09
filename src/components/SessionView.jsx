@@ -198,6 +198,8 @@ export default function SessionView({
 
   const [confirmComplete, setConfirmComplete] = useState(false);
 
+  const [showSupersetEditor, setShowSupersetEditor] = useState(false);
+
   const [showCreateExercise, setShowCreateExercise] = useState(false);
 
   const [newExercise, setNewExercise] = useState({
@@ -593,7 +595,27 @@ export default function SessionView({
     updateSession((s) => ({
       ...s,
 
+      templateChanged: true,
+
       exercises: s.exercises.filter((ex) => ex.id !== exerciseId),
+    }));
+  }
+
+  function updateExerciseSupersetGroup(exerciseId, supersetGroup) {
+    updateSession((s) => ({
+      ...s,
+
+      templateChanged: true,
+
+      exercises: s.exercises.map((ex) =>
+        ex.id === exerciseId
+          ? {
+              ...ex,
+
+              supersetGroup,
+            }
+          : ex
+      ),
     }));
   }
 
@@ -673,6 +695,7 @@ export default function SessionView({
 
     updateSession((s) => ({
       ...s,
+      templateChanged: true,
       exercises: [
         ...s.exercises,
         {
@@ -728,11 +751,16 @@ export default function SessionView({
 
     if (!original) return false;
 
-    const originalNames = original.exercises.map((ex) => ex.name);
+    const getStructuralSignature = (exercises) =>
+      exercises.map((ex) => ({
+        name: ex.name,
+        supersetGroup: ex.supersetGroup || null,
+      }));
 
-    const sessionNames = session.exercises.map((ex) => ex.name);
-
-    return JSON.stringify(originalNames) !== JSON.stringify(sessionNames);
+    return (
+      JSON.stringify(getStructuralSignature(original.exercises)) !==
+      JSON.stringify(getStructuralSignature(session.exercises))
+    );
   }
 
   return (
@@ -1958,6 +1986,15 @@ export default function SessionView({
             </button>
 
             <button
+              style={{
+                padding: "10px 14px",
+              }}
+              onClick={() => setShowSupersetEditor(true)}
+            >
+              🔗 Supersets
+            </button>
+
+            <button
               ref={completeWorkoutButtonRef}
               style={{
                 padding: "10px 14px",
@@ -1975,6 +2012,125 @@ export default function SessionView({
               Complete Workout
             </button>
           </div>
+
+          {showSupersetEditor && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,.45)",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "flex-end",
+                zIndex: 9999,
+              }}
+            >
+              <div
+                style={{
+                  background: "white",
+                  borderRadius: "18px 18px 0 0",
+                  boxSizing: "border-box",
+                  maxHeight: "78vh",
+                  overflowY: "auto",
+                  padding: "16px",
+                  paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      margin: 0,
+                    }}
+                  >
+                    Supersets
+                  </h2>
+
+                  <button onClick={() => setShowSupersetEditor(false)}>
+                    ✕
+                  </button>
+                </div>
+
+                {session.exercises.map((exercise) => (
+                  <div
+                    key={exercise.id}
+                    style={{
+                      alignItems: "center",
+                      borderBottom: "1px solid #eee",
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                      padding: "10px 0",
+                    }}
+                  >
+                    <div
+                      style={{
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {exercise.name}
+                      </div>
+
+                      <div
+                        style={{
+                          color: "#666",
+                          fontSize: "12px",
+                          marginTop: "3px",
+                        }}
+                      >
+                        {exercise.supersetGroup
+                          ? `Linked as ${exercise.supersetGroup}`
+                          : "Not linked"}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const group = prompt(
+                          "Superset group (A, B, etc). Use the same group for exercises you want linked.",
+                          exercise.supersetGroup || ""
+                        );
+
+                        if (group === null) {
+                          return;
+                        }
+
+                        updateExerciseSupersetGroup(
+                          exercise.id,
+                          group.trim() || null
+                        );
+                      }}
+                    >
+                      Set
+                    </button>
+
+                    <button
+                      disabled={!exercise.supersetGroup}
+                      onClick={() =>
+                        updateExerciseSupersetGroup(exercise.id, null)
+                      }
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {showCreateExercise && (
             <div
