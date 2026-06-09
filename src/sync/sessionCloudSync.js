@@ -42,6 +42,20 @@ function parseInteger(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseRir(value) {
+  if (value === "" || value == null || value === "-") {
+    return 0;
+  }
+
+  if (String(value).trim() === "5+") {
+    return 6;
+  }
+
+  const parsed = Number.parseFloat(value);
+
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
 function parseCompletedAt(value) {
   const parsed = value ? new Date(value) : null;
 
@@ -100,7 +114,7 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
   return {
     actual_reps: parseInteger(set.actualReps || set.targetReps),
     actual_rir_label: actualRir !== "" ? String(actualRir) : null,
-    actual_rir_value: parseNumber(actualRir),
+    actual_rir_value: parseRir(actualRir),
     actual_weight_label: set.actualWeight
       ? String(set.actualWeight)
       : set.targetWeight
@@ -117,7 +131,7 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     target_reps_max: parseInteger(set.targetReps),
     target_reps_min: parseInteger(set.targetReps),
     target_rir_label: targetRir ? String(targetRir) : null,
-    target_rir_value: parseNumber(targetRir),
+    target_rir_value: parseRir(targetRir),
     target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
     target_weight_value: parseNumber(set.targetWeight),
     updated_at: new Date().toISOString(),

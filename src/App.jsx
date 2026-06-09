@@ -36,6 +36,7 @@ import {
 } from "./sync/exerciseCloudSync";
 import { uploadWorkouts } from "./sync/workoutCloudSync";
 import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
+import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 9;
@@ -63,6 +64,18 @@ const BUILD_NOTICE_COPY = {
 
 function formatBackupSummary(summary) {
   return `${summary.templates} templates, ${summary.customExercises} custom exercises, ${summary.history} completed workouts`;
+}
+
+function formatNormalizedSummary(summary) {
+  const latest = summary.latestSession
+    ? ` Latest: ${summary.latestSession.workout_name} on ${new Date(
+        summary.latestSession.completed_at
+      ).toLocaleDateString()}.`
+    : "";
+  const maxE1RM =
+    summary.maxE1RM == null ? "" : ` Max e1RM stored: ${summary.maxE1RM.toFixed(1)}.`;
+
+  return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}`;
 }
 
 const backupButtonStyle = {
@@ -591,6 +604,21 @@ export default function App() {
     }
   }
 
+  async function checkNormalizedCloudData() {
+    setSyncLoading(true);
+
+    try {
+      const summary = await getNormalizedCloudSummary(authSession);
+
+      setSyncStatus(`Normalized cloud data: ${formatNormalizedSummary(summary)}`);
+    } catch (error) {
+      console.error("Normalized cloud check failed:", error);
+      setSyncStatus(`Normalized cloud check failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1080,6 +1108,15 @@ export default function App() {
               }}
             >
               Sync History
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={checkNormalizedCloudData}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Check Normalized Data
             </button>
             <div
               style={{

@@ -28,6 +28,9 @@ function cloudExerciseFromLocal(exercise, userId) {
     deleted_at: null,
     description: exercise.description || exercise.note || null,
     equipment: firstArrayValue(exercise.equipment),
+    image_alt: exercise.imageAlt || exercise.image_alt || null,
+    image_storage_path:
+      exercise.imageStoragePath || exercise.image_storage_path || null,
     image_url: exercise.imageUrl || exercise.image_url || null,
     is_builtin: false,
     name: exercise.name,

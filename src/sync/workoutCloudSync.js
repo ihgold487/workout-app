@@ -41,6 +41,20 @@ function parseInteger(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseRir(value) {
+  if (value === "" || value == null || value === "-") {
+    return 0;
+  }
+
+  if (String(value).trim() === "5+") {
+    return 6;
+  }
+
+  const parsed = Number.parseFloat(value);
+
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
 function localWorkoutToCloud(template, userId) {
   return {
     deleted_at: null,
@@ -87,7 +101,7 @@ function localSetToCloud(set, userId, workoutExerciseId, setNumber) {
     target_reps_max: parseInteger(set.targetReps),
     target_reps_min: parseInteger(set.targetReps),
     target_rir_label: targetRir ? String(targetRir) : null,
-    target_rir_value: parseNumber(targetRir),
+    target_rir_value: parseRir(targetRir),
     target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
     target_weight_value: parseNumber(set.targetWeight),
     updated_at: new Date().toISOString(),

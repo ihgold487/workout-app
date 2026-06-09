@@ -96,6 +96,8 @@ create table if not exists public.exercises (
   name text not null,
   description text,
   image_url text,
+  image_storage_path text,
+  image_alt text,
   equipment text,
   primary_muscle text,
   secondary_muscles text[] not null default '{}',
@@ -115,6 +117,15 @@ create index if not exists exercises_user_id_idx on public.exercises (user_id);
 create index if not exists exercises_name_idx on public.exercises (lower(name));
 create unique index if not exists exercises_user_source_key_idx
 on public.exercises (user_id, source, source_key);
+create unique index if not exists exercises_builtin_source_key_idx
+on public.exercises (source, source_key)
+where user_id is null;
+
+alter table public.exercises
+add column if not exists image_storage_path text;
+
+alter table public.exercises
+add column if not exists image_alt text;
 
 drop trigger if exists exercises_set_updated_at on public.exercises;
 create trigger exercises_set_updated_at
@@ -265,7 +276,7 @@ create table if not exists public.workout_exercise_sets (
   target_reps_min integer,
   target_reps_max integer,
   target_reps_label text,
-  target_rir_value numeric,
+  target_rir_value integer not null default 0,
   target_rir_label text,
   is_drop_set boolean not null default false,
   created_at timestamptz not null default now(),
@@ -276,6 +287,15 @@ create table if not exists public.workout_exercise_sets (
 
 create index if not exists workout_exercise_sets_workout_exercise_id_idx
 on public.workout_exercise_sets (workout_exercise_id);
+
+update public.workout_exercise_sets
+set target_rir_value = 0
+where target_rir_value is null;
+
+alter table public.workout_exercise_sets
+alter column target_rir_value type integer using round(target_rir_value)::integer,
+alter column target_rir_value set default 0,
+alter column target_rir_value set not null;
 
 drop trigger if exists workout_exercise_sets_set_updated_at on public.workout_exercise_sets;
 create trigger workout_exercise_sets_set_updated_at
@@ -396,12 +416,12 @@ create table if not exists public.session_sets (
   target_reps_min integer,
   target_reps_max integer,
   target_reps_label text,
-  target_rir_value numeric,
+  target_rir_value integer not null default 0,
   target_rir_label text,
   actual_weight_value numeric,
   actual_weight_label text,
   actual_reps integer,
-  actual_rir_value numeric,
+  actual_rir_value integer not null default 0,
   actual_rir_label text,
   estimated_1rm numeric,
   is_drop_set boolean not null default false,
@@ -421,6 +441,22 @@ comment on column public.session_sets.actual_rir_label is
 
 create index if not exists session_sets_session_exercise_id_idx
 on public.session_sets (session_exercise_id);
+
+update public.session_sets
+set target_rir_value = 0
+where target_rir_value is null;
+
+update public.session_sets
+set actual_rir_value = 0
+where actual_rir_value is null;
+
+alter table public.session_sets
+alter column target_rir_value type integer using round(target_rir_value)::integer,
+alter column target_rir_value set default 0,
+alter column target_rir_value set not null,
+alter column actual_rir_value type integer using round(actual_rir_value)::integer,
+alter column actual_rir_value set default 0,
+alter column actual_rir_value set not null;
 
 drop trigger if exists session_sets_set_updated_at on public.session_sets;
 create trigger session_sets_set_updated_at
@@ -484,7 +520,7 @@ create table if not exists public.training_plan_workouts (
   position integer not null default 1,
   name text not null,
   phase text,
-  target_rir_value numeric,
+  target_rir_value integer not null default 0,
   target_rir_label text,
   workout_rules jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -494,6 +530,15 @@ create table if not exists public.training_plan_workouts (
 
 create index if not exists training_plan_workouts_plan_id_idx
 on public.training_plan_workouts (training_plan_id);
+
+update public.training_plan_workouts
+set target_rir_value = 0
+where target_rir_value is null;
+
+alter table public.training_plan_workouts
+alter column target_rir_value type integer using round(target_rir_value)::integer,
+alter column target_rir_value set default 0,
+alter column target_rir_value set not null;
 
 drop trigger if exists training_plan_workouts_set_updated_at on public.training_plan_workouts;
 create trigger training_plan_workouts_set_updated_at
