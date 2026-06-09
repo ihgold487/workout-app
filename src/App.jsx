@@ -1,12 +1,13 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
-import { ClipboardList, Dumbbell, Home, Settings } from "lucide-react";
+import { ClipboardList, Dumbbell, Home, Settings, Utensils } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
 import HistoryView from "./components/HistoryView";
 import ExerciseView from "./components/ExerciseView";
 import PlansView from "./components/PlansView";
+import NutritionView from "./components/NutritionView";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import {
   clearLegacyEquipmentStorage,
@@ -358,6 +359,8 @@ export default function App() {
   const [showExercises, setShowExercises] = useState(false);
 
   const [showPlans, setShowPlans] = useState(false);
+
+  const [showNutrition, setShowNutrition] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
 
@@ -867,6 +870,7 @@ export default function App() {
   function goHome() {
     setShowExercises(false);
     setShowPlans(false);
+    setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -876,6 +880,7 @@ export default function App() {
   function goExercises() {
     setShowExercises(true);
     setShowPlans(false);
+    setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -885,6 +890,17 @@ export default function App() {
   function goPlans() {
     setShowExercises(false);
     setShowPlans(true);
+    setShowNutrition(false);
+    setShowSettings(false);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function goNutrition() {
+    setShowExercises(false);
+    setShowPlans(false);
+    setShowNutrition(true);
     setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -894,6 +910,7 @@ export default function App() {
   function goSettings() {
     setShowExercises(false);
     setShowPlans(false);
+    setShowNutrition(false);
     setShowSettings(true);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -919,6 +936,12 @@ export default function App() {
         key: "plans",
         label: "Plans",
         onClick: goPlans,
+      },
+      {
+        icon: Utensils,
+        key: "nutrition",
+        label: "Nutrition",
+        onClick: goNutrition,
       },
       {
         icon: Settings,
@@ -1357,6 +1380,10 @@ export default function App() {
       />,
       "plans"
     );
+  }
+
+  if (showNutrition) {
+    return renderAppShell(<NutritionView />, "nutrition");
   }
 
   if (selectedHistory) {

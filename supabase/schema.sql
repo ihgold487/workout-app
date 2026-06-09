@@ -554,3 +554,190 @@ on public.training_plan_workouts
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Nutrition model.
+--
+-- Start with manual daily tracking and keep the shape ready for food lookup,
+-- saved foods, barcode-backed foods, recipes, and future cloud sync.
+
+create table if not exists public.nutrition_daily_targets (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  target_date date not null,
+  calorie_target integer,
+  protein_grams numeric,
+  carb_grams numeric,
+  fat_grams numeric,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  primary key (user_id, target_date)
+);
+
+drop trigger if exists nutrition_daily_targets_set_updated_at on public.nutrition_daily_targets;
+create trigger nutrition_daily_targets_set_updated_at
+before update on public.nutrition_daily_targets
+for each row
+execute function public.set_updated_at();
+
+alter table public.nutrition_daily_targets enable row level security;
+
+drop policy if exists "Users can manage their nutrition targets" on public.nutrition_daily_targets;
+create policy "Users can manage their nutrition targets"
+on public.nutrition_daily_targets
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create table if not exists public.nutrition_foods (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users (id) on delete cascade,
+  name text not null,
+  brand text,
+  barcode text,
+  serving_size numeric,
+  serving_unit text,
+  calories integer,
+  protein_grams numeric,
+  carb_grams numeric,
+  fat_grams numeric,
+  source text not null default 'user',
+  source_key text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint nutrition_foods_owner_check check (
+    (source <> 'user' and user_id is null)
+    or (source = 'user' and user_id is not null)
+  )
+);
+
+create index if not exists nutrition_foods_user_id_idx on public.nutrition_foods (user_id);
+create index if not exists nutrition_foods_name_idx on public.nutrition_foods (lower(name));
+create index if not exists nutrition_foods_barcode_idx on public.nutrition_foods (barcode);
+create unique index if not exists nutrition_foods_user_source_key_idx
+on public.nutrition_foods (user_id, source, source_key);
+create unique index if not exists nutrition_foods_public_source_key_idx
+on public.nutrition_foods (source, source_key)
+where user_id is null;
+
+drop trigger if exists nutrition_foods_set_updated_at on public.nutrition_foods;
+create trigger nutrition_foods_set_updated_at
+before update on public.nutrition_foods
+for each row
+execute function public.set_updated_at();
+
+alter table public.nutrition_foods enable row level security;
+
+drop policy if exists "Users can read public and own nutrition foods" on public.nutrition_foods;
+create policy "Users can read public and own nutrition foods"
+on public.nutrition_foods
+for select
+using (user_id is null or auth.uid() = user_id);
+
+drop policy if exists "Users can insert custom nutrition foods" on public.nutrition_foods;
+create policy "Users can insert custom nutrition foods"
+on public.nutrition_foods
+for insert
+with check (auth.uid() = user_id and source = 'user');
+
+drop policy if exists "Users can update custom nutrition foods" on public.nutrition_foods;
+create policy "Users can update custom nutrition foods"
+on public.nutrition_foods
+for update
+using (auth.uid() = user_id and source = 'user')
+with check (auth.uid() = user_id and source = 'user');
+
+drop policy if exists "Users can delete custom nutrition foods" on public.nutrition_foods;
+create policy "Users can delete custom nutrition foods"
+on public.nutrition_foods
+for delete
+using (auth.uid() = user_id and source = 'user');
+
+create table if not exists public.nutrition_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  entry_date date not null,
+  food_id uuid references public.nutrition_foods (id) on delete set null,
+  food_name text not null,
+  meal text,
+  quantity numeric,
+  quantity_unit text,
+  calories integer,
+  protein_grams numeric,
+  carb_grams numeric,
+  fat_grams numeric,
+  source text not null default 'user',
+  source_key text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+comment on table public.nutrition_entries is
+  'Daily food log entries. Manual entries can store food_name and macros even when no reusable food exists yet.';
+
+create index if not exists nutrition_entries_user_date_idx
+on public.nutrition_entries (user_id, entry_date desc);
+create unique index if not exists nutrition_entries_user_source_key_idx
+on public.nutrition_entries (user_id, source, source_key);
+
+drop trigger if exists nutrition_entries_set_updated_at on public.nutrition_entries;
+create trigger nutrition_entries_set_updated_at
+before update on public.nutrition_entries
+for each row
+execute function public.set_updated_at();
+
+alter table public.nutrition_entries enable row level security;
+
+drop policy if exists "Users can manage their nutrition entries" on public.nutrition_entries;
+create policy "Users can manage their nutrition entries"
+on public.nutrition_entries
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create table if not exists public.body_measurements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  measured_on date not null,
+  body_weight_value numeric,
+  body_weight_unit text not null default 'lb',
+  waist_value numeric,
+  waist_unit text,
+  notes text,
+  source text not null default 'user',
+  source_key text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+comment on table public.body_measurements is
+  'Daily body measurements. The first UI uses body weight, with room for waist or other measurements later.';
+
+create index if not exists body_measurements_user_measured_on_idx
+on public.body_measurements (user_id, measured_on desc);
+create unique index if not exists body_measurements_user_source_key_idx
+on public.body_measurements (user_id, source, source_key);
+create unique index if not exists body_measurements_user_day_idx
+on public.body_measurements (user_id, measured_on)
+where deleted_at is null;
+
+drop trigger if exists body_measurements_set_updated_at on public.body_measurements;
+create trigger body_measurements_set_updated_at
+before update on public.body_measurements
+for each row
+execute function public.set_updated_at();
+
+alter table public.body_measurements enable row level security;
+
+drop policy if exists "Users can manage their body measurements" on public.body_measurements;
+create policy "Users can manage their body measurements"
+on public.body_measurements
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);

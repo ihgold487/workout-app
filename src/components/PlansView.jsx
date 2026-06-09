@@ -207,7 +207,18 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
   );
 }
 
-function PlanWorkoutPreview({ onReplaceExercise, onShowSummary, workout }) {
+function getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks) {
+  return daysPerWeek === "1"
+    ? `${workout.name} (single)`
+    : `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`;
+}
+
+function PlanWorkoutPreview({
+  onRenameWorkout,
+  onReplaceExercise,
+  onShowSummary,
+  workout,
+}) {
   const groupedExercises = workout.exercises.reduce((groups, exercise) => {
     const key = exercise.supersetGroup || `single-${exercise.id}`;
 
@@ -239,14 +250,21 @@ function PlanWorkoutPreview({ onReplaceExercise, onShowSummary, workout }) {
           marginBottom: "10px",
         }}
       >
-        <h3
+        <input
+          aria-label={`${workout.name} name`}
+          value={workout.name}
+          onChange={(event) => onRenameWorkout(workout, event.target.value)}
           style={{
+            boxSizing: "border-box",
+            font: "inherit",
+            fontSize: "18px",
+            fontWeight: "bold",
             lineHeight: 1.15,
-            margin: 0,
+            minHeight: "38px",
+            minWidth: 0,
+            width: "100%",
           }}
-        >
-          {workout.name}
-        </h3>
+        />
 
         <button
           aria-label={`${workout.name} summary`}
@@ -403,6 +421,7 @@ export default function PlansView({
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
   const [replacementBySlot, setReplacementBySlot] = useState({});
+  const [workoutNameBySlot, setWorkoutNameBySlot] = useState({});
   const [pickerTarget, setPickerTarget] = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState("");
@@ -439,6 +458,10 @@ export default function PlansView({
     () =>
       generatedPlan.workouts.map((workout, workoutIndex) => ({
         ...workout,
+        name:
+          workoutNameBySlot[workoutIndex] ||
+          getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks),
+        previewWorkoutKey: workoutIndex,
         exercises: workout.exercises.map((exercise) => {
           const slotKey = `${workoutIndex}:${exercise.id}`;
           const replacementExercise = replacementBySlot[slotKey];
@@ -468,22 +491,28 @@ export default function PlansView({
       replacementBySlot,
       reps,
       rir,
+      daysPerWeek,
+      durationWeeks,
+      workoutNameBySlot,
     ]
   );
 
   function saveGeneratedWorkouts() {
     const savedAt = Date.now();
-    const workouts = previewWorkouts.map((workout, workoutIndex) => ({
-      ...workout,
-      id: savedAt + workoutIndex,
-      name:
-        daysPerWeek === "1"
-          ? `${workout.name} (single)`
-          : `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`,
-      exercises: workout.exercises.map((exercise, exerciseIndex) => {
+    const workouts = previewWorkouts.map((workout, workoutIndex) => {
+      const savedWorkout = { ...workout };
+
+      delete savedWorkout.previewWorkoutKey;
+
+      return {
+        ...savedWorkout,
+        id: savedAt + workoutIndex,
+        name: workout.name,
+        exercises: workout.exercises.map((exercise, exerciseIndex) => {
         const savedExercise = { ...exercise };
 
         delete savedExercise.previewSlotKey;
+        delete savedExercise.previewWorkoutKey;
 
         return {
           ...savedExercise,
@@ -493,8 +522,9 @@ export default function PlansView({
             id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
           })),
         };
-      }),
-    }));
+        }),
+      };
+    });
 
     setTemplates([...templates, ...workouts]);
     setSaveStatus(`Saved ${workouts.length} generated workouts.`);
@@ -536,6 +566,7 @@ export default function PlansView({
             onChange={(event) => {
               setPlanType(event.target.value);
               setReplacementBySlot({});
+              setWorkoutNameBySlot({});
               setSaveStatus("");
             }}
             style={{
@@ -586,6 +617,7 @@ export default function PlansView({
             onClick={() => {
               setSeed((value) => value + 1);
               setReplacementBySlot({});
+              setWorkoutNameBySlot({});
               setSaveStatus("");
             }}
             style={{
@@ -648,6 +680,13 @@ export default function PlansView({
         <PlanWorkoutPreview
           key={workout.name}
           workout={workout}
+          onRenameWorkout={(renamedWorkout, name) => {
+            setWorkoutNameBySlot({
+              ...workoutNameBySlot,
+              [renamedWorkout.previewWorkoutKey]: name,
+            });
+            setSaveStatus("");
+          }}
           onShowSummary={setSummaryWorkout}
           onReplaceExercise={(exercise) => {
             setPickerTarget(exercise);
@@ -694,6 +733,7 @@ export default function PlansView({
         onSelect={(value) => {
           setDaysPerWeek(String(value));
           setReplacementBySlot({});
+          setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
       />
@@ -706,6 +746,7 @@ export default function PlansView({
         values={[3, 4, 5, 6]}
         onSelect={(value) => {
           setDurationWeeks(String(value));
+          setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
       />
