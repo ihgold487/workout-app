@@ -1,11 +1,12 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
-import { Dumbbell, Home, Settings } from "lucide-react";
+import { ClipboardList, Dumbbell, Home, Settings } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
 import HistoryView from "./components/HistoryView";
 import ExerciseView from "./components/ExerciseView";
+import PlansView from "./components/PlansView";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import {
   clearLegacyEquipmentStorage,
@@ -352,6 +353,8 @@ export default function App() {
   const [selectedHistoryList, setSelectedHistoryList] = useState(null);
 
   const [showExercises, setShowExercises] = useState(false);
+
+  const [showPlans, setShowPlans] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
 
@@ -807,6 +810,7 @@ export default function App() {
 
   function goHome() {
     setShowExercises(false);
+    setShowPlans(false);
     setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -815,6 +819,16 @@ export default function App() {
 
   function goExercises() {
     setShowExercises(true);
+    setShowPlans(false);
+    setShowSettings(false);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function goPlans() {
+    setShowExercises(false);
+    setShowPlans(true);
     setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -823,6 +837,7 @@ export default function App() {
 
   function goSettings() {
     setShowExercises(false);
+    setShowPlans(false);
     setShowSettings(true);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
@@ -842,6 +857,12 @@ export default function App() {
         key: "exercises",
         label: "Exercises",
         onClick: goExercises,
+      },
+      {
+        icon: ClipboardList,
+        key: "plans",
+        label: "Plans",
+        onClick: goPlans,
       },
       {
         icon: Settings,
@@ -1266,6 +1287,19 @@ export default function App() {
         setExerciseMetadata={setExerciseMetadata}
       />,
       "exercises"
+    );
+  }
+
+  if (showPlans) {
+    return renderAppShell(
+      <PlansView
+        exerciseLibrary={exerciseLibrary}
+        exerciseMetadata={exerciseMetadata}
+        history={history}
+        setTemplates={setTemplates}
+        templates={templates}
+      />,
+      "plans"
     );
   }
 
