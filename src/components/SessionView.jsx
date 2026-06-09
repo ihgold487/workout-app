@@ -210,6 +210,8 @@ export default function SessionView({
 
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
+  const [pendingDeleteExercise, setPendingDeleteExercise] = useState(null);
+
   const [restMinutes, setRestMinutes] = useState(2);
 
   const [restRemainder, setRestRemainder] = useState(0);
@@ -871,6 +873,79 @@ export default function SessionView({
             </div>
           </div>
         )}
+        {pendingDeleteExercise && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
+            }}
+          >
+            <div
+              style={{
+                background: "#ffe5e5",
+                color: "#400",
+                border: "2px solid #c66",
+                borderRadius: "12px",
+                padding: "20px",
+                width: "280px",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  marginBottom: "10px",
+                  fontWeight: "bold",
+                  fontSize: "18px",
+                }}
+              >
+                <span style={{ fontSize: "22px" }}>⚠️</span>
+                <span>Delete Exercise?</span>
+              </div>
+
+              <div
+                style={{
+                  fontSize: "14px",
+                  marginBottom: "16px",
+                }}
+              >
+                {pendingDeleteExercise.name}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <button onClick={() => setPendingDeleteExercise(null)}>
+                  ✖️
+                </button>
+
+                <button
+                  onClick={() => {
+                    deleteExercise(pendingDeleteExercise.id);
+
+                    setPendingDeleteExercise(null);
+                  }}
+                >
+                  ✔️
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {pendingDeleteSet && (
           <div
             style={{
@@ -1197,7 +1272,7 @@ export default function SessionView({
                         fontSize: "20px",
                         lineHeight: "1",
                       }}
-                      onClick={() => deleteExercise(exercise.id)}
+                      onClick={() => setPendingDeleteExercise(exercise)}
                     >
                       🗑
                     </button>
