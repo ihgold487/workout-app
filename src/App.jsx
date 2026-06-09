@@ -51,8 +51,11 @@ const PENDING_UPDATE_KEY = "pendingPwaUpdate";
 const LAST_SEEN_BUILD_KEY = "lastSeenBuildTime";
 const UPDATE_CONFIRMATION_KEY = "pwaUpdateConfirmation";
 const UPDATE_CONFIRMATION_DURATION = 10 * 60 * 1000;
+const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
+const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
 
 const UPDATE_STATUS_COPY = {
+  available: "Update available. Tap Update to install it.",
   checking: "Checking for update...",
   current: "No new build found.",
   error: "Update check failed. Try closing and reopening the app.",
@@ -685,7 +688,7 @@ export default function App() {
       const status = event.detail?.status;
 
       if (status) {
-        if (status === "found") {
+        if (status === "available" || status === "found") {
           rememberPendingUpdate();
         }
 
@@ -720,6 +723,7 @@ export default function App() {
         result = await navigator.serviceWorker.ready.then(
           async (registration) => {
             await registration.update();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             if (registration.waiting) {
               registration.waiting.postMessage({
@@ -787,6 +791,58 @@ export default function App() {
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function checkForPassiveUpdate() {
+      if (document.visibilityState === "hidden" || !window.checkForAppUpdate) {
+        return;
+      }
+
+      const lastCheck = Number(
+        localStorage.getItem(LAST_AUTO_UPDATE_CHECK_KEY) || 0
+      );
+
+      if (Date.now() - lastCheck < AUTO_UPDATE_CHECK_INTERVAL) {
+        return;
+      }
+
+      localStorage.setItem(LAST_AUTO_UPDATE_CHECK_KEY, String(Date.now()));
+
+      const result = await window.checkForAppUpdate({
+        applyUpdate: false,
+        silent: true,
+      });
+
+      if (!cancelled && result?.status === "available") {
+        setUpdateStatus("available");
+      }
+    }
+
+    checkForPassiveUpdate().catch((error) => {
+      console.error("Passive update check failed:", error);
+    });
+
+    function handleResume() {
+      checkForPassiveUpdate().catch((error) => {
+        console.error("Passive update check failed:", error);
+      });
+    }
+
+    window.addEventListener("focus", handleResume);
+    document.addEventListener("visibilitychange", handleResume);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleResume);
+      document.removeEventListener("visibilitychange", handleResume);
+    };
+  }, [selectedSessionId]);
 
   function addTemplate() {
     const name = prompt("Template name");

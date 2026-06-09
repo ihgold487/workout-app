@@ -3,7 +3,7 @@ import { BarChart3, RefreshCw, Save, X } from "lucide-react";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import {
   createPlanExercise,
-  generatePlanType2Workouts,
+  generatePlanWorkouts,
 } from "../plans/planType2Generator";
 
 function formatEquipment(equipment) {
@@ -360,6 +360,10 @@ function PlanWorkoutPreview({ onReplaceExercise, onShowSummary, workout }) {
   );
 }
 
+function getPlanTypeLabel(planType) {
+  return planType === "type-1" ? "Plan Type 1" : "Plan Type 2";
+}
+
 export default function PlansView({
   exerciseLibrary,
   exerciseMetadata,
@@ -368,6 +372,8 @@ export default function PlansView({
   templates,
 }) {
   const [durationWeeks, setDurationWeeks] = useState("4");
+  const [daysPerWeek, setDaysPerWeek] = useState("2");
+  const [planType, setPlanType] = useState("type-2");
   const [reps, setReps] = useState("10");
   const [rir, setRir] = useState("2");
   const [seed, setSeed] = useState(0);
@@ -380,16 +386,28 @@ export default function PlansView({
 
   const generatedPlan = useMemo(
     () =>
-      generatePlanType2Workouts({
+      generatePlanWorkouts({
+        daysPerWeek,
         durationWeeks,
         exerciseLibrary,
         exerciseMetadata,
         history,
+        planType,
         reps,
         rir,
         seed,
       }),
-    [durationWeeks, exerciseLibrary, exerciseMetadata, history, reps, rir, seed]
+    [
+      daysPerWeek,
+      durationWeeks,
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      planType,
+      reps,
+      rir,
+      seed,
+    ]
   );
 
   const previewWorkouts = useMemo(
@@ -433,7 +451,7 @@ export default function PlansView({
     const workouts = previewWorkouts.map((workout, workoutIndex) => ({
       ...workout,
       id: savedAt + workoutIndex,
-      name: `${workout.name} (${durationWeeks} wk)`,
+      name: `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`,
       exercises: workout.exercises.map((exercise, exerciseIndex) => {
         const savedExercise = { ...exercise };
 
@@ -451,7 +469,7 @@ export default function PlansView({
     }));
 
     setTemplates([...templates, ...workouts]);
-    setSaveStatus("Saved two generated workouts.");
+    setSaveStatus(`Saved ${workouts.length} generated workouts.`);
   }
 
   return (
@@ -475,8 +493,48 @@ export default function PlansView({
             margin: 0,
           }}
         >
-          Plan Type 2
+          {getPlanTypeLabel(planType)}
         </h2>
+
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
+          Plan type
+          <select
+            value={planType}
+            onChange={(event) => {
+              setPlanType(event.target.value);
+              setReplacementBySlot({});
+              setSaveStatus("");
+            }}
+          >
+            <option value="type-1">Type 1</option>
+            <option value="type-2">Type 2</option>
+          </select>
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
+          Days per week
+          <select
+            value={daysPerWeek}
+            onChange={(event) => {
+              setDaysPerWeek(event.target.value);
+              setReplacementBySlot({});
+              setSaveStatus("");
+            }}
+          >
+            <option value="2">2 days/week</option>
+            <option value="3">3 days/week</option>
+          </select>
+        </label>
 
         <label
           style={{

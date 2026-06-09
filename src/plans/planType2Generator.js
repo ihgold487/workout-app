@@ -23,6 +23,55 @@ const PLAN_TYPE_2_WORKOUTS = [
   },
 ];
 
+const PLAN_TYPE_2_THIRD_DAY = {
+  name: "Workout 3",
+  groups: [
+    { label: "A", muscles: ["Quads", "Lats"], sets: 3 },
+    { label: "B", muscles: ["Hamstrings", "Upper Chest"], sets: 3 },
+    { label: "C", muscles: ["Glutes", "Upper Back"], sets: 2 },
+    { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
+    { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
+  ],
+};
+
+const PLAN_TYPE_1_WORKOUTS = [
+  {
+    name: "Workout 1",
+    groups: [
+      { label: "A", muscles: ["Quads", "Upper Back"], sets: 2 },
+      { label: "B", muscles: ["Glutes", "Chest"], sets: 2 },
+      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
+    ],
+  },
+  {
+    name: "Workout 2",
+    groups: [
+      { label: "A", muscles: ["Hamstrings", "Chest"], sets: 2 },
+      { label: "B", muscles: ["Glutes", "Lats"], sets: 2 },
+      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
+    ],
+  },
+  {
+    name: "Workout 3",
+    groups: [
+      { label: "A", muscles: ["Quads", "Lats"], sets: 2 },
+      { label: "B", muscles: ["Hamstrings", "Upper Chest"], sets: 2 },
+      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
+    ],
+  },
+];
+
+const PLAN_CONFIGS = {
+  "type-1": {
+    label: "Plan Type 1",
+    workouts: PLAN_TYPE_1_WORKOUTS,
+  },
+  "type-2": {
+    label: "Plan Type 2",
+    workouts: [...PLAN_TYPE_2_WORKOUTS, PLAN_TYPE_2_THIRD_DAY],
+  },
+};
+
 function normalizeMuscle(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -149,19 +198,24 @@ export function createPlanExercise({
   };
 }
 
-export function generatePlanType2Workouts({
+export function generatePlanWorkouts({
+  daysPerWeek,
   durationWeeks,
   exerciseLibrary,
   exerciseMetadata,
   history,
+  planType,
   reps,
   rir,
   seed = 0,
 }) {
+  const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
+  const workoutCount = Math.max(1, Number(daysPerWeek) || 2);
+  const workoutDefinitions = config.workouts.slice(0, workoutCount);
   const usedExerciseIds = new Set();
   const gaps = [];
 
-  const workouts = PLAN_TYPE_2_WORKOUTS.map((workout, workoutIndex) => {
+  const workouts = workoutDefinitions.map((workout, workoutIndex) => {
     const exercises = workout.groups.flatMap((group, groupIndex) =>
       group.muscles.flatMap((muscle, muscleIndex) => {
         const exercise = chooseExercise(
@@ -196,10 +250,11 @@ export function generatePlanType2Workouts({
     return {
       id: Date.now() + Math.random(),
       durationWeeks: Number(durationWeeks) || null,
+      daysPerWeek: workoutCount,
       exercises,
       lastCompleted: null,
-      name: `Plan Type 2 - ${workout.name}`,
-      planType: "type-2",
+      name: `${config.label} - ${workout.name}`,
+      planType,
     };
   });
 
@@ -207,4 +262,12 @@ export function generatePlanType2Workouts({
     gaps,
     workouts,
   };
+}
+
+export function generatePlanType2Workouts(options) {
+  return generatePlanWorkouts({
+    ...options,
+    daysPerWeek: options.daysPerWeek || 2,
+    planType: "type-2",
+  });
 }
