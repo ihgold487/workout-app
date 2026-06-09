@@ -1,5 +1,6 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
+import { Dumbbell, Home, Settings } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
@@ -95,6 +96,26 @@ const backupButtonStyle = {
   margin: 0,
   minHeight: "32px",
   padding: "4px 8px",
+};
+
+const bottomNavButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: "none",
+  color: "#5f6368",
+  display: "flex",
+  flex: 1,
+  flexDirection: "column",
+  fontSize: "11px",
+  gap: "3px",
+  minHeight: "46px",
+  padding: "5px 4px",
+};
+
+const activeBottomNavButtonStyle = {
+  ...bottomNavButtonStyle,
+  color: "#1769aa",
+  fontWeight: "bold",
 };
 
 function getInitialBuildNotice() {
@@ -784,6 +805,104 @@ export default function App() {
     ]);
   }
 
+  function goHome() {
+    setShowExercises(false);
+    setShowSettings(false);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function goExercises() {
+    setShowExercises(true);
+    setShowSettings(false);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function goSettings() {
+    setShowExercises(false);
+    setShowSettings(true);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function renderBottomNav(activeView) {
+    const navItems = [
+      {
+        icon: Home,
+        key: "home",
+        label: "Home",
+        onClick: goHome,
+      },
+      {
+        icon: Dumbbell,
+        key: "exercises",
+        label: "Exercises",
+        onClick: goExercises,
+      },
+      {
+        icon: Settings,
+        key: "settings",
+        label: "Settings",
+        onClick: goSettings,
+      },
+    ];
+
+    return (
+      <nav
+        aria-label="Primary"
+        style={{
+          background: "rgba(255,255,255,.96)",
+          borderTop: "1px solid #ddd",
+          bottom: 0,
+          boxShadow: "0 -4px 16px rgba(0,0,0,.06)",
+          display: "flex",
+          left: 0,
+          padding: "4px 8px calc(4px + env(safe-area-inset-bottom))",
+          position: "fixed",
+          right: 0,
+          zIndex: 900,
+        }}
+      >
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = item.key === activeView;
+
+          return (
+            <button
+              key={item.key}
+              aria-current={active ? "page" : undefined}
+              onClick={item.onClick}
+              style={
+                active ? activeBottomNavButtonStyle : bottomNavButtonStyle
+              }
+            >
+              <Icon size={20} strokeWidth={active ? 2.5 : 2} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    );
+  }
+
+  function renderAppShell(content, activeView) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          paddingBottom: "calc(70px + env(safe-area-inset-bottom))",
+        }}
+      >
+        {content}
+        {renderBottomNav(activeView)}
+      </div>
+    );
+  }
+
   function renderBackupStatusDialog() {
     if (!backupStatus) return null;
 
@@ -857,8 +976,6 @@ export default function App() {
           padding: "20px",
         }}
       >
-        <button onClick={() => setShowSettings(false)}>← Back</button>
-
         <h2>Settings</h2>
 
         <section
@@ -1137,39 +1254,35 @@ export default function App() {
   }
 
   if (showSettings) {
-    return renderSettings();
+    return renderAppShell(renderSettings(), "settings");
   }
 
   if (showExercises) {
-    return (
+    return renderAppShell(
       <ExerciseView
         exerciseLibrary={exerciseLibrary}
         setExerciseLibrary={setExerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
-        setShowExercises={setShowExercises}
-      />
+      />,
+      "exercises"
     );
   }
 
   if (selectedHistory) {
-    return (
-      <HistoryView
-        selectedHistory={selectedHistory}
-        setSelectedHistory={setSelectedHistory}
-      />
+    return renderAppShell(
+      <HistoryView selectedHistory={selectedHistory} />,
+      "home"
     );
   }
 
   if (selectedHistoryList) {
-    return (
+    return renderAppShell(
       <div
         style={{
           padding: "20px",
         }}
       >
-        <button onClick={() => setSelectedHistoryList(null)}>← Back</button>
-
         <h2>History</h2>
 
         {selectedHistoryList.map((workout) => (
@@ -1184,7 +1297,8 @@ export default function App() {
             {workout.completedAt}
           </button>
         ))}
-      </div>
+      </div>,
+      "home"
     );
   }
 
@@ -1209,13 +1323,12 @@ export default function App() {
   }
 
   if (selectedTemplate) {
-    return (
+    return renderAppShell(
       <TemplateView
         template={selectedTemplate}
         templates={templates}
         setTemplates={setTemplates}
         exerciseLibrary={exerciseLibrary}
-        setSelectedTemplateId={setSelectedTemplateId}
         setSelectedSessionId={setSelectedSessionId}
         sessions={sessions}
         setSessions={setSessions}
@@ -1223,11 +1336,12 @@ export default function App() {
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         history={history}
-      />
+      />,
+      "home"
     );
   }
 
-  return (
+  return renderAppShell(
     <div
       style={{
         padding: "20px",
@@ -1235,19 +1349,7 @@ export default function App() {
     >
       <h1>Workout Log</h1>
 
-      <div
-        style={{
-          marginBottom: "12px",
-        }}
-      >
-        <button onClick={() => setShowSettings(true)}>⚙️ Settings</button>
-      </div>
-
       <WorkoutCalendar history={history} />
-
-      <hr />
-
-      <button onClick={() => setShowExercises(true)}>Manage Exercises</button>
 
       <hr />
 
@@ -1430,6 +1532,7 @@ export default function App() {
             </div>
           </div>
         ))}
-    </div>
+    </div>,
+    "home"
   );
 }

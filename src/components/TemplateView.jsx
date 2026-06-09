@@ -43,7 +43,6 @@ export default function TemplateView({
   sessions,
   setSessions,
   setSelectedSessionId,
-  setSelectedTemplateId,
 }) {
   const [search, setSearch] = useState("");
 
@@ -220,7 +219,6 @@ export default function TemplateView({
         padding: "20px",
       }}
     >
-      <button onClick={() => setSelectedTemplateId(null)}>← Back</button>
       <input
         style={{
           fontSize: "2rem",

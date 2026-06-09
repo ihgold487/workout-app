@@ -1,8 +1,6 @@
-export default function HistoryView({ selectedHistory, setSelectedHistory }) {
+export default function HistoryView({ selectedHistory }) {
   return (
     <div style={{ padding: "20px" }}>
-      <button onClick={() => setSelectedHistory(null)}>← Back</button>
-
       <h1>{selectedHistory.templateName}</h1>
 
       <p>Completed: {selectedHistory.completedAt}</p>
