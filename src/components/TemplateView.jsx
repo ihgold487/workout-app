@@ -65,6 +65,8 @@ export default function TemplateView({
   const [editingWeightSetIndex, setEditingWeightSetIndex] = useState(null);
   const [editingRepsSetIndex, setEditingRepsSetIndex] = useState(null);
   const [editingRirSetIndex, setEditingRirSetIndex] = useState(null);
+  const [editingTemplateName, setEditingTemplateName] = useState(false);
+  const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
 
   // ACTION BUTTONS: keep icon sizes consistent app-wide
   const iconButton = {
@@ -176,6 +178,26 @@ export default function TemplateView({
     });
   }
 
+  function saveTemplateName() {
+    const nextName = templateNameDraft.trim();
+
+    if (!nextName) {
+      return;
+    }
+
+    setTemplates(
+      templates.map((t) =>
+        t.id === template.id
+          ? {
+              ...t,
+              name: nextName,
+            }
+          : t
+      )
+    );
+    setEditingTemplateName(false);
+  }
+
   function getLatestWorkoutPerformance(exerciseId) {
     const workout = history.find((workout) =>
       workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
@@ -205,31 +227,103 @@ export default function TemplateView({
         padding: "20px",
       }}
     >
-      <input
+      <button
+        aria-label={`Edit workout name: ${template.name}`}
+        onClick={() => {
+          setTemplateNameDraft(template.name);
+          setEditingTemplateName(true);
+        }}
         style={{
+          background: "transparent",
+          border: "none",
+          color: "#111",
+          display: "block",
           fontSize: "2rem",
-
+          fontWeight: "bold",
+          lineHeight: 1.15,
           marginBottom: "20px",
-
+          minWidth: 0,
+          overflow: "hidden",
+          padding: 0,
+          textAlign: "left",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
           width: "100%",
         }}
-        value={template.name}
-        onChange={(e) =>
-          setTemplates(
-            templates.map((t) =>
-              t.id === template.id
-                ? {
-                    ...t,
-
-                    name: e.target.value,
-                  }
-                : t
-            )
-          )
-        }
-      />
+      >
+        {template.name}
+      </button>
       <button onClick={startWorkout}>Start Workout</button>{" "}
       <button onClick={() => setShowAdd(true)}>+ Add Exercise</button>
+
+      {editingTemplateName && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit workout name"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.42)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              boxShadow: "0 10px 28px rgba(0,0,0,.25)",
+              boxSizing: "border-box",
+              maxWidth: "360px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "20px",
+                marginBottom: "12px",
+              }}
+            >
+              Workout name
+            </h2>
+            <input
+              autoFocus
+              value={templateNameDraft}
+              onChange={(event) => setTemplateNameDraft(event.target.value)}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                marginBottom: "12px",
+                minHeight: "42px",
+                padding: "7px 10px",
+                width: "100%",
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                justifyContent: "space-between",
+              }}
+            >
+              <button onClick={() => setEditingTemplateName(false)}>
+                Cancel
+              </button>
+              <button
+                disabled={!templateNameDraft.trim()}
+                onClick={saveTemplateName}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <ExercisePickerSheet

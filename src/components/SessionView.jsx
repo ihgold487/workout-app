@@ -72,6 +72,36 @@ export default function SessionView({
     return weightUnit === "kg" ? lbsToKg(weight) : weight;
   }
 
+  function formatList(value) {
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(", ");
+    }
+
+    return value || "";
+  }
+
+  function getExerciseDetailText(exercise) {
+    const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
+    const primaryMuscle =
+      exercise.primaryMuscle ||
+      exercise.primary_muscle ||
+      muscles[0] ||
+      exercise.planMuscle ||
+      "n/a";
+    const secondaryMuscles =
+      formatList(exercise.secondaryMuscles) ||
+      formatList(exercise.secondary_muscles) ||
+      formatList(muscles.slice(1)) ||
+      "n/a";
+
+    return [
+      `Exercise: ${exercise.name || "n/a"}`,
+      `Equipment: ${formatList(exercise.equipment) || "n/a"}`,
+      `Primary: ${primaryMuscle}`,
+      `Secondary: ${secondaryMuscles}`,
+    ].join("\n");
+  }
+
   function getLatestWorkoutPerformance(exerciseId) {
     const workout = history.find((workout) =>
       workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
@@ -213,6 +243,12 @@ export default function SessionView({
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
   const [pendingDeleteExercise, setPendingDeleteExercise] = useState(null);
+
+  const [editingSessionName, setEditingSessionName] = useState(false);
+
+  const [sessionNameDraft, setSessionNameDraft] = useState(
+    session.templateName || ""
+  );
 
   const [restMinutes, setRestMinutes] = useState(2);
 
@@ -746,6 +782,30 @@ export default function SessionView({
       exercise.sets.every((set) => set.completed)
     );
 
+  function saveSessionName() {
+    const nextName = sessionNameDraft.trim();
+
+    if (!nextName) {
+      return;
+    }
+
+    updateSession((s) => ({
+      ...s,
+      templateName: nextName,
+    }));
+    setTemplates(
+      templates.map((template) =>
+        template.id === session.templateId
+          ? {
+              ...template,
+              name: nextName,
+            }
+          : template
+      )
+    );
+    setEditingSessionName(false);
+  }
+
   function hasStructuralChanges() {
     const original = templates.find((t) => t.id === session.templateId);
 
@@ -1185,7 +1245,101 @@ export default function SessionView({
           </div>
         )}
 
-        <h1>{session.templateName}</h1>
+        <button
+          aria-label={`Edit workout name: ${session.templateName}`}
+          onClick={() => {
+            setSessionNameDraft(session.templateName || "");
+            setEditingSessionName(true);
+          }}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#111",
+            display: "block",
+            fontSize: "36px",
+            fontWeight: "bold",
+            lineHeight: 1.15,
+            margin: "20px 0",
+            minWidth: 0,
+            overflow: "hidden",
+            padding: 0,
+            textAlign: "center",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            width: "100%",
+          }}
+        >
+          {session.templateName}
+        </button>
+
+        {editingSessionName && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit workout name"
+            style={{
+              alignItems: "center",
+              background: "rgba(0,0,0,.42)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: "18px",
+              position: "fixed",
+              zIndex: 1000,
+            }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: "12px",
+                boxShadow: "0 10px 28px rgba(0,0,0,.25)",
+                boxSizing: "border-box",
+                maxWidth: "360px",
+                padding: "16px",
+                width: "100%",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "20px",
+                  marginBottom: "12px",
+                }}
+              >
+                Workout name
+              </h2>
+              <input
+                autoFocus
+                value={sessionNameDraft}
+                onChange={(event) => setSessionNameDraft(event.target.value)}
+                style={{
+                  boxSizing: "border-box",
+                  font: "inherit",
+                  marginBottom: "12px",
+                  minHeight: "42px",
+                  padding: "7px 10px",
+                  width: "100%",
+                }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <button onClick={() => setEditingSessionName(false)}>
+                  Cancel
+                </button>
+                <button
+                  disabled={!sessionNameDraft.trim()}
+                  onClick={saveSessionName}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <hr />
 
@@ -1239,13 +1393,7 @@ export default function SessionView({
                     <strong>
                       <span
                         onClick={() =>
-                          alert(
-                            `${exercise.name}${
-                              exercise.equipment?.[0]
-                                ? ", " + exercise.equipment[0]
-                                : ""
-                            }`
-                          )
+                          alert(getExerciseDetailText(exercise))
                         }
                         style={{
                           display: "inline-block",
@@ -2434,6 +2582,8 @@ export default function SessionView({
                             t.id === session.templateId
                               ? {
                                   ...t,
+
+                                  name: completedWorkout.templateName,
 
                                   lastCompleted: completedWorkout.completedAt,
 
