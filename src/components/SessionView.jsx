@@ -4,6 +4,7 @@ import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import { calculateE1RM } from "../utils/e1rm";
 
 export default function SessionView({
@@ -55,6 +56,7 @@ export default function SessionView({
   const [rirPickerData, setRirPickerData] = useState(null);
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
+  const [detailExercise, setDetailExercise] = useState(null);
 
   function lbsToKg(lbs) {
     const num = parseFloat(lbs);
@@ -80,26 +82,47 @@ export default function SessionView({
     return value || "";
   }
 
-  function getExerciseDetailText(exercise) {
-    const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
-    const primaryMuscle =
-      exercise.primaryMuscle ||
-      exercise.primary_muscle ||
-      muscles[0] ||
-      exercise.planMuscle ||
-      "n/a";
-    const secondaryMuscles =
-      formatList(exercise.secondaryMuscles) ||
-      formatList(exercise.secondary_muscles) ||
-      formatList(muscles.slice(1)) ||
-      "n/a";
+  function getExerciseKey(exercise) {
+    return `${String(exercise?.name || "").toLowerCase()}||${formatList(
+      exercise?.equipment
+    ).toLowerCase()}`;
+  }
 
-    return [
-      `Exercise: ${exercise.name || "n/a"}`,
-      `Equipment: ${formatList(exercise.equipment) || "n/a"}`,
-      `Primary: ${primaryMuscle}`,
-      `Secondary: ${secondaryMuscles}`,
-    ].join("\n");
+  function getExerciseDetailRecord(sessionExercise) {
+    const libraryExercise = exerciseLibrary.find((exercise) => {
+      if (
+        sessionExercise.exerciseId &&
+        String(exercise.id) === String(sessionExercise.exerciseId)
+      ) {
+        return true;
+      }
+
+      return getExerciseKey(exercise) === getExerciseKey(sessionExercise);
+    });
+
+    const muscles = Array.isArray(sessionExercise.muscles)
+      ? sessionExercise.muscles
+      : Array.isArray(libraryExercise?.muscles)
+        ? libraryExercise.muscles
+        : [
+            sessionExercise.primaryMuscle || sessionExercise.planMuscle,
+            ...(Array.isArray(sessionExercise.secondaryMuscles)
+              ? sessionExercise.secondaryMuscles
+              : []),
+          ].filter(Boolean);
+
+    return {
+      ...(libraryExercise || {}),
+      ...sessionExercise,
+      equipment: sessionExercise.equipment || libraryExercise?.equipment || [],
+      id:
+        sessionExercise.exerciseId ||
+        libraryExercise?.id ||
+        sessionExercise.id,
+      imageAlt: libraryExercise?.imageAlt || sessionExercise.imageAlt || "",
+      imageUrl: libraryExercise?.imageUrl || sessionExercise.imageUrl || "",
+      muscles,
+    };
   }
 
   function getLatestWorkoutPerformance(exerciseId) {
@@ -1410,20 +1433,26 @@ export default function SessionView({
                       ✏️
                     </button>{" "}
                     <strong>
-                      <span
+                      <button
+                        type="button"
                         onClick={() =>
-                          alert(getExerciseDetailText(exercise))
+                          setDetailExercise(getExerciseDetailRecord(exercise))
                         }
                         style={{
+                          background: "transparent",
+                          border: 0,
+                          color: "var(--text)",
+                          cursor: "pointer",
                           display: "inline-block",
+                          font: "inherit",
                           maxWidth: "180px",
+                          padding: 0,
                           whiteSpace: "normal",
                           wordBreak: "break-word",
                           lineHeight: "1.05",
                           fontSize: "14px",
                           textAlign: "left",
                           verticalAlign: "middle",
-                          cursor: "pointer",
                         }}
                       >
                         {`${exercise.name}${
@@ -1431,7 +1460,7 @@ export default function SessionView({
                             ? ", " + exercise.equipment[0]
                             : ""
                         }`}
-                      </span>
+                      </button>
                     </strong>
                   </div>
 
@@ -1933,6 +1962,7 @@ export default function SessionView({
             title="Add exercise"
             actionLabel="Create exercise"
             exerciseLibrary={exerciseLibrary}
+            history={history}
             search={search}
             selectedMuscle={selectedMuscle}
             setSearch={setSearch}
@@ -2028,6 +2058,7 @@ export default function SessionView({
           <ExercisePickerSheet
             title="Replace exercise"
             exerciseLibrary={exerciseLibrary}
+            history={history}
             search={search}
             selectedMuscle={selectedMuscle}
             setSearch={setSearch}
@@ -2738,6 +2769,14 @@ export default function SessionView({
               );
             }}
           />
+
+          {detailExercise && (
+            <ExerciseDetailDialog
+              exercise={detailExercise}
+              history={history}
+              onClose={() => setDetailExercise(null)}
+            />
+          )}
         </>
       </div>
     </div>

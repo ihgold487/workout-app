@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 
 import { equipmentOptions } from "../data/seedEquipment";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import ExerciseThumbnail from "./ExerciseThumbnail";
 
 const muscleGroups = [
   "Abs",
@@ -70,9 +72,11 @@ function toggleMuscle(muscles, muscle) {
 
 export default function ExerciseView({
   exerciseLibrary,
+  history = [],
   setExerciseLibrary,
 }) {
   const [draft, setDraft] = useState(emptyDraft);
+  const [detailExercise, setDetailExercise] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
   const [editingDraft, setEditingDraft] = useState(emptyDraft);
   const [exerciseType, setExerciseType] = useState("");
@@ -433,10 +437,24 @@ export default function ExerciseView({
           return (
             <div
               key={exercise.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailExercise(exercise)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setDetailExercise(exercise);
+                }
+              }}
               style={{
+                background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: "6px",
+                color: "var(--text)",
+                cursor: "pointer",
                 padding: "10px",
+                textAlign: "left",
+                width: "100%",
               }}
             >
               <div
@@ -447,32 +465,11 @@ export default function ExerciseView({
                   justifyContent: "space-between",
                 }}
               >
-                {exercise.imageUrl && (
-                  <div
-                    style={{
-                      alignItems: "center",
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      display: "flex",
-                      flex: "0 0 76px",
-                      height: "76px",
-                      justifyContent: "center",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <img
-                      alt={exercise.imageAlt || `${exercise.name} demonstration`}
-                      src={exercise.imageUrl}
-                      style={{
-                        display: "block",
-                        height: "100%",
-                        objectFit: "contain",
-                        width: "100%",
-                      }}
-                    />
-                  </div>
-                )}
+                <ExerciseThumbnail
+                  alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                  imageUrl={exercise.imageUrl}
+                  size={76}
+                />
 
                 <div
                   style={{
@@ -505,13 +502,21 @@ export default function ExerciseView({
                       gap: "6px",
                     }}
                   >
-                    <button onClick={() => startEdit(exercise)}>Edit</button>
                     <button
-                      onClick={() =>
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startEdit(exercise);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setExerciseLibrary(
                           exerciseLibrary.filter((item) => item.id !== exercise.id)
-                        )
-                      }
+                        );
+                      }}
                     >
                       Delete
                     </button>
@@ -547,6 +552,14 @@ export default function ExerciseView({
           );
         })}
       </div>
+
+      {detailExercise && (
+        <ExerciseDetailDialog
+          exercise={detailExercise}
+          history={history}
+          onClose={() => setDetailExercise(null)}
+        />
+      )}
 
       {editingExercise && (
         <div

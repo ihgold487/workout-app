@@ -1,4 +1,7 @@
 import { Plus, Search, X } from "lucide-react";
+import { useState } from "react";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import ExerciseThumbnail from "./ExerciseThumbnail";
 
 function formatEquipment(equipment) {
   if (Array.isArray(equipment)) {
@@ -14,12 +17,14 @@ export default function ExercisePickerSheet({
   onAction,
   onClose,
   onSelect,
+  history = [],
   search,
   selectedMuscle,
   setSearch,
   setSelectedMuscle,
   title,
 }) {
+  const [detailExercise, setDetailExercise] = useState(null);
   const muscleGroups = [
     ...new Set(exerciseLibrary.map((exercise) => exercise.muscles?.[0])),
   ]
@@ -208,7 +213,7 @@ export default function ExercisePickerSheet({
               return (
                 <button
                   key={`${exercise.name}-${equipment}-${exercise.id}`}
-                  onClick={() => onSelect(exercise)}
+                  onClick={() => setDetailExercise(exercise)}
                   style={{
                     alignItems: "center",
                     background: "transparent",
@@ -226,32 +231,11 @@ export default function ExercisePickerSheet({
                     width: "100%",
                   }}
                 >
-                  {exercise.imageUrl && (
-                    <span
-                      style={{
-                        alignItems: "center",
-                        background: "var(--surface-muted)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        display: "flex",
-                        height: "46px",
-                        justifyContent: "center",
-                        overflow: "hidden",
-                        width: "46px",
-                      }}
-                    >
-                      <img
-                        alt={exercise.imageAlt || `${exercise.name} demonstration`}
-                        src={exercise.imageUrl}
-                        style={{
-                          display: "block",
-                          height: "100%",
-                          objectFit: "contain",
-                          width: "100%",
-                        }}
-                      />
-                    </span>
-                  )}
+                  <ExerciseThumbnail
+                    alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                    imageUrl={exercise.imageUrl}
+                    size={46}
+                  />
                   <span
                     style={{
                       display: "grid",
@@ -285,6 +269,18 @@ export default function ExercisePickerSheet({
           )}
         </div>
       </div>
+
+      {detailExercise && (
+        <ExerciseDetailDialog
+          exercise={detailExercise}
+          history={history}
+          onClose={() => setDetailExercise(null)}
+          onSelect={(exercise) => {
+            setDetailExercise(null);
+            onSelect(exercise);
+          }}
+        />
+      )}
     </div>
   );
 }

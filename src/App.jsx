@@ -1361,6 +1361,7 @@ export default function App() {
     return renderAppShell(
       <ExerciseView
         exerciseLibrary={exerciseLibrary}
+        history={history}
         setExerciseLibrary={setExerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}

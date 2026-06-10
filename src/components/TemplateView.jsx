@@ -329,6 +329,7 @@ export default function TemplateView({
         <ExercisePickerSheet
           title="Add exercise"
           exerciseLibrary={exerciseLibrary}
+          history={history}
           search={search}
           selectedMuscle={selectedMuscle}
           setSearch={setSearch}

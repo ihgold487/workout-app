@@ -700,6 +700,7 @@ export default function PlansView({
         <ExercisePickerSheet
           title={`Replace ${pickerTarget.planMuscle}`}
           exerciseLibrary={exerciseLibrary}
+          history={history}
           search={pickerSearch}
           selectedMuscle={pickerMuscle}
           setSearch={setPickerSearch}
