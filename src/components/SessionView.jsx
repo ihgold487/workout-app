@@ -82,23 +82,33 @@ export default function SessionView({
     return value || "";
   }
 
+  function normalizeLookupValue(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
   function getExerciseKey(exercise) {
-    return `${String(exercise?.name || "").toLowerCase()}||${formatList(
+    return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(formatList(
       exercise?.equipment
-    ).toLowerCase()}`;
+    ))}`;
   }
 
   function getExerciseDetailRecord(sessionExercise) {
-    const libraryExercise = exerciseLibrary.find((exercise) => {
-      if (
-        sessionExercise.exerciseId &&
-        String(exercise.id) === String(sessionExercise.exerciseId)
-      ) {
-        return true;
-      }
-
-      return getExerciseKey(exercise) === getExerciseKey(sessionExercise);
-    });
+    const sessionKey = getExerciseKey(sessionExercise);
+    const idMatch = sessionExercise.exerciseId
+      ? exerciseLibrary.find(
+          (exercise) => String(exercise.id) === String(sessionExercise.exerciseId)
+        )
+      : null;
+    const keyMatches = exerciseLibrary.filter(
+      (exercise) => getExerciseKey(exercise) === sessionKey
+    );
+    const keyMatchWithImage = keyMatches.find((exercise) => exercise.imageUrl);
+    const libraryExercise =
+      keyMatchWithImage || keyMatches[0] || idMatch || null;
 
     const muscles = Array.isArray(sessionExercise.muscles)
       ? sessionExercise.muscles
@@ -714,6 +724,10 @@ export default function SessionView({
 
               muscles: newExercise.muscles,
 
+              imageAlt: newExercise.imageAlt || "",
+
+              imageUrl: newExercise.imageUrl || "",
+
               originalExerciseId: newExercise.id,
 
               exerciseId: newExercise.id,
@@ -779,8 +793,11 @@ export default function SessionView({
         {
           id: Date.now(),
           name: exercise.name,
+          exerciseId: exercise.id,
           equipment: exercise.equipment,
           muscles: exercise.muscles,
+          imageAlt: exercise.imageAlt || "",
+          imageUrl: exercise.imageUrl || "",
           supersetGroup: null,
           sets,
         },
@@ -1472,16 +1489,21 @@ export default function SessionView({
                         lineHeight: "1",
                       }}
                       onClick={() => {
-                        setShowAddExercise(false);
-                        setReplacingExerciseId(
+                        const nextReplacingExerciseId =
                           replacingExerciseId === exercise.id
                             ? null
-                            : exercise.id
-                        );
+                            : exercise.id;
 
-                        const originalExercise = exerciseLibrary.find(
-                          (ex) => ex.name === exercise.name
-                        );
+                        setShowAddExercise(false);
+                        setReplacingExerciseId(nextReplacingExerciseId);
+
+                        if (!nextReplacingExerciseId) {
+                          setSelectedMuscle("");
+                          setSearch("");
+                          return;
+                        }
+
+                        const originalExercise = getExerciseDetailRecord(exercise);
 
                         setSelectedMuscle(originalExercise?.muscles?.[0] || "");
 
@@ -2065,6 +2087,7 @@ export default function SessionView({
             setSelectedMuscle={setSelectedMuscle}
             onClose={() => {
               setReplacingExerciseId(null);
+              setSelectedMuscle("");
               setSearch("");
             }}
             onSelect={(exercise) => {
