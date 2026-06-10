@@ -7,6 +7,8 @@ export const seedExercises = [
     name: "Arnold Press",
     equipment: ["Dumbbells"],
     muscles: ["Front Delts", "Side Delts", "Traps"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-arnold-press-dumbbells.gif",
+    imageAlt: "Arnold Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -14,6 +16,8 @@ export const seedExercises = [
     name: "Behind-the-Back Curls",
     equipment: ["Cable"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-behind-the-back-curls-cable.webp",
+    imageAlt: "Behind-the-Back Curls Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -21,6 +25,8 @@ export const seedExercises = [
     name: "Bench Press",
     equipment: ["Barbell"],
     muscles: ["Chest", "Triceps", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bench-press-barbell.webp",
+    imageAlt: "Bench Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -28,6 +34,8 @@ export const seedExercises = [
     name: "Bench Press",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Triceps", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bench-press-dumbbells.webp",
+    imageAlt: "Bench Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -35,6 +43,8 @@ export const seedExercises = [
     name: "Bench Press with Close Grip",
     equipment: ["Barbell"],
     muscles: ["Triceps", "Chest", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bench-press-with-close-grip-barbell.webp",
+    imageAlt: "Bench Press with Close Grip Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -42,6 +52,8 @@ export const seedExercises = [
     name: "Bent-Over Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Rear Delts", "Traps", "Side Delts", "Upper Back", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-lateral-raises-dumbbells.webp",
+    imageAlt: "Bent-Over Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -49,6 +61,8 @@ export const seedExercises = [
     name: "Bent-Over One-Arm Rows",
     equipment: ["Landmine"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-one-arm-rows-barbell.webp",
+    imageAlt: "Bent-Over One-Arm Rows Landmine exercise demonstration",
     builtin: true,
   },
   {
@@ -56,6 +70,8 @@ export const seedExercises = [
     name: "Bent-Over Rows",
     equipment: ["Barbell"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-rows-barbell.webp",
+    imageAlt: "Bent-Over Rows Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -63,6 +79,8 @@ export const seedExercises = [
     name: "Bent-Over Rows",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-rows-dumbbells.webp",
+    imageAlt: "Bent-Over Rows Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -70,6 +88,8 @@ export const seedExercises = [
     name: "Bent-Over Rows with Reverse Grip",
     equipment: ["Barbell"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-rows-with-reverse-grip-barbell.webp",
+    imageAlt: "Bent-Over Rows with Reverse Grip Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -77,6 +97,8 @@ export const seedExercises = [
     name: "Bent-Over Rows with Reverse Grip",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-rows-with-reverse-grip-dumbbells.gif",
+    imageAlt: "Bent-Over Rows with Reverse Grip Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -84,6 +106,8 @@ export const seedExercises = [
     name: "Bent-Over Rows with Wide Grip",
     equipment: ["Barbell"],
     muscles: ["Upper Back", "Lats", "Traps", "Lower Back", "Biceps", "Rear Delts", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-rows-with-wide-grip-barbell.webp",
+    imageAlt: "Bent-Over Rows with Wide Grip Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -91,6 +115,8 @@ export const seedExercises = [
     name: "Bent-Over Shrugs",
     equipment: ["Barbell"],
     muscles: ["Traps", "Forearms", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-shrugs-barbell.webp",
+    imageAlt: "Bent-Over Shrugs Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -98,6 +124,8 @@ export const seedExercises = [
     name: "Bent-Over Shrugs",
     equipment: ["Dumbbells"],
     muscles: ["Traps", "Forearms", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bent-over-shrugs-dumbbells.webp",
+    imageAlt: "Bent-Over Shrugs Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -105,6 +133,8 @@ export const seedExercises = [
     name: "Bulgarian Split Squats",
     equipment: ["Barbell"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bulgarian-split-squats-barbell.webp",
+    imageAlt: "Bulgarian Split Squats Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -112,6 +142,8 @@ export const seedExercises = [
     name: "Bulgarian Split Squats",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-bulgarian-split-squats-dumbbells.gif",
+    imageAlt: "Bulgarian Split Squats Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -119,6 +151,8 @@ export const seedExercises = [
     name: "Chin-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Lats", "Upper Back", "Forearms", "Biceps", "Rear Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-chin-ups-bodyweight.webp",
+    imageAlt: "Chin-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -126,6 +160,8 @@ export const seedExercises = [
     name: "Concentration Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-concentration-curls-dumbbells.webp",
+    imageAlt: "Concentration Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -133,6 +169,8 @@ export const seedExercises = [
     name: "Concentration Hammer Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-concentration-hammer-curls-dumbbells.webp",
+    imageAlt: "Concentration Hammer Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -140,6 +178,8 @@ export const seedExercises = [
     name: "Concentration Twist Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-concentration-twist-curls-dumbbells.webp",
+    imageAlt: "Concentration Twist Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -147,6 +187,8 @@ export const seedExercises = [
     name: "Cross body curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-cross-body-curls-dumbbells.webp",
+    imageAlt: "Cross body curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -154,6 +196,8 @@ export const seedExercises = [
     name: "Crunches",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-crunches-bodyweight.webp",
+    imageAlt: "Crunches Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -161,6 +205,8 @@ export const seedExercises = [
     name: "Crunches on Exercise Ball",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-crunches-on-exercise-ball-bodyweight.webp",
+    imageAlt: "Crunches on Exercise Ball Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -168,6 +214,8 @@ export const seedExercises = [
     name: "Curls",
     equipment: ["Barbell"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-curls-barbell.webp",
+    imageAlt: "Curls Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -175,6 +223,8 @@ export const seedExercises = [
     name: "Curls",
     equipment: ["Cable"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-curls-cable.webp",
+    imageAlt: "Curls Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -182,6 +232,8 @@ export const seedExercises = [
     name: "Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-curls-dumbbells.webp",
+    imageAlt: "Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -189,6 +241,8 @@ export const seedExercises = [
     name: "Curls (one arm)",
     equipment: ["Cable"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-curls-one-arm-cable.webp",
+    imageAlt: "Curls (one arm) Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -196,6 +250,8 @@ export const seedExercises = [
     name: "Cycling on Stationary Bike",
     equipment: ["Machine"],
     muscles: ["Cardio", "Quads"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-cycling-on-stationary-bike-machine.webp",
+    imageAlt: "Cycling on Stationary Bike Machine exercise demonstration",
     builtin: true,
   },
   {
@@ -203,6 +259,8 @@ export const seedExercises = [
     name: "Deadlifts",
     equipment: ["Barbell"],
     muscles: ["Glutes", "Hamstrings", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-deadlifts-barbell.webp",
+    imageAlt: "Deadlifts Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -210,6 +268,8 @@ export const seedExercises = [
     name: "Deadlifts",
     equipment: ["Trap Bar"],
     muscles: ["Glutes", "Hamstrings", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-deadlifts-trap-bar.webp",
+    imageAlt: "Deadlifts Trap Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -217,6 +277,8 @@ export const seedExercises = [
     name: "Decline Bench Press",
     equipment: ["Barbell"],
     muscles: ["Chest", "Forearms", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-bench-press-barbell.webp",
+    imageAlt: "Decline Bench Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -224,6 +286,8 @@ export const seedExercises = [
     name: "Decline Bench Press",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Forearms", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-bench-press-dumbbells.webp",
+    imageAlt: "Decline Bench Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -231,6 +295,8 @@ export const seedExercises = [
     name: "Decline Crunches",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-crunches-bodyweight.webp",
+    imageAlt: "Decline Crunches Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -238,6 +304,8 @@ export const seedExercises = [
     name: "Decline Side Crunches",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-side-crunches-bodyweight.webp",
+    imageAlt: "Decline Side Crunches Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -245,6 +313,8 @@ export const seedExercises = [
     name: "Decline Side Sit-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-side-sit-ups-bodyweight.gif",
+    imageAlt: "Decline Side Sit-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -252,6 +322,8 @@ export const seedExercises = [
     name: "Decline Sit-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-decline-sit-ups-bodyweight.webp",
+    imageAlt: "Decline Sit-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -259,6 +331,8 @@ export const seedExercises = [
     name: "Deficit Deadlifts",
     equipment: ["Trap Bar"],
     muscles: ["Hamstrings", "Hamstrings", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-deficit-deadlifts-trap-bar.webp",
+    imageAlt: "Deficit Deadlifts Trap Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -266,6 +340,8 @@ export const seedExercises = [
     name: "Dips",
     equipment: ["Bodyweight"],
     muscles: ["Triceps", "Chest", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-dips-bodyweight.gif",
+    imageAlt: "Dips Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -273,6 +349,8 @@ export const seedExercises = [
     name: "Drag Curls",
     equipment: ["Barbell"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-drag-curls-barbell.webp",
+    imageAlt: "Drag Curls Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -280,6 +358,8 @@ export const seedExercises = [
     name: "Face Pulls with Rope",
     equipment: ["Cable"],
     muscles: ["Rear Delts", "Upper Back", "Traps", "Side Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-face-pulls-with-rope-cable.webp",
+    imageAlt: "Face Pulls with Rope Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -287,6 +367,8 @@ export const seedExercises = [
     name: "Flys",
     equipment: ["Cable"],
     muscles: ["Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-flys-cable.webp",
+    imageAlt: "Flys Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -294,6 +376,8 @@ export const seedExercises = [
     name: "Flys",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Biceps", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-flys-dumbbells.webp",
+    imageAlt: "Flys Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -301,6 +385,8 @@ export const seedExercises = [
     name: "Forward Lunges",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-forward-lunges-dumbbells.webp",
+    imageAlt: "Forward Lunges Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -308,6 +394,8 @@ export const seedExercises = [
     name: "Front Squats",
     equipment: ["Barbell"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Upper Back", "Traps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-front-squats-barbell.webp",
+    imageAlt: "Front Squats Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -315,6 +403,8 @@ export const seedExercises = [
     name: "Goblet Squats",
     equipment: ["Dumbbells"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Upper Back", "Traps", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-goblet-squats-dumbbells.gif",
+    imageAlt: "Goblet Squats Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -322,6 +412,8 @@ export const seedExercises = [
     name: "Good Mornings",
     equipment: ["Barbell"],
     muscles: ["Hamstrings", "Glutes", "Quads", "Abductors", "Adductors", "Lower Back", "Abs", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-good-mornings-barbell.webp",
+    imageAlt: "Good Mornings Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -329,6 +421,8 @@ export const seedExercises = [
     name: "Hammer Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hammer-curls-dumbbells.webp",
+    imageAlt: "Hammer Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -336,6 +430,8 @@ export const seedExercises = [
     name: "Hammer Curls (Tri bar)",
     equipment: ["EZ Curl Bar"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hammer-curls-tri-bar-ez-curl-bar.webp",
+    imageAlt: "Hammer Curls (Tri bar) EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -343,6 +439,8 @@ export const seedExercises = [
     name: "Hanging Leg Raises",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hanging-leg-raises-bodyweight.gif",
+    imageAlt: "Hanging Leg Raises Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -350,6 +448,8 @@ export const seedExercises = [
     name: "Hanging Leg Raises with Twist",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hanging-leg-raises-with-twist-bodyweight.webp",
+    imageAlt: "Hanging Leg Raises with Twist Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -357,6 +457,8 @@ export const seedExercises = [
     name: "High Cable Flys",
     equipment: ["Cable"],
     muscles: ["Chest", "Biceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-high-cable-flys-cable.webp",
+    imageAlt: "High Cable Flys Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -364,6 +466,8 @@ export const seedExercises = [
     name: "Hip Thrusts",
     equipment: ["Barbell"],
     muscles: ["Glutes", "Hamstrings", "Quads", "Abductors", "Adductors", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hip-thrusts-barbell.webp",
+    imageAlt: "Hip Thrusts Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -371,6 +475,8 @@ export const seedExercises = [
     name: "Hyperextensions on Roman Chair",
     equipment: ["Bodyweight"],
     muscles: ["Hamstrings", "Glutes", "Abductors", "Adductors", "Lower Back"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-hyperextensions-on-roman-chair-bodyweight.webp",
+    imageAlt: "Hyperextensions on Roman Chair Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -378,6 +484,8 @@ export const seedExercises = [
     name: "Incline Bench Hex Press",
     equipment: ["Dumbbells"],
     muscles: ["Upper Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-hex-press-dumbbells.gif",
+    imageAlt: "Incline Bench Hex Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -385,6 +493,8 @@ export const seedExercises = [
     name: "Incline Bench Press",
     equipment: ["Barbell"],
     muscles: ["Chest", "Upper Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-press-barbell.webp",
+    imageAlt: "Incline Bench Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -392,6 +502,8 @@ export const seedExercises = [
     name: "Incline Bench Press",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Upper Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-press-dumbbells.webp",
+    imageAlt: "Incline Bench Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -399,6 +511,8 @@ export const seedExercises = [
     name: "Incline Bench Press 20°",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Upper Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-press-20-dumbbells.webp",
+    imageAlt: "Incline Bench Press 20° Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -406,6 +520,8 @@ export const seedExercises = [
     name: "Incline Bench Press 60°",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Upper Chest", "Triceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-press-60-dumbbells.webp",
+    imageAlt: "Incline Bench Press 60° Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -413,6 +529,8 @@ export const seedExercises = [
     name: "Incline Bench Press with Close Grip",
     equipment: ["Barbell"],
     muscles: ["Triceps", "Chest", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-bench-press-with-close-grip-barbell.webp",
+    imageAlt: "Incline Bench Press with Close Grip Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -420,6 +538,8 @@ export const seedExercises = [
     name: "Incline Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-curls-dumbbells.webp",
+    imageAlt: "Incline Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -427,6 +547,8 @@ export const seedExercises = [
     name: "Incline Flys",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Upper Chest", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-flys-dumbbells.webp",
+    imageAlt: "Incline Flys Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -434,6 +556,8 @@ export const seedExercises = [
     name: "Incline Flys 20-deg",
     equipment: ["Dumbbells"],
     muscles: ["Chest", "Upper Chest", "Biceps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-flys-20-deg-dumbbells.webp",
+    imageAlt: "Incline Flys 20-deg Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -441,6 +565,8 @@ export const seedExercises = [
     name: "Incline Hammer Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-hammer-curls-dumbbells.webp",
+    imageAlt: "Incline Hammer Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -448,6 +574,8 @@ export const seedExercises = [
     name: "Incline Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-lateral-raises-dumbbells.webp",
+    imageAlt: "Incline Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -455,6 +583,8 @@ export const seedExercises = [
     name: "Incline Reverse Flys",
     equipment: ["Dumbbells"],
     muscles: ["Rear Delts", "Traps", "Side Delts", "Upper Back", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-reverse-flys-dumbbells.webp",
+    imageAlt: "Incline Reverse Flys Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -462,6 +592,8 @@ export const seedExercises = [
     name: "Incline Rows",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Traps", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-rows-dumbbells.webp",
+    imageAlt: "Incline Rows Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -469,6 +601,8 @@ export const seedExercises = [
     name: "Incline Shrugs",
     equipment: ["Dumbbells"],
     muscles: ["Traps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-shrugs-dumbbells.gif",
+    imageAlt: "Incline Shrugs Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -476,6 +610,8 @@ export const seedExercises = [
     name: "Incline Skull Crushers",
     equipment: ["Dumbbells"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-skull-crushers-dumbbells.webp",
+    imageAlt: "Incline Skull Crushers Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -483,6 +619,8 @@ export const seedExercises = [
     name: "Incline Skull Crushers",
     equipment: ["EZ Curl Bar"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-skull-crushers-ez-curl-bar.webp",
+    imageAlt: "Incline Skull Crushers EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -490,6 +628,8 @@ export const seedExercises = [
     name: "Incline Twist Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-incline-twist-curls-dumbbells.webp",
+    imageAlt: "Incline Twist Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -497,6 +637,8 @@ export const seedExercises = [
     name: "JM Press",
     equipment: ["Barbell"],
     muscles: ["Triceps", "Chest", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-jm-press-barbell.webp",
+    imageAlt: "JM Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -504,6 +646,8 @@ export const seedExercises = [
     name: "JM Press",
     equipment: ["EZ Curl Bar"],
     muscles: ["Triceps", "Chest", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-jm-press-ez-curl-bar.webp",
+    imageAlt: "JM Press EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -511,6 +655,8 @@ export const seedExercises = [
     name: "Kneeling Crunches",
     equipment: ["Cable"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-kneeling-crunches-cable.webp",
+    imageAlt: "Kneeling Crunches Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -518,6 +664,8 @@ export const seedExercises = [
     name: "Kneeling Side Crunches",
     equipment: ["Cable"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-kneeling-side-crunches-cable.webp",
+    imageAlt: "Kneeling Side Crunches Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -525,6 +673,8 @@ export const seedExercises = [
     name: "Landmine Hack Squats",
     equipment: ["Landmine"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-landmine-hack-squats-bodyweight.webp",
+    imageAlt: "Landmine Hack Squats Landmine exercise demonstration",
     builtin: true,
   },
   {
@@ -532,6 +682,8 @@ export const seedExercises = [
     name: "Lat Pulldowns with Close Neutral Grip",
     equipment: ["Cable"],
     muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-close-neutral-grip-cable.jpg",
+    imageAlt: "Lat Pulldowns with Close Neutral Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -539,6 +691,8 @@ export const seedExercises = [
     name: "Lat Pulldowns with Close Overhand Grip",
     equipment: ["Cable"],
     muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-close-overhand-grip-cable.webp",
+    imageAlt: "Lat Pulldowns with Close Overhand Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -546,6 +700,8 @@ export const seedExercises = [
     name: "Lat Pulldowns with Reverse Grip",
     equipment: ["Cable"],
     muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-reverse-grip-cable.gif",
+    imageAlt: "Lat Pulldowns with Reverse Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -553,6 +709,8 @@ export const seedExercises = [
     name: "Lat Pulldowns with Wide Neutral Grip",
     equipment: ["Cable"],
     muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-wide-neutral-grip-cable.webp",
+    imageAlt: "Lat Pulldowns with Wide Neutral Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -560,6 +718,8 @@ export const seedExercises = [
     name: "Lat Pulldowns with Wide Overhand Grip",
     equipment: ["Cable"],
     muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-wide-overhand-grip-cable.gif",
+    imageAlt: "Lat Pulldowns with Wide Overhand Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -567,6 +727,8 @@ export const seedExercises = [
     name: "Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lateral-raises-dumbbells.webp",
+    imageAlt: "Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -574,6 +736,8 @@ export const seedExercises = [
     name: "Lean Away Lateral Raises",
     equipment: ["Cable"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lean-away-lateral-raises-cable.webp",
+    imageAlt: "Lean Away Lateral Raises Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -581,6 +745,8 @@ export const seedExercises = [
     name: "Lean Away Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lean-away-lateral-raises-dumbbells.webp",
+    imageAlt: "Lean Away Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -588,6 +754,8 @@ export const seedExercises = [
     name: "Leg Extensions",
     equipment: ["Machine"],
     muscles: ["Quads"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-leg-extensions-machine.webp",
+    imageAlt: "Leg Extensions Machine exercise demonstration",
     builtin: true,
   },
   {
@@ -595,6 +763,8 @@ export const seedExercises = [
     name: "Lying Leg Curls",
     equipment: ["Resistance Band"],
     muscles: ["Hamstrings", "Abductors", "Adductors", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-lying-leg-curls-resistance-band.webp",
+    imageAlt: "Lying Leg Curls Resistance Band exercise demonstration",
     builtin: true,
   },
   {
@@ -602,6 +772,8 @@ export const seedExercises = [
     name: "One-Arm Lateral Raises at Hip Height",
     equipment: ["Cable"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-one-arm-lateral-raises-at-hip-height-cable.webp",
+    imageAlt: "One-Arm Lateral Raises at Hip Height Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -609,6 +781,8 @@ export const seedExercises = [
     name: "One-Arm Rows",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Biceps", "Traps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-one-arm-rows-dumbbells.gif",
+    imageAlt: "One-Arm Rows Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -616,6 +790,8 @@ export const seedExercises = [
     name: "One-Arm Rows with Reverse Grip",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-one-arm-rows-with-reverse-grip-dumbbells.gif",
+    imageAlt: "One-Arm Rows with Reverse Grip Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -623,6 +799,8 @@ export const seedExercises = [
     name: "One-Arm Rows with Wide Grip",
     equipment: ["Dumbbells"],
     muscles: ["Upper Back", "Lats", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-one-arm-rows-with-wide-grip-dumbbells.webp",
+    imageAlt: "One-Arm Rows with Wide Grip Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -630,6 +808,8 @@ export const seedExercises = [
     name: "Overhead Shrugs",
     equipment: ["Barbell"],
     muscles: ["Traps", "Forearms", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-overhead-shrugs-barbell.gif",
+    imageAlt: "Overhead Shrugs Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -637,6 +817,8 @@ export const seedExercises = [
     name: "Overhead Triceps Extensions",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-cable.webp",
+    imageAlt: "Overhead Triceps Extensions Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -644,6 +826,8 @@ export const seedExercises = [
     name: "Overhead Triceps Extensions",
     equipment: ["Dumbbells"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-dumbbells.webp",
+    imageAlt: "Overhead Triceps Extensions Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -651,6 +835,8 @@ export const seedExercises = [
     name: "Overhead Triceps Extensions",
     equipment: ["EZ Curl Bar"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-ez-curl-bar.webp",
+    imageAlt: "Overhead Triceps Extensions EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -658,6 +844,8 @@ export const seedExercises = [
     name: "Preacher Curls",
     equipment: ["EZ Curl Bar"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-preacher-curls-ez-curl-bar.webp",
+    imageAlt: "Preacher Curls EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -665,6 +853,8 @@ export const seedExercises = [
     name: "Preacher Hammer Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-preacher-hammer-curls-dumbbells.webp",
+    imageAlt: "Preacher Hammer Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -672,6 +862,8 @@ export const seedExercises = [
     name: "Preacher Twist Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-preacher-twist-curls-dumbbells.webp",
+    imageAlt: "Preacher Twist Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -679,6 +871,8 @@ export const seedExercises = [
     name: "Pull-Ups with Close Neutral Grip",
     equipment: ["Bodyweight"],
     muscles: ["Lats", "Upper Back", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pull-ups-with-close-neutral-grip-bodyweight.webp",
+    imageAlt: "Pull-Ups with Close Neutral Grip Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -686,6 +880,8 @@ export const seedExercises = [
     name: "Pull-Ups with Close Overhand Grip",
     equipment: ["Bodyweight"],
     muscles: ["Lats", "Upper Back", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pull-ups-with-close-overhand-grip-bodyweight.webp",
+    imageAlt: "Pull-Ups with Close Overhand Grip Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -693,6 +889,8 @@ export const seedExercises = [
     name: "Pull-Ups with Wide Overhand Grip",
     equipment: ["Bodyweight"],
     muscles: ["Lats", "Upper Back", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pull-ups-with-wide-overhand-grip-bodyweight.webp",
+    imageAlt: "Pull-Ups with Wide Overhand Grip Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -700,6 +898,8 @@ export const seedExercises = [
     name: "Pullovers",
     equipment: ["Cable"],
     muscles: ["Lats", "Chest", "Triceps", "Upper Back", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pullovers-cable.webp",
+    imageAlt: "Pullovers Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -707,6 +907,8 @@ export const seedExercises = [
     name: "Pullovers on Bench",
     equipment: ["Dumbbells"],
     muscles: ["Lats", "Chest", "Triceps", "Upper Back", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pullovers-on-bench-dumbbells.webp",
+    imageAlt: "Pullovers on Bench Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -714,6 +916,8 @@ export const seedExercises = [
     name: "Pullovers on Bench",
     equipment: ["EZ Curl Bar"],
     muscles: ["Lats", "Chest", "Triceps", "Upper Back", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pullovers-on-bench-ez-curl-bar.webp",
+    imageAlt: "Pullovers on Bench EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -721,6 +925,8 @@ export const seedExercises = [
     name: "Pullovers with Rope",
     equipment: ["Cable"],
     muscles: ["Lats", "Chest", "Triceps", "Upper Back", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-pullovers-with-rope-cable.webp",
+    imageAlt: "Pullovers with Rope Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -728,6 +934,8 @@ export const seedExercises = [
     name: "Push-Ups with Close Grip",
     equipment: ["Bodyweight"],
     muscles: ["Triceps", "Chest", "Front Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-push-ups-with-close-grip-bodyweight.webp",
+    imageAlt: "Push-Ups with Close Grip Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -735,6 +943,8 @@ export const seedExercises = [
     name: "Reverse Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-reverse-curls-dumbbells.webp",
+    imageAlt: "Reverse Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -742,6 +952,8 @@ export const seedExercises = [
     name: "Reverse Curls",
     equipment: ["EZ Curl Bar"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-reverse-curls-ez-curl-bar.webp",
+    imageAlt: "Reverse Curls EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -749,6 +961,8 @@ export const seedExercises = [
     name: "Reverse Flys",
     equipment: ["Cable"],
     muscles: ["Rear Delts", "Traps", "Side Delts", "Upper Back", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-reverse-flys-cable.webp",
+    imageAlt: "Reverse Flys Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -756,6 +970,8 @@ export const seedExercises = [
     name: "Reverse Lunges",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-reverse-lunges-dumbbells.webp",
+    imageAlt: "Reverse Lunges Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -763,6 +979,8 @@ export const seedExercises = [
     name: "Reverse Spider Curls",
     equipment: ["EZ Curl Bar"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-reverse-spider-curls-ez-curl-bar.webp",
+    imageAlt: "Reverse Spider Curls EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -770,6 +988,8 @@ export const seedExercises = [
     name: "Romanian Deadlifts",
     equipment: ["Barbell"],
     muscles: ["Hamstrings", "Glutes", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-romanian-deadlifts-barbell.webp",
+    imageAlt: "Romanian Deadlifts Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -777,6 +997,8 @@ export const seedExercises = [
     name: "Romanian Deadlifts",
     equipment: ["Dumbbells"],
     muscles: ["Hamstrings", "Glutes", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-romanian-deadlifts-dumbbells.gif",
+    imageAlt: "Romanian Deadlifts Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -784,6 +1006,8 @@ export const seedExercises = [
     name: "Romanian Deadlifts",
     equipment: ["Trap Bar"],
     muscles: ["Hamstrings", "Glutes", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-romanian-deadlifts-trap-bar.webp",
+    imageAlt: "Romanian Deadlifts Trap Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -791,6 +1015,8 @@ export const seedExercises = [
     name: "Rows with Close Grip",
     equipment: ["Cable"],
     muscles: ["Upper Back", "Lats", "Traps", "Biceps", "Rear Delts", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-rows-with-close-grip-cable.webp",
+    imageAlt: "Rows with Close Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -798,6 +1024,8 @@ export const seedExercises = [
     name: "Rows with Reverse Grip",
     equipment: ["Cable"],
     muscles: ["Upper Back", "Lats", "Traps", "Biceps", "Rear Delts", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-rows-with-reverse-grip-cable.webp",
+    imageAlt: "Rows with Reverse Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -805,6 +1033,8 @@ export const seedExercises = [
     name: "Rows with Wide Grip",
     equipment: ["Cable"],
     muscles: ["Upper Back", "Lats", "Traps", "Biceps", "Rear Delts", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-rows-with-wide-grip-cable.webp",
+    imageAlt: "Rows with Wide Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -812,6 +1042,8 @@ export const seedExercises = [
     name: "Rows with Wide Neutral Grip",
     equipment: ["Cable"],
     muscles: ["Upper Back", "Lats", "Traps", "Biceps", "Rear Delts", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-rows-with-wide-neutral-grip-cable.webp",
+    imageAlt: "Rows with Wide Neutral Grip Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -819,6 +1051,8 @@ export const seedExercises = [
     name: "Russian Twists",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-russian-twists-bodyweight.webp",
+    imageAlt: "Russian Twists Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -826,6 +1060,8 @@ export const seedExercises = [
     name: "Seated Bent-Over Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Rear Delts", "Traps", "Side Delts", "Upper Back", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-bent-over-lateral-raises-dumbbells.webp",
+    imageAlt: "Seated Bent-Over Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -833,6 +1069,8 @@ export const seedExercises = [
     name: "Seated Calf Raises",
     equipment: ["Bodyweight"],
     muscles: ["Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-calf-raises-bodyweight.webp",
+    imageAlt: "Seated Calf Raises Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -840,6 +1078,8 @@ export const seedExercises = [
     name: "Seated Calf Raises (BB)",
     equipment: ["Barbell"],
     muscles: ["Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-calf-raises-bb-barbell.webp",
+    imageAlt: "Seated Calf Raises (BB) Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -847,6 +1087,8 @@ export const seedExercises = [
     name: "Seated Lateral Raises",
     equipment: ["Dumbbells"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-lateral-raises-dumbbells.webp",
+    imageAlt: "Seated Lateral Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -854,6 +1096,8 @@ export const seedExercises = [
     name: "Seated Leg Curls",
     equipment: ["Machine"],
     muscles: ["Hamstrings", "Abductors", "Adductors"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-leg-curls-machine.webp",
+    imageAlt: "Seated Leg Curls Machine exercise demonstration",
     builtin: true,
   },
   {
@@ -861,6 +1105,8 @@ export const seedExercises = [
     name: "Seated Shoulder Press",
     equipment: ["Barbell"],
     muscles: ["Front Delts", "Side Delts", "Traps", "Triceps", "Chest", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-shoulder-press-barbell.webp",
+    imageAlt: "Seated Shoulder Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -868,6 +1114,8 @@ export const seedExercises = [
     name: "Seated Shoulder Press",
     equipment: ["Dumbbells"],
     muscles: ["Shoulders", "Side Delts", "Traps", "Triceps", "Chest", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-shoulder-press-dumbbells.webp",
+    imageAlt: "Seated Shoulder Press Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -875,6 +1123,8 @@ export const seedExercises = [
     name: "Seated Shoulder Press with Close Grip",
     equipment: ["Dumbbells"],
     muscles: ["Shoulders", "Side Delts", "Traps", "Triceps", "Chest", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-seated-shoulder-press-with-close-grip-dumbbells.gif",
+    imageAlt: "Seated Shoulder Press with Close Grip Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -882,6 +1132,8 @@ export const seedExercises = [
     name: "Shrugs",
     equipment: ["Barbell"],
     muscles: ["Traps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-shrugs-barbell.webp",
+    imageAlt: "Shrugs Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -889,6 +1141,8 @@ export const seedExercises = [
     name: "Shrugs",
     equipment: ["Dumbbells"],
     muscles: ["Traps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-shrugs-dumbbells.webp",
+    imageAlt: "Shrugs Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -896,6 +1150,8 @@ export const seedExercises = [
     name: "Shrugs",
     equipment: ["Trap Bar"],
     muscles: ["Traps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-shrugs-trap-bar.webp",
+    imageAlt: "Shrugs Trap Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -903,6 +1159,8 @@ export const seedExercises = [
     name: "Side Bends",
     equipment: ["Dumbbells"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-side-bends-dumbbells.webp",
+    imageAlt: "Side Bends Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -910,6 +1168,8 @@ export const seedExercises = [
     name: "Side Crunches",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-side-crunches-bodyweight.webp",
+    imageAlt: "Side Crunches Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -917,6 +1177,8 @@ export const seedExercises = [
     name: "Side Sit-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-side-sit-ups-bodyweight.webp",
+    imageAlt: "Side Sit-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -924,6 +1186,8 @@ export const seedExercises = [
     name: "Sit-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-sit-ups-bodyweight.webp",
+    imageAlt: "Sit-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -931,6 +1195,8 @@ export const seedExercises = [
     name: "Skull Crushers",
     equipment: ["Dumbbells"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-skull-crushers-dumbbells.webp",
+    imageAlt: "Skull Crushers Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -938,6 +1204,8 @@ export const seedExercises = [
     name: "Skull Crushers",
     equipment: ["EZ Curl Bar"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-skull-crushers-ez-curl-bar.webp",
+    imageAlt: "Skull Crushers EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -945,6 +1213,8 @@ export const seedExercises = [
     name: "Skull Crushers with Rope",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-skull-crushers-with-rope-cable.webp",
+    imageAlt: "Skull Crushers with Rope Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -952,6 +1222,8 @@ export const seedExercises = [
     name: "Spider Curls",
     equipment: ["Barbell"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-spider-curls-barbell.gif",
+    imageAlt: "Spider Curls Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -959,6 +1231,8 @@ export const seedExercises = [
     name: "Split Squats",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-split-squats-dumbbells.gif",
+    imageAlt: "Split Squats Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -966,6 +1240,8 @@ export const seedExercises = [
     name: "Squats",
     equipment: ["Barbell"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-squats-barbell.webp",
+    imageAlt: "Squats Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -973,6 +1249,8 @@ export const seedExercises = [
     name: "Squats (Belt)",
     equipment: ["Bodyweight"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-squats-belt-bodyweight.gif",
+    imageAlt: "Squats (Belt) Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -980,6 +1258,8 @@ export const seedExercises = [
     name: "Standing Calf Raises",
     equipment: ["Bodyweight"],
     muscles: ["Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-calf-raises-bodyweight.webp",
+    imageAlt: "Standing Calf Raises Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -987,6 +1267,8 @@ export const seedExercises = [
     name: "Standing Calf Raises",
     equipment: ["Smith Machine"],
     muscles: ["Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-calf-raises-smith-machine.webp",
+    imageAlt: "Standing Calf Raises Smith Machine exercise demonstration",
     builtin: true,
   },
   {
@@ -994,6 +1276,8 @@ export const seedExercises = [
     name: "Standing Leg Curls",
     equipment: ["Cable"],
     muscles: ["Hamstrings", "Abductors", "Adductors"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-leg-curls-cable.webp",
+    imageAlt: "Standing Leg Curls Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1001,6 +1285,8 @@ export const seedExercises = [
     name: "Standing Russian Twists",
     equipment: ["Cable"],
     muscles: ["Abs", "Obliques"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-russian-twists-cable.webp",
+    imageAlt: "Standing Russian Twists Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1008,6 +1294,8 @@ export const seedExercises = [
     name: "Standing Shoulder Press",
     equipment: ["Barbell"],
     muscles: ["Front Delts", "Side Delts", "Traps", "Triceps", "Chest", "Forearms", "Lower Back"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-shoulder-press-barbell.webp",
+    imageAlt: "Standing Shoulder Press Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -1015,6 +1303,8 @@ export const seedExercises = [
     name: "Standing Shoulder Press with Close Grip",
     equipment: ["Dumbbells"],
     muscles: ["Shoulders", "Side Delts", "Traps", "Triceps", "Chest", "Forearms", "Lower Back"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-standing-shoulder-press-with-close-grip-dumbbells.gif",
+    imageAlt: "Standing Shoulder Press with Close Grip Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1022,6 +1312,8 @@ export const seedExercises = [
     name: "Step-Ups",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-step-ups-dumbbells.webp",
+    imageAlt: "Step-Ups Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1029,6 +1321,8 @@ export const seedExercises = [
     name: "Sumo Deadlifts",
     equipment: ["Barbell"],
     muscles: ["Glutes", "Hamstrings", "Quads", "Upper Back", "Lats", "Traps", "Rear Delts", "Forearms", "Abductors", "Adductors", "Lower Back", "Abs", "Calves"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-sumo-deadlifts-barbell.webp",
+    imageAlt: "Sumo Deadlifts Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -1036,6 +1330,8 @@ export const seedExercises = [
     name: "T-Bar Reverse Lunges",
     equipment: ["Landmine"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-t-bar-reverse-lunges-barbell.webp",
+    imageAlt: "T-Bar Reverse Lunges Landmine exercise demonstration",
     builtin: true,
   },
   {
@@ -1043,6 +1339,8 @@ export const seedExercises = [
     name: "T-Bar Rows with Wide Grip",
     equipment: ["Landmine"],
     muscles: ["Upper Back", "Lats", "Traps", "Rear Delts", "Biceps", "Forearms", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-t-bar-rows-with-wide-grip-barbell.webp",
+    imageAlt: "T-Bar Rows with Wide Grip Landmine exercise demonstration",
     builtin: true,
   },
   {
@@ -1050,6 +1348,8 @@ export const seedExercises = [
     name: "Triceps Kickbacks",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-triceps-kickbacks-cable.webp",
+    imageAlt: "Triceps Kickbacks Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1057,6 +1357,8 @@ export const seedExercises = [
     name: "Triceps Kickbacks",
     equipment: ["Dumbbells"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-triceps-kickbacks-dumbbells.webp",
+    imageAlt: "Triceps Kickbacks Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1064,6 +1366,8 @@ export const seedExercises = [
     name: "Triceps Pushdowns",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-triceps-pushdowns-cable.webp",
+    imageAlt: "Triceps Pushdowns Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1071,6 +1375,8 @@ export const seedExercises = [
     name: "Triceps Pushdowns (Vbar)",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-triceps-pushdowns-vbar-cable.webp",
+    imageAlt: "Triceps Pushdowns (Vbar) Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1078,6 +1384,8 @@ export const seedExercises = [
     name: "Triceps Pushdowns with Rope",
     equipment: ["Cable"],
     muscles: ["Triceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-triceps-pushdowns-with-rope-cable.webp",
+    imageAlt: "Triceps Pushdowns with Rope Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1085,6 +1393,8 @@ export const seedExercises = [
     name: "Twist Curls",
     equipment: ["Dumbbells"],
     muscles: ["Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-twist-curls-dumbbells.webp",
+    imageAlt: "Twist Curls Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1092,6 +1402,8 @@ export const seedExercises = [
     name: "Upright Rows",
     equipment: ["Dumbbells"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-upright-rows-dumbbells.webp",
+    imageAlt: "Upright Rows Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1099,6 +1411,8 @@ export const seedExercises = [
     name: "Upright Rows",
     equipment: ["EZ Curl Bar"],
     muscles: ["Shoulders", "Traps", "Front Delts", "Rear Delts", "Biceps", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-upright-rows-ez-curl-bar.webp",
+    imageAlt: "Upright Rows EZ Curl Bar exercise demonstration",
     builtin: true,
   },
   {
@@ -1106,6 +1420,8 @@ export const seedExercises = [
     name: "Walking Lunges",
     equipment: ["Dumbbells"],
     muscles: ["Glutes", "Quads", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-walking-lunges-dumbbells.gif",
+    imageAlt: "Walking Lunges Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1113,6 +1429,8 @@ export const seedExercises = [
     name: "Y Raises",
     equipment: ["Cable"],
     muscles: ["Side Delts", "Traps", "Front Delts", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-y-raises-cable.webp",
+    imageAlt: "Y Raises Cable exercise demonstration",
     builtin: true,
   },
   {
@@ -1120,6 +1438,8 @@ export const seedExercises = [
     name: "Zercher Squats",
     equipment: ["Barbell"],
     muscles: ["Quads", "Glutes", "Hamstrings", "Abductors", "Adductors", "Calves", "Lower Back", "Abs", "Upper Back", "Traps", "Front Delts"],
+    imageUrl: "exercise-media/history-csv-2026-06-07-zercher-squats-barbell.webp",
+    imageAlt: "Zercher Squats Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -1127,6 +1447,8 @@ export const seedExercises = [
     name: "Push-Ups",
     equipment: ["Bodyweight"],
     muscles: ["Chest", "Front Delts", "Triceps", "Forearms"],
+    imageUrl: "exercise-media/manual-2026-06-09-push-ups-bodyweight.webp",
+    imageAlt: "Push-Ups Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -1134,6 +1456,8 @@ export const seedExercises = [
     name: "Pull-Ups with Wide Neutral Grip",
     equipment: ["Bodyweight"],
     muscles: ["Lats", "Upper Back", "Biceps", "Rear Delts", "Forearms"],
+    imageUrl: "exercise-media/manual-2026-06-09-pull-ups-with-wide-neutral-grip-bodyweight.webp",
+    imageAlt: "Pull-Ups with Wide Neutral Grip Bodyweight exercise demonstration",
     builtin: true,
   },
   {
@@ -1141,6 +1465,8 @@ export const seedExercises = [
     name: "T-Bar Rows with Narrow Grip",
     equipment: ["Landmine"],
     muscles: ["Upper Back", "Lats", "Traps", "Rear Delts", "Biceps", "Forearms", "Lower Back", "Abs"],
+    imageUrl: "",
+    imageAlt: "",
     builtin: true,
   },
   {
@@ -1148,6 +1474,8 @@ export const seedExercises = [
     name: "Front Raises",
     equipment: ["Barbell"],
     muscles: ["Front Delts", "Side Delts", "Traps", "Forearms"],
+    imageUrl: "exercise-media/manual-2026-06-09-front-raises-barbell.webp",
+    imageAlt: "Front Raises Barbell exercise demonstration",
     builtin: true,
   },
   {
@@ -1155,6 +1483,8 @@ export const seedExercises = [
     name: "Front Raises",
     equipment: ["Dumbbells"],
     muscles: ["Front Delts", "Side Delts", "Traps", "Forearms"],
+    imageUrl: "exercise-media/manual-2026-06-09-front-raises-dumbbells.webp",
+    imageAlt: "Front Raises Dumbbells exercise demonstration",
     builtin: true,
   },
   {
@@ -1162,6 +1492,8 @@ export const seedExercises = [
     name: "Front Raises",
     equipment: ["EZ Curl Bar"],
     muscles: ["Front Delts", "Side Delts", "Traps", "Forearms"],
+    imageUrl: "exercise-media/manual-2026-06-09-front-raises-ez-curl-bar.webp",
+    imageAlt: "Front Raises EZ Curl Bar exercise demonstration",
     builtin: true,
   }
 ];

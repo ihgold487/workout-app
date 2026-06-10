@@ -4,6 +4,7 @@ import path from "node:path";
 const [
   inputPath = "supabase/exercise_library_review_template.csv",
   outputPath = "supabase/seed_exercises_from_review.sql",
+  imageManifestPath = "supabase/exercise_image_manifest.json",
 ] = process.argv.slice(2);
 
 const SOURCE = "curated_exercise_library_v1";
@@ -78,6 +79,12 @@ const rows = lines.slice(1).map((line, index) => {
 const includedRows = rows.filter(
   (row) => row.include_in_seed?.toLowerCase() === "yes"
 );
+const imageManifest = fs.existsSync(imageManifestPath)
+  ? JSON.parse(fs.readFileSync(imageManifestPath, "utf8"))
+  : [];
+const imageManifestBySourceKey = new Map(
+  imageManifest.map((item) => [item.sourceKey, item])
+);
 
 const seenSourceKeys = new Set();
 const seenNameEquipment = new Set();
@@ -105,16 +112,19 @@ for (const row of includedRows) {
 }
 
 const valuesSql = includedRows
-  .map(
-    (row) =>
-      `  (null, ${sqlString(row.name)}, null, null, null, ${sqlString(
-        row.name
-      )}, ${sqlString(row.equipment)}, ${sqlString(
+  .map((row) => {
+    const image = imageManifestBySourceKey.get(row.source_key);
+
+    return `  (null, ${sqlString(row.name)}, null, ${sqlString(
+      image?.imageUrl
+    )}, null, ${sqlString(image?.imageAlt || row.name)}, ${sqlString(
+      row.equipment
+    )}, ${sqlString(
         row.primary_muscle
       )}, ${sqlArray(row.secondary_muscles)}, true, ${sqlString(
         SOURCE
-      )}, ${sqlString(row.source_key)})`
-  )
+      )}, ${sqlString(row.source_key)})`;
+  })
   .join(",\n");
 
 const output = `-- Curated baseline exercise library generated from ${path.basename(inputPath)}.

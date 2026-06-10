@@ -42,7 +42,7 @@ import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
-const STORAGE_VERSION = 10;
+const STORAGE_VERSION = 11;
 
 const APP_VERSION = "0.16";
 

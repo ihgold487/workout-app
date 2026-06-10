@@ -447,7 +447,38 @@ export default function ExerciseView({
                   justifyContent: "space-between",
                 }}
               >
-                <div>
+                {exercise.imageUrl && (
+                  <div
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      display: "flex",
+                      flex: "0 0 76px",
+                      height: "76px",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <img
+                      alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                      src={exercise.imageUrl}
+                      style={{
+                        display: "block",
+                        height: "100%",
+                        objectFit: "contain",
+                        width: "100%",
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    minWidth: 0,
+                  }}
+                >
                   <div
                     style={{
                       fontWeight: "bold",
@@ -501,7 +532,7 @@ export default function ExerciseView({
                   : ""}
               </div>
 
-              {(exercise.description || exercise.note || exercise.imageUrl) && (
+              {(exercise.description || exercise.note) && (
                 <div
                   style={{
                     color: "var(--text-muted)",
@@ -510,15 +541,6 @@ export default function ExerciseView({
                   }}
                 >
                   {exercise.description || exercise.note}
-                  {exercise.imageUrl ? (
-                    <div
-                      style={{
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {exercise.imageUrl}
-                    </div>
-                  ) : null}
                 </div>
               )}
             </div>

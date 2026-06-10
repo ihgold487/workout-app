@@ -215,33 +215,70 @@ export default function ExercisePickerSheet({
                     border: "none",
                     borderBottom: "1px solid var(--border)",
                     display: "grid",
-                    gap: "3px",
-                    justifyItems: "start",
+                    gap: "8px",
+                    gridTemplateColumns: exercise.imageUrl
+                      ? "46px minmax(0, 1fr)"
+                      : "minmax(0, 1fr)",
+                    justifyItems: "stretch",
                     minHeight: "54px",
                     padding: "9px 6px",
                     textAlign: "left",
                     width: "100%",
                   }}
                 >
-                  <span
-                    style={{
-                      fontWeight: "bold",
-                      lineHeight: 1.15,
-                    }}
-                  >
-                    {exercise.name}
-                  </span>
-                  {(equipment || primaryMuscle) && (
+                  {exercise.imageUrl && (
                     <span
                       style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                        lineHeight: 1.2,
+                        alignItems: "center",
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        display: "flex",
+                        height: "46px",
+                        justifyContent: "center",
+                        overflow: "hidden",
+                        width: "46px",
                       }}
                     >
-                      {[equipment, primaryMuscle].filter(Boolean).join(" · ")}
+                      <img
+                        alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                        src={exercise.imageUrl}
+                        style={{
+                          display: "block",
+                          height: "100%",
+                          objectFit: "contain",
+                          width: "100%",
+                        }}
+                      />
                     </span>
                   )}
+                  <span
+                    style={{
+                      display: "grid",
+                      gap: "3px",
+                      minWidth: 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontWeight: "bold",
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {exercise.name}
+                    </span>
+                    {(equipment || primaryMuscle) && (
+                      <span
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {[equipment, primaryMuscle].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
                 </button>
               );
             })

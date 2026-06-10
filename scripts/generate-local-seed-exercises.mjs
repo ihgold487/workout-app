@@ -5,6 +5,7 @@ import { seedExercises as existingSeedExercises } from "../src/data/seedExercise
 const [
   inputPath = "supabase/exercise_library_review_template.csv",
   outputPath = "src/data/seedExercises.js",
+  imageManifestPath = "supabase/exercise_image_manifest.json",
 ] = process.argv.slice(2);
 
 function parseCsvLine(line) {
@@ -75,6 +76,12 @@ const rows = lines.slice(1).map((line, index) => {
 const includedRows = rows.filter(
   (row) => row.include_in_seed?.toLowerCase() === "yes"
 );
+const imageManifest = fs.existsSync(imageManifestPath)
+  ? JSON.parse(fs.readFileSync(imageManifestPath, "utf8"))
+  : [];
+const imageManifestBySourceKey = new Map(
+  imageManifest.map((item) => [item.sourceKey, item])
+);
 
 const existingIdsByKey = new Map(
   existingSeedExercises.map((exercise) => [
@@ -115,9 +122,12 @@ const exercises = includedRows.map((row) => {
   }
 
   usedIds.add(id);
+  const image = imageManifestBySourceKey.get(row.source_key);
 
   return {
     id,
+    imageAlt: image?.imageAlt || "",
+    imageUrl: image?.imageUrl || "",
     name: row.name,
     equipment: [row.equipment],
     muscles: [row.primary_muscle, ...splitMuscles(row.secondary_muscles)],
@@ -136,6 +146,8 @@ ${exercises
     name: ${jsString(exercise.name)},
     equipment: [${exercise.equipment.map(jsString).join(", ")}],
     muscles: [${exercise.muscles.map(jsString).join(", ")}],
+    imageUrl: ${jsString(exercise.imageUrl)},
+    imageAlt: ${jsString(exercise.imageAlt)},
     builtin: true,
   }`
   )

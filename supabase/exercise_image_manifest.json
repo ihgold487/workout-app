@@ -1,0 +1,1487 @@
+[
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Arnold Press Dumbbells exercise demonstration",
+    "imageFile": "2. Arnold Press.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-arnold-press-dumbbells.gif",
+    "lineNumber": 2,
+    "name": "Arnold Press",
+    "sourceKey": "history-csv-2026-06-07:arnold-press-dumbbells"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Behind-the-Back Curls Cable exercise demonstration",
+    "imageFile": "3. Behind-the-Back Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-behind-the-back-curls-cable.webp",
+    "lineNumber": 3,
+    "name": "Behind-the-Back Curls",
+    "sourceKey": "history-csv-2026-06-07:behind-the-back-curls-cable"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bench Press Barbell exercise demonstration",
+    "imageFile": "4. Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bench-press-barbell.webp",
+    "lineNumber": 4,
+    "name": "Bench Press",
+    "sourceKey": "history-csv-2026-06-07:bench-press-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bench Press Dumbbells exercise demonstration",
+    "imageFile": "5. Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bench-press-dumbbells.webp",
+    "lineNumber": 5,
+    "name": "Bench Press",
+    "sourceKey": "history-csv-2026-06-07:bench-press-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bench Press with Close Grip Barbell exercise demonstration",
+    "imageFile": "6. Bench Press with Close Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bench-press-with-close-grip-barbell.webp",
+    "lineNumber": 6,
+    "name": "Bench Press with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:bench-press-with-close-grip-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bent-Over Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "7. Bent-Over Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-lateral-raises-dumbbells.webp",
+    "lineNumber": 7,
+    "name": "Bent-Over Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:bent-over-lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "Bent-Over One-Arm Rows Landmine exercise demonstration",
+    "imageFile": "8. Bent-Over One-Arm Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-one-arm-rows-barbell.webp",
+    "lineNumber": 8,
+    "name": "Bent-Over One-Arm Rows",
+    "sourceKey": "history-csv-2026-06-07:bent-over-one-arm-rows-barbell"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bent-Over Rows Barbell exercise demonstration",
+    "imageFile": "9. Bent-Over Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-rows-barbell.webp",
+    "lineNumber": 9,
+    "name": "Bent-Over Rows",
+    "sourceKey": "history-csv-2026-06-07:bent-over-rows-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bent-Over Rows Dumbbells exercise demonstration",
+    "imageFile": "10. Bent-Over Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-rows-dumbbells.webp",
+    "lineNumber": 10,
+    "name": "Bent-Over Rows",
+    "sourceKey": "history-csv-2026-06-07:bent-over-rows-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bent-Over Rows with Reverse Grip Barbell exercise demonstration",
+    "imageFile": "11. Bent-Over Rows with Reverse Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-rows-with-reverse-grip-barbell.webp",
+    "lineNumber": 11,
+    "name": "Bent-Over Rows with Reverse Grip",
+    "sourceKey": "history-csv-2026-06-07:bent-over-rows-with-reverse-grip-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bent-Over Rows with Reverse Grip Dumbbells exercise demonstration",
+    "imageFile": "12. Bent-Over Rows with Reverse Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-rows-with-reverse-grip-dumbbells.gif",
+    "lineNumber": 12,
+    "name": "Bent-Over Rows with Reverse Grip",
+    "sourceKey": "history-csv-2026-06-07:bent-over-rows-with-reverse-grip-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bent-Over Rows with Wide Grip Barbell exercise demonstration",
+    "imageFile": "13. Bent-Over Rows with Wide Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-rows-with-wide-grip-barbell.webp",
+    "lineNumber": 13,
+    "name": "Bent-Over Rows with Wide Grip",
+    "sourceKey": "history-csv-2026-06-07:bent-over-rows-with-wide-grip-barbell"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bent-Over Shrugs Barbell exercise demonstration",
+    "imageFile": "14. Bent-Over Shrugs.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-shrugs-barbell.webp",
+    "lineNumber": 14,
+    "name": "Bent-Over Shrugs",
+    "sourceKey": "history-csv-2026-06-07:bent-over-shrugs-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bent-Over Shrugs Dumbbells exercise demonstration",
+    "imageFile": "15. Bent-Over Shrugs.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bent-over-shrugs-dumbbells.webp",
+    "lineNumber": 15,
+    "name": "Bent-Over Shrugs",
+    "sourceKey": "history-csv-2026-06-07:bent-over-shrugs-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Bulgarian Split Squats Barbell exercise demonstration",
+    "imageFile": "16. Bulgarian Split Squats.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bulgarian-split-squats-barbell.webp",
+    "lineNumber": 16,
+    "name": "Bulgarian Split Squats",
+    "sourceKey": "history-csv-2026-06-07:bulgarian-split-squats-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Bulgarian Split Squats Dumbbells exercise demonstration",
+    "imageFile": "17. Bulgarian Split Squats.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-bulgarian-split-squats-dumbbells.gif",
+    "lineNumber": 17,
+    "name": "Bulgarian Split Squats",
+    "sourceKey": "history-csv-2026-06-07:bulgarian-split-squats-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Chin-Ups Bodyweight exercise demonstration",
+    "imageFile": "18. Chin-Ups.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-chin-ups-bodyweight.webp",
+    "lineNumber": 18,
+    "name": "Chin-Ups",
+    "sourceKey": "history-csv-2026-06-07:chin-ups-bodyweight"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Concentration Curls Dumbbells exercise demonstration",
+    "imageFile": "19. Concentration Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-concentration-curls-dumbbells.webp",
+    "lineNumber": 19,
+    "name": "Concentration Curls",
+    "sourceKey": "history-csv-2026-06-07:concentration-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Concentration Hammer Curls Dumbbells exercise demonstration",
+    "imageFile": "20. Concentration Hammer Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-concentration-hammer-curls-dumbbells.webp",
+    "lineNumber": 20,
+    "name": "Concentration Hammer Curls",
+    "sourceKey": "history-csv-2026-06-07:concentration-hammer-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Concentration Twist Curls Dumbbells exercise demonstration",
+    "imageFile": "21. Concentration Twist Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-concentration-twist-curls-dumbbells.webp",
+    "lineNumber": 21,
+    "name": "Concentration Twist Curls",
+    "sourceKey": "history-csv-2026-06-07:concentration-twist-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Cross body curls Dumbbells exercise demonstration",
+    "imageFile": "22. Cross body curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-cross-body-curls-dumbbells.webp",
+    "lineNumber": 22,
+    "name": "Cross body curls",
+    "sourceKey": "history-csv-2026-06-07:cross-body-curls-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Crunches Bodyweight exercise demonstration",
+    "imageFile": "23. Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-crunches-bodyweight.webp",
+    "lineNumber": 23,
+    "name": "Crunches",
+    "sourceKey": "history-csv-2026-06-07:crunches-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Crunches on Exercise Ball Bodyweight exercise demonstration",
+    "imageFile": "24. Crunches on Exercise Ball.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-crunches-on-exercise-ball-bodyweight.webp",
+    "lineNumber": 24,
+    "name": "Crunches on Exercise Ball",
+    "sourceKey": "history-csv-2026-06-07:crunches-on-exercise-ball-bodyweight"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Curls Barbell exercise demonstration",
+    "imageFile": "25. Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-curls-barbell.webp",
+    "lineNumber": 25,
+    "name": "Curls",
+    "sourceKey": "history-csv-2026-06-07:curls-barbell"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Curls Cable exercise demonstration",
+    "imageFile": "26. Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-curls-cable.webp",
+    "lineNumber": 26,
+    "name": "Curls",
+    "sourceKey": "history-csv-2026-06-07:curls-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Curls Dumbbells exercise demonstration",
+    "imageFile": "27. Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-curls-dumbbells.webp",
+    "lineNumber": 27,
+    "name": "Curls",
+    "sourceKey": "history-csv-2026-06-07:curls-dumbbells"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Curls (one arm) Cable exercise demonstration",
+    "imageFile": "28. Curls one arm.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-curls-one-arm-cable.webp",
+    "lineNumber": 28,
+    "name": "Curls (one arm)",
+    "sourceKey": "history-csv-2026-06-07:curls-one-arm-cable"
+  },
+  {
+    "equipment": "Machine",
+    "imageAlt": "Cycling on Stationary Bike Machine exercise demonstration",
+    "imageFile": "29. Cycling on Stationary Bike.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-cycling-on-stationary-bike-machine.webp",
+    "lineNumber": 29,
+    "name": "Cycling on Stationary Bike",
+    "sourceKey": "history-csv-2026-06-07:cycling-on-stationary-bike-machine"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Deadlifts Barbell exercise demonstration",
+    "imageFile": "30. Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-deadlifts-barbell.webp",
+    "lineNumber": 30,
+    "name": "Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:deadlifts-barbell"
+  },
+  {
+    "equipment": "Trap Bar",
+    "imageAlt": "Deadlifts Trap Bar exercise demonstration",
+    "imageFile": "31. Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-deadlifts-trap-bar.webp",
+    "lineNumber": 31,
+    "name": "Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:deadlifts-trap-bar"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Decline Bench Press Barbell exercise demonstration",
+    "imageFile": "32. Decline Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-bench-press-barbell.webp",
+    "lineNumber": 32,
+    "name": "Decline Bench Press",
+    "sourceKey": "history-csv-2026-06-07:decline-bench-press-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Decline Bench Press Dumbbells exercise demonstration",
+    "imageFile": "33. Decline Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-bench-press-dumbbells.webp",
+    "lineNumber": 33,
+    "name": "Decline Bench Press",
+    "sourceKey": "history-csv-2026-06-07:decline-bench-press-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Decline Crunches Bodyweight exercise demonstration",
+    "imageFile": "34. Decline Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-crunches-bodyweight.webp",
+    "lineNumber": 34,
+    "name": "Decline Crunches",
+    "sourceKey": "history-csv-2026-06-07:decline-crunches-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Decline Side Crunches Bodyweight exercise demonstration",
+    "imageFile": "35. Decline Side Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-side-crunches-bodyweight.webp",
+    "lineNumber": 35,
+    "name": "Decline Side Crunches",
+    "sourceKey": "history-csv-2026-06-07:decline-side-crunches-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Decline Side Sit-Ups Bodyweight exercise demonstration",
+    "imageFile": "36. Decline Side Sit-Ups.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-side-sit-ups-bodyweight.gif",
+    "lineNumber": 36,
+    "name": "Decline Side Sit-Ups",
+    "sourceKey": "history-csv-2026-06-07:decline-side-sit-ups-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Decline Sit-Ups Bodyweight exercise demonstration",
+    "imageFile": "37. Decline Side Sit-Ups.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-decline-sit-ups-bodyweight.webp",
+    "lineNumber": 37,
+    "name": "Decline Sit-Ups",
+    "sourceKey": "history-csv-2026-06-07:decline-sit-ups-bodyweight"
+  },
+  {
+    "equipment": "Trap Bar",
+    "imageAlt": "Deficit Deadlifts Trap Bar exercise demonstration",
+    "imageFile": "38. Deficit Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-deficit-deadlifts-trap-bar.webp",
+    "lineNumber": 38,
+    "name": "Deficit Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:deficit-deadlifts-trap-bar"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Dips Bodyweight exercise demonstration",
+    "imageFile": "39. Dips.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-dips-bodyweight.gif",
+    "lineNumber": 39,
+    "name": "Dips",
+    "sourceKey": "history-csv-2026-06-07:dips-bodyweight"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Drag Curls Barbell exercise demonstration",
+    "imageFile": "40. Drag Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-drag-curls-barbell.webp",
+    "lineNumber": 40,
+    "name": "Drag Curls",
+    "sourceKey": "history-csv-2026-06-07:drag-curls-barbell"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Face Pulls with Rope Cable exercise demonstration",
+    "imageFile": "41. Face Pulls with Rope.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-face-pulls-with-rope-cable.webp",
+    "lineNumber": 41,
+    "name": "Face Pulls with Rope",
+    "sourceKey": "history-csv-2026-06-07:face-pulls-with-rope-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Flys Cable exercise demonstration",
+    "imageFile": "42. Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-flys-cable.webp",
+    "lineNumber": 42,
+    "name": "Flys",
+    "sourceKey": "history-csv-2026-06-07:flys-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Flys Dumbbells exercise demonstration",
+    "imageFile": "43. Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-flys-dumbbells.webp",
+    "lineNumber": 43,
+    "name": "Flys",
+    "sourceKey": "history-csv-2026-06-07:flys-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Forward Lunges Dumbbells exercise demonstration",
+    "imageFile": "44. Forward Lunges.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-forward-lunges-dumbbells.webp",
+    "lineNumber": 44,
+    "name": "Forward Lunges",
+    "sourceKey": "history-csv-2026-06-07:forward-lunges-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Front Squats Barbell exercise demonstration",
+    "imageFile": "45. Front Squats.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-front-squats-barbell.webp",
+    "lineNumber": 45,
+    "name": "Front Squats",
+    "sourceKey": "history-csv-2026-06-07:front-squats-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Goblet Squats Dumbbells exercise demonstration",
+    "imageFile": "46. Goblet Squats.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-goblet-squats-dumbbells.gif",
+    "lineNumber": 46,
+    "name": "Goblet Squats",
+    "sourceKey": "history-csv-2026-06-07:goblet-squats-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Good Mornings Barbell exercise demonstration",
+    "imageFile": "47. Good Mornings.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-good-mornings-barbell.webp",
+    "lineNumber": 47,
+    "name": "Good Mornings",
+    "sourceKey": "history-csv-2026-06-07:good-mornings-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Hammer Curls Dumbbells exercise demonstration",
+    "imageFile": "48. Hammer Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hammer-curls-dumbbells.webp",
+    "lineNumber": 48,
+    "name": "Hammer Curls",
+    "sourceKey": "history-csv-2026-06-07:hammer-curls-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Hammer Curls (Tri bar) EZ Curl Bar exercise demonstration",
+    "imageFile": "49. Hammer Curls (Tri bar).webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hammer-curls-tri-bar-ez-curl-bar.webp",
+    "lineNumber": 49,
+    "name": "Hammer Curls (Tri bar)",
+    "sourceKey": "history-csv-2026-06-07:hammer-curls-tri-bar-ez-curl-bar"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Hanging Leg Raises Bodyweight exercise demonstration",
+    "imageFile": "50. Hanging Leg Raises.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hanging-leg-raises-bodyweight.gif",
+    "lineNumber": 50,
+    "name": "Hanging Leg Raises",
+    "sourceKey": "history-csv-2026-06-07:hanging-leg-raises-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Hanging Leg Raises with Twist Bodyweight exercise demonstration",
+    "imageFile": "51. Hanging Leg Raises with Twist.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hanging-leg-raises-with-twist-bodyweight.webp",
+    "lineNumber": 51,
+    "name": "Hanging Leg Raises with Twist",
+    "sourceKey": "history-csv-2026-06-07:hanging-leg-raises-with-twist-bodyweight"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "High Cable Flys Cable exercise demonstration",
+    "imageFile": "52. High Cable Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-high-cable-flys-cable.webp",
+    "lineNumber": 52,
+    "name": "High Cable Flys",
+    "sourceKey": "history-csv-2026-06-07:high-cable-flys-cable"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Hip Thrusts Barbell exercise demonstration",
+    "imageFile": "53. Hip Thrusts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hip-thrusts-barbell.webp",
+    "lineNumber": 53,
+    "name": "Hip Thrusts",
+    "sourceKey": "history-csv-2026-06-07:hip-thrusts-barbell"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Hyperextensions on Roman Chair Bodyweight exercise demonstration",
+    "imageFile": "54. Hyperextensions on Roman Chair.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-hyperextensions-on-roman-chair-bodyweight.webp",
+    "lineNumber": 54,
+    "name": "Hyperextensions on Roman Chair",
+    "sourceKey": "history-csv-2026-06-07:hyperextensions-on-roman-chair-bodyweight"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Bench Hex Press Dumbbells exercise demonstration",
+    "imageFile": "55. Incline Bench Hex Press.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-hex-press-dumbbells.gif",
+    "lineNumber": 55,
+    "name": "Incline Bench Hex Press",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-hex-press-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Incline Bench Press Barbell exercise demonstration",
+    "imageFile": "56. Incline Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-press-barbell.webp",
+    "lineNumber": 56,
+    "name": "Incline Bench Press",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-press-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Bench Press Dumbbells exercise demonstration",
+    "imageFile": "57. Incline Bench Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-press-dumbbells.webp",
+    "lineNumber": 57,
+    "name": "Incline Bench Press",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-press-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Bench Press 20° Dumbbells exercise demonstration",
+    "imageFile": "58. Incline Bench Press 20°.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-press-20-dumbbells.webp",
+    "lineNumber": 58,
+    "name": "Incline Bench Press 20°",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-press-20-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Bench Press 60° Dumbbells exercise demonstration",
+    "imageFile": "59. Incline Bench Press 60°.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-press-60-dumbbells.webp",
+    "lineNumber": 59,
+    "name": "Incline Bench Press 60°",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-press-60-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Incline Bench Press with Close Grip Barbell exercise demonstration",
+    "imageFile": "60. Incline Bench Press with Close Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-bench-press-with-close-grip-barbell.webp",
+    "lineNumber": 60,
+    "name": "Incline Bench Press with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:incline-bench-press-with-close-grip-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Curls Dumbbells exercise demonstration",
+    "imageFile": "61. Incline Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-curls-dumbbells.webp",
+    "lineNumber": 61,
+    "name": "Incline Curls",
+    "sourceKey": "history-csv-2026-06-07:incline-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Flys Dumbbells exercise demonstration",
+    "imageFile": "62. Incline Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-flys-dumbbells.webp",
+    "lineNumber": 62,
+    "name": "Incline Flys",
+    "sourceKey": "history-csv-2026-06-07:incline-flys-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Flys 20-deg Dumbbells exercise demonstration",
+    "imageFile": "63. Incline Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-flys-20-deg-dumbbells.webp",
+    "lineNumber": 63,
+    "name": "Incline Flys 20-deg",
+    "sourceKey": "history-csv-2026-06-07:incline-flys-20-deg-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Hammer Curls Dumbbells exercise demonstration",
+    "imageFile": "64. Incline Hammer Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-hammer-curls-dumbbells.webp",
+    "lineNumber": 64,
+    "name": "Incline Hammer Curls",
+    "sourceKey": "history-csv-2026-06-07:incline-hammer-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "65. Incline Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-lateral-raises-dumbbells.webp",
+    "lineNumber": 65,
+    "name": "Incline Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:incline-lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Reverse Flys Dumbbells exercise demonstration",
+    "imageFile": "66. Incline Reverse Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-reverse-flys-dumbbells.webp",
+    "lineNumber": 66,
+    "name": "Incline Reverse Flys",
+    "sourceKey": "history-csv-2026-06-07:incline-reverse-flys-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Rows Dumbbells exercise demonstration",
+    "imageFile": "67. Incline Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-rows-dumbbells.webp",
+    "lineNumber": 67,
+    "name": "Incline Rows",
+    "sourceKey": "history-csv-2026-06-07:incline-rows-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Shrugs Dumbbells exercise demonstration",
+    "imageFile": "68. Incline Shrugs.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-shrugs-dumbbells.gif",
+    "lineNumber": 68,
+    "name": "Incline Shrugs",
+    "sourceKey": "history-csv-2026-06-07:incline-shrugs-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Skull Crushers Dumbbells exercise demonstration",
+    "imageFile": "69. Incline Skull Crushers.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-skull-crushers-dumbbells.webp",
+    "lineNumber": 69,
+    "name": "Incline Skull Crushers",
+    "sourceKey": "history-csv-2026-06-07:incline-skull-crushers-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Incline Skull Crushers EZ Curl Bar exercise demonstration",
+    "imageFile": "70. Incline Skull Crushers.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-skull-crushers-ez-curl-bar.webp",
+    "lineNumber": 70,
+    "name": "Incline Skull Crushers",
+    "sourceKey": "history-csv-2026-06-07:incline-skull-crushers-ez-curl-bar"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Incline Twist Curls Dumbbells exercise demonstration",
+    "imageFile": "71. Incline Twist Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-incline-twist-curls-dumbbells.webp",
+    "lineNumber": 71,
+    "name": "Incline Twist Curls",
+    "sourceKey": "history-csv-2026-06-07:incline-twist-curls-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "JM Press Barbell exercise demonstration",
+    "imageFile": "72. JM Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-jm-press-barbell.webp",
+    "lineNumber": 72,
+    "name": "JM Press",
+    "sourceKey": "history-csv-2026-06-07:jm-press-barbell"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "JM Press EZ Curl Bar exercise demonstration",
+    "imageFile": "73. JM Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-jm-press-ez-curl-bar.webp",
+    "lineNumber": 73,
+    "name": "JM Press",
+    "sourceKey": "history-csv-2026-06-07:jm-press-ez-curl-bar"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Kneeling Crunches Cable exercise demonstration",
+    "imageFile": "74. Kneeling Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-kneeling-crunches-cable.webp",
+    "lineNumber": 74,
+    "name": "Kneeling Crunches",
+    "sourceKey": "history-csv-2026-06-07:kneeling-crunches-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Kneeling Side Crunches Cable exercise demonstration",
+    "imageFile": "75. Kneeling Side Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-kneeling-side-crunches-cable.webp",
+    "lineNumber": 75,
+    "name": "Kneeling Side Crunches",
+    "sourceKey": "history-csv-2026-06-07:kneeling-side-crunches-cable"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "Landmine Hack Squats Landmine exercise demonstration",
+    "imageFile": "76. Landmine Hack Squats.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-landmine-hack-squats-bodyweight.webp",
+    "lineNumber": 76,
+    "name": "Landmine Hack Squats",
+    "sourceKey": "history-csv-2026-06-07:landmine-hack-squats-bodyweight"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lat Pulldowns with Close Neutral Grip Cable exercise demonstration",
+    "imageFile": "77. Lat Pulldowns with Close Neutral Grip.jpg",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-close-neutral-grip-cable.jpg",
+    "lineNumber": 77,
+    "name": "Lat Pulldowns with Close Neutral Grip",
+    "sourceKey": "history-csv-2026-06-07:lat-pulldowns-with-close-neutral-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lat Pulldowns with Close Overhand Grip Cable exercise demonstration",
+    "imageFile": "78. Lat Pulldowns with Close Overhand Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-close-overhand-grip-cable.webp",
+    "lineNumber": 78,
+    "name": "Lat Pulldowns with Close Overhand Grip",
+    "sourceKey": "history-csv-2026-06-07:lat-pulldowns-with-close-overhand-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lat Pulldowns with Reverse Grip Cable exercise demonstration",
+    "imageFile": "79. Lat Pulldowns with Reverse Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-reverse-grip-cable.gif",
+    "lineNumber": 79,
+    "name": "Lat Pulldowns with Reverse Grip",
+    "sourceKey": "history-csv-2026-06-07:lat-pulldowns-with-reverse-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lat Pulldowns with Wide Neutral Grip Cable exercise demonstration",
+    "imageFile": "80. Lat Pulldowns with Close Neutral Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-wide-neutral-grip-cable.webp",
+    "lineNumber": 80,
+    "name": "Lat Pulldowns with Wide Neutral Grip",
+    "sourceKey": "history-csv-2026-06-07:lat-pulldowns-with-wide-neutral-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lat Pulldowns with Wide Overhand Grip Cable exercise demonstration",
+    "imageFile": "81. Lat Pulldowns with Wide Overhand Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lat-pulldowns-with-wide-overhand-grip-cable.gif",
+    "lineNumber": 81,
+    "name": "Lat Pulldowns with Wide Overhand Grip",
+    "sourceKey": "history-csv-2026-06-07:lat-pulldowns-with-wide-overhand-grip-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "82. Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lateral-raises-dumbbells.webp",
+    "lineNumber": 82,
+    "name": "Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Lean Away Lateral Raises Cable exercise demonstration",
+    "imageFile": "83. Lean Away Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lean-away-lateral-raises-cable.webp",
+    "lineNumber": 83,
+    "name": "Lean Away Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:lean-away-lateral-raises-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Lean Away Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "84. Lean Away Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lean-away-lateral-raises-dumbbells.webp",
+    "lineNumber": 84,
+    "name": "Lean Away Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:lean-away-lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Machine",
+    "imageAlt": "Leg Extensions Machine exercise demonstration",
+    "imageFile": "85. Leg Extensions.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-leg-extensions-machine.webp",
+    "lineNumber": 85,
+    "name": "Leg Extensions",
+    "sourceKey": "history-csv-2026-06-07:leg-extensions-machine"
+  },
+  {
+    "equipment": "Resistance Band",
+    "imageAlt": "Lying Leg Curls Resistance Band exercise demonstration",
+    "imageFile": "86. Lying Leg Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-lying-leg-curls-resistance-band.webp",
+    "lineNumber": 86,
+    "name": "Lying Leg Curls",
+    "sourceKey": "history-csv-2026-06-07:lying-leg-curls-resistance-band"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "One-Arm Lateral Raises at Hip Height Cable exercise demonstration",
+    "imageFile": "87. One-Arm Lateral Raises at Hip Height.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-one-arm-lateral-raises-at-hip-height-cable.webp",
+    "lineNumber": 87,
+    "name": "One-Arm Lateral Raises at Hip Height",
+    "sourceKey": "history-csv-2026-06-07:one-arm-lateral-raises-at-hip-height-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "One-Arm Rows Dumbbells exercise demonstration",
+    "imageFile": "88. One-Arm Rows.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-one-arm-rows-dumbbells.gif",
+    "lineNumber": 88,
+    "name": "One-Arm Rows",
+    "sourceKey": "history-csv-2026-06-07:one-arm-rows-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "One-Arm Rows with Reverse Grip Dumbbells exercise demonstration",
+    "imageFile": "89. One-Arm Rows with Reverse Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-one-arm-rows-with-reverse-grip-dumbbells.gif",
+    "lineNumber": 89,
+    "name": "One-Arm Rows with Reverse Grip",
+    "sourceKey": "history-csv-2026-06-07:one-arm-rows-with-reverse-grip-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "One-Arm Rows with Wide Grip Dumbbells exercise demonstration",
+    "imageFile": "90. One-Arm Rows with Wide Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-one-arm-rows-with-wide-grip-dumbbells.webp",
+    "lineNumber": 90,
+    "name": "One-Arm Rows with Wide Grip",
+    "sourceKey": "history-csv-2026-06-07:one-arm-rows-with-wide-grip-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Overhead Shrugs Barbell exercise demonstration",
+    "imageFile": "91. Overhead Shrugs.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-overhead-shrugs-barbell.gif",
+    "lineNumber": 91,
+    "name": "Overhead Shrugs",
+    "sourceKey": "history-csv-2026-06-07:overhead-shrugs-barbell"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Overhead Triceps Extensions Cable exercise demonstration",
+    "imageFile": "92. Overhead Triceps Extensions.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-cable.webp",
+    "lineNumber": 92,
+    "name": "Overhead Triceps Extensions",
+    "sourceKey": "history-csv-2026-06-07:overhead-triceps-extensions-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Overhead Triceps Extensions Dumbbells exercise demonstration",
+    "imageFile": "93. Overhead Triceps Extensions.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-dumbbells.webp",
+    "lineNumber": 93,
+    "name": "Overhead Triceps Extensions",
+    "sourceKey": "history-csv-2026-06-07:overhead-triceps-extensions-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Overhead Triceps Extensions EZ Curl Bar exercise demonstration",
+    "imageFile": "94. Overhead Triceps Extensions.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-overhead-triceps-extensions-ez-curl-bar.webp",
+    "lineNumber": 94,
+    "name": "Overhead Triceps Extensions",
+    "sourceKey": "history-csv-2026-06-07:overhead-triceps-extensions-ez-curl-bar"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Preacher Curls EZ Curl Bar exercise demonstration",
+    "imageFile": "95. Preacher Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-preacher-curls-ez-curl-bar.webp",
+    "lineNumber": 95,
+    "name": "Preacher Curls",
+    "sourceKey": "history-csv-2026-06-07:preacher-curls-ez-curl-bar"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Preacher Hammer Curls Dumbbells exercise demonstration",
+    "imageFile": "96. Preacher Hammer Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-preacher-hammer-curls-dumbbells.webp",
+    "lineNumber": 96,
+    "name": "Preacher Hammer Curls",
+    "sourceKey": "history-csv-2026-06-07:preacher-hammer-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Preacher Twist Curls Dumbbells exercise demonstration",
+    "imageFile": "97. Preacher Twist Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-preacher-twist-curls-dumbbells.webp",
+    "lineNumber": 97,
+    "name": "Preacher Twist Curls",
+    "sourceKey": "history-csv-2026-06-07:preacher-twist-curls-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Pull-Ups with Close Neutral Grip Bodyweight exercise demonstration",
+    "imageFile": "98. Pull-Ups with Close Neutral Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pull-ups-with-close-neutral-grip-bodyweight.webp",
+    "lineNumber": 98,
+    "name": "Pull-Ups with Close Neutral Grip",
+    "sourceKey": "history-csv-2026-06-07:pull-ups-with-close-neutral-grip-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Pull-Ups with Close Overhand Grip Bodyweight exercise demonstration",
+    "imageFile": "99. Pull-Ups with Close Overhand Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pull-ups-with-close-overhand-grip-bodyweight.webp",
+    "lineNumber": 99,
+    "name": "Pull-Ups with Close Overhand Grip",
+    "sourceKey": "history-csv-2026-06-07:pull-ups-with-close-overhand-grip-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Pull-Ups with Wide Overhand Grip Bodyweight exercise demonstration",
+    "imageFile": "100. Pull-Ups with Wide Overhand Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pull-ups-with-wide-overhand-grip-bodyweight.webp",
+    "lineNumber": 100,
+    "name": "Pull-Ups with Wide Overhand Grip",
+    "sourceKey": "history-csv-2026-06-07:pull-ups-with-wide-overhand-grip-bodyweight"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Pullovers Cable exercise demonstration",
+    "imageFile": "101. Pullovers.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pullovers-cable.webp",
+    "lineNumber": 101,
+    "name": "Pullovers",
+    "sourceKey": "history-csv-2026-06-07:pullovers-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Pullovers on Bench Dumbbells exercise demonstration",
+    "imageFile": "102. Pullovers on Bench.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pullovers-on-bench-dumbbells.webp",
+    "lineNumber": 102,
+    "name": "Pullovers on Bench",
+    "sourceKey": "history-csv-2026-06-07:pullovers-on-bench-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Pullovers on Bench EZ Curl Bar exercise demonstration",
+    "imageFile": "103. Pullovers on Bench.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pullovers-on-bench-ez-curl-bar.webp",
+    "lineNumber": 103,
+    "name": "Pullovers on Bench",
+    "sourceKey": "history-csv-2026-06-07:pullovers-on-bench-ez-curl-bar"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Pullovers with Rope Cable exercise demonstration",
+    "imageFile": "104. Pullovers with Rope.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-pullovers-with-rope-cable.webp",
+    "lineNumber": 104,
+    "name": "Pullovers with Rope",
+    "sourceKey": "history-csv-2026-06-07:pullovers-with-rope-cable"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Push-Ups with Close Grip Bodyweight exercise demonstration",
+    "imageFile": "105. Push-Ups with Close Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-push-ups-with-close-grip-bodyweight.webp",
+    "lineNumber": 105,
+    "name": "Push-Ups with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:push-ups-with-close-grip-bodyweight"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Reverse Curls Dumbbells exercise demonstration",
+    "imageFile": "106. Reverse Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-reverse-curls-dumbbells.webp",
+    "lineNumber": 106,
+    "name": "Reverse Curls",
+    "sourceKey": "history-csv-2026-06-07:reverse-curls-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Reverse Curls EZ Curl Bar exercise demonstration",
+    "imageFile": "107. Reverse Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-reverse-curls-ez-curl-bar.webp",
+    "lineNumber": 107,
+    "name": "Reverse Curls",
+    "sourceKey": "history-csv-2026-06-07:reverse-curls-ez-curl-bar"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Reverse Flys Cable exercise demonstration",
+    "imageFile": "108. Reverse Flys.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-reverse-flys-cable.webp",
+    "lineNumber": 108,
+    "name": "Reverse Flys",
+    "sourceKey": "history-csv-2026-06-07:reverse-flys-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Reverse Lunges Dumbbells exercise demonstration",
+    "imageFile": "109. Reverse Lunges.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-reverse-lunges-dumbbells.webp",
+    "lineNumber": 109,
+    "name": "Reverse Lunges",
+    "sourceKey": "history-csv-2026-06-07:reverse-lunges-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Reverse Spider Curls EZ Curl Bar exercise demonstration",
+    "imageFile": "110. Reverse Spider Curl.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-reverse-spider-curls-ez-curl-bar.webp",
+    "lineNumber": 110,
+    "name": "Reverse Spider Curls",
+    "sourceKey": "history-csv-2026-06-07:reverse-spider-curls-ez-curl-bar"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Romanian Deadlifts Barbell exercise demonstration",
+    "imageFile": "111. Romanian Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-romanian-deadlifts-barbell.webp",
+    "lineNumber": 111,
+    "name": "Romanian Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:romanian-deadlifts-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Romanian Deadlifts Dumbbells exercise demonstration",
+    "imageFile": "112. Romanian Deadlifts.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-romanian-deadlifts-dumbbells.gif",
+    "lineNumber": 112,
+    "name": "Romanian Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:romanian-deadlifts-dumbbells"
+  },
+  {
+    "equipment": "Trap Bar",
+    "imageAlt": "Romanian Deadlifts Trap Bar exercise demonstration",
+    "imageFile": "113. Romanian Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-romanian-deadlifts-trap-bar.webp",
+    "lineNumber": 113,
+    "name": "Romanian Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:romanian-deadlifts-trap-bar"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Rows with Close Grip Cable exercise demonstration",
+    "imageFile": "114. Rows with Close Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-rows-with-close-grip-cable.webp",
+    "lineNumber": 114,
+    "name": "Rows with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:rows-with-close-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Rows with Reverse Grip Cable exercise demonstration",
+    "imageFile": "115. Rows with Reverse Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-rows-with-reverse-grip-cable.webp",
+    "lineNumber": 115,
+    "name": "Rows with Reverse Grip",
+    "sourceKey": "history-csv-2026-06-07:rows-with-reverse-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Rows with Wide Grip Cable exercise demonstration",
+    "imageFile": "116. Rows with Wide Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-rows-with-wide-grip-cable.webp",
+    "lineNumber": 116,
+    "name": "Rows with Wide Grip",
+    "sourceKey": "history-csv-2026-06-07:rows-with-wide-grip-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Rows with Wide Neutral Grip Cable exercise demonstration",
+    "imageFile": "117. Rows with Wide Neutral Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-rows-with-wide-neutral-grip-cable.webp",
+    "lineNumber": 117,
+    "name": "Rows with Wide Neutral Grip",
+    "sourceKey": "history-csv-2026-06-07:rows-with-wide-neutral-grip-cable"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Russian Twists Bodyweight exercise demonstration",
+    "imageFile": "118. Russian Twists.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-russian-twists-bodyweight.webp",
+    "lineNumber": 118,
+    "name": "Russian Twists",
+    "sourceKey": "history-csv-2026-06-07:russian-twists-bodyweight"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Seated Bent-Over Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "119. Seated Bent-Over Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-bent-over-lateral-raises-dumbbells.webp",
+    "lineNumber": 119,
+    "name": "Seated Bent-Over Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:seated-bent-over-lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Seated Calf Raises Bodyweight exercise demonstration",
+    "imageFile": "120. Seated Calf Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-calf-raises-bodyweight.webp",
+    "lineNumber": 120,
+    "name": "Seated Calf Raises",
+    "sourceKey": "history-csv-2026-06-07:seated-calf-raises-bodyweight"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Seated Calf Raises (BB) Barbell exercise demonstration",
+    "imageFile": "121. Seated Calf Raises (BB).webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-calf-raises-bb-barbell.webp",
+    "lineNumber": 121,
+    "name": "Seated Calf Raises (BB)",
+    "sourceKey": "history-csv-2026-06-07:seated-calf-raises-bb-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Seated Lateral Raises Dumbbells exercise demonstration",
+    "imageFile": "122. Seated Lateral Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-lateral-raises-dumbbells.webp",
+    "lineNumber": 122,
+    "name": "Seated Lateral Raises",
+    "sourceKey": "history-csv-2026-06-07:seated-lateral-raises-dumbbells"
+  },
+  {
+    "equipment": "Machine",
+    "imageAlt": "Seated Leg Curls Machine exercise demonstration",
+    "imageFile": "123. Seated Leg Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-leg-curls-machine.webp",
+    "lineNumber": 123,
+    "name": "Seated Leg Curls",
+    "sourceKey": "history-csv-2026-06-07:seated-leg-curls-machine"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Seated Shoulder Press Barbell exercise demonstration",
+    "imageFile": "124. Seated Shoulder Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-shoulder-press-barbell.webp",
+    "lineNumber": 124,
+    "name": "Seated Shoulder Press",
+    "sourceKey": "history-csv-2026-06-07:seated-shoulder-press-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Seated Shoulder Press Dumbbells exercise demonstration",
+    "imageFile": "125. Seated Shoulder Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-shoulder-press-dumbbells.webp",
+    "lineNumber": 125,
+    "name": "Seated Shoulder Press",
+    "sourceKey": "history-csv-2026-06-07:seated-shoulder-press-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Seated Shoulder Press with Close Grip Dumbbells exercise demonstration",
+    "imageFile": "126. Seated Shoulder Press with Close Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-seated-shoulder-press-with-close-grip-dumbbells.gif",
+    "lineNumber": 126,
+    "name": "Seated Shoulder Press with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:seated-shoulder-press-with-close-grip-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Shrugs Barbell exercise demonstration",
+    "imageFile": "127. Shrugs.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-shrugs-barbell.webp",
+    "lineNumber": 127,
+    "name": "Shrugs",
+    "sourceKey": "history-csv-2026-06-07:shrugs-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Shrugs Dumbbells exercise demonstration",
+    "imageFile": "128. Shrugs.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-shrugs-dumbbells.webp",
+    "lineNumber": 128,
+    "name": "Shrugs",
+    "sourceKey": "history-csv-2026-06-07:shrugs-dumbbells"
+  },
+  {
+    "equipment": "Trap Bar",
+    "imageAlt": "Shrugs Trap Bar exercise demonstration",
+    "imageFile": "129. Shrugs.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-shrugs-trap-bar.webp",
+    "lineNumber": 129,
+    "name": "Shrugs",
+    "sourceKey": "history-csv-2026-06-07:shrugs-trap-bar"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Side Bends Dumbbells exercise demonstration",
+    "imageFile": "130. Side Bends.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-side-bends-dumbbells.webp",
+    "lineNumber": 130,
+    "name": "Side Bends",
+    "sourceKey": "history-csv-2026-06-07:side-bends-dumbbells"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Side Crunches Bodyweight exercise demonstration",
+    "imageFile": "131. Side Crunches.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-side-crunches-bodyweight.webp",
+    "lineNumber": 131,
+    "name": "Side Crunches",
+    "sourceKey": "history-csv-2026-06-07:side-crunches-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Side Sit-Ups Bodyweight exercise demonstration",
+    "imageFile": "132. Side Sit-Ups.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-side-sit-ups-bodyweight.webp",
+    "lineNumber": 132,
+    "name": "Side Sit-Ups",
+    "sourceKey": "history-csv-2026-06-07:side-sit-ups-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Sit-Ups Bodyweight exercise demonstration",
+    "imageFile": "133. Sit-Ups.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-sit-ups-bodyweight.webp",
+    "lineNumber": 133,
+    "name": "Sit-Ups",
+    "sourceKey": "history-csv-2026-06-07:sit-ups-bodyweight"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Skull Crushers Dumbbells exercise demonstration",
+    "imageFile": "134. Skull Crushers.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-skull-crushers-dumbbells.webp",
+    "lineNumber": 134,
+    "name": "Skull Crushers",
+    "sourceKey": "history-csv-2026-06-07:skull-crushers-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Skull Crushers EZ Curl Bar exercise demonstration",
+    "imageFile": "135. Skull Crushers.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-skull-crushers-ez-curl-bar.webp",
+    "lineNumber": 135,
+    "name": "Skull Crushers",
+    "sourceKey": "history-csv-2026-06-07:skull-crushers-ez-curl-bar"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Skull Crushers with Rope Cable exercise demonstration",
+    "imageFile": "136. Skull Crushers with Rope.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-skull-crushers-with-rope-cable.webp",
+    "lineNumber": 136,
+    "name": "Skull Crushers with Rope",
+    "sourceKey": "history-csv-2026-06-07:skull-crushers-with-rope-cable"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Spider Curls Barbell exercise demonstration",
+    "imageFile": "137. Spider Curls.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-spider-curls-barbell.gif",
+    "lineNumber": 137,
+    "name": "Spider Curls",
+    "sourceKey": "history-csv-2026-06-07:spider-curls-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Split Squats Dumbbells exercise demonstration",
+    "imageFile": "138. Split Squats.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-split-squats-dumbbells.gif",
+    "lineNumber": 138,
+    "name": "Split Squats",
+    "sourceKey": "history-csv-2026-06-07:split-squats-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Squats Barbell exercise demonstration",
+    "imageFile": "139. Squats.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-squats-barbell.webp",
+    "lineNumber": 139,
+    "name": "Squats",
+    "sourceKey": "history-csv-2026-06-07:squats-barbell"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Squats (Belt) Bodyweight exercise demonstration",
+    "imageFile": "140. Squats (Belt).gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-squats-belt-bodyweight.gif",
+    "lineNumber": 140,
+    "name": "Squats (Belt)",
+    "sourceKey": "history-csv-2026-06-07:squats-belt-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Standing Calf Raises Bodyweight exercise demonstration",
+    "imageFile": "141. Standing Calf Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-calf-raises-bodyweight.webp",
+    "lineNumber": 141,
+    "name": "Standing Calf Raises",
+    "sourceKey": "history-csv-2026-06-07:standing-calf-raises-bodyweight"
+  },
+  {
+    "equipment": "Smith Machine",
+    "imageAlt": "Standing Calf Raises Smith Machine exercise demonstration",
+    "imageFile": "142. Standing Calf Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-calf-raises-smith-machine.webp",
+    "lineNumber": 142,
+    "name": "Standing Calf Raises",
+    "sourceKey": "history-csv-2026-06-07:standing-calf-raises-smith-machine"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Standing Leg Curls Cable exercise demonstration",
+    "imageFile": "143. Standing Leg Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-leg-curls-cable.webp",
+    "lineNumber": 143,
+    "name": "Standing Leg Curls",
+    "sourceKey": "history-csv-2026-06-07:standing-leg-curls-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Standing Russian Twists Cable exercise demonstration",
+    "imageFile": "144. Standing Russian Twists.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-russian-twists-cable.webp",
+    "lineNumber": 144,
+    "name": "Standing Russian Twists",
+    "sourceKey": "history-csv-2026-06-07:standing-russian-twists-cable"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Standing Shoulder Press Barbell exercise demonstration",
+    "imageFile": "145. Standing Shoulder Press.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-shoulder-press-barbell.webp",
+    "lineNumber": 145,
+    "name": "Standing Shoulder Press",
+    "sourceKey": "history-csv-2026-06-07:standing-shoulder-press-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Standing Shoulder Press with Close Grip Dumbbells exercise demonstration",
+    "imageFile": "146. Standing Shoulder Press with Close Grip.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-standing-shoulder-press-with-close-grip-dumbbells.gif",
+    "lineNumber": 146,
+    "name": "Standing Shoulder Press with Close Grip",
+    "sourceKey": "history-csv-2026-06-07:standing-shoulder-press-with-close-grip-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Step-Ups Dumbbells exercise demonstration",
+    "imageFile": "147. Step-Ups.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-step-ups-dumbbells.webp",
+    "lineNumber": 147,
+    "name": "Step-Ups",
+    "sourceKey": "history-csv-2026-06-07:step-ups-dumbbells"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Sumo Deadlifts Barbell exercise demonstration",
+    "imageFile": "148. Sumo Deadlifts.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-sumo-deadlifts-barbell.webp",
+    "lineNumber": 148,
+    "name": "Sumo Deadlifts",
+    "sourceKey": "history-csv-2026-06-07:sumo-deadlifts-barbell"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "T-Bar Reverse Lunges Landmine exercise demonstration",
+    "imageFile": "149. T-Bar Reverse Lunges.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-t-bar-reverse-lunges-barbell.webp",
+    "lineNumber": 149,
+    "name": "T-Bar Reverse Lunges",
+    "sourceKey": "history-csv-2026-06-07:t-bar-reverse-lunges-barbell"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "T-Bar Rows with Wide Grip Landmine exercise demonstration",
+    "imageFile": "150. T-Bar Rows with Wide Grip.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-t-bar-rows-with-wide-grip-barbell.webp",
+    "lineNumber": 150,
+    "name": "T-Bar Rows with Wide Grip",
+    "sourceKey": "history-csv-2026-06-07:t-bar-rows-with-wide-grip-barbell"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Triceps Kickbacks Cable exercise demonstration",
+    "imageFile": "151. Triceps Kickbacks.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-triceps-kickbacks-cable.webp",
+    "lineNumber": 151,
+    "name": "Triceps Kickbacks",
+    "sourceKey": "history-csv-2026-06-07:triceps-kickbacks-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Triceps Kickbacks Dumbbells exercise demonstration",
+    "imageFile": "152. Triceps Kickbacks.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-triceps-kickbacks-dumbbells.webp",
+    "lineNumber": 152,
+    "name": "Triceps Kickbacks",
+    "sourceKey": "history-csv-2026-06-07:triceps-kickbacks-dumbbells"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Triceps Pushdowns Cable exercise demonstration",
+    "imageFile": "153. Triceps Pushdowns.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-triceps-pushdowns-cable.webp",
+    "lineNumber": 153,
+    "name": "Triceps Pushdowns",
+    "sourceKey": "history-csv-2026-06-07:triceps-pushdowns-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Triceps Pushdowns (Vbar) Cable exercise demonstration",
+    "imageFile": "154. Triceps Pushdowns (Vbar).webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-triceps-pushdowns-vbar-cable.webp",
+    "lineNumber": 154,
+    "name": "Triceps Pushdowns (Vbar)",
+    "sourceKey": "history-csv-2026-06-07:triceps-pushdowns-vbar-cable"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Triceps Pushdowns with Rope Cable exercise demonstration",
+    "imageFile": "155. Triceps Pushdowns with Rope.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-triceps-pushdowns-with-rope-cable.webp",
+    "lineNumber": 155,
+    "name": "Triceps Pushdowns with Rope",
+    "sourceKey": "history-csv-2026-06-07:triceps-pushdowns-with-rope-cable"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Twist Curls Dumbbells exercise demonstration",
+    "imageFile": "156. Twist Curls.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-twist-curls-dumbbells.webp",
+    "lineNumber": 156,
+    "name": "Twist Curls",
+    "sourceKey": "history-csv-2026-06-07:twist-curls-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Upright Rows Dumbbells exercise demonstration",
+    "imageFile": "157. Upright Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-upright-rows-dumbbells.webp",
+    "lineNumber": 157,
+    "name": "Upright Rows",
+    "sourceKey": "history-csv-2026-06-07:upright-rows-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Upright Rows EZ Curl Bar exercise demonstration",
+    "imageFile": "158. Upright Rows.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-upright-rows-ez-curl-bar.webp",
+    "lineNumber": 158,
+    "name": "Upright Rows",
+    "sourceKey": "history-csv-2026-06-07:upright-rows-ez-curl-bar"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Walking Lunges Dumbbells exercise demonstration",
+    "imageFile": "159. Walking Lunges.gif",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-walking-lunges-dumbbells.gif",
+    "lineNumber": 159,
+    "name": "Walking Lunges",
+    "sourceKey": "history-csv-2026-06-07:walking-lunges-dumbbells"
+  },
+  {
+    "equipment": "Cable",
+    "imageAlt": "Y Raises Cable exercise demonstration",
+    "imageFile": "160. Y Raises.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-y-raises-cable.webp",
+    "lineNumber": 160,
+    "name": "Y Raises",
+    "sourceKey": "history-csv-2026-06-07:y-raises-cable"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Zercher Squats Barbell exercise demonstration",
+    "imageFile": "161. Zercher Squats.webp",
+    "imageUrl": "exercise-media/history-csv-2026-06-07-zercher-squats-barbell.webp",
+    "lineNumber": 161,
+    "name": "Zercher Squats",
+    "sourceKey": "history-csv-2026-06-07:zercher-squats-barbell"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Push-Ups Bodyweight exercise demonstration",
+    "imageFile": "162. Push-Ups.webp",
+    "imageUrl": "exercise-media/manual-2026-06-09-push-ups-bodyweight.webp",
+    "lineNumber": 162,
+    "name": "Push-Ups",
+    "sourceKey": "manual-2026-06-09:push-ups-bodyweight"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Pull-Ups with Wide Neutral Grip Bodyweight exercise demonstration",
+    "imageFile": "163. Pull-Ups with Wide Neutral Grip.webp",
+    "imageUrl": "exercise-media/manual-2026-06-09-pull-ups-with-wide-neutral-grip-bodyweight.webp",
+    "lineNumber": 163,
+    "name": "Pull-Ups with Wide Neutral Grip",
+    "sourceKey": "manual-2026-06-09:pull-ups-with-wide-neutral-grip-bodyweight"
+  },
+  {
+    "equipment": "Barbell",
+    "imageAlt": "Front Raises Barbell exercise demonstration",
+    "imageFile": "165. Front Raises.webp",
+    "imageUrl": "exercise-media/manual-2026-06-09-front-raises-barbell.webp",
+    "lineNumber": 165,
+    "name": "Front Raises",
+    "sourceKey": "manual-2026-06-09:front-raises-barbell"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Front Raises Dumbbells exercise demonstration",
+    "imageFile": "166. Front Raises.webp",
+    "imageUrl": "exercise-media/manual-2026-06-09-front-raises-dumbbells.webp",
+    "lineNumber": 166,
+    "name": "Front Raises",
+    "sourceKey": "manual-2026-06-09:front-raises-dumbbells"
+  },
+  {
+    "equipment": "EZ Curl Bar",
+    "imageAlt": "Front Raises EZ Curl Bar exercise demonstration",
+    "imageFile": "167. Front Raises.webp",
+    "imageUrl": "exercise-media/manual-2026-06-09-front-raises-ez-curl-bar.webp",
+    "lineNumber": 167,
+    "name": "Front Raises",
+    "sourceKey": "manual-2026-06-09:front-raises-ez-curl-bar"
+  }
+]
