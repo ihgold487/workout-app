@@ -1,4 +1,19 @@
 import { useState } from "react";
+import {
+  BatteryMedium,
+  Check,
+  Dumbbell,
+  GripVertical,
+  Link2,
+  NotebookPen,
+  Play,
+  Plus,
+  Repeat2,
+  Save,
+  Target,
+  Trash2,
+  X,
+} from "lucide-react";
 import WeightPickerModal from "./WeightPickerModal";
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import {
@@ -11,6 +26,53 @@ import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+
+function IconButton({
+  children,
+  disabled = false,
+  label,
+  onClick,
+  size = 36,
+  style,
+  tone = "neutral",
+  type = "button",
+}) {
+  const toneColor =
+    tone === "danger"
+      ? "var(--danger-text)"
+      : tone === "success"
+        ? "var(--success-text)"
+        : "var(--text)";
+
+  return (
+    <button
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      title={label}
+      type={type}
+      style={{
+        alignItems: "center",
+        background: "var(--surface-raised)",
+        border: "1px solid var(--border)",
+        borderRadius: "999px",
+        color: toneColor,
+        cursor: disabled ? "not-allowed" : "pointer",
+        display: "inline-flex",
+        flex: `0 0 ${size}px`,
+        height: `${size}px`,
+        justifyContent: "center",
+        lineHeight: 1,
+        opacity: disabled ? 0.45 : 1,
+        padding: 0,
+        width: `${size}px`,
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 function SortableExerciseRow({ exercise, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -67,12 +129,6 @@ export default function TemplateView({
   const [editingRirSetIndex, setEditingRirSetIndex] = useState(null);
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
-
-  // ACTION BUTTONS: keep icon sizes consistent app-wide
-  const iconButton = {
-    fontSize: "0.9rem",
-    padding: "1px 4px",
-  };
 
   function startWorkout() {
     const session = {
@@ -253,8 +309,34 @@ export default function TemplateView({
       >
         {template.name}
       </button>
-      <button onClick={startWorkout}>Start Workout</button>{" "}
-      <button onClick={() => setShowAdd(true)}>+ Add Exercise</button>
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          marginBottom: "10px",
+        }}
+      >
+        <button
+          onClick={startWorkout}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: "6px",
+          }}
+        >
+          <Play size={16} /> Start
+        </button>
+        <button
+          onClick={() => setShowAdd(true)}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: "6px",
+          }}
+        >
+          <Plus size={16} /> Add Exercise
+        </button>
+      </div>
 
       {editingTemplateName && (
         <div
@@ -311,14 +393,26 @@ export default function TemplateView({
                 justifyContent: "space-between",
               }}
             >
-              <button onClick={() => setEditingTemplateName(false)}>
-                Cancel
+              <button
+                onClick={() => setEditingTemplateName(false)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                }}
+              >
+                <X size={16} /> Cancel
               </button>
               <button
                 disabled={!templateNameDraft.trim()}
                 onClick={saveTemplateName}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                }}
               >
-                Save
+                <Save size={16} /> Save
               </button>
             </div>
           </div>
@@ -399,12 +493,8 @@ export default function TemplateView({
                   justifyContent: "flex-end",
                 }}
               >
-                <button
-                  style={{
-                    fontSize: "28px",
-                    padding: "8px 18px",
-                    minWidth: "56px",
-                  }}
+                <IconButton
+                  label="Cancel add exercise"
                   onClick={() => {
                     setPendingExercise(null);
 
@@ -415,15 +505,12 @@ export default function TemplateView({
                     });
                   }}
                 >
-                  ✕
-                </button>
+                  <X size={18} />
+                </IconButton>
 
-                <button
-                  style={{
-                    fontSize: "28px",
-                    padding: "8px 18px",
-                    minWidth: "56px",
-                  }}
+                <IconButton
+                  label="Add exercise"
+                  tone="success"
                   onClick={() => {
                     addExercise(pendingExercise);
 
@@ -434,8 +521,8 @@ export default function TemplateView({
                     });
                   }}
                 >
-                  ✓
-                </button>
+                  <Check size={18} />
+                </IconButton>
               </div>
             </div>
       )}
@@ -511,11 +598,9 @@ export default function TemplateView({
                             cursor: "pointer",
                           }}
                         >
-                          <button
-                            style={{
-                              ...iconButton,
-                              fontSize: "0.85rem",
-                            }}
+                          <IconButton
+                            label="Exercise note"
+                            size={32}
                             onClick={() => {
                               const note = prompt(
                                 "Exercise note",
@@ -537,8 +622,8 @@ export default function TemplateView({
                               });
                             }}
                           >
-                            ✏️
-                          </button>
+                            <NotebookPen size={16} />
+                          </IconButton>
 
                           {`${exercise.name}${
                             exercise.equipment?.[0]
@@ -560,19 +645,27 @@ export default function TemplateView({
                           {...attributes}
                           {...listeners}
                           style={{
+                            alignItems: "center",
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "999px",
+                            color: "var(--text-muted)",
                             cursor: "grab",
-                            padding: "0 10px",
-                            fontSize: "1.4rem",
-                            fontWeight: "bold",
+                            display: "inline-flex",
+                            height: "32px",
+                            justifyContent: "center",
+                            padding: 0,
                             userSelect: "none",
                             touchAction: "none",
+                            width: "32px",
                           }}
                         >
-                          ☰
+                          <GripVertical size={17} />
                         </span>
 
-                        <button
-                          style={iconButton}
+                        <IconButton
+                          label="Edit superset"
+                          size={exercise.supersetGroup ? 42 : 32}
                           onClick={() => {
                             const group = prompt(
                               "Superset group (A, B, etc). Leave empty to clear."
@@ -599,13 +692,24 @@ export default function TemplateView({
                             );
                           }}
                         >
-                          {exercise.supersetGroup
-                            ? `🔗 ${exercise.supersetGroup}`
-                            : "🔗"}
-                        </button>
+                          <Link2 size={16} />
+                          {exercise.supersetGroup && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: "bold",
+                                marginLeft: "-3px",
+                              }}
+                            >
+                              {exercise.supersetGroup}
+                            </span>
+                          )}
+                        </IconButton>
 
-                        <button
-                          style={iconButton}
+                        <IconButton
+                          label="Delete exercise"
+                          size={32}
+                          tone="danger"
                           onClick={() => {
                             setTemplates(
                               templates.map((t) =>
@@ -622,8 +726,8 @@ export default function TemplateView({
                             );
                           }}
                         >
-                          🗑
-                        </button>
+                          <Trash2 size={16} />
+                        </IconButton>
                       </div>
                     </h3>
 
@@ -643,10 +747,19 @@ export default function TemplateView({
                           }}
                         >
                           <span>
-                            📝 {exerciseMetadata[exercise.exerciseId]?.note}
+                            <NotebookPen
+                              size={13}
+                              style={{
+                                marginRight: "4px",
+                                verticalAlign: "-2px",
+                              }}
+                            />
+                            {exerciseMetadata[exercise.exerciseId]?.note}
                           </span>
 
-                          <button
+                          <IconButton
+                            label="Clear note"
+                            size={24}
                             onClick={() => {
                               const updated = {
                                 ...exerciseMetadata,
@@ -658,13 +771,11 @@ export default function TemplateView({
                             }}
                             style={{
                               marginLeft: "8px",
-                              border: "none",
-                              background: "none",
-                              cursor: "pointer",
+                              verticalAlign: "-6px",
                             }}
                           >
-                            ×
-                          </button>
+                            <X size={13} />
+                          </IconButton>
                         </div>
                       ) : null;
                     })()}
@@ -672,20 +783,24 @@ export default function TemplateView({
                     {exercise.sets.map((set) => (
                       <div
                         key={set.id}
-                        style={{
-                          cursor: "pointer",
-                        }}
                         onClick={() => {
                           setEditingExercise(exercise);
 
                           setEditingExerciseDraft(structuredClone(exercise));
                         }}
+                        style={{
+                          alignItems: "center",
+                          cursor: "pointer",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "4px",
+                        }}
                       >
-                        🎯 {set.targetWeight}×{set.targetReps}
+                        <Target size={14} /> {set.targetWeight}×{set.targetReps}
                         {set.targetRir || set.rir
                           ? ` @ ${set.targetRir || set.rir}`
                           : ""}{" "}
-                        (🏋️‍♂️{" "}
+                        (<Dumbbell size={13} />{" "}
                         {calculateE1RM(
                           null,
                           set.targetReps,
@@ -757,10 +872,18 @@ export default function TemplateView({
                 }}
               >
                 <div>#</div>
-                <div>🎯</div>
-                <div>🔁</div>
-                <div>🔋</div>
-                <div>🏋️</div>
+                <div>
+                  <Target size={15} aria-label="Target weight" />
+                </div>
+                <div>
+                  <Repeat2 size={15} aria-label="Reps" />
+                </div>
+                <div>
+                  <BatteryMedium size={15} aria-label="RIR" />
+                </div>
+                <div>
+                  <Dumbbell size={15} aria-label="e1RM" />
+                </div>
                 <div></div>
               </div>
 
@@ -820,7 +943,10 @@ export default function TemplateView({
                     )?.toFixed(1)}
                   </div>
 
-                  <button
+                  <IconButton
+                    label="Delete set"
+                    size={30}
+                    tone="danger"
                     onClick={() => {
                       if (editingExerciseDraft.sets.length <= 1) {
                         return;
@@ -833,12 +959,17 @@ export default function TemplateView({
                       setEditingExerciseDraft(updated);
                     }}
                   >
-                    🗑
-                  </button>
+                    <Trash2 size={15} />
+                  </IconButton>
                 </div>
               ))}
 
               <button
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "5px",
+                }}
                 onClick={() => {
                   const updated = structuredClone(editingExerciseDraft);
 
@@ -855,7 +986,7 @@ export default function TemplateView({
                   setEditingExerciseDraft(updated);
                 }}
               >
-                + Add Set
+                <Plus size={15} /> Add Set
               </button>
             </div>
 
@@ -936,8 +1067,13 @@ export default function TemplateView({
 
                   setEditingExerciseDraft(null);
                 }}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                }}
               >
-                ❌ Cancel
+                <X size={16} /> Cancel
               </button>
 
               <button
@@ -962,8 +1098,13 @@ export default function TemplateView({
 
                   setEditingExerciseDraft(null);
                 }}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                }}
               >
-                ✅ Save
+                <Save size={16} /> Save
               </button>
             </div>
           </div>

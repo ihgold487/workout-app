@@ -1,4 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  AlertTriangle,
+  BatteryMedium,
+  Check,
+  CheckCircle2,
+  Circle,
+  Dumbbell,
+  Link2,
+  NotebookPen,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Target,
+  Timer,
+  Trash2,
+  Trophy,
+  X,
+} from "lucide-react";
 import { equipmentOptions } from "../data/seedEquipment";
 import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
@@ -6,6 +24,53 @@ import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import { calculateE1RM } from "../utils/e1rm";
+
+function IconButton({
+  children,
+  disabled = false,
+  label,
+  onClick,
+  size = 36,
+  style,
+  tone = "neutral",
+  type = "button",
+}) {
+  const toneColor =
+    tone === "danger"
+      ? "var(--danger-text)"
+      : tone === "success"
+        ? "var(--success-text)"
+        : "var(--text)";
+
+  return (
+    <button
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      title={label}
+      type={type}
+      style={{
+        alignItems: "center",
+        background: "var(--surface-raised)",
+        border: "1px solid var(--border)",
+        borderRadius: "999px",
+        color: toneColor,
+        cursor: disabled ? "not-allowed" : "pointer",
+        display: "inline-flex",
+        flex: `0 0 ${size}px`,
+        height: `${size}px`,
+        justifyContent: "center",
+        lineHeight: 1,
+        opacity: disabled ? 0.45 : 1,
+        padding: 0,
+        width: `${size}px`,
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function SessionView({
   session,
@@ -562,6 +627,126 @@ export default function SessionView({
     }));
   }
 
+  function getSupersetSequence(group) {
+    const exercises = session.exercises.filter(
+      (exercise) => exercise.supersetGroup === group
+    );
+    const maxSetCount = Math.max(
+      0,
+      ...exercises.map((exercise) => exercise.sets.length)
+    );
+    const sequence = [];
+
+    for (let setIndex = 0; setIndex < maxSetCount; setIndex += 1) {
+      for (const exercise of exercises) {
+        const set = exercise.sets[setIndex];
+
+        if (set) {
+          sequence.push({
+            exercise,
+            exerciseId: exercise.id,
+            set,
+            setId: set.id,
+            setIndex,
+          });
+        }
+      }
+    }
+
+    return sequence;
+  }
+
+  function getSetOrderSequence(exercise) {
+    return exercise.supersetGroup
+      ? getSupersetSequence(exercise.supersetGroup)
+      : exercise.sets.map((set, setIndex) => ({
+          exercise,
+          exerciseId: exercise.id,
+          set,
+          setId: set.id,
+          setIndex,
+        }));
+  }
+
+  function findSetOrderItem(exerciseId, setId) {
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+
+    if (!exercise) {
+      return null;
+    }
+
+    const sequence = getSetOrderSequence(exercise);
+    const index = sequence.findIndex(
+      (item) => item.exerciseId === exerciseId && item.setId === setId
+    );
+
+    return index === -1
+      ? null
+      : {
+          index,
+          sequence,
+          item: sequence[index],
+        };
+  }
+
+  function canActivateSet(exerciseId, setId) {
+    const ordered = findSetOrderItem(exerciseId, setId);
+
+    if (!ordered || ordered.item.set.completed) {
+      return false;
+    }
+
+    return ordered.sequence
+      .slice(0, ordered.index)
+      .every((item) => item.set.completed);
+  }
+
+  function canUncompleteSet(exerciseId, setId) {
+    const ordered = findSetOrderItem(exerciseId, setId);
+
+    if (!ordered || !ordered.item.set.completed) {
+      return false;
+    }
+
+    return ordered.sequence
+      .slice(ordered.index + 1)
+      .every((item) => !item.set.completed);
+  }
+
+  function getNextActiveSetAfter(exerciseId, setId) {
+    const ordered = findSetOrderItem(exerciseId, setId);
+
+    if (!ordered) {
+      return null;
+    }
+
+    const next = ordered.sequence
+      .slice(ordered.index + 1)
+      .find((item) => !item.set.completed);
+
+    if (next) {
+      return {
+        exerciseId: next.exerciseId,
+        setId: next.setId,
+      };
+    }
+
+    const exerciseIndex = session.exercises.findIndex(
+      (exercise) => exercise.id === exerciseId
+    );
+    const nextExercise = session.exercises
+      .slice(exerciseIndex + 1)
+      .find((exercise) => exercise.sets.some((set) => !set.completed));
+    const nextSet = nextExercise?.sets.find((set) => !set.completed);
+
+    return nextExercise && nextSet
+      ? {
+          exerciseId: nextExercise.id,
+          setId: nextSet.id,
+        }
+      : null;
+  }
+
   function markSetComplete(exerciseId, setId) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
@@ -570,6 +755,14 @@ export default function SessionView({
     const currentIndex = exercise.sets.findIndex((s) => s.id === setId);
 
     const undo = currentSet.completed;
+
+    if (undo && !canUncompleteSet(exerciseId, setId)) {
+      return;
+    }
+
+    if (!undo && !canActivateSet(exerciseId, setId)) {
+      return;
+    }
 
     updateSession((s) => ({
       ...s,
@@ -616,68 +809,7 @@ export default function SessionView({
       return;
     }
 
-    const group = exercise.supersetGroup;
-
-    if (group) {
-      const superset = session.exercises.filter(
-        (ex) => ex.supersetGroup === group
-      );
-
-      const currentSupersetIndex = superset.findIndex(
-        (ex) => ex.id === exerciseId
-      );
-
-      const nextExercise = superset[currentSupersetIndex + 1];
-
-      if (nextExercise && nextExercise.sets[currentIndex]) {
-        setActiveSet({
-          exerciseId: nextExercise.id,
-
-          setId: nextExercise.sets[currentIndex].id,
-        });
-
-        return;
-      }
-
-      const firstExercise = superset[0];
-
-      if (firstExercise && firstExercise.sets[currentIndex + 1]) {
-        setActiveSet({
-          exerciseId: firstExercise.id,
-
-          setId: firstExercise.sets[currentIndex + 1].id,
-        });
-
-        return;
-      }
-    }
-
-    const nextSet = exercise.sets[currentIndex + 1];
-
-    if (nextSet) {
-      setActiveSet({
-        exerciseId,
-        setId: nextSet.id,
-      });
-
-      return;
-    }
-
-    const exerciseIndex = session.exercises.findIndex(
-      (ex) => ex.id === exerciseId
-    );
-
-    const nextExercise = session.exercises[exerciseIndex + 1];
-
-    if (nextExercise && nextExercise.sets[0]) {
-      setActiveSet({
-        exerciseId: nextExercise.id,
-
-        setId: nextExercise.sets[0].id,
-      });
-    } else {
-      setActiveSet(null);
-    }
+    setActiveSet(getNextActiveSetAfter(exerciseId, setId));
   }
   function deleteExercise(exerciseId) {
     updateSession((s) => ({
@@ -984,7 +1116,7 @@ export default function SessionView({
                     marginBottom: "12px",
                   }}
                 >
-                  <span style={{ fontSize: "22px" }}>⚠️</span>
+                  <AlertTriangle size={22} />
                   <span>End Workout?</span>
                 </div>
               </div>
@@ -1003,9 +1135,16 @@ export default function SessionView({
                   justifyContent: "space-between",
                 }}
               >
-                <button onClick={() => setConfirmExitWorkout(false)}>✖️</button>
+                <IconButton
+                  label="Cancel"
+                  onClick={() => setConfirmExitWorkout(false)}
+                >
+                  <X size={18} />
+                </IconButton>
 
-                <button
+                <IconButton
+                  label="End workout"
+                  tone="danger"
                   onClick={() => {
                     setConfirmExitWorkout(false);
 
@@ -1014,8 +1153,8 @@ export default function SessionView({
                     setSelectedTemplateId(null);
                   }}
                 >
-                  ✔️
-                </button>
+                  <Check size={18} />
+                </IconButton>
               </div>
             </div>
           </div>
@@ -1057,7 +1196,7 @@ export default function SessionView({
                   fontSize: "18px",
                 }}
               >
-                <span style={{ fontSize: "22px" }}>⚠️</span>
+                <AlertTriangle size={22} />
                 <span>Delete Exercise?</span>
               </div>
 
@@ -1076,19 +1215,24 @@ export default function SessionView({
                   justifyContent: "space-between",
                 }}
               >
-                <button onClick={() => setPendingDeleteExercise(null)}>
-                  ✖️
-                </button>
+                <IconButton
+                  label="Cancel"
+                  onClick={() => setPendingDeleteExercise(null)}
+                >
+                  <X size={18} />
+                </IconButton>
 
-                <button
+                <IconButton
+                  label="Delete exercise"
+                  tone="danger"
                   onClick={() => {
                     deleteExercise(pendingDeleteExercise.id);
 
                     setPendingDeleteExercise(null);
                   }}
                 >
-                  ✔️
-                </button>
+                  <Check size={18} />
+                </IconButton>
               </div>
             </div>
           </div>
@@ -1130,7 +1274,7 @@ export default function SessionView({
                   fontSize: "18px",
                 }}
               >
-                <span style={{ fontSize: "22px" }}>⚠️</span>
+                <AlertTriangle size={22} />
                 <span>Delete Set?</span>
               </div>
 
@@ -1140,9 +1284,16 @@ export default function SessionView({
                   justifyContent: "space-between",
                 }}
               >
-                <button onClick={() => setPendingDeleteSet(null)}>✖️</button>
+                <IconButton
+                  label="Cancel"
+                  onClick={() => setPendingDeleteSet(null)}
+                >
+                  <X size={18} />
+                </IconButton>
 
-                <button
+                <IconButton
+                  label="Delete set"
+                  tone="danger"
                   onClick={() => {
                     deleteSet(
                       pendingDeleteSet.exerciseId,
@@ -1152,8 +1303,8 @@ export default function SessionView({
                     setPendingDeleteSet(null);
                   }}
                 >
-                  ✔️
-                </button>
+                  <Check size={18} />
+                </IconButton>
               </div>
             </div>
           </div>
@@ -1182,13 +1333,7 @@ export default function SessionView({
             flexWrap: "nowrap",
           }}
         >
-          <span
-            style={{
-              fontSize: "28px",
-            }}
-          >
-            ⏱
-          </span>
+          <Timer size={28} />
 
           <select
             style={{
@@ -1434,12 +1579,9 @@ export default function SessionView({
                   }}
                 >
                   <div>
-                    <button
-                      style={{
-                        padding: "8px 6px",
-                        fontSize: "20px",
-                        lineHeight: "1",
-                      }}
+                    <IconButton
+                      label="Exercise notes"
+                      size={34}
                       onClick={() =>
                         setExpandedNotes((s) => ({
                           ...s,
@@ -1447,8 +1589,8 @@ export default function SessionView({
                         }))
                       }
                     >
-                      ✏️
-                    </button>{" "}
+                      <NotebookPen size={17} />
+                    </IconButton>{" "}
                     <strong>
                       <button
                         type="button"
@@ -1482,12 +1624,9 @@ export default function SessionView({
                   </div>
 
                   <div>
-                    <button
-                      style={{
-                        padding: "8px 6px",
-                        fontSize: "20px",
-                        lineHeight: "1",
-                      }}
+                    <IconButton
+                      label="Replace exercise"
+                      size={34}
                       onClick={() => {
                         const nextReplacingExerciseId =
                           replacingExerciseId === exercise.id
@@ -1510,18 +1649,16 @@ export default function SessionView({
                         setSearch("");
                       }}
                     >
-                      🔄
-                    </button>{" "}
-                    <button
-                      style={{
-                        padding: "8px 6px",
-                        fontSize: "20px",
-                        lineHeight: "1",
-                      }}
+                      <RefreshCw size={17} />
+                    </IconButton>{" "}
+                    <IconButton
+                      label="Delete exercise"
+                      size={34}
+                      tone="danger"
                       onClick={() => setPendingDeleteExercise(exercise)}
                     >
-                      🗑
-                    </button>
+                      <Trash2 size={17} />
+                    </IconButton>
                   </div>
                 </div>
 
@@ -1606,9 +1743,12 @@ export default function SessionView({
                           width: "78px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
+                          gap: "3px",
                         }}
                       >
-                        🎯 Target
+                        <Target size={14} /> Target
                       </span>
 
                       <span
@@ -1616,9 +1756,12 @@ export default function SessionView({
                           width: "112px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
+                          gap: "3px",
                         }}
                       >
-                        ✍️ Actual
+                        <Pencil size={14} /> Actual
                       </span>
 
                       <span
@@ -1626,9 +1769,11 @@ export default function SessionView({
                           marginLeft: "10px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
                         }}
                       >
-                        🔋 {/* RIR */}
+                        <BatteryMedium size={15} aria-label="RIR" />
                       </span>
 
                       <span
@@ -1636,9 +1781,11 @@ export default function SessionView({
                           marginLeft: "12px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
                         }}
                       >
-                        🏋️ {/* e1RM */}
+                        <Dumbbell size={15} aria-label="e1RM" />
                       </span>
 
                       <span
@@ -1646,16 +1793,22 @@ export default function SessionView({
                           marginLeft: "16px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
                         }}
                       >
-                        ✅
+                        <CheckCircle2 size={15} aria-label="Completed" />
                       </span>
                     </div>
 
                     {exercise.sets.map((set) => {
-                      const isActive = activeSet?.setId === set.id;
+                      const isActive =
+                        activeSet?.exerciseId === exercise.id &&
+                        activeSet?.setId === set.id;
 
                       const isCompleted = !!set.completed;
+                      const canActivate = canActivateSet(exercise.id, set.id);
+                      const canUncomplete = canUncompleteSet(exercise.id, set.id);
 
                       const valueColor = isActive
                         ? "#1976d2"
@@ -1672,17 +1825,7 @@ export default function SessionView({
                             }
                           }}
                           onClick={() => {
-                            const blocked = exercise.sets
-
-                              .slice(
-                                0,
-
-                                exercise.sets.findIndex((s) => s.id === set.id)
-                              )
-
-                              .some((s) => !s.completed);
-
-                            if (!blocked) {
+                            if (canActivate) {
                               setActiveSet({
                                 exerciseId: exercise.id,
 
@@ -1909,37 +2052,38 @@ export default function SessionView({
                             </span>
                           </span>
 
-                          <button
+                          <IconButton
+                            label={set.completed ? "Set completed" : "Complete set"}
+                            size={30}
                             style={{
-                              padding: "4px 2px",
-                              fontSize: "16px",
-                              lineHeight: "1",
+                              background: set.completed
+                                ? "var(--success-bg)"
+                                : "var(--surface-raised)",
                             }}
+                            tone={set.completed ? "success" : "neutral"}
                             disabled={
                               set.completed
-                                ? exercise.sets
-                                    .slice(
-                                      exercise.sets.findIndex(
-                                        (s) => s.id === set.id
-                                      ) + 1
-                                    )
-                                    .some((s) => s.completed)
-                                : activeSet?.setId !== set.id
+                                ? !canUncomplete
+                                : activeSet?.exerciseId !== exercise.id ||
+                                  activeSet?.setId !== set.id ||
+                                  !canActivate
                             }
                             onClick={(e) => {
                               e.stopPropagation();
                               markSetComplete(exercise.id, set.id);
                             }}
                           >
-                            {set.completed ? "✓" : "○"}
-                          </button>
+                            {set.completed ? (
+                              <CheckCircle2 size={16} />
+                            ) : (
+                              <Circle size={16} />
+                            )}
+                          </IconButton>
 
-                          <button
-                            style={{
-                              padding: "4px 2px",
-                              fontSize: "16px",
-                              lineHeight: "1",
-                            }}
+                          <IconButton
+                            label="Delete set"
+                            size={30}
+                            tone="danger"
                             onClick={(e) => {
                               e.stopPropagation();
 
@@ -1949,8 +2093,8 @@ export default function SessionView({
                               });
                             }}
                           >
-                            🗑
-                          </button>
+                            <Trash2 size={15} />
+                          </IconButton>
                         </div>
                       );
                     })}
@@ -1958,6 +2102,11 @@ export default function SessionView({
                 }
 
                 <button
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "5px",
+                  }}
                   onClick={() =>
                     addSet(
                       exercise.id,
@@ -1970,7 +2119,7 @@ export default function SessionView({
                     )
                   }
                 >
-                  + Add Set
+                  <Plus size={15} /> Add Set
                 </button>
               </div>
             ))}
@@ -2050,16 +2199,19 @@ export default function SessionView({
                     justifyContent: "space-between",
                   }}
                 >
-                  <button
+                  <IconButton
+                    label="Cancel add exercise"
                     onClick={() => {
                       setPendingExercise(null);
                       setShowAddExercise(false);
                     }}
                   >
-                    ✖️
-                  </button>
+                    <X size={18} />
+                  </IconButton>
 
-                  <button
+                  <IconButton
+                    label="Add exercise"
+                    tone="success"
                     onClick={() =>
                       addExercise(
                         pendingExercise,
@@ -2070,8 +2222,8 @@ export default function SessionView({
                       )
                     }
                   >
-                    ✔️
-                  </button>
+                    <Check size={18} />
+                  </IconButton>
                 </div>
               </div>
         )}
@@ -2196,6 +2348,9 @@ export default function SessionView({
           >
             <button
               style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
                 padding: "10px 14px",
               }}
               onClick={() => {
@@ -2204,21 +2359,35 @@ export default function SessionView({
                 setSearch("");
               }}
             >
-              {showAddExercise ? "✕ Cancel" : "+ Add Exercise"}
+              {showAddExercise ? (
+                <>
+                  <X size={16} /> Cancel
+                </>
+              ) : (
+                <>
+                  <Plus size={16} /> Add Exercise
+                </>
+              )}
             </button>
 
             <button
               style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
                 padding: "10px 14px",
               }}
               onClick={() => setShowSupersetEditor(true)}
             >
-              🔗 Supersets
+              <Link2 size={16} /> Supersets
             </button>
 
             <button
               ref={completeWorkoutButtonRef}
               style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
                 padding: "10px 14px",
 
                 border: allSetsCompleted ? "3px solid #4caf50" : undefined,
@@ -2231,7 +2400,7 @@ export default function SessionView({
               }}
               onClick={() => setConfirmComplete(true)}
             >
-              Complete Workout
+              <Trophy size={16} /> Complete
             </button>
           </div>
 
@@ -2532,11 +2701,11 @@ export default function SessionView({
                     <div
                       style={{
                         fontSize: "56px",
-                        marginBottom: "24px",
-                      }}
-                    >
-                      💪
-                    </div>
+                      marginBottom: "24px",
+                    }}
+                  >
+                    <Trophy size={28} />
+                  </div>
                     <div>Complete Workout?</div>
                   </div>
                 </div>
@@ -2547,9 +2716,16 @@ export default function SessionView({
                     justifyContent: "space-between",
                   }}
                 >
-                  <button onClick={() => setConfirmComplete(false)}>✖️</button>
+                  <IconButton
+                    label="Cancel"
+                    onClick={() => setConfirmComplete(false)}
+                  >
+                    <X size={18} />
+                  </IconButton>
 
-                  <button
+                  <IconButton
+                    label="Complete workout"
+                    tone="success"
                     onClick={() => {
                       let completedWorkout = {
                         ...session,
@@ -2692,8 +2868,8 @@ export default function SessionView({
                       setSelectedTemplateId(null);
                     }}
                   >
-                    ✔️
-                  </button>
+                    <Check size={18} />
+                  </IconButton>
                 </div>
               </div>
             </div>
