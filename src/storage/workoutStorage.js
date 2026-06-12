@@ -9,6 +9,7 @@ const WORKOUT_DATA_KEYS = {
   exerciseLibrary: "exerciseLibrary",
   exerciseMetadata: "exerciseMetadata",
   history: "history",
+  plans: "plans",
   selectedSessionId: "selectedSessionId",
   sessions: "sessions",
   templates: "templates",
@@ -48,6 +49,7 @@ function normalizeWorkoutData(data, { seedExercises }) {
     ),
     exerciseMetadata: objectOrEmpty(data?.exerciseMetadata),
     history: arrayOrEmpty(data?.history),
+    plans: arrayOrEmpty(data?.plans),
     selectedSessionId: data?.selectedSessionId ?? null,
     sessions: arrayOrEmpty(data?.sessions),
     templates: arrayOrEmpty(data?.templates),
@@ -68,6 +70,7 @@ export function loadWorkoutData({ seedExercises }) {
       exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
       exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
       history: readJson(WORKOUT_DATA_KEYS.history, []),
+      plans: readJson(WORKOUT_DATA_KEYS.plans, []),
       selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
       sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
       templates: readJson(WORKOUT_DATA_KEYS.templates, []),
@@ -82,6 +85,7 @@ export function saveWorkoutData(data, storageVersion) {
   writeJson(WORKOUT_DATA_KEYS.exerciseLibrary, data.exerciseLibrary);
   writeJson(WORKOUT_DATA_KEYS.exerciseMetadata, data.exerciseMetadata);
   writeJson(WORKOUT_DATA_KEYS.history, data.history);
+  writeJson(WORKOUT_DATA_KEYS.plans, data.plans);
   writeJson(WORKOUT_DATA_KEYS.selectedSessionId, data.selectedSessionId);
   writeJson(WORKOUT_DATA_KEYS.sessions, data.sessions);
   writeJson(WORKOUT_DATA_KEYS.templates, data.templates);
@@ -128,6 +132,7 @@ export function createWorkoutBackup(data) {
       exerciseLibrary: arrayOrEmpty(data.exerciseLibrary),
       exerciseMetadata: objectOrEmpty(data.exerciseMetadata),
       history: arrayOrEmpty(data.history),
+      plans: arrayOrEmpty(data.plans),
       selectedSessionId: data.selectedSessionId ?? null,
       sessions: arrayOrEmpty(data.sessions),
       templates: arrayOrEmpty(data.templates),
@@ -143,6 +148,7 @@ export function getWorkoutDataSummary(data) {
       (exercise) => !exercise.builtin
     ).length,
     history: arrayOrEmpty(data.history).length,
+    plans: arrayOrEmpty(data.plans).length,
     sessions: arrayOrEmpty(data.sessions).length,
     templates: arrayOrEmpty(data.templates).length,
   };
@@ -157,6 +163,7 @@ export function parseWorkoutBackup(rawData, { seedExercises }) {
 
   const hasWorkoutData =
     Array.isArray(data.templates) ||
+    Array.isArray(data.plans) ||
     Array.isArray(data.history) ||
     Array.isArray(data.sessions) ||
     Array.isArray(data.exerciseLibrary) ||

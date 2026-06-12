@@ -78,6 +78,8 @@ export default function SessionView({
   setSessions,
   history,
   setHistory,
+  plans = [],
+  setPlans,
   templates,
   setTemplates,
   exerciseLibrary,
@@ -553,6 +555,8 @@ export default function SessionView({
     updateSession((s) => ({
       ...s,
 
+      templateChanged: true,
+
       exercises: s.exercises.map((ex) =>
         ex.id === exerciseId
           ? {
@@ -614,6 +618,8 @@ export default function SessionView({
 
     updateSession((s) => ({
       ...s,
+
+      templateChanged: true,
 
       exercises: s.exercises.map((ex) =>
         ex.id === exerciseId
@@ -906,6 +912,72 @@ export default function SessionView({
     }));
   }
 
+  function recordPlanWorkoutCompletion(completedWorkout) {
+    if (
+      !setPlans ||
+      !completedWorkout.planId ||
+      !completedWorkout.planWorkoutId
+    ) {
+      return;
+    }
+
+    setPlans(
+      plans.map((plan) => {
+        if (plan.id !== completedWorkout.planId) {
+          return plan;
+        }
+
+        const weekNumber = completedWorkout.planWeek || plan.currentWeek || 1;
+        const existingCompletions = plan.completions || [];
+        const alreadyCompleted = existingCompletions.some(
+          (completion) =>
+            Number(completion.weekNumber) === Number(weekNumber) &&
+            completion.planWorkoutId === completedWorkout.planWorkoutId
+        );
+        const completions = alreadyCompleted
+          ? existingCompletions
+          : [
+              ...existingCompletions,
+              {
+                completedAt: completedWorkout.completedAt,
+                planWorkoutId: completedWorkout.planWorkoutId,
+                sessionId: completedWorkout.id,
+                weekNumber,
+              },
+            ];
+        const completedThisWeek = completions.filter(
+          (completion) => Number(completion.weekNumber) === Number(weekNumber)
+        ).length;
+        const weekComplete =
+          plan.workouts?.length > 0 &&
+          completedThisWeek >= plan.workouts.length;
+        const finalWeek = weekNumber >= plan.durationWeeks;
+
+        return {
+          ...plan,
+          completions,
+          currentWeek:
+            weekComplete && !finalWeek
+              ? weekNumber + 1
+              : plan.currentWeek || weekNumber,
+          status: weekComplete && finalWeek ? "completed" : plan.status,
+        };
+      })
+    );
+  }
+
+  function createNextTemplateExercisesFromSession() {
+    return session.exercises.map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => ({
+        id: Date.now() + Math.random(),
+        targetWeight: set.actualWeight || set.targetWeight || "",
+        targetReps: set.actualReps || set.targetReps || "",
+        targetRir: set.actualRir || set.targetRir || "",
+      })),
+    }));
+  }
+
   function addExercise(exercise, weight, reps, numSets, rir) {
     const sets = Array.from({ length: Number(numSets) }, () => ({
       id: Date.now() + Math.random(),
@@ -1004,7 +1076,11 @@ export default function SessionView({
 
     const getStructuralSignature = (exercises) =>
       exercises.map((ex) => ({
+        equipment: formatList(ex.equipment),
+        exerciseId: ex.exerciseId || null,
+        muscles: formatList(ex.muscles),
         name: ex.name,
+        setCount: ex.sets?.length || 0,
         supersetGroup: ex.supersetGroup || null,
       }));
 
@@ -2727,43 +2803,39 @@ export default function SessionView({
                     label="Complete workout"
                     tone="success"
                     onClick={() => {
+                      const structuralChanges = hasStructuralChanges();
+                      const originalTemplate = templates.find(
+                        (t) => t.id === session.templateId
+                      );
+                      const nextTemplateExercises =
+                        createNextTemplateExercisesFromSession();
+                      const applyChangesToPlanWorkout =
+                        structuralChanges && session.planId
+                          ? window.confirm("Apply changes to workout?")
+                          : false;
                       let completedWorkout = {
                         ...session,
                         completedAt: new Date().toLocaleDateString(),
                       };
+                      let nextTemplates = templates;
 
-                      if (hasStructuralChanges()) {
-                        const original = templates.find(
-                          (t) => t.id === session.templateId
-                        );
-
+                      if (
+                        structuralChanges &&
+                        !applyChangesToPlanWorkout &&
+                        originalTemplate
+                      ) {
                         const derived = {
-                          ...original,
+                          ...originalTemplate,
 
                           id: Date.now(),
 
-                          name: `${original.name} (modified)`,
+                          name: `${originalTemplate.name} (modified)`,
 
-                          parentTemplateId: original.id,
+                          parentTemplateId: originalTemplate.id,
 
                           lastCompleted: completedWorkout.completedAt,
 
-                          exercises: session.exercises.map((ex) => ({
-                            ...ex,
-                            sets: ex.sets
-                              .filter(
-                                (set) => set.actualWeight && set.actualReps
-                              )
-                              .map((set) => ({
-                                id: Date.now() + Math.random(),
-
-                                targetWeight: set.actualWeight,
-
-                                targetReps: set.actualReps,
-
-                                targetRir: set.actualRir || "",
-                              })),
-                          })),
+                          exercises: nextTemplateExercises,
                         };
 
                         completedWorkout = {
@@ -2774,7 +2846,7 @@ export default function SessionView({
                           templateName: derived.name,
                         };
 
-                        setTemplates([...templates, derived]);
+                        nextTemplates = [...templates, derived];
                       }
 
                       const metadataUpdates = {
@@ -2826,40 +2898,25 @@ export default function SessionView({
 
                       setHistory([completedWorkout, ...history]);
 
-                      if (!hasStructuralChanges()) {
-                        setTemplates(
-                          templates.map((t) =>
-                            t.id === session.templateId
-                              ? {
-                                  ...t,
+                      recordPlanWorkoutCompletion(completedWorkout);
 
-                                  name: completedWorkout.templateName,
+                      if (!structuralChanges || applyChangesToPlanWorkout) {
+                        nextTemplates = nextTemplates.map((t) =>
+                          t.id === session.templateId
+                            ? {
+                                ...t,
 
-                                  lastCompleted: completedWorkout.completedAt,
+                                name: completedWorkout.templateName,
 
-                                  exercises: session.exercises.map((ex) => ({
-                                    ...ex,
+                                lastCompleted: completedWorkout.completedAt,
 
-                                    sets: ex.sets
-                                      .filter(
-                                        (set) =>
-                                          set.actualWeight && set.actualReps
-                                      )
-                                      .map((set) => ({
-                                        id: Date.now() + Math.random(),
-
-                                        targetWeight: set.actualWeight,
-
-                                        targetReps: set.actualReps,
-
-                                        targetRir: set.actualRir || "",
-                                      })),
-                                  })),
-                                }
-                              : t
-                          )
+                                exercises: nextTemplateExercises,
+                              }
+                            : t
                         );
                       }
+
+                      setTemplates(nextTemplates);
 
                       setSessions(sessions.filter((s) => s.id !== session.id));
 

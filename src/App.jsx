@@ -1,6 +1,18 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
-import { ClipboardList, Dumbbell, Home, Settings, Utensils } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  ClipboardList,
+  Dumbbell,
+  Home,
+  Play,
+  Settings,
+  Trash2,
+  Utensils,
+} from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
@@ -42,7 +54,7 @@ import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
-const STORAGE_VERSION = 11;
+const STORAGE_VERSION = 12;
 
 const APP_VERSION = "0.16";
 
@@ -69,7 +81,7 @@ const BUILD_NOTICE_COPY = {
 };
 
 function formatBackupSummary(summary) {
-  return `${summary.templates} templates, ${summary.customExercises} custom exercises, ${summary.history} completed workouts`;
+  return `${summary.templates} templates, ${summary.plans || 0} plans, ${summary.customExercises} custom exercises, ${summary.history} completed workouts`;
 }
 
 function formatNormalizedSummary(summary) {
@@ -122,6 +134,30 @@ const activeBottomNavButtonStyle = {
   color: "var(--accent)",
   fontWeight: "bold",
 };
+
+function getPlanCompletionsForWeek(plan, weekNumber) {
+  return (plan.completions || []).filter(
+    (completion) => Number(completion.weekNumber) === Number(weekNumber)
+  );
+}
+
+function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
+  return getPlanCompletionsForWeek(plan, weekNumber).some(
+    (completion) => completion.planWorkoutId === planWorkoutId
+  );
+}
+
+function getPlanWeekStatus(plan) {
+  const currentWeek = plan.currentWeek || 1;
+  const completedThisWeek = getPlanCompletionsForWeek(plan, currentWeek).length;
+  const totalThisWeek = plan.workouts?.length || 0;
+
+  return {
+    completedThisWeek,
+    currentWeek,
+    totalThisWeek,
+  };
+}
 
 function getInitialBuildNotice() {
   const lastSeenBuildTime = localStorage.getItem(LAST_SEEN_BUILD_KEY);
@@ -218,6 +254,7 @@ export default function App() {
   async function exportBackup() {
     const summary = getWorkoutDataSummary({
       templates,
+      plans,
       history,
       sessions,
       exerciseLibrary,
@@ -225,6 +262,7 @@ export default function App() {
 
     const backup = createWorkoutBackup({
       templates,
+      plans,
       history,
       sessions,
       exerciseMetadata,
@@ -307,6 +345,8 @@ export default function App() {
 
       setTemplates(importedData.templates);
 
+      setPlans(importedData.plans);
+
       setHistory(importedData.history);
 
       setSessions(importedData.sessions);
@@ -327,6 +367,8 @@ export default function App() {
   }
 
   const [templates, setTemplates] = useState(initialWorkoutData.templates);
+
+  const [plans, setPlans] = useState(initialWorkoutData.plans);
 
   const [sessions, setSessions] = useState(initialWorkoutData.sessions);
 
@@ -363,6 +405,7 @@ export default function App() {
   const [showNutrition, setShowNutrition] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [expandedPlanIds, setExpandedPlanIds] = useState({});
 
   const [updateStatus, setUpdateStatus] = useState("");
 
@@ -504,6 +547,7 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
+      plans,
       selectedSessionId,
       sessions,
       templates,
@@ -512,6 +556,7 @@ export default function App() {
 
   function replaceWorkoutData(data) {
     setTemplates(data.templates);
+    setPlans(data.plans);
     setHistory(data.history);
     setSessions(data.sessions);
     setExerciseLibrary(data.exerciseLibrary);
@@ -664,6 +709,7 @@ export default function App() {
 
         if (indexedDbData) {
           setTemplates(indexedDbData.templates);
+          setPlans(indexedDbData.plans);
           setHistory(indexedDbData.history);
           setSessions(indexedDbData.sessions);
           setExerciseLibrary(indexedDbData.exerciseLibrary);
@@ -769,6 +815,7 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
+      plans,
       selectedSessionId,
       sessions,
       templates,
@@ -783,6 +830,7 @@ export default function App() {
     }
   }, [
     templates,
+    plans,
     history,
     sessions,
     exerciseLibrary,
@@ -794,6 +842,15 @@ export default function App() {
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+  const isHomeView =
+    !showExercises &&
+    !showPlans &&
+    !showNutrition &&
+    !showSettings &&
+    !selectedTemplateId &&
+    !selectedSessionId &&
+    !selectedHistory &&
+    !selectedHistoryList;
 
   useEffect(() => {
     if (selectedSessionId) {
@@ -867,7 +924,301 @@ export default function App() {
     ]);
   }
 
+  function activatePlan(planId) {
+    setPlans(
+      plans.map((plan) => ({
+        ...plan,
+        currentWeek: plan.currentWeek || 1,
+        status:
+          plan.id === planId
+            ? "active"
+            : plan.status === "active"
+              ? "inactive"
+              : plan.status,
+      }))
+    );
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [planId]: true,
+    }));
+  }
+
+  function deletePlan(plan) {
+    const confirmed = window.confirm(
+      `Delete ${plan.name}? Completed workout history will be kept, but this plan and its generated workout templates will be removed.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const planTemplateIds = new Set(
+      (plan.workouts || []).map((workout) => workout.templateId)
+    );
+
+    setPlans(plans.filter((item) => item.id !== plan.id));
+    setTemplates(
+      templates.filter((template) => !planTemplateIds.has(template.id))
+    );
+  }
+
+  function renderPlanCard(plan) {
+    const weekStatus = getPlanWeekStatus(plan);
+    const active = plan.status === "active";
+    const completed = plan.status === "completed";
+    const expanded = expandedPlanIds[plan.id] ?? (isHomeView && active);
+
+    function toggleExpanded() {
+      setExpandedPlanIds((current) => ({
+        ...current,
+        [plan.id]: !current[plan.id],
+      }));
+    }
+
+    return (
+      <section
+        key={plan.id}
+        style={{
+          background: active ? "var(--surface-muted)" : "var(--surface)",
+          border: active ? "2px solid var(--accent)" : "1px solid var(--border)",
+          borderRadius: "8px",
+          marginBottom: "12px",
+          padding: "12px",
+          textAlign: "left",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "start",
+            display: "grid",
+            gap: "8px",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+        }}
+      >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              minWidth: 0,
+            }}
+          >
+            <button
+              aria-label={`${expanded ? "Collapse" : "Expand"} ${plan.name}`}
+              onClick={toggleExpanded}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "32px",
+                minWidth: "32px",
+                padding: "4px",
+              }}
+            >
+              {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+            </button>
+            <button
+              onClick={toggleExpanded}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text)",
+                cursor: "pointer",
+                minWidth: 0,
+                padding: 0,
+                textAlign: "left",
+              }}
+            >
+              <strong
+                style={{
+                  display: "block",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {plan.name}
+              </strong>
+            </button>
+          </div>
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "6px",
+            }}
+          >
+            <button
+              disabled={active || completed}
+              onClick={() => {
+                if (!active && !completed) {
+                  activatePlan(plan.id);
+                }
+              }}
+              style={{
+                background: active
+                  ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
+                  : "var(--surface-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "999px",
+                color: active ? "var(--accent)" : "var(--text-muted)",
+                cursor: active || completed ? "default" : "pointer",
+                fontSize: "11px",
+                fontWeight: "bold",
+                minHeight: "30px",
+                padding: "3px 8px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {completed ? "Complete" : active ? "Active" : "Inactive"}
+            </button>
+            <button
+              aria-label={`Delete ${plan.name}`}
+              onClick={() => deletePlan(plan)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "30px",
+                minWidth: "32px",
+                padding: "4px",
+              }}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+
+        {expanded && (
+          <>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "8px",
+              }}
+            >
+              {plan.goal === "progress" ? "Progress" : "Maintain"} · Week{" "}
+              {weekStatus.currentWeek} of {plan.durationWeeks} ·{" "}
+              {weekStatus.completedThisWeek}/{weekStatus.totalThisWeek} this week
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "6px",
+                marginTop: "10px",
+              }}
+            >
+              {(plan.workouts || []).map((planWorkout) => {
+                const template = templates.find(
+                  (item) => item.id === planWorkout.templateId
+                );
+                const done = isPlanWorkoutComplete(
+                  plan,
+                  planWorkout.planWorkoutId,
+                  weekStatus.currentWeek
+                );
+
+                return (
+                  <button
+                    key={planWorkout.planWorkoutId}
+                    disabled={!template}
+                    onClick={() => template && setSelectedTemplateId(template.id)}
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
+                      minHeight: "44px",
+                      padding: "7px 9px",
+                      textAlign: "left",
+                    }}
+                  >
+                    {done ? (
+                      <CheckCircle2 size={17} color="var(--success-text)" />
+                    ) : (
+                      <Circle size={17} color="var(--text-muted)" />
+                    )}
+                    <span
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Day {planWorkout.dayNumber}
+                    </span>
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {template?.name || planWorkout.name}
+                    </span>
+                    <span
+                      style={{
+                        alignItems: "center",
+                        display: "inline-flex",
+                        gap: "3px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <Play size={15} /> Review
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {active && !completed && (
+              <div
+                style={{
+                  color: "var(--accent)",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  marginTop: "10px",
+                }}
+              >
+                This is your active plan
+              </div>
+            )}
+          </>
+        )}
+
+        {!expanded && (
+          <div
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "12px",
+              marginTop: "6px",
+            }}
+          >
+            Week {weekStatus.currentWeek} · {weekStatus.completedThisWeek}/
+            {weekStatus.totalThisWeek} done
+          </div>
+        )}
+      </section>
+    );
+  }
+
   function goHome() {
+    const activePlan = plans.find((plan) => plan.status === "active");
+
+    if (activePlan) {
+      setExpandedPlanIds((current) => ({
+        ...current,
+        [activePlan.id]: true,
+      }));
+    }
+
     setShowExercises(false);
     setShowPlans(false);
     setShowNutrition(false);
@@ -1376,6 +1727,9 @@ export default function App() {
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         history={history}
+        onSave={goHome}
+        plans={plans}
+        setPlans={setPlans}
         setTemplates={setTemplates}
         templates={templates}
       />,
@@ -1428,6 +1782,8 @@ export default function App() {
         setSessions={setSessions}
         history={history}
         setHistory={setHistory}
+        plans={plans}
+        setPlans={setPlans}
         templates={templates}
         setTemplates={setTemplates}
         exerciseLibrary={exerciseLibrary}
@@ -1454,6 +1810,7 @@ export default function App() {
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         history={history}
+        plans={plans}
       />,
       "home"
     );
@@ -1475,6 +1832,27 @@ export default function App() {
 
       <hr />
 
+      {plans.length > 0 && (
+        <>
+          <h2
+            style={{
+              fontSize: "18px",
+              marginBottom: "10px",
+            }}
+          >
+            Plans
+          </h2>
+          {[...plans]
+            .sort((a, b) => {
+              if (a.status === "active" && b.status !== "active") return -1;
+              if (b.status === "active" && a.status !== "active") return 1;
+              return (b.createdAt || "").localeCompare(a.createdAt || "");
+            })
+            .map(renderPlanCard)}
+          <hr />
+        </>
+      )}
+
       <div
         style={{
           margin: "12px 0",
@@ -1492,6 +1870,7 @@ export default function App() {
       </div>
 
       {[...templates]
+        .filter((template) => !template.planId)
 
         .sort((a, b) => {
           if (templateSort === "alpha") {

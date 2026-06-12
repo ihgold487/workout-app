@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BarChart3, RefreshCw, Save, X } from "lucide-react";
+import { BarChart3, RefreshCw, Replace, Save, X } from "lucide-react";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import {
@@ -213,6 +213,14 @@ function getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks) {
     : `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`;
 }
 
+function getGoalLabel(goal) {
+  return goal === "progress" ? "Progress" : "Maintain";
+}
+
+function getDefaultPlanName(planType, daysPerWeek, durationWeeks) {
+  return `${getPlanTypeLabel(planType)} (${daysPerWeek}d ${durationWeeks}wk)`;
+}
+
 function PlanWorkoutPreview({
   onRenameWorkout,
   onReplaceExercise,
@@ -346,7 +354,7 @@ function PlanWorkoutPreview({
                       padding: "4px 6px",
                     }}
                   >
-                    🔄
+                    <Replace size={17} />
                   </button>
                 </div>
                 <span
@@ -410,12 +418,20 @@ export default function PlansView({
   exerciseLibrary,
   exerciseMetadata,
   history,
+  onSave,
+  plans,
+  setPlans,
   setTemplates,
   templates,
 }) {
   const [durationWeeks, setDurationWeeks] = useState("4");
   const [daysPerWeek, setDaysPerWeek] = useState("2");
+  const [goal, setGoal] = useState("maintain");
   const [planType, setPlanType] = useState("type-2");
+  const [planName, setPlanName] = useState(() =>
+    getDefaultPlanName("type-2", "2", "4")
+  );
+  const [isPlanNameCustom, setIsPlanNameCustom] = useState(false);
   const [reps, setReps] = useState("10");
   const [rir, setRir] = useState("2");
   const [seed, setSeed] = useState(0);
@@ -458,9 +474,12 @@ export default function PlansView({
     () =>
       generatedPlan.workouts.map((workout, workoutIndex) => ({
         ...workout,
-        name:
-          workoutNameBySlot[workoutIndex] ||
-          getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks),
+        name: Object.prototype.hasOwnProperty.call(
+          workoutNameBySlot,
+          workoutIndex
+        )
+          ? workoutNameBySlot[workoutIndex]
+          : getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks),
         previewWorkoutKey: workoutIndex,
         exercises: workout.exercises.map((exercise) => {
           const slotKey = `${workoutIndex}:${exercise.id}`;
@@ -497,17 +516,24 @@ export default function PlansView({
     ]
   );
 
-  function saveGeneratedWorkouts() {
+  function saveGeneratedPlan() {
     const savedAt = Date.now();
+    const planId = savedAt;
     const workouts = previewWorkouts.map((workout, workoutIndex) => {
       const savedWorkout = { ...workout };
 
       delete savedWorkout.previewWorkoutKey;
 
+      const templateId = savedAt + workoutIndex + 1;
+      const planWorkoutId = `${planId}:workout-${workoutIndex + 1}`;
+
       return {
         ...savedWorkout,
-        id: savedAt + workoutIndex,
+        id: templateId,
         name: workout.name,
+        dayNumber: workoutIndex + 1,
+        planId,
+        planWorkoutId,
         exercises: workout.exercises.map((exercise, exerciseIndex) => {
         const savedExercise = { ...exercise };
 
@@ -526,8 +552,35 @@ export default function PlansView({
       };
     });
 
+    const plan = {
+      id: planId,
+      name:
+        planName.trim() ||
+        getDefaultPlanName(planType, daysPerWeek, durationWeeks),
+      planType,
+      goal,
+      daysPerWeek: Number(daysPerWeek),
+      durationWeeks: Number(durationWeeks),
+      currentWeek: 1,
+      status: "inactive",
+      createdAt: new Date().toISOString(),
+      completions: [],
+      config: {
+        reps,
+        rir,
+      },
+      workouts: workouts.map((workout) => ({
+        dayNumber: workout.dayNumber,
+        name: workout.name,
+        planWorkoutId: workout.planWorkoutId,
+        templateId: workout.id,
+      })),
+    };
+
+    setPlans([...plans, plan]);
     setTemplates([...templates, ...workouts]);
-    setSaveStatus(`Saved ${workouts.length} generated workouts.`);
+    setSaveStatus(`Saved plan with ${workouts.length} workouts.`);
+    onSave?.();
   }
 
   return (
@@ -538,11 +591,17 @@ export default function PlansView({
     >
       <h1>Plans</h1>
 
-      <section
+      <div
         style={{
+          background: "color-mix(in srgb, var(--surface) 96%, transparent)",
+          borderBottom: "1px solid var(--border)",
           display: "grid",
-          gap: "10px",
-          marginBottom: "16px",
+          gap: "8px",
+          margin: "0 -20px 12px",
+          padding: "8px 20px 10px",
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
         }}
       >
         <h2
@@ -560,11 +619,103 @@ export default function PlansView({
             gap: "4px",
           }}
         >
+          Plan name
+          <input
+            value={planName}
+            onChange={(event) => {
+              setIsPlanNameCustom(true);
+              setPlanName(event.target.value);
+            }}
+            style={{
+              boxSizing: "border-box",
+              font: "inherit",
+              minHeight: "40px",
+              padding: "6px 10px",
+              width: "100%",
+            }}
+          />
+        </label>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+          }}
+        >
+          <button
+            onClick={() => {
+              setSeed((value) => value + 1);
+              setReplacementBySlot({});
+              setSaveStatus("");
+            }}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              minHeight: "40px",
+              padding: "6px 10px",
+            }}
+          >
+            <RefreshCw size={16} />
+            Regenerate
+          </button>
+
+          <button
+            onClick={saveGeneratedPlan}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              minHeight: "40px",
+              padding: "6px 10px",
+            }}
+          >
+            <Save size={16} />
+            Save Plan
+          </button>
+        </div>
+
+        {saveStatus && (
+          <div
+            role="status"
+            style={{
+              color: "#1769aa",
+              fontSize: "13px",
+              fontWeight: "bold",
+            }}
+          >
+            {saveStatus}
+          </div>
+        )}
+      </div>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "10px",
+          marginBottom: "16px",
+        }}
+      >
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
           Plan type
           <select
             value={planType}
             onChange={(event) => {
               setPlanType(event.target.value);
+              if (!isPlanNameCustom) {
+                setPlanName(
+                  getDefaultPlanName(
+                    event.target.value,
+                    daysPerWeek,
+                    durationWeeks
+                  )
+                );
+              }
               setReplacementBySlot({});
               setWorkoutNameBySlot({});
               setSaveStatus("");
@@ -579,6 +730,29 @@ export default function PlansView({
           >
             <option value="type-1">Type 1</option>
             <option value="type-2">Type 2</option>
+          </select>
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
+          Goal
+          <select
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            style={{
+              boxSizing: "border-box",
+              font: "inherit",
+              minHeight: "40px",
+              padding: "6px 10px",
+              width: "100%",
+            }}
+          >
+            <option value="maintain">{getGoalLabel("maintain")}</option>
+            <option value="progress">{getGoalLabel("progress")}</option>
           </select>
         </label>
 
@@ -607,59 +781,6 @@ export default function PlansView({
           onClick={() => setActiveValuePicker("rir")}
         />
 
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-          }}
-        >
-          <button
-            onClick={() => {
-              setSeed((value) => value + 1);
-              setReplacementBySlot({});
-              setWorkoutNameBySlot({});
-              setSaveStatus("");
-            }}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-              minHeight: "40px",
-              padding: "6px 10px",
-            }}
-          >
-            <RefreshCw size={16} />
-            Regenerate
-          </button>
-
-          <button
-            onClick={saveGeneratedWorkouts}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-              minHeight: "40px",
-              padding: "6px 10px",
-            }}
-          >
-            <Save size={16} />
-            Save Workouts
-          </button>
-        </div>
-
-        {saveStatus && (
-          <div
-            role="status"
-            style={{
-              color: "#1769aa",
-              fontSize: "13px",
-              fontWeight: "bold",
-            }}
-          >
-            {saveStatus}
-          </div>
-        )}
-
         {generatedPlan.gaps.length > 0 && (
           <div
             style={{
@@ -678,7 +799,7 @@ export default function PlansView({
 
       {previewWorkouts.map((workout) => (
         <PlanWorkoutPreview
-          key={workout.name}
+          key={workout.previewWorkoutKey}
           workout={workout}
           onRenameWorkout={(renamedWorkout, name) => {
             setWorkoutNameBySlot({
@@ -732,7 +853,14 @@ export default function PlansView({
         title="Days per week"
         values={[1, 2, 3, 4, 5, 6]}
         onSelect={(value) => {
-          setDaysPerWeek(String(value));
+          const nextDaysPerWeek = String(value);
+
+          setDaysPerWeek(nextDaysPerWeek);
+          if (!isPlanNameCustom) {
+            setPlanName(
+              getDefaultPlanName(planType, nextDaysPerWeek, durationWeeks)
+            );
+          }
           setReplacementBySlot({});
           setWorkoutNameBySlot({});
           setSaveStatus("");
@@ -746,7 +874,14 @@ export default function PlansView({
         title="Duration in weeks"
         values={[3, 4, 5, 6]}
         onSelect={(value) => {
-          setDurationWeeks(String(value));
+          const nextDurationWeeks = String(value);
+
+          setDurationWeeks(nextDurationWeeks);
+          if (!isPlanNameCustom) {
+            setPlanName(
+              getDefaultPlanName(planType, daysPerWeek, nextDurationWeeks)
+            );
+          }
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}

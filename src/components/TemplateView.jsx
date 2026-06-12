@@ -25,6 +25,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import ExerciseThumbnail from "./ExerciseThumbnail";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 
 function IconButton({
@@ -103,6 +105,7 @@ export default function TemplateView({
   exerciseMetadata,
   setExerciseMetadata,
   history,
+  plans = [],
   sessions,
   setSessions,
   setSelectedSessionId,
@@ -129,14 +132,104 @@ export default function TemplateView({
   const [editingRirSetIndex, setEditingRirSetIndex] = useState(null);
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
+  const [detailExercise, setDetailExercise] = useState(null);
+  const linkedPlan = plans.find((item) => item.id === template.planId);
+  const currentPlanWeek = linkedPlan?.currentWeek || 1;
+  const planWorkoutCompleteThisWeek = Boolean(
+    linkedPlan?.completions?.some(
+      (completion) =>
+        Number(completion.weekNumber) === Number(currentPlanWeek) &&
+        completion.planWorkoutId === template.planWorkoutId
+    )
+  );
+  const isPlanWorkout = Boolean(template.planId);
+  const canStartWorkout =
+    !isPlanWorkout ||
+    (linkedPlan?.status === "active" && !planWorkoutCompleteThisWeek);
+  const startDisabledReason = !isPlanWorkout
+    ? ""
+    : !linkedPlan
+      ? "This plan workout is no longer linked to an active plan."
+      : linkedPlan.status === "completed"
+        ? "This plan is complete."
+        : linkedPlan.status !== "active"
+          ? "Activate this plan before starting its workouts."
+          : planWorkoutCompleteThisWeek
+            ? `This workout is already complete for week ${currentPlanWeek}.`
+            : "";
+
+  function formatList(value) {
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(", ");
+    }
+
+    return value || "";
+  }
+
+  function normalizeLookupValue(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function getExerciseKey(exercise) {
+    return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
+      formatList(exercise?.equipment)
+    )}`;
+  }
+
+  function getExerciseDetailRecord(templateExercise) {
+    const exerciseKey = getExerciseKey(templateExercise);
+    const idMatch = templateExercise.exerciseId
+      ? exerciseLibrary.find(
+          (exercise) => String(exercise.id) === String(templateExercise.exerciseId)
+        )
+      : null;
+    const keyMatches = exerciseLibrary.filter(
+      (exercise) => getExerciseKey(exercise) === exerciseKey
+    );
+    const libraryExercise =
+      keyMatches.find((exercise) => exercise.imageUrl) ||
+      keyMatches[0] ||
+      idMatch ||
+      null;
+    const muscles = Array.isArray(templateExercise.muscles)
+      ? templateExercise.muscles
+      : Array.isArray(libraryExercise?.muscles)
+        ? libraryExercise.muscles
+        : [templateExercise.planMuscle].filter(Boolean);
+
+    return {
+      ...(libraryExercise || {}),
+      ...templateExercise,
+      equipment: templateExercise.equipment || libraryExercise?.equipment || [],
+      id:
+        templateExercise.exerciseId ||
+        libraryExercise?.id ||
+        templateExercise.id,
+      imageAlt: libraryExercise?.imageAlt || templateExercise.imageAlt || "",
+      imageUrl: libraryExercise?.imageUrl || templateExercise.imageUrl || "",
+      muscles,
+    };
+  }
 
   function startWorkout() {
+    if (!canStartWorkout) {
+      return;
+    }
+
+    const plan = plans.find((item) => item.id === template.planId);
     const session = {
       id: Date.now(),
 
       templateId: template.id,
 
       templateName: template.name,
+      planId: template.planId || null,
+      planWeek: plan?.currentWeek || null,
+      planWorkoutId: template.planWorkoutId || null,
 
       exercises: template.exercises.map((exercise) => {
         const libraryExercise = exerciseLibrary.find(
@@ -317,6 +410,7 @@ export default function TemplateView({
         }}
       >
         <button
+          disabled={!canStartWorkout}
           onClick={startWorkout}
           style={{
             alignItems: "center",
@@ -337,6 +431,17 @@ export default function TemplateView({
           <Plus size={16} /> Add Exercise
         </button>
       </div>
+      {startDisabledReason && (
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            marginBottom: "10px",
+          }}
+        >
+          {startDisabledReason}
+        </div>
+      )}
 
       {editingTemplateName && (
         <div
@@ -561,15 +666,18 @@ export default function TemplateView({
             items={template.exercises.map((exercise) => exercise.id)}
             strategy={verticalListSortingStrategy}
           >
-            {template.exercises.map((exercise) => (
-              <SortableExerciseRow key={exercise.id} exercise={exercise}>
-                {({ attributes, listeners }) => (
-                  <div
-                    key={exercise.id}
-                    style={{
-                      marginBottom: "20px",
-                    }}
-                  >
+            {template.exercises.map((exercise) => {
+              const exerciseDetail = getExerciseDetailRecord(exercise);
+
+              return (
+                <SortableExerciseRow key={exercise.id} exercise={exercise}>
+                  {({ attributes, listeners }) => (
+                    <div
+                      key={exercise.id}
+                      style={{
+                        marginBottom: "20px",
+                      }}
+                    >
                     <h3
                       style={{
                         display: "flex",
@@ -586,16 +694,13 @@ export default function TemplateView({
                           gap: "4px",
                         }}
                       >
-                        <span
-                          onClick={() => {}}
+                        <div
                           style={{
+                            alignItems: "center",
+                            display: "flex",
                             flex: 1,
-
+                            gap: "6px",
                             minWidth: 0,
-
-                            overflowWrap: "break-word",
-
-                            cursor: "pointer",
                           }}
                         >
                           <IconButton
@@ -625,12 +730,32 @@ export default function TemplateView({
                             <NotebookPen size={16} />
                           </IconButton>
 
-                          {`${exercise.name}${
-                            exercise.equipment?.[0]
-                              ? ", " + exercise.equipment[0]
-                              : ""
-                          }`}
-                        </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDetailExercise(exerciseDetail)
+                            }
+                            style={{
+                              background: "transparent",
+                              border: 0,
+                              color: "var(--text)",
+                              cursor: "pointer",
+                              flex: 1,
+                              font: "inherit",
+                              fontWeight: "bold",
+                              minWidth: 0,
+                              overflowWrap: "break-word",
+                              padding: 0,
+                              textAlign: "left",
+                            }}
+                          >
+                            {`${exercise.name}${
+                              exercise.equipment?.[0]
+                                ? ", " + exercise.equipment[0]
+                                : ""
+                            }`}
+                          </button>
+                        </div>
                       </div>
 
                       <div
@@ -780,40 +905,71 @@ export default function TemplateView({
                       ) : null;
                     })()}
 
-                    {exercise.sets.map((set) => (
                       <div
-                        key={set.id}
-                        onClick={() => {
-                          setEditingExercise(exercise);
-
-                          setEditingExerciseDraft(structuredClone(exercise));
-                        }}
                         style={{
-                          alignItems: "center",
-                          cursor: "pointer",
+                          alignItems: "flex-start",
                           display: "flex",
-                          flexWrap: "wrap",
-                          gap: "4px",
+                          gap: "8px",
+                          marginTop: "6px",
                         }}
                       >
-                        <Target size={14} /> {set.targetWeight}×{set.targetReps}
-                        {set.targetRir || set.rir
-                          ? ` @ ${set.targetRir || set.rir}`
-                          : ""}{" "}
-                        (<Dumbbell size={13} />{" "}
-                        {calculateE1RM(
-                          null,
-                          set.targetReps,
-                          set.targetRir || set.rir,
-                          set.targetWeight
-                        )?.toFixed(1)}
-                        )
+                        <ExerciseThumbnail
+                          alt={
+                            exerciseDetail.imageAlt ||
+                            `${exercise.name} demonstration`
+                          }
+                          imageUrl={exerciseDetail.imageUrl}
+                          size={42}
+                        />
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: "5px",
+                            minWidth: 0,
+                          }}
+                        >
+                          {exercise.sets.map((set) => (
+                            <div
+                              key={set.id}
+                              onClick={() => {
+                                setEditingExercise(exercise);
+
+                                setEditingExerciseDraft(
+                                  structuredClone(exercise)
+                                );
+                              }}
+                              style={{
+                                alignItems: "center",
+                                cursor: "pointer",
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "6px",
+                              }}
+                            >
+                              <span>
+                                <Target size={14} /> {set.targetWeight}×
+                                {set.targetReps}
+                                {set.targetRir || set.rir
+                                  ? ` @ ${set.targetRir || set.rir}`
+                                  : ""}{" "}
+                                (<Dumbbell size={13} />{" "}
+                                {calculateE1RM(
+                                  null,
+                                  set.targetReps,
+                                  set.targetRir || set.rir,
+                                  set.targetWeight
+                                )?.toFixed(1)}
+                                )
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </SortableExerciseRow>
-            ))}
+                    </div>
+                  )}
+                </SortableExerciseRow>
+              );
+            })}
           </SortableContext>
         </DndContext>
       }
@@ -1109,6 +1265,13 @@ export default function TemplateView({
             </div>
           </div>
         </div>
+      )}
+      {detailExercise && (
+        <ExerciseDetailDialog
+          exercise={detailExercise}
+          history={history}
+          onClose={() => setDetailExercise(null)}
+        />
       )}
     </div>
   );
