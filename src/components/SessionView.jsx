@@ -122,6 +122,7 @@ export default function SessionView({
   const [repsPickerData, setRepsPickerData] = useState(null);
   const [showRirPicker, setShowRirPicker] = useState(false);
   const [rirPickerData, setRirPickerData] = useState(null);
+  const [showApplyChangesPrompt, setShowApplyChangesPrompt] = useState(false);
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -351,9 +352,9 @@ export default function SessionView({
     session.templateName || ""
   );
 
-  const [restMinutes, setRestMinutes] = useState(2);
+  const [restMinutes, setRestMinutes] = useState(1);
 
-  const [restRemainder, setRestRemainder] = useState(0);
+  const [restRemainder, setRestRemainder] = useState(30);
 
   const [restSeconds, setRestSeconds] = useState(90);
 
@@ -364,6 +365,8 @@ export default function SessionView({
   const [timerPaused, setTimerPaused] = useState(false);
 
   const [timerStartedAt, setTimerStartedAt] = useState(null);
+
+  const [timerExpiredAt, setTimerExpiredAt] = useState(null);
 
   const [restComplete, setRestComplete] = useState(false);
 
@@ -388,6 +391,16 @@ export default function SessionView({
 
     return () => clearInterval(id);
   }, [timerRunning, timerStartedAt, restMinutes, restRemainder]);
+
+  useEffect(() => {
+    if (!timerFinished || !timerExpiredAt) return;
+
+    const id = setInterval(() => {
+      setRestSeconds(Math.floor((Date.now() - timerExpiredAt) / 1000));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [timerExpiredAt, timerFinished]);
 
   useEffect(() => {
     if (!timerRunning && !timerPaused && !timerFinished) {
@@ -437,10 +450,12 @@ export default function SessionView({
       setTimeout(() => {
         setRestComplete(true);
 
-        setTimeout(() => setRestComplete(false), 2000);
+        setTimeout(() => setRestComplete(false), 1200);
 
+        setTimerExpiredAt(Date.now());
         setTimerFinished(true);
         setTimerRunning(false);
+        setTimerPaused(false);
       }, 0);
     }
   }, [restSeconds, timerRunning, restMinutes, restRemainder]);
@@ -754,6 +769,15 @@ export default function SessionView({
       : null;
   }
 
+  function resetRestTimer() {
+    setTimerPaused(false);
+    setTimerRunning(false);
+    setTimerStartedAt(null);
+    setTimerExpiredAt(null);
+    setTimerFinished(false);
+    setRestSeconds(restMinutes * 60 + restRemainder);
+  }
+
   function markSetComplete(exerciseId, setId) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
@@ -814,6 +838,10 @@ export default function SessionView({
     if (undo) {
       setActiveSet({ exerciseId, setId });
       return;
+    }
+
+    if (timerFinished) {
+      resetRestTimer();
     }
 
     setActiveSet(getNextActiveSetAfter(exerciseId, setId));
@@ -1089,6 +1117,89 @@ export default function SessionView({
       JSON.stringify(getStructuralSignature(original.exercises)) !==
       JSON.stringify(getStructuralSignature(session.exercises))
     );
+  }
+
+  function completeWorkout({ applyStructuralChanges = false } = {}) {
+    const structuralChanges = hasStructuralChanges();
+    const nextTemplateExercises = createNextTemplateExercisesFromSession();
+    let completedWorkout = {
+      ...session,
+      completedAt: new Date().toLocaleDateString(),
+    };
+    let nextTemplates = templates;
+
+    const metadataUpdates = {
+      ...exerciseMetadata,
+    };
+
+    completedWorkout.exercises.forEach((exercise) => {
+      let bestE1RM = null;
+
+      exercise.sets.forEach((set) => {
+        const e1rm = calculateE1RM(
+          set.actualWeight || set.targetWeight,
+          set.actualReps || set.targetReps,
+          set.actualRir ?? set.targetRir
+        );
+
+        if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
+          bestE1RM = e1rm;
+        }
+      });
+
+      if (bestE1RM === null) {
+        return;
+      }
+
+      const existing = metadataUpdates[exercise.exerciseId] || {};
+
+      metadataUpdates[exercise.exerciseId] = {
+        ...existing,
+
+        latestE1RM: {
+          value: bestE1RM,
+          date: completedWorkout.completedAt,
+        },
+
+        maxE1RM:
+          !existing.maxE1RM || bestE1RM > existing.maxE1RM.value
+            ? {
+                value: bestE1RM,
+                date: completedWorkout.completedAt,
+              }
+            : existing.maxE1RM,
+      };
+    });
+
+    setExerciseMetadata(metadataUpdates);
+
+    setHistory([completedWorkout, ...history]);
+
+    recordPlanWorkoutCompletion(completedWorkout);
+
+    if (!structuralChanges || applyStructuralChanges) {
+      nextTemplates = nextTemplates.map((t) =>
+        t.id === session.templateId
+          ? {
+              ...t,
+
+              name: completedWorkout.templateName,
+
+              lastCompleted: completedWorkout.completedAt,
+
+              exercises: nextTemplateExercises,
+            }
+          : t
+      );
+    }
+
+    setTemplates(nextTemplates);
+
+    setSessions(sessions.filter((s) => s.id !== session.id));
+
+    setSelectedSessionId(null);
+
+    setSelectedTemplateId(null);
   }
 
   return (
@@ -1389,15 +1500,15 @@ export default function SessionView({
         <div
           style={{
             background: timerFinished
-              ? "var(--success-bg)"
-              : timerRunning
               ? "var(--danger-bg)"
+              : timerRunning
+              ? "var(--warning-bg, rgba(255, 193, 7, .18))"
               : "var(--surface-raised)",
 
             border: timerFinished
-              ? "2px solid #5aa469"
-              : timerRunning
               ? "2px solid #c66"
+              : timerRunning
+              ? "2px solid #d6a100"
               : "1px solid var(--border)",
 
             padding: "6px",
@@ -1459,12 +1570,20 @@ export default function SessionView({
               lineHeight: "1",
             }}
             onClick={() => {
-              if (timerRunning) {
+              if (timerFinished) {
+                setTimerPaused(false);
+                setTimerRunning(false);
+                setTimerStartedAt(null);
+                setTimerExpiredAt(null);
+                setTimerFinished(false);
+                setRestSeconds(restMinutes * 60 + restRemainder);
+              } else if (timerRunning) {
                 setTimerPaused(true);
 
                 setTimerRunning(false);
               } else {
                 setTimerPaused(false);
+                setTimerExpiredAt(null);
 
                 if (restSeconds <= 0) {
                   setRestSeconds(restMinutes * 60 + restRemainder);
@@ -1480,7 +1599,7 @@ export default function SessionView({
               }
             }}
           >
-            {timerRunning ? "■" : "▶"}
+            {timerRunning || timerFinished ? "■" : "▶"}
           </button>
 
           <button
@@ -1493,6 +1612,7 @@ export default function SessionView({
 
               setTimerRunning(false);
               setTimerStartedAt(null);
+              setTimerExpiredAt(null);
               setTimerFinished(false);
 
               setRestSeconds(restMinutes * 60 + restRemainder);
@@ -1514,12 +1634,20 @@ export default function SessionView({
         {restComplete && (
           <div
             style={{
-              marginBottom: "10px",
-              padding: "10px",
-              textAlign: "center",
+              alignItems: "center",
+              background: "rgba(34, 197, 94, .72)",
+              color: "white",
+              display: "flex",
+              fontSize: "28px",
               fontWeight: "bold",
-              border: "1px solid",
-              borderRadius: "8px",
+              inset: 0,
+              justifyContent: "center",
+              letterSpacing: "0.04em",
+              pointerEvents: "none",
+              position: "fixed",
+              textAlign: "center",
+              textShadow: "0 2px 12px rgba(0,0,0,.35)",
+              zIndex: 20000,
             }}
           >
             REST COMPLETE
@@ -2784,10 +2912,29 @@ export default function SessionView({
                     }}
                   >
                     <Trophy size={28} />
-                  </div>
+                    </div>
                     <div>Complete Workout?</div>
                   </div>
                 </div>
+
+                {!allSetsCompleted && (
+                  <div
+                    style={{
+                      alignItems: "center",
+                      background: "var(--warning-bg, rgba(255, 193, 7, .14))",
+                      border: "1px solid var(--warning-border, #d6a100)",
+                      borderRadius: "8px",
+                      color: "var(--warning-text, var(--text))",
+                      display: "flex",
+                      gap: "8px",
+                      marginBottom: "16px",
+                      padding: "10px",
+                    }}
+                  >
+                    <AlertTriangle size={18} />
+                    <span>Warning: not all sets have been completed</span>
+                  </div>
+                )}
 
                 <div
                   style={{
@@ -2806,130 +2953,101 @@ export default function SessionView({
                     label="Complete workout"
                     tone="success"
                     onClick={() => {
-                      const structuralChanges = hasStructuralChanges();
-                      const originalTemplate = templates.find(
-                        (t) => t.id === session.templateId
-                      );
-                      const nextTemplateExercises =
-                        createNextTemplateExercisesFromSession();
-                      const applyChangesToPlanWorkout =
-                        structuralChanges && session.planId
-                          ? window.confirm("Apply changes to workout?")
-                          : false;
-                      let completedWorkout = {
-                        ...session,
-                        completedAt: new Date().toLocaleDateString(),
-                      };
-                      let nextTemplates = templates;
-
-                      if (
-                        structuralChanges &&
-                        !applyChangesToPlanWorkout &&
-                        originalTemplate
-                      ) {
-                        const derived = {
-                          ...originalTemplate,
-
-                          id: Date.now(),
-
-                          name: `${originalTemplate.name} (modified)`,
-
-                          parentTemplateId: originalTemplate.id,
-
-                          lastCompleted: completedWorkout.completedAt,
-
-                          exercises: nextTemplateExercises,
-                        };
-
-                        completedWorkout = {
-                          ...completedWorkout,
-
-                          templateId: derived.id,
-
-                          templateName: derived.name,
-                        };
-
-                        nextTemplates = [...templates, derived];
+                      if (hasStructuralChanges()) {
+                        setConfirmComplete(false);
+                        setShowApplyChangesPrompt(true);
+                        return;
                       }
 
-                      const metadataUpdates = {
-                        ...exerciseMetadata,
-                      };
-
-                      completedWorkout.exercises.forEach((exercise) => {
-                        let bestE1RM = null;
-
-                        exercise.sets.forEach((set) => {
-                          const e1rm = calculateE1RM(
-                            set.actualWeight || set.targetWeight,
-                            set.actualReps || set.targetReps,
-                            set.actualRir ?? set.targetRir
-                          );
-
-                          if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
-                            bestE1RM = e1rm;
-                          }
-                        });
-
-                        if (bestE1RM === null) {
-                          return;
-                        }
-
-                        const existing =
-                          metadataUpdates[exercise.exerciseId] || {};
-
-                        metadataUpdates[exercise.exerciseId] = {
-                          ...existing,
-
-                          latestE1RM: {
-                            value: bestE1RM,
-                            date: completedWorkout.completedAt,
-                          },
-
-                          maxE1RM:
-                            !existing.maxE1RM ||
-                            bestE1RM > existing.maxE1RM.value
-                              ? {
-                                  value: bestE1RM,
-                                  date: completedWorkout.completedAt,
-                                }
-                              : existing.maxE1RM,
-                        };
-                      });
-
-                      setExerciseMetadata(metadataUpdates);
-
-                      setHistory([completedWorkout, ...history]);
-
-                      recordPlanWorkoutCompletion(completedWorkout);
-
-                      if (!structuralChanges || applyChangesToPlanWorkout) {
-                        nextTemplates = nextTemplates.map((t) =>
-                          t.id === session.templateId
-                            ? {
-                                ...t,
-
-                                name: completedWorkout.templateName,
-
-                                lastCompleted: completedWorkout.completedAt,
-
-                                exercises: nextTemplateExercises,
-                              }
-                            : t
-                        );
-                      }
-
-                      setTemplates(nextTemplates);
-
-                      setSessions(sessions.filter((s) => s.id !== session.id));
-
-                      setSelectedSessionId(null);
-
-                      setSelectedTemplateId(null);
+                      completeWorkout();
                     }}
                   >
                     <Check size={18} />
                   </IconButton>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showApplyChangesPrompt && (
+            <div
+              style={{
+                alignItems: "center",
+                background: "rgba(0,0,0,.45)",
+                display: "flex",
+                height: "100%",
+                justifyContent: "center",
+                left: 0,
+                position: "fixed",
+                top: 0,
+                width: "100%",
+                zIndex: 9999,
+              }}
+            >
+              <div
+                style={{
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  boxShadow: "0 0 20px rgba(0,0,0,.35)",
+                  maxWidth: "320px",
+                  padding: "20px",
+                  width: "calc(100% - 32px)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Apply changes to workout?
+                </div>
+
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "13px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  Save exercise, set, or superset changes to this workout for next
+                  time?
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                  }}
+                >
+                  <button onClick={() => setShowApplyChangesPrompt(false)}>
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowApplyChangesPrompt(false);
+                      completeWorkout({
+                        applyStructuralChanges: false,
+                      });
+                    }}
+                  >
+                    No
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowApplyChangesPrompt(false);
+                      completeWorkout({
+                        applyStructuralChanges: true,
+                      });
+                    }}
+                  >
+                    Yes
+                  </button>
                 </div>
               </div>
             </div>
