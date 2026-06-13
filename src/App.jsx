@@ -1,17 +1,21 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect } from "react";
 import {
+  CalendarPlus,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
   ClipboardList,
+  Copy,
   Dumbbell,
   Home,
   Play,
+  RotateCcw,
   Settings,
   Trash2,
   Utensils,
+  X,
 } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
@@ -406,6 +410,8 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [expandedPlanIds, setExpandedPlanIds] = useState({});
+  const [completedPlanActions, setCompletedPlanActions] = useState(null);
+  const [extendPlanTarget, setExtendPlanTarget] = useState(null);
 
   const [updateStatus, setUpdateStatus] = useState("");
 
@@ -943,6 +949,112 @@ export default function App() {
     }));
   }
 
+  function restartPlan(planId) {
+    setPlans(
+      plans.map((plan) => ({
+        ...plan,
+        completions: plan.id === planId ? [] : plan.completions || [],
+        currentWeek: plan.id === planId ? 1 : plan.currentWeek || 1,
+        status:
+          plan.id === planId
+            ? "active"
+            : plan.status === "active"
+              ? "inactive"
+              : plan.status,
+      }))
+    );
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [planId]: true,
+    }));
+    setCompletedPlanActions(null);
+  }
+
+  function extendPlan(planId, weeksToAdd) {
+    setPlans(
+      plans.map((plan) => {
+        if (plan.id !== planId) {
+          return {
+            ...plan,
+            status: plan.status === "active" ? "inactive" : plan.status,
+          };
+        }
+
+        const durationWeeks = Number(plan.durationWeeks) || 1;
+
+        return {
+          ...plan,
+          currentWeek: durationWeeks + 1,
+          durationWeeks: durationWeeks + weeksToAdd,
+          status: "active",
+        };
+      })
+    );
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [planId]: true,
+    }));
+    setCompletedPlanActions(null);
+    setExtendPlanTarget(null);
+  }
+
+  function clonePlan(plan) {
+    const clonedAt = Date.now();
+    const clonedPlanId = clonedAt;
+    const clonedTemplates = (plan.workouts || []).map((planWorkout, index) => {
+      const originalTemplate = templates.find(
+        (template) => template.id === planWorkout.templateId
+      );
+      const templateId = clonedAt + index + 1;
+      const planWorkoutId = `${clonedPlanId}:workout-${index + 1}`;
+
+      return {
+        ...(originalTemplate || {
+          exercises: [],
+          name: planWorkout.name,
+        }),
+        id: templateId,
+        exercises: (originalTemplate?.exercises || []).map(
+          (exercise, exerciseIndex) => ({
+            ...exercise,
+            id: clonedAt + index * 100 + exerciseIndex,
+            sets: (exercise.sets || []).map((set, setIndex) => ({
+              ...set,
+              id: clonedAt + index * 1000 + exerciseIndex * 100 + setIndex,
+            })),
+          })
+        ),
+        lastCompleted: null,
+        name: originalTemplate?.name || planWorkout.name,
+        planId: clonedPlanId,
+        planWorkoutId,
+      };
+    });
+    const clonedPlan = {
+      ...plan,
+      id: clonedPlanId,
+      name: `${plan.name} Copy`,
+      status: "inactive",
+      currentWeek: 1,
+      createdAt: new Date().toISOString(),
+      completions: [],
+      workouts: clonedTemplates.map((template, index) => ({
+        dayNumber: index + 1,
+        name: template.name,
+        planWorkoutId: template.planWorkoutId,
+        templateId: template.id,
+      })),
+    };
+
+    setPlans([...plans, clonedPlan]);
+    setTemplates([...templates, ...clonedTemplates]);
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [clonedPlanId]: true,
+    }));
+    setCompletedPlanActions(null);
+  }
+
   function deletePlan(plan) {
     const confirmed = window.confirm(
       `Delete ${plan.name}? Completed workout history will be kept, but this plan and its generated workout templates will be removed.`
@@ -959,6 +1071,219 @@ export default function App() {
     setPlans(plans.filter((item) => item.id !== plan.id));
     setTemplates(
       templates.filter((template) => !planTemplateIds.has(template.id))
+    );
+  }
+
+  function renderCompletedPlanActions() {
+    if (!completedPlanActions) {
+      return null;
+    }
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${completedPlanActions.name} options`}
+        style={{
+          alignItems: "flex-end",
+          background: "rgba(0,0,0,.42)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          position: "fixed",
+          zIndex: 1500,
+        }}
+      >
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            borderRadius: "18px 18px 0 0",
+            boxSizing: "border-box",
+            maxWidth: "520px",
+            padding: "16px",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "space-between",
+              marginBottom: "12px",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <h2
+                style={{
+                  fontSize: "18px",
+                  margin: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Completed plan
+              </h2>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "3px",
+                }}
+              >
+                {completedPlanActions.name}
+              </div>
+            </div>
+            <button
+              aria-label="Close completed plan options"
+              onClick={() => setCompletedPlanActions(null)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: "4px",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            <button
+              onClick={() => restartPlan(completedPlanActions.id)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "8px",
+                justifyContent: "center",
+                minHeight: "44px",
+              }}
+            >
+              <RotateCcw size={17} /> Restart
+            </button>
+            <button
+              onClick={() => setExtendPlanTarget(completedPlanActions)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "8px",
+                justifyContent: "center",
+                minHeight: "44px",
+              }}
+            >
+              <CalendarPlus size={17} /> Extend
+            </button>
+            <button
+              onClick={() => clonePlan(completedPlanActions)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "8px",
+                justifyContent: "center",
+                minHeight: "44px",
+              }}
+            >
+              <Copy size={17} /> Clone
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderExtendPlanPicker() {
+    if (!extendPlanTarget) {
+      return null;
+    }
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose extension length"
+        style={{
+          alignItems: "flex-end",
+          background: "rgba(0,0,0,.42)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          position: "fixed",
+          zIndex: 1600,
+        }}
+      >
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            borderRadius: "18px 18px 0 0",
+            boxSizing: "border-box",
+            maxWidth: "520px",
+            padding: "16px",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "18px",
+                margin: 0,
+              }}
+            >
+              Extend by weeks
+            </h2>
+            <button
+              aria-label="Cancel extension"
+              onClick={() => setExtendPlanTarget(null)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: "4px",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "repeat(3, 1fr)",
+            }}
+          >
+            {[1, 2, 3, 4, 5, 6].map((weeks) => (
+              <button
+                key={weeks}
+                onClick={() => extendPlan(extendPlanTarget.id, weeks)}
+                style={{
+                  minHeight: "46px",
+                }}
+              >
+                {weeks}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1050,9 +1375,14 @@ export default function App() {
             }}
           >
             <button
-              disabled={active || completed}
+              disabled={active}
               onClick={() => {
-                if (!active && !completed) {
+                if (completed) {
+                  setCompletedPlanActions(plan);
+                  return;
+                }
+
+                if (!active) {
                   activatePlan(plan.id);
                 }
               }}
@@ -1063,7 +1393,7 @@ export default function App() {
                 border: "1px solid var(--border)",
                 borderRadius: "999px",
                 color: active ? "var(--accent)" : "var(--text-muted)",
-                cursor: active || completed ? "default" : "pointer",
+                cursor: active ? "default" : "pointer",
                 fontSize: "11px",
                 fontWeight: "bold",
                 minHeight: "30px",
@@ -1849,6 +2179,8 @@ export default function App() {
               return (b.createdAt || "").localeCompare(a.createdAt || "");
             })
             .map(renderPlanCard)}
+          {renderCompletedPlanActions()}
+          {renderExtendPlanPicker()}
           <hr />
         </>
       )}

@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 
 import { equipmentOptions } from "../data/seedEquipment";
+import {
+  EXERCISE_STATUS,
+  getExerciseStatus,
+  isExerciseActive,
+} from "../utils/exerciseStatus";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
@@ -80,6 +85,7 @@ export default function ExerciseView({
   const [editingExercise, setEditingExercise] = useState(null);
   const [editingDraft, setEditingDraft] = useState(emptyDraft);
   const [exerciseType, setExerciseType] = useState("");
+  const [exerciseStatus, setExerciseStatus] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("");
   const [search, setSearch] = useState("");
@@ -105,11 +111,26 @@ export default function ExerciseView({
           !exerciseType ||
           (exerciseType === "builtin" && exercise.builtin) ||
           (exerciseType === "custom" && !exercise.builtin);
+        const matchesStatus =
+          !exerciseStatus || getExerciseStatus(exercise) === exerciseStatus;
 
-        return matchesSearch && matchesMuscle && matchesEquipment && matchesType;
+        return (
+          matchesSearch &&
+          matchesMuscle &&
+          matchesEquipment &&
+          matchesType &&
+          matchesStatus
+        );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [exerciseLibrary, exerciseType, search, selectedEquipment, selectedMuscle]);
+  }, [
+    exerciseLibrary,
+    exerciseStatus,
+    exerciseType,
+    search,
+    selectedEquipment,
+    selectedMuscle,
+  ]);
 
   function addExercise() {
     if (!draft.name.trim()) {
@@ -121,6 +142,7 @@ export default function ExerciseView({
       ...exerciseLibrary,
       exerciseFromDraft(draft, {
         builtin: false,
+        active: EXERCISE_STATUS.active,
         id: Date.now(),
       }),
     ]);
@@ -147,6 +169,23 @@ export default function ExerciseView({
     );
     setEditingExercise(null);
     setEditingDraft(emptyDraft);
+  }
+
+  function toggleExerciseStatus(exerciseToToggle) {
+    const nextStatus = isExerciseActive(exerciseToToggle)
+      ? EXERCISE_STATUS.inactive
+      : EXERCISE_STATUS.active;
+
+    setExerciseLibrary(
+      exerciseLibrary.map((exercise) =>
+        exercise.id === exerciseToToggle.id
+          ? {
+              ...exercise,
+              active: nextStatus,
+            }
+          : exercise
+      )
+    );
   }
 
   function renderExerciseForm(formDraft, setFormDraft, { compact = false } = {}) {
@@ -422,6 +461,15 @@ export default function ExerciseView({
           <option value="builtin">Built-in</option>
           <option value="custom">Custom</option>
         </select>
+
+        <select
+          value={exerciseStatus}
+          onChange={(event) => setExerciseStatus(event.target.value)}
+        >
+          <option value="">All status</option>
+          <option value={EXERCISE_STATUS.active}>Active</option>
+          <option value={EXERCISE_STATUS.inactive}>Inactive</option>
+        </select>
       </section>
 
       <div
@@ -433,6 +481,7 @@ export default function ExerciseView({
         {filteredExercises.map((exercise) => {
           const primaryMuscle = exercise.muscles?.[0] || "Other";
           const secondaryMuscles = exercise.muscles?.slice(1) || [];
+          const active = isExerciseActive(exercise);
 
           return (
             <div
@@ -491,17 +540,30 @@ export default function ExerciseView({
                     }}
                   >
                     {exercise.equipment?.[0] || "No equipment"} ·{" "}
-                    {exercise.builtin ? "Built-in" : "Custom"}
+                    {exercise.builtin ? "Built-in" : "Custom"} ·{" "}
+                    {active ? "Active" : "Inactive"}
                   </div>
                 </div>
 
-                {!exercise.builtin && (
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "6px",
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleExerciseStatus(exercise);
                     }}
                   >
+                    {active ? "Active" : "Inactive"}
+                  </button>
+
+                  {!exercise.builtin && (
+                    <>
                     <button
                       onClick={(event) => {
                         event.stopPropagation();
@@ -520,8 +582,9 @@ export default function ExerciseView({
                     >
                       Delete
                     </button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div

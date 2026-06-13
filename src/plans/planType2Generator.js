@@ -1,4 +1,5 @@
 import { calculateE1RM } from "../utils/e1rm";
+import { isExerciseActive } from "../utils/exerciseStatus";
 
 const PLAN_TYPE_2_WORKOUTS = [
   {
@@ -301,6 +302,7 @@ export function generatePlanWorkouts({
   const requestedWorkoutCount = Math.max(1, Number(daysPerWeek) || 2);
   const workoutCount = Math.min(requestedWorkoutCount, config.workouts.length);
   const workoutDefinitions = config.workouts.slice(0, workoutCount);
+  const activeExerciseLibrary = exerciseLibrary.filter(isExerciseActive);
   const usage = {
     equipmentByMuscle: new Map(),
     exerciseIds: new Set(),
@@ -312,7 +314,7 @@ export function generatePlanWorkouts({
     const exercises = workout.groups.flatMap((group, groupIndex) =>
       group.muscles.flatMap((muscle, muscleIndex) => {
         const exercise = chooseExercise(
-          exerciseLibrary,
+          activeExerciseLibrary,
           muscle,
           usage,
           seed + workoutIndex + groupIndex + muscleIndex

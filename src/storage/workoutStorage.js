@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { withDefaultExerciseStatus } from "../utils/exerciseStatus";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
@@ -41,6 +42,14 @@ function objectOrEmpty(value) {
     : {};
 }
 
+function getExerciseSeedKey(exercise) {
+  const equipment = Array.isArray(exercise?.equipment)
+    ? exercise.equipment.filter(Boolean).join("|")
+    : exercise?.equipment || "";
+
+  return `${exercise?.id ?? ""}::${exercise?.name || ""}::${equipment}`;
+}
+
 function normalizeWorkoutData(data, { seedExercises }) {
   return {
     exerciseLibrary: mergeExerciseLibraryWithSeed(
@@ -57,11 +66,23 @@ function normalizeWorkoutData(data, { seedExercises }) {
 }
 
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
-  const customExercises = arrayOrEmpty(exerciseLibrary).filter(
+  const savedExercises = arrayOrEmpty(exerciseLibrary);
+  const savedStatusBySeedKey = new Map(
+    savedExercises
+      .filter((exercise) => exercise.builtin)
+      .map((exercise) => [getExerciseSeedKey(exercise), exercise.active])
+  );
+  const seededExercises = seedExercises.map((exercise) =>
+    withDefaultExerciseStatus({
+      ...exercise,
+      active: savedStatusBySeedKey.get(getExerciseSeedKey(exercise)),
+    })
+  );
+  const customExercises = savedExercises.filter(
     (exercise) => !exercise.builtin
   );
 
-  return [...seedExercises, ...customExercises];
+  return [...seededExercises, ...customExercises.map(withDefaultExerciseStatus)];
 }
 
 export function loadWorkoutData({ seedExercises }) {

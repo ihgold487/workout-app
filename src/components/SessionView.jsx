@@ -24,6 +24,7 @@ import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import { calculateE1RM } from "../utils/e1rm";
+import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 
 function IconButton({
   children,
@@ -2705,6 +2706,8 @@ export default function SessionView({
                       if (!newExercise.name.trim()) return;
 
                       const createdExercise = {
+                        active: EXERCISE_STATUS.active,
+
                         id: Date.now(),
 
                         name: newExercise.name.trim(),

@@ -1,5 +1,6 @@
 import { Plus, Search, X } from "lucide-react";
 import { useState } from "react";
+import { isExerciseActive } from "../utils/exerciseStatus";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
@@ -25,14 +26,16 @@ export default function ExercisePickerSheet({
   title,
 }) {
   const [detailExercise, setDetailExercise] = useState(null);
+  const activeExercises = exerciseLibrary.filter(isExerciseActive);
   const muscleGroups = [
-    ...new Set(exerciseLibrary.map((exercise) => exercise.muscles?.[0])),
+    ...new Set(activeExercises.map((exercise) => exercise.muscles?.[0])),
   ]
     .filter(Boolean)
     .sort();
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredExercises = [...exerciseLibrary]
+  const filteredExercises = activeExercises
+    .slice()
     .filter(
       (exercise) =>
         (!selectedMuscle || exercise.muscles?.[0] === selectedMuscle) &&
