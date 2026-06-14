@@ -6,15 +6,16 @@ import {
   CheckCircle2,
   Circle,
   Dumbbell,
+  Hash,
   Link2,
   NotebookPen,
-  Pencil,
   Plus,
   RefreshCw,
   Target,
   Timer,
   Trash2,
   Trophy,
+  Weight,
   X,
 } from "lucide-react";
 import { equipmentOptions } from "../data/seedEquipment";
@@ -2180,45 +2181,67 @@ export default function SessionView({
                       </span>
 
                       <span
+                        title="Actual weight"
                         style={{
-                          width: "112px",
+                          marginLeft: "4px",
+                          width: "50px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
                           alignItems: "center",
                           display: "inline-flex",
-                          gap: "3px",
+                          justifyContent: "center",
                         }}
                       >
-                        <Pencil size={14} /> Actual
+                        <Weight size={15} aria-label="Actual weight" />
                       </span>
 
                       <span
+                        title="Actual reps"
                         style={{
-                          marginLeft: "10px",
+                          width: "46px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
                           alignItems: "center",
                           display: "inline-flex",
+                          justifyContent: "center",
                         }}
                       >
-                        <BatteryMedium size={15} aria-label="RIR" />
+                        <Hash size={15} aria-label="Actual reps" />
                       </span>
 
                       <span
+                        title="Actual RIR"
                         style={{
-                          marginLeft: "12px",
+                          width: "36px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
                           alignItems: "center",
                           display: "inline-flex",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <BatteryMedium size={15} aria-label="Actual RIR" />
+                      </span>
+
+                      <span
+                        title="e1RM"
+                        style={{
+                          marginLeft: "2px",
+                          width: "42px",
+                          whiteSpace: "nowrap",
+                          fontSize: "14px",
+                          alignItems: "center",
+                          display: "inline-flex",
+                          justifyContent: "center",
                         }}
                       >
                         <Dumbbell size={15} aria-label="e1RM" />
                       </span>
 
                       <span
+                        title="Completed"
                         style={{
-                          marginLeft: "16px",
+                          marginLeft: "8px",
                           whiteSpace: "nowrap",
                           fontSize: "14px",
                           alignItems: "center",

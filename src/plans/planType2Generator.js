@@ -1,75 +1,17 @@
 import { isExerciseActive } from "../utils/exerciseStatus";
 import { recommendSetTarget } from "../utils/targetRecommendation";
 
-const PLAN_TYPE_2_WORKOUTS = [
-  {
-    name: "Workout 1",
-    groups: [
-      { label: "A", muscles: ["Quads", "Upper Back"], sets: 3 },
-      { label: "B", muscles: ["Glutes", "Chest"], sets: 3 },
-      { label: "C", muscles: ["Lats", "Upper Chest"], sets: 2 },
-      { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
-      { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
-    ],
-  },
-  {
-    name: "Workout 2",
-    groups: [
-      { label: "A", muscles: ["Hamstrings", "Chest"], sets: 3 },
-      { label: "B", muscles: ["Glutes", "Lats"], sets: 3 },
-      { label: "C", muscles: ["Upper Back", "Upper Chest"], sets: 2 },
-      { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
-      { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
-    ],
-  },
-];
-
-const PLAN_TYPE_2_THIRD_DAY = {
-  name: "Workout 3",
-  groups: [
-    { label: "A", muscles: ["Quads", "Lats"], sets: 3 },
-    { label: "B", muscles: ["Hamstrings", "Upper Chest"], sets: 3 },
-    { label: "C", muscles: ["Glutes", "Upper Back"], sets: 2 },
-    { label: "D", muscles: ["Biceps", "Triceps"], sets: 2 },
-    { label: "Abs", muscles: ["Abs"], sets: 3, supersetGroup: null },
-  ],
-};
-
-const PLAN_TYPE_1_WORKOUTS = [
-  {
-    name: "Workout 1",
-    groups: [
-      { label: "A", muscles: ["Quads", "Upper Back"], sets: 2 },
-      { label: "B", muscles: ["Glutes", "Chest"], sets: 2 },
-      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
-    ],
-  },
-  {
-    name: "Workout 2",
-    groups: [
-      { label: "A", muscles: ["Hamstrings", "Chest"], sets: 2 },
-      { label: "B", muscles: ["Glutes", "Lats"], sets: 2 },
-      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
-    ],
-  },
-  {
-    name: "Workout 3",
-    groups: [
-      { label: "A", muscles: ["Quads", "Lats"], sets: 2 },
-      { label: "B", muscles: ["Hamstrings", "Upper Chest"], sets: 2 },
-      { label: "C", muscles: ["Biceps", "Triceps"], sets: 2 },
-    ],
-  },
-];
+const CHEST_MUSCLES = ["Chest", "Upper Chest"];
+const LEG_MUSCLES = ["Glutes", "Quads", "Hamstrings"];
+const PULL_MUSCLES = ["Lats", "Upper Back"];
+const UPPER_BODY_CATEGORIES = ["Lats", "Upper Back", "Chest"];
 
 const PLAN_CONFIGS = {
   "type-1": {
     label: "Plan Type 1",
-    workouts: PLAN_TYPE_1_WORKOUTS,
   },
   "type-2": {
     label: "Plan Type 2",
-    workouts: [...PLAN_TYPE_2_WORKOUTS, PLAN_TYPE_2_THIRD_DAY],
   },
 };
 
@@ -96,6 +38,12 @@ function getExerciseEquipmentKey(exercise) {
     .join("|");
 }
 
+function getExerciseSearchText(exercise) {
+  return [exercise.name, ...(exercise.equipment || [])]
+    .join(" ")
+    .toLowerCase();
+}
+
 function getExerciseVariantKey(exercise) {
   const name = exercise.name.toLowerCase();
 
@@ -117,8 +65,243 @@ function getExerciseVariantKey(exercise) {
   return name.replace(/[^a-z0-9]+/g, "-");
 }
 
+function getChestVariantKey(exercise) {
+  const name = exercise.name.toLowerCase();
+
+  if (name.includes("decline")) return "decline";
+  if (name.includes("incline")) return "incline";
+  if (normalizeMuscle(exercise.muscles?.[0]) === "upper chest") {
+    return "incline";
+  }
+  if (name.includes("fly") || name.includes("flye")) return "fly";
+
+  return "flat";
+}
+
+function getPullVariantKey(exercise) {
+  const text = getExerciseSearchText(exercise);
+  const movement = text.includes("pulldown")
+    ? "pulldown"
+    : text.includes("pull up") || text.includes("pull-up")
+      ? "pull-up"
+      : text.includes("row")
+        ? "row"
+        : "pull";
+  let grip = "standard";
+
+  if (text.includes("wide neutral")) {
+    grip = "wide-neutral";
+  } else if (text.includes("wide")) {
+    grip = "wide";
+  } else if (
+    text.includes("narrow") ||
+    text.includes("close grip") ||
+    text.includes("close-grip")
+  ) {
+    grip = "narrow";
+  } else if (text.includes("neutral")) {
+    grip = "neutral";
+  } else if (
+    text.includes("supinated") ||
+    text.includes("underhand") ||
+    text.includes("reverse")
+  ) {
+    grip = "supinated";
+  } else if (
+    text.includes("pronated") ||
+    text.includes("overhand") ||
+    text.includes("straight bar")
+  ) {
+    grip = "overhand";
+  }
+
+  return `${movement}:${grip}`;
+}
+
 function getMuscleUsageKey(muscle) {
   return normalizeMuscle(muscle);
+}
+
+function getUpperCategoryKey(muscle) {
+  return muscle === "Chest" || CHEST_MUSCLES.includes(muscle)
+    ? "category:chest"
+    : muscle;
+}
+
+function getUsageTotal(usage, key) {
+  return usage.setTotalsByMuscle.get(key) || 0;
+}
+
+function stableHash(...parts) {
+  const input = parts.join("|");
+  let hash = 0;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+function chooseLeastUsed(candidates, usage, options = {}) {
+  const excluded = new Set(options.exclude || []);
+  const excludedKeys = new Set(options.excludeKeys || []);
+  const getKey = (candidate) => options.keyFn?.(candidate) || candidate;
+  const pool = candidates.filter(
+    (candidate) => !excluded.has(candidate) && !excludedKeys.has(getKey(candidate))
+  );
+  const availablePool = pool.length ? pool : candidates;
+  const totals = availablePool.map((candidate) =>
+    getUsageTotal(usage, getKey(candidate))
+  );
+  const minimum = Math.min(...totals);
+  const bestPool = availablePool.filter(
+    (candidate) => getUsageTotal(usage, getKey(candidate)) === minimum
+  );
+  const offset = Number(options.offset) || 0;
+
+  return bestPool[offset % bestPool.length];
+}
+
+function chooseChestMuscle(usage, offset) {
+  return chooseLeastUsed(CHEST_MUSCLES, usage, { offset });
+}
+
+function chooseUpperMuscle(usage, options = {}) {
+  const category = chooseLeastUsed(UPPER_BODY_CATEGORIES, usage, {
+    exclude: options.exclude,
+    excludeKeys: options.excludeKeys,
+    keyFn: getUpperCategoryKey,
+    offset: options.offset,
+  });
+
+  if (category !== "Chest") {
+    return category;
+  }
+
+  return chooseChestMuscle(usage, options.offset);
+}
+
+function rememberMuscleSets(usage, muscle, sets) {
+  const currentMuscleTotal = getUsageTotal(usage, muscle);
+  usage.setTotalsByMuscle.set(muscle, currentMuscleTotal + sets);
+
+  const categoryKey = getUpperCategoryKey(muscle);
+  if (categoryKey !== muscle) {
+    const currentCategoryTotal = getUsageTotal(usage, categoryKey);
+    usage.setTotalsByMuscle.set(categoryKey, currentCategoryTotal + sets);
+  }
+}
+
+function createGroup(label, muscles, sets, supersetGroup = label) {
+  return { label, muscles, sets, supersetGroup };
+}
+
+function chooseArmPair(seed, workoutIndex) {
+  const startsWithTriceps = stableHash(seed, workoutIndex, "arms") % 2 === 0;
+  return startsWithTriceps ? ["Triceps", "Biceps"] : ["Biceps", "Triceps"];
+}
+
+function buildType1Workout(workoutIndex, usage, seed) {
+  const baseOffset = stableHash(seed, "type-1", workoutIndex);
+  const firstLeg = chooseLeastUsed(LEG_MUSCLES, usage, {
+    offset: baseOffset,
+  });
+  rememberMuscleSets(usage, firstLeg, 2);
+
+  const firstUpper = chooseUpperMuscle(usage, {
+    offset: baseOffset + 2,
+  });
+  rememberMuscleSets(usage, firstUpper, 2);
+
+  const secondLeg = chooseLeastUsed(LEG_MUSCLES, usage, {
+    exclude: [firstLeg],
+    offset: baseOffset + 1,
+  });
+  rememberMuscleSets(usage, secondLeg, 2);
+
+  const secondUpper = chooseUpperMuscle(usage, {
+    excludeKeys: [getUpperCategoryKey(firstUpper)],
+    offset: baseOffset + 3,
+  });
+  rememberMuscleSets(usage, secondUpper, 2);
+
+  const armPair = chooseArmPair(seed, workoutIndex);
+  rememberMuscleSets(usage, armPair[0], 2);
+  rememberMuscleSets(usage, armPair[1], 2);
+
+  return {
+    name: `Workout ${workoutIndex + 1}`,
+    groups: [
+      createGroup("A", [firstLeg, firstUpper], 2),
+      createGroup("B", [secondLeg, secondUpper], 2),
+      createGroup("C", armPair, 2),
+    ],
+  };
+}
+
+function buildType2Workout(workoutIndex, usage, seed) {
+  const baseOffset = stableHash(seed, "type-2", workoutIndex);
+  const firstLeg = chooseLeastUsed(LEG_MUSCLES, usage, {
+    offset: baseOffset,
+  });
+  rememberMuscleSets(usage, firstLeg, 3);
+
+  const firstUpper = chooseUpperMuscle(usage, {
+    offset: baseOffset + 2,
+  });
+  rememberMuscleSets(usage, firstUpper, 3);
+
+  const secondLeg = chooseLeastUsed(LEG_MUSCLES, usage, {
+    exclude: [firstLeg],
+    offset: baseOffset + 1,
+  });
+  rememberMuscleSets(usage, secondLeg, 3);
+
+  const secondUpper = chooseUpperMuscle(usage, {
+    excludeKeys: [getUpperCategoryKey(firstUpper)],
+    offset: baseOffset + 3,
+  });
+  rememberMuscleSets(usage, secondUpper, 3);
+
+  const thirdUpper = chooseUpperMuscle(usage, {
+    offset: baseOffset + 4,
+  });
+  rememberMuscleSets(usage, thirdUpper, 2);
+
+  const fourthUpper = chooseUpperMuscle(usage, {
+    excludeKeys: [getUpperCategoryKey(thirdUpper)],
+    offset: baseOffset + 5,
+  });
+  rememberMuscleSets(usage, fourthUpper, 2);
+
+  const armPair = chooseArmPair(seed, workoutIndex);
+  rememberMuscleSets(usage, armPair[0], 2);
+  rememberMuscleSets(usage, armPair[1], 2);
+  rememberMuscleSets(usage, "Abs", 3);
+
+  return {
+    name: `Workout ${workoutIndex + 1}`,
+    groups: [
+      createGroup("A", [firstLeg, firstUpper], 3),
+      createGroup("B", [secondLeg, secondUpper], 3),
+      createGroup("C", [thirdUpper, fourthUpper], 2),
+      createGroup("D", armPair, 2),
+      createGroup("Abs", ["Abs"], 3, null),
+    ],
+  };
+}
+
+function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
+  const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
+  const usage = {
+    setTotalsByMuscle: new Map(),
+  };
+  const builder = planType === "type-1" ? buildType1Workout : buildType2Workout;
+
+  return Array.from({ length: workoutCount }, (_, workoutIndex) =>
+    builder(workoutIndex, usage, seed)
+  );
 }
 
 function chooseExercise(exerciseLibrary, muscle, usage, offset) {
@@ -161,6 +344,28 @@ function chooseExercise(exerciseLibrary, muscle, usage, offset) {
         score += 3;
       }
 
+      if (CHEST_MUSCLES.includes(muscle)) {
+        const usedChestVariants = usage.chestVariants || new Set();
+        const chestVariant = getChestVariantKey(exercise);
+
+        if (!usedChestVariants.has(chestVariant)) {
+          score += 2;
+        }
+
+        if (chestVariant === "decline") {
+          score -= 3;
+        }
+      }
+
+      if (PULL_MUSCLES.includes(muscle)) {
+        const usedPullVariants = usage.pullVariants || new Set();
+        const pullVariant = getPullVariantKey(exercise);
+
+        if (!usedPullVariants.has(pullVariant)) {
+          score += 3;
+        }
+      }
+
       return {
         exercise,
         score,
@@ -187,6 +392,19 @@ function rememberExerciseUsage(usage, muscle, exercise) {
   variants.add(getExerciseVariantKey(exercise));
   usage.equipmentByMuscle.set(muscleKey, equipment);
   usage.variantByMuscle.set(muscleKey, variants);
+
+  if (CHEST_MUSCLES.includes(muscle)) {
+    const chestVariants = usage.chestVariants || new Set();
+    chestVariants.add(getChestVariantKey(exercise));
+    usage.chestVariants = chestVariants;
+  }
+
+  if (PULL_MUSCLES.includes(muscle)) {
+    const pullVariants = usage.pullVariants || new Set();
+    pullVariants.add(getPullVariantKey(exercise));
+    usage.pullVariants = pullVariants;
+  }
+
   usage.exerciseIds.add(exercise.id);
 }
 
@@ -269,13 +487,18 @@ export function generatePlanWorkouts({
   seed = 0,
 }) {
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
-  const requestedWorkoutCount = Math.max(1, Number(daysPerWeek) || 2);
-  const workoutCount = Math.min(requestedWorkoutCount, config.workouts.length);
-  const workoutDefinitions = config.workouts.slice(0, workoutCount);
+  const workoutDefinitions = buildWorkoutDefinitions({
+    daysPerWeek,
+    planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
+    seed,
+  });
+  const workoutCount = workoutDefinitions.length;
   const activeExerciseLibrary = exerciseLibrary.filter(isExerciseActive);
   const usage = {
+    chestVariants: new Set(),
     equipmentByMuscle: new Map(),
     exerciseIds: new Set(),
+    pullVariants: new Set(),
     variantByMuscle: new Map(),
   };
   const gaps = [];
