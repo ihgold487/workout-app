@@ -451,6 +451,7 @@ export default function PlansView({
         durationWeeks,
         exerciseLibrary,
         exerciseMetadata,
+        goal,
         history,
         planType,
         reps,
@@ -462,6 +463,7 @@ export default function PlansView({
       durationWeeks,
       exerciseLibrary,
       exerciseMetadata,
+      goal,
       history,
       planType,
       reps,
@@ -487,7 +489,7 @@ export default function PlansView({
           const previewExercise = replacementExercise
             ? createPlanExercise({
                 exercise: replacementExercise,
-                exerciseMetadata,
+                goal,
                 history,
                 planMuscle: exercise.planMuscle,
                 reps,
@@ -504,8 +506,8 @@ export default function PlansView({
         }),
       })),
     [
-      exerciseMetadata,
       generatedPlan.workouts,
+      goal,
       history,
       replacementBySlot,
       reps,

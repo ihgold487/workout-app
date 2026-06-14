@@ -25,6 +25,7 @@ import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import { calculateE1RM } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
+import { recommendSetTarget } from "../utils/targetRecommendation";
 
 function IconButton({
   children,
@@ -123,6 +124,9 @@ export default function SessionView({
   const [showRirPicker, setShowRirPicker] = useState(false);
   const [rirPickerData, setRirPickerData] = useState(null);
   const [showApplyChangesPrompt, setShowApplyChangesPrompt] = useState(false);
+  const [targetAlternativesData, setTargetAlternativesData] = useState(null);
+  const targetPressTimerRef = useRef(null);
+  const targetLongPressRef = useRef(false);
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -228,6 +232,116 @@ export default function SessionView({
     };
   }
 
+
+  function getLinkedPlan() {
+    return plans.find((plan) => String(plan.id) === String(session.planId));
+  }
+
+  function getGoalMode() {
+    const goal = getLinkedPlan()?.goal;
+
+    return goal === "progress" ? "progress" : "maintenance";
+  }
+
+  function getPlanTargetValues() {
+    const config = getLinkedPlan()?.config || {};
+
+    return {
+      reps: config.reps == null || config.reps === "" ? "" : String(config.reps),
+      rir: config.rir == null || config.rir === "" ? "" : String(config.rir),
+    };
+  }
+
+  function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
+    const recommendation = recommendSetTarget({
+      exercise,
+      goalMode: getGoalMode(),
+      history,
+      setIndex,
+      targetReps: reps,
+      targetRir: rir,
+    });
+
+    const weight = recommendation.result?.recommendation?.weight;
+
+    return weight != null ? String(weight) : "";
+  }
+
+  function getTargetRecommendation(exercise, set, setIndex) {
+    return recommendSetTarget({
+      exercise,
+      goalMode: getGoalMode(),
+      history,
+      setIndex,
+      targetReps: set.targetReps,
+      targetRir: set.targetRir,
+    });
+  }
+
+  function firstPresentValue(...values) {
+    const value = values.find((item) => item != null && item !== "");
+
+    return value == null ? "" : value;
+  }
+
+  function formatSetupDefault(value) {
+    return value == null || value === "" ? "" : String(value);
+  }
+
+  function isBlankValue(value) {
+    return value == null || value === "";
+  }
+
+  function formatPrescriptionLabel(prescription) {
+    if (!prescription) {
+      return "";
+    }
+
+    return `${prescription.weight} × ${prescription.reps} @ ${prescription.rir}`;
+  }
+
+
+  function getReplacementDefaults(oldExerciseId, newExercise) {
+    const replacedExercise = session.exercises.find(
+      (exercise) => exercise.id === oldExerciseId
+    );
+    const firstSet = replacedExercise?.sets?.[0] || {};
+    const reps = firstPresentValue(firstSet.targetReps, firstSet.actualReps);
+    const rir = firstPresentValue(firstSet.targetRir, firstSet.actualRir);
+
+    return {
+      reps: formatSetupDefault(reps),
+      rir: formatSetupDefault(rir),
+      sets: replacedExercise?.sets?.length
+        ? String(replacedExercise.sets.length)
+        : "",
+      weight: getRecommendedTargetWeight(newExercise, reps, rir),
+    };
+  }
+
+  function getAddExerciseDefaults(exercise) {
+    const previousExercise = session.exercises[session.exercises.length - 1];
+    const previousFirstSet = previousExercise?.sets?.[0] || {};
+    const planTargets = getPlanTargetValues();
+    const reps = firstPresentValue(
+      planTargets.reps,
+      previousFirstSet.targetReps,
+      previousFirstSet.actualReps
+    );
+    const rir = firstPresentValue(
+      planTargets.rir,
+      previousFirstSet.targetRir,
+      previousFirstSet.actualRir
+    );
+
+    return {
+      reps: formatSetupDefault(reps),
+      rir: formatSetupDefault(rir),
+      sets: "3",
+      weight: getRecommendedTargetWeight(exercise, reps, rir),
+    };
+  }
+
   const [selectedMuscle, setSelectedMuscle] = useState("");
 
   const [activeSet, setActiveSet] = useState({
@@ -274,6 +388,69 @@ export default function SessionView({
     [updateSession]
   );
 
+  function applyTargetToActual(exerciseId, setId) {
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+    const set = exercise?.sets.find((item) => item.id === setId);
+
+    if (!set) {
+      return;
+    }
+
+    applyPrescriptionToActual(exerciseId, setId, {
+      reps: set.targetReps,
+      rir: set.targetRir,
+      weight: set.targetWeight,
+    });
+  }
+
+  function applyPrescriptionToActual(exerciseId, setId, prescription) {
+    updateSession((s) => ({
+      ...s,
+      exercises: s.exercises.map((ex) =>
+        ex.id === exerciseId
+          ? {
+              ...ex,
+              sets: ex.sets.map((set) =>
+                set.id === setId
+                  ? {
+                      ...set,
+                      actualReps: formatSetupDefault(prescription.reps),
+                      actualRir: formatSetupDefault(prescription.rir),
+                      actualWeight: formatSetupDefault(prescription.weight),
+                    }
+                  : set
+              ),
+            }
+          : ex
+      ),
+    }));
+  }
+
+  function openTargetAlternatives(exercise, set, setIndex) {
+    const recommendation = getTargetRecommendation(exercise, set, setIndex);
+    const current = {
+      e1rm: calculateE1RM(set.actualWeight, set.actualReps, set.actualRir),
+      reps: set.actualReps,
+      rir: set.actualRir,
+      weight: set.actualWeight,
+    };
+    const alternatives = recommendation.result?.alternatives || [];
+
+    setTargetAlternativesData({
+      alternatives,
+      current,
+      exerciseId: exercise.id,
+      setId: set.id,
+    });
+  }
+
+  function cancelTargetPressTimer() {
+    if (targetPressTimerRef.current) {
+      clearTimeout(targetPressTimerRef.current);
+      targetPressTimerRef.current = null;
+    }
+  }
+
   useEffect(() => {
     if (!activeSet) return;
 
@@ -285,44 +462,81 @@ export default function SessionView({
 
     const currentSet = exercise?.sets[setIndex];
 
-    const previousSet = setIndex > 0 ? exercise.sets[setIndex - 1] : null;
-
-    if (currentSet && !currentSet.actualWeight) {
-      updateActual(
-        exercise.id,
-
-        currentSet.id,
-
-        "actualWeight",
-
-        previousSet?.actualWeight || currentSet.targetWeight || ""
-      );
+    if (!exercise || !currentSet || setIndex < 0) {
+      return;
     }
 
-    if (currentSet && !currentSet.actualReps) {
-      updateActual(
-        exercise.id,
+    const latestWorkout = history.find((historyWorkout) =>
+      historyWorkout.exercises?.some((historyExercise) => {
+        if (exercise.exerciseId && historyExercise.exerciseId) {
+          return String(exercise.exerciseId) === String(historyExercise.exerciseId);
+        }
 
-        currentSet.id,
+        return false;
+      })
+    );
+    const latestExercise = latestWorkout?.exercises?.find((historyExercise) => {
+      if (exercise.exerciseId && historyExercise.exerciseId) {
+        return String(exercise.exerciseId) === String(historyExercise.exerciseId);
+      }
 
-        "actualReps",
+      return false;
+    });
+    const historySet = latestExercise?.sets?.[setIndex];
+    const defaults = historySet
+      ? {
+          actualReps: formatSetupDefault(
+            firstPresentValue(historySet.actualReps, historySet.targetReps)
+          ),
+          actualRir: formatSetupDefault(
+            firstPresentValue(historySet.actualRir, historySet.targetRir)
+          ),
+          actualWeight: formatSetupDefault(
+            firstPresentValue(historySet.actualWeight, historySet.targetWeight)
+          ),
+        }
+      : {
+          actualReps: formatSetupDefault(currentSet.targetReps),
+          actualRir: formatSetupDefault(currentSet.targetRir),
+          actualWeight: "",
+        };
+    const updates = {};
 
-        previousSet?.actualReps || currentSet.targetReps || ""
-      );
+    if (isBlankValue(currentSet.actualWeight) && defaults.actualWeight) {
+      updates.actualWeight = defaults.actualWeight;
     }
 
-    if (currentSet && !currentSet.actualRir) {
-      updateActual(
-        exercise.id,
-
-        currentSet.id,
-
-        "actualRir",
-
-        previousSet?.actualRir || currentSet.targetRir || ""
-      );
+    if (isBlankValue(currentSet.actualReps) && defaults.actualReps) {
+      updates.actualReps = defaults.actualReps;
     }
-  }, [activeSet, session.exercises, updateActual]);
+
+    if (isBlankValue(currentSet.actualRir) && defaults.actualRir !== "") {
+      updates.actualRir = defaults.actualRir;
+    }
+
+    if (!Object.keys(updates).length) {
+      return;
+    }
+
+    updateSession((s) => ({
+      ...s,
+      exercises: s.exercises.map((ex) =>
+        ex.id === exercise.id
+          ? {
+              ...ex,
+              sets: ex.sets.map((set) =>
+                set.id === currentSet.id
+                  ? {
+                      ...set,
+                      ...updates,
+                    }
+                  : set
+              ),
+            }
+          : ex
+      ),
+    }));
+  }, [activeSet, history, session.exercises, updateSession]);
 
   const [expandedNotes, setExpandedNotes] = useState({});
 
@@ -375,6 +589,15 @@ export default function SessionView({
       Notification.requestPermission();
     }
   }, []);
+
+  useEffect(
+    () => () => {
+      if (targetPressTimerRef.current) {
+        clearTimeout(targetPressTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!timerRunning || !timerStartedAt) return;
@@ -2006,7 +2229,7 @@ export default function SessionView({
                       </span>
                     </div>
 
-                    {exercise.sets.map((set) => {
+                    {exercise.sets.map((set, setIndex) => {
                       const isActive =
                         activeSet?.exerciseId === exercise.id &&
                         activeSet?.setId === set.id;
@@ -2020,6 +2243,24 @@ export default function SessionView({
                         : isCompleted
                         ? "#444"
                         : "#aaa";
+                      const actualWeightDisplay = isBlankValue(set.actualWeight)
+                        ? "—"
+                        : weightUnit === "kg"
+                          ? lbsToKg(set.actualWeight)
+                          : set.actualWeight;
+                      const actualRepsDisplay = isBlankValue(set.actualReps)
+                        ? "—"
+                        : set.actualReps;
+                      const actualRirDisplay = isBlankValue(set.actualRir)
+                        ? "—"
+                        : set.actualRir;
+                      const actualE1RM = isBlankValue(set.actualWeight)
+                        ? null
+                        : calculateE1RM(
+                            set.actualWeight,
+                            set.actualReps,
+                            set.actualRir
+                          );
 
                       return (
                         <div
@@ -2056,8 +2297,58 @@ export default function SessionView({
                             fontWeight: isActive ? "bold" : "normal",
                           }}
                         >
-                          <div
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                applyTargetToActual(exercise.id, set.id);
+                              }
+
+                              if (event.key === " ") {
+                                event.preventDefault();
+                                openTargetAlternatives(exercise, set, setIndex);
+                              }
+                            }}
+                            onPointerCancel={() => {
+                              cancelTargetPressTimer();
+                            }}
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                              targetLongPressRef.current = false;
+                              cancelTargetPressTimer();
+                              targetPressTimerRef.current = setTimeout(() => {
+                                targetLongPressRef.current = true;
+                                openTargetAlternatives(exercise, set, setIndex);
+                              }, 520);
+                            }}
+                            onPointerLeave={() => {
+                              cancelTargetPressTimer();
+                            }}
+                            onPointerUp={(event) => {
+                              event.stopPropagation();
+                              cancelTargetPressTimer();
+
+                              if (targetLongPressRef.current) {
+                                targetLongPressRef.current = false;
+                                return;
+                              }
+
+                              applyTargetToActual(exercise.id, set.id);
+                            }}
+                            title="Use target values"
                             style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "inherit",
+                              cursor: "pointer",
+                              font: "inherit",
+                              padding: 0,
+                              textAlign: "left",
                               width: "80px",
                               lineHeight: "1.1",
                             }}
@@ -2090,7 +2381,7 @@ export default function SessionView({
                               )?.toFixed(1)}
                               )
                             </div>
-                          </div>
+                          </button>
 
                           <span
                             style={{
@@ -2107,7 +2398,7 @@ export default function SessionView({
 
                                   setId: set.id,
 
-                                  value: set.actualWeight || set.targetWeight,
+                                  value: set.actualWeight,
                                 });
 
                                 setShowWeightPicker(true);
@@ -2125,9 +2416,7 @@ export default function SessionView({
                                 fontWeight: isActive ? "bold" : "normal",
                               }}
                             >
-                              {weightUnit === "kg"
-                                ? lbsToKg(set.actualWeight || set.targetWeight)
-                                : set.actualWeight || set.targetWeight}
+                              {actualWeightDisplay}
                             </button>
 
                             <span
@@ -2147,7 +2436,7 @@ export default function SessionView({
                                   setId: set.id,
 
                                   value: Number(
-                                    set.actualReps || set.targetReps || 0
+                                    set.actualReps || 0
                                   ),
                                 });
 
@@ -2165,7 +2454,7 @@ export default function SessionView({
                                 fontWeight: isActive ? "bold" : "normal",
                               }}
                             >
-                              {set.actualReps || set.targetReps}
+                              {actualRepsDisplay}
                             </button>
 
                             <span
@@ -2187,7 +2476,7 @@ export default function SessionView({
                                   setId: set.id,
 
                                   value: Number(
-                                    set.actualRir || set.targetRir || 0
+                                    set.actualRir || 0
                                   ),
                                 });
 
@@ -2205,7 +2494,7 @@ export default function SessionView({
                                 fontWeight: isActive ? "bold" : "normal",
                               }}
                             >
-                              {set.actualRir || set.targetRir || 0}
+                              {actualRirDisplay}
                             </button>
 
                             <span
@@ -2233,27 +2522,11 @@ export default function SessionView({
                                 cursor: "pointer",
                               }}
                             >
-                              {weightUnit === "kg"
-                                ? lbsToKg(
-                                    calculateE1RM(
-                                      set.actualWeight,
-                                      set.actualReps,
-                                      set.actualRir,
-
-                                      set.targetWeight,
-                                      set.targetReps,
-                                      set.targetRir
-                                    )?.toFixed(1)
-                                  )
-                                : calculateE1RM(
-                                    set.actualWeight,
-                                    set.actualReps,
-                                    set.actualRir,
-
-                                    set.targetWeight,
-                                    set.targetReps,
-                                    set.targetRir
-                                  )?.toFixed(1)}
+                              {actualE1RM == null
+                                ? "—"
+                                : weightUnit === "kg"
+                                  ? lbsToKg(actualE1RM.toFixed(1))
+                                  : actualE1RM.toFixed(1)}
                             </span>
                           </span>
 
@@ -2355,12 +2628,7 @@ export default function SessionView({
               setPendingExercise(exercise);
               setShowAddExercise(false);
 
-              setNewExerciseValues({
-                weight: exercise.lastWeight || "",
-                reps: exercise.lastReps || "",
-                rir: "",
-                sets: "",
-              });
+              setNewExerciseValues(getAddExerciseDefaults(exercise));
             }}
           />
         )}
@@ -2450,12 +2718,9 @@ export default function SessionView({
             onSelect={(exercise) => {
               setReplacementTarget(replacingExerciseId);
               setReplacementExercise(exercise);
-              setReplacementValues({
-                weight: "",
-                reps: "",
-                rir: "",
-                sets: "",
-              });
+              setReplacementValues(
+                getReplacementDefaults(replacingExerciseId, exercise)
+              );
               setShowReplaceExercise(true);
             }}
           />
@@ -3048,6 +3313,163 @@ export default function SessionView({
                   >
                     Yes
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {targetAlternativesData && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Target alternatives"
+              onClick={() => setTargetAlternativesData(null)}
+              style={{
+                alignItems: "flex-end",
+                background: "rgba(0,0,0,.45)",
+                display: "flex",
+                inset: 0,
+                justifyContent: "center",
+                position: "fixed",
+                zIndex: 2200,
+              }}
+            >
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  background: "var(--surface-raised)",
+                  borderRadius: "18px 18px 0 0",
+                  boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                  boxSizing: "border-box",
+                  maxHeight: "78vh",
+                  maxWidth: "520px",
+                  overflowY: "auto",
+                  padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div>
+                    <h2
+                      style={{
+                        fontSize: "18px",
+                        lineHeight: 1.15,
+                        margin: 0,
+                      }}
+                    >
+                      Target Options
+                    </h2>
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "3px",
+                      }}
+                    >
+                      Most recent values and ranked alternatives
+                    </div>
+                  </div>
+
+                  <IconButton
+                    label="Close target options"
+                    onClick={() => setTargetAlternativesData(null)}
+                    size={36}
+                  >
+                    <X size={18} />
+                  </IconButton>
+                </div>
+
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    marginBottom: "12px",
+                    padding: "10px",
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Most recent actual
+                  </div>
+                  <strong>
+                    {targetAlternativesData.current?.weight
+                      ? formatPrescriptionLabel(targetAlternativesData.current)
+                      : "No previous actual value"}
+                  </strong>
+                  {targetAlternativesData.current?.e1rm != null && (
+                    <span
+                      style={{
+                        color: "var(--text-muted)",
+                        marginLeft: "8px",
+                      }}
+                    >
+                      e1RM {targetAlternativesData.current.e1rm.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                  }}
+                >
+                  {targetAlternativesData.alternatives.length === 0 ? (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "13px",
+                        padding: "8px 0",
+                      }}
+                    >
+                      No alternatives are available for this target yet.
+                    </div>
+                  ) : (
+                    targetAlternativesData.alternatives.map((option) => (
+                      <button
+                        key={`${option.weight}-${option.reps}-${option.rir}`}
+                        onClick={() => {
+                          applyPrescriptionToActual(
+                            targetAlternativesData.exerciseId,
+                            targetAlternativesData.setId,
+                            option
+                          );
+                          setTargetAlternativesData(null);
+                        }}
+                        style={{
+                          alignItems: "center",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                          minHeight: "44px",
+                          textAlign: "left",
+                        }}
+                      >
+                        <span>{formatPrescriptionLabel(option)}</span>
+                        <span
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "13px",
+                          }}
+                        >
+                          e1RM {option.e1rm.toFixed(1)}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

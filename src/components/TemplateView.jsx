@@ -28,6 +28,7 @@ import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+import { recommendSetTarget } from "../utils/targetRecommendation";
 
 function IconButton({
   children,
@@ -215,6 +216,97 @@ export default function TemplateView({
     };
   }
 
+  function getGoalMode(plan) {
+    return plan?.goal === "progress" ? "progress" : "maintenance";
+  }
+
+  function formatTargetValue(value, fallback = "") {
+    return value == null || value === "" ? String(fallback) : String(value);
+  }
+
+  function firstPresentValue(...values) {
+    const value = values.find((item) => item != null && item !== "");
+
+    return value == null ? "" : value;
+  }
+
+  function getLatestHistoryExercise(templateExercise) {
+    const workout = history.find((historyWorkout) =>
+      historyWorkout.exercises?.some((historyExercise) => {
+        if (templateExercise.exerciseId && historyExercise.exerciseId) {
+          return (
+            String(templateExercise.exerciseId) ===
+            String(historyExercise.exerciseId)
+          );
+        }
+
+        return getExerciseKey(templateExercise) === getExerciseKey(historyExercise);
+      })
+    );
+
+    return workout?.exercises?.find((historyExercise) => {
+      if (templateExercise.exerciseId && historyExercise.exerciseId) {
+        return (
+          String(templateExercise.exerciseId) ===
+          String(historyExercise.exerciseId)
+        );
+      }
+
+      return getExerciseKey(templateExercise) === getExerciseKey(historyExercise);
+    });
+  }
+
+  function getActualDefaultsForSet(templateExercise, setIndex, targetSet) {
+    const historySet = getLatestHistoryExercise(templateExercise)?.sets?.[setIndex];
+
+    if (historySet) {
+      return {
+        actualReps: formatTargetValue(
+          firstPresentValue(historySet.actualReps, historySet.targetReps)
+        ),
+        actualRir: formatTargetValue(
+          firstPresentValue(historySet.actualRir, historySet.targetRir)
+        ),
+        actualWeight: formatTargetValue(
+          firstPresentValue(historySet.actualWeight, historySet.targetWeight)
+        ),
+      };
+    }
+
+    return {
+      actualReps: formatTargetValue(targetSet.targetReps),
+      actualRir: formatTargetValue(targetSet.targetRir),
+      actualWeight: "",
+    };
+  }
+
+  function getDynamicTargetPrescription({
+    exercise,
+    libraryExercise,
+    plan,
+    set,
+    setIndex,
+  }) {
+    const targetReps = set.targetReps ?? "";
+    const targetRir = set.targetRir ?? set.rir ?? "";
+    const recommendationExercise = {
+      ...(libraryExercise || {}),
+      ...exercise,
+      id: exercise.exerciseId || libraryExercise?.id || exercise.id,
+      exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
+    };
+    const recommendation = recommendSetTarget({
+      exercise: recommendationExercise,
+      goalMode: getGoalMode(plan),
+      history,
+      setIndex,
+      targetReps,
+      targetRir,
+    });
+
+    return recommendation.result?.recommendation || null;
+  }
+
   function startWorkout() {
     if (!canStartWorkout) {
       return;
@@ -241,17 +333,43 @@ export default function TemplateView({
 
           note: libraryExercise?.note || "",
 
-          sets: exercise.sets.map((set) => ({
-            ...set,
+          sets: exercise.sets.map((set, setIndex) => {
+            const dynamicTarget = getDynamicTargetPrescription({
+              exercise,
+              libraryExercise,
+              plan,
+              set,
+              setIndex,
+            });
 
-            actualWeight: "",
+            const targetSet = {
+              ...set,
+              targetWeight: formatTargetValue(
+                dynamicTarget?.weight,
+                set.targetWeight || ""
+              ),
 
-            actualReps: "",
+              targetReps: formatTargetValue(
+                dynamicTarget?.reps,
+                set.targetReps || ""
+              ),
 
-            targetRir: set.targetRir || set.rir || "",
+              targetRir: formatTargetValue(
+                dynamicTarget?.rir,
+                set.targetRir ?? set.rir ?? ""
+              ),
+            };
+            const actualDefaults = getActualDefaultsForSet(
+              exercise,
+              setIndex,
+              targetSet
+            );
 
-            actualRir: "",
-          })),
+            return {
+              ...targetSet,
+              ...actualDefaults,
+            };
+          }),
         };
       }),
     };
@@ -347,6 +465,30 @@ export default function TemplateView({
     setEditingTemplateName(false);
   }
 
+  function addPlanWorkoutToWorkouts() {
+    const copiedAt = Date.now();
+    const copy = {
+      ...template,
+      id: copiedAt,
+      lastCompleted: null,
+      name: `${template.name} copy`,
+      parentWorkoutId: template.id,
+      planId: null,
+      planWeek: null,
+      planWorkoutId: null,
+      exercises: template.exercises.map((exercise, exerciseIndex) => ({
+        ...exercise,
+        id: copiedAt + exerciseIndex + 1,
+        sets: exercise.sets.map((set, setIndex) => ({
+          ...set,
+          id: copiedAt + exerciseIndex * 100 + setIndex,
+        })),
+      })),
+    };
+
+    setTemplates([...templates, copy]);
+  }
+
   function getLatestWorkoutPerformance(exerciseId) {
     const workout = history.find((workout) =>
       workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
@@ -406,30 +548,52 @@ export default function TemplateView({
         style={{
           display: "flex",
           gap: "8px",
+          justifyContent: "space-between",
           marginBottom: "10px",
         }}
       >
-        <button
-          disabled={!canStartWorkout}
-          onClick={startWorkout}
+        <div
           style={{
             alignItems: "center",
-            display: "inline-flex",
-            gap: "6px",
+            display: "flex",
+            gap: "8px",
           }}
         >
-          <Play size={16} /> Start
-        </button>
-        <button
-          onClick={() => setShowAdd(true)}
-          style={{
-            alignItems: "center",
-            display: "inline-flex",
-            gap: "6px",
-          }}
-        >
-          <Plus size={16} /> Add Exercise
-        </button>
+          <button
+            disabled={!canStartWorkout}
+            onClick={startWorkout}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            <Play size={16} /> Start
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            <Plus size={16} /> Add Exercise
+          </button>
+        </div>
+
+        {isPlanWorkout && (
+          <button
+            onClick={addPlanWorkoutToWorkouts}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            <Plus size={16} /> Add to Workouts
+          </button>
+        )}
       </div>
       {startDisabledReason && (
         <div

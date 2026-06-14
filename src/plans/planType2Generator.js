@@ -1,5 +1,5 @@
-import { calculateE1RM } from "../utils/e1rm";
 import { isExerciseActive } from "../utils/exerciseStatus";
+import { recommendSetTarget } from "../utils/targetRecommendation";
 
 const PLAN_TYPE_2_WORKOUTS = [
   {
@@ -121,59 +121,6 @@ function getMuscleUsageKey(muscle) {
   return normalizeMuscle(muscle);
 }
 
-function getExerciseE1RM(exercise, exerciseMetadata, history) {
-  const metadata = exerciseMetadata?.[exercise.id] || {};
-
-  if (metadata.latestE1RM?.value) {
-    return metadata.latestE1RM.value;
-  }
-
-  if (metadata.maxE1RM?.value) {
-    return metadata.maxE1RM.value;
-  }
-
-  for (const workout of history || []) {
-    const performedExercise = workout.exercises?.find(
-      (item) => item.exerciseId === exercise.id
-    );
-
-    if (!performedExercise) {
-      continue;
-    }
-
-    const bestSetE1RM = performedExercise.sets?.reduce((best, set) => {
-      const estimated = calculateE1RM(
-        set.actualWeight || set.targetWeight,
-        set.actualReps || set.targetReps,
-        set.actualRir ?? set.targetRir
-      );
-
-      return estimated && (!best || estimated > best) ? estimated : best;
-    }, null);
-
-    if (bestSetE1RM) {
-      return bestSetE1RM;
-    }
-  }
-
-  return null;
-}
-
-function estimateTargetWeight(exercise, exerciseMetadata, history, reps, rir) {
-  const e1RM = getExerciseE1RM(exercise, exerciseMetadata, history);
-  const targetReps = Number(reps);
-  const targetRir = Number(rir || 0);
-
-  if (!e1RM || !Number.isFinite(targetReps)) {
-    return "";
-  }
-
-  const rawWeight = e1RM / (1 + (targetReps + targetRir) / 30);
-  const rounded = Math.round(rawWeight / 5) * 5;
-
-  return rounded > 0 ? String(rounded) : "";
-}
-
 function chooseExercise(exerciseLibrary, muscle, usage, offset) {
   const matchingCandidates = exerciseLibrary.filter((exercise) =>
     exerciseHasMuscle(exercise, muscle)
@@ -244,25 +191,48 @@ function rememberExerciseUsage(usage, muscle, exercise) {
 }
 
 function createSets(count, exercise, options) {
-  const targetWeight = estimateTargetWeight(
-    exercise,
-    options.exerciseMetadata,
-    options.history,
-    options.reps,
-    options.rir
-  );
+  return Array.from({ length: count }, (_, index) => {
+    const recommendedTarget = getRecommendedTargetPrescription(exercise, {
+      goal: options.goal,
+      history: options.history,
+      reps: options.reps,
+      rir: options.rir,
+      setIndex: index,
+    });
 
-  return Array.from({ length: count }, (_, index) => ({
-    id: Date.now() + Math.random() + index,
-    targetWeight,
-    targetReps: String(options.reps),
-    targetRir: String(options.rir),
-  }));
+    return {
+      id: Date.now() + Math.random() + index,
+      targetWeight: formatTargetValue(recommendedTarget?.weight),
+      targetReps: formatTargetValue(recommendedTarget?.reps, options.reps),
+      targetRir: formatTargetValue(recommendedTarget?.rir, options.rir),
+    };
+  });
+}
+
+function getGoalMode(goal) {
+  return goal === "progress" ? "progress" : "maintenance";
+}
+
+function formatTargetValue(value, fallback = "") {
+  return value == null || value === "" ? String(fallback) : String(value);
+}
+
+function getRecommendedTargetPrescription(exercise, options) {
+  const recommendation = recommendSetTarget({
+    exercise,
+    goalMode: getGoalMode(options.goal),
+    history: options.history,
+    setIndex: options.setIndex,
+    targetReps: options.reps,
+    targetRir: options.rir,
+  });
+
+  return recommendation.result?.recommendation || null;
 }
 
 export function createPlanExercise({
   exercise,
-  exerciseMetadata,
+  goal,
   history,
   planMuscle,
   reps,
@@ -278,7 +248,7 @@ export function createPlanExercise({
     name: exercise.name,
     planMuscle,
     sets: createSets(setCount, exercise, {
-      exerciseMetadata,
+      goal,
       history,
       reps,
       rir,
@@ -291,7 +261,7 @@ export function generatePlanWorkouts({
   daysPerWeek,
   durationWeeks,
   exerciseLibrary,
-  exerciseMetadata,
+  goal = "maintain",
   history,
   planType,
   reps,
@@ -330,7 +300,7 @@ export function generatePlanWorkouts({
         return [
           createPlanExercise({
             exercise,
-            exerciseMetadata,
+            goal,
             history,
             planMuscle: muscle,
             reps,

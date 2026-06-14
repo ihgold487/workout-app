@@ -3,7 +3,7 @@ import { calculateE1RM } from "./e1rm.js";
 export const GOAL_MODE_PROGRESSIONS = {
   aggressive: 0.02,
   maintenance: 0,
-  progress: 0.01,
+  progress: 0.02,
 };
 
 function toNumber(value) {
@@ -130,9 +130,18 @@ export function findBaselineSet({
   history,
   setIndex = 0,
 }) {
+  const bestHistoricalSet = findBestBaselineSet({
+    exercise,
+    history,
+  });
+
+  if (bestHistoricalSet) {
+    return bestHistoricalSet;
+  }
+
   const previousWorkoutBestSet = findPreviousWorkoutBestSet(history, exercise);
 
-  if (setIndex === 0 && previousWorkoutBestSet) {
+  if (previousWorkoutBestSet) {
     return {
       ...previousWorkoutBestSet,
       source: "previous-workout-best-set",
@@ -146,13 +155,6 @@ export function findBaselineSet({
     return {
       ...matchingSet,
       source: "matching-set",
-    };
-  }
-
-  if (previousWorkoutBestSet) {
-    return {
-      ...previousWorkoutBestSet,
-      source: "previous-workout-best-set",
     };
   }
 
@@ -224,12 +226,23 @@ function compareCandidates(a, b) {
   );
 }
 
+function compareProgressCandidates(a, b) {
+  return (
+    a.score.rirDeviation - b.score.rirDeviation ||
+    a.score.preferredRepPenalty - b.score.preferredRepPenalty ||
+    a.score.e1rmDeviation - b.score.e1rmDeviation ||
+    a.score.repDeviation - b.score.repDeviation ||
+    a.weight - b.weight
+  );
+}
+
 export function recommendTargetPrescription({
   allowedRepWindow = 4,
   goalMode = "maintenance",
   minWeight = 0,
   preferredRepWindow = 2,
   previousE1RM,
+  previousWeight,
   progressionPercent,
   targetReps,
   targetRir,
@@ -245,6 +258,10 @@ export function recommendTargetPrescription({
 
   const targetE1RM =
     baselineE1RM * (1 + getProgressionPercent(goalMode, progressionPercent));
+  const resolvedProgressionPercent = getProgressionPercent(
+    goalMode,
+    progressionPercent
+  );
   const minReps = Math.max(1, Math.round(reps - allowedRepWindow));
   const maxReps = Math.max(minReps, Math.round(reps + allowedRepWindow));
   const candidates = [];
@@ -284,14 +301,39 @@ export function recommendTargetPrescription({
     });
   }
 
-  const rankedCandidates = candidates.sort(compareCandidates);
+  const comparator =
+    resolvedProgressionPercent > 0 ? compareProgressCandidates : compareCandidates;
+  const rankedCandidates = candidates.sort(comparator);
+  const targetProgressCandidates =
+    resolvedProgressionPercent > 0
+      ? rankedCandidates.filter((candidate) => candidate.e1rm >= targetE1RM)
+      : rankedCandidates;
+  const preferredWeightProgressCandidates =
+    resolvedProgressionPercent > 0
+      ? targetProgressCandidates.filter(
+          (candidate) =>
+            (previousWeight == null || candidate.weight > previousWeight) &&
+            candidate.reps >= reps - preferredRepWindow
+        )
+      : rankedCandidates;
+  const baselineProgressCandidates =
+    resolvedProgressionPercent > 0
+      ? rankedCandidates.filter((candidate) => candidate.e1rm > baselineE1RM)
+      : rankedCandidates;
+  const selectedCandidates = preferredWeightProgressCandidates.length
+    ? preferredWeightProgressCandidates
+    : targetProgressCandidates.length
+    ? targetProgressCandidates
+    : baselineProgressCandidates.length
+      ? baselineProgressCandidates
+    : rankedCandidates;
 
   return {
-    alternatives: rankedCandidates.slice(1, 8),
+    alternatives: selectedCandidates.slice(1, 8),
     baselineE1RM,
     goalMode,
-    progressionPercent: getProgressionPercent(goalMode, progressionPercent),
-    recommendation: rankedCandidates[0] || null,
+    progressionPercent: resolvedProgressionPercent,
+    recommendation: selectedCandidates[0] || null,
     targetE1RM,
   };
 }
@@ -329,6 +371,7 @@ export function recommendSetTarget({
     result: recommendTargetPrescription({
       goalMode,
       previousE1RM: baseline.e1rm,
+      previousWeight: baseline.weight,
       progressionPercent,
       targetReps,
       targetRir,

@@ -410,6 +410,8 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [expandedPlanIds, setExpandedPlanIds] = useState({});
+  const [plansExpanded, setPlansExpanded] = useState(true);
+  const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
   const [completedPlanActions, setCompletedPlanActions] = useState(null);
   const [extendPlanTarget, setExtendPlanTarget] = useState(null);
 
@@ -2146,6 +2148,16 @@ export default function App() {
     );
   }
 
+  const standaloneTemplates = [...templates]
+    .filter((template) => !template.planId)
+    .sort((a, b) => {
+      if (templateSort === "alpha") {
+        return a.name.localeCompare(b.name);
+      }
+
+      return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
+    });
+
   return renderAppShell(
     <div
       style={{
@@ -2158,99 +2170,182 @@ export default function App() {
 
       <hr />
 
-      <button onClick={addTemplate}>+ New Template</button>
-
-      <hr />
-
       {plans.length > 0 && (
         <>
-          <h2
+          <button
+            aria-expanded={plansExpanded}
+            onClick={() => setPlansExpanded((expanded) => !expanded)}
             style={{
-              fontSize: "18px",
-              marginBottom: "10px",
+              alignItems: "center",
+              background: "transparent",
+              border: "none",
+              color: "var(--text-h)",
+              display: "grid",
+              font: "inherit",
+              gridTemplateColumns: "32px minmax(0, 1fr) 32px",
+              margin: "0 0 10px",
+              padding: "4px 0",
+              width: "100%",
             }}
           >
-            Plans
-          </h2>
-          {[...plans]
-            .sort((a, b) => {
-              if (a.status === "active" && b.status !== "active") return -1;
-              if (b.status === "active" && a.status !== "active") return 1;
-              return (b.createdAt || "").localeCompare(a.createdAt || "");
-            })
-            .map(renderPlanCard)}
+            <span
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+              }}
+            >
+              {plansExpanded ? (
+                <ChevronDown size={18} />
+              ) : (
+                <ChevronRight size={18} />
+              )}
+            </span>
+            <span
+              style={{
+                fontSize: "18px",
+                fontWeight: "bold",
+              }}
+            >
+              Plans{" "}
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "normal",
+                }}
+              >
+                ({plans.length} {plans.length === 1 ? "plan" : "plans"})
+              </span>
+            </span>
+            <span />
+          </button>
+
+          {plansExpanded && (
+            <>
+              {[...plans]
+                .sort((a, b) => {
+                  if (a.status === "active" && b.status !== "active") return -1;
+                  if (b.status === "active" && a.status !== "active") return 1;
+                  return (b.createdAt || "").localeCompare(a.createdAt || "");
+                })
+                .map(renderPlanCard)}
+            </>
+          )}
           {renderCompletedPlanActions()}
           {renderExtendPlanPicker()}
           <hr />
         </>
       )}
 
-      <div
+      <button
+        aria-expanded={workoutsExpanded}
+        onClick={() => setWorkoutsExpanded((expanded) => !expanded)}
         style={{
-          margin: "12px 0",
-          textAlign: "center",
+          alignItems: "center",
+          background: "transparent",
+          border: "none",
+          color: "var(--text-h)",
+          display: "grid",
+          font: "inherit",
+          gridTemplateColumns: "32px minmax(0, 1fr) 32px",
+          margin: "12px 0 8px",
+          padding: "4px 0",
+          width: "100%",
         }}
       >
-        <select
-          value={templateSort}
-          onChange={(e) => setTemplateSort(e.target.value)}
+        <span
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            justifyContent: "center",
+          }}
         >
-          <option value="recent">Recent</option>
+          {workoutsExpanded ? (
+            <ChevronDown size={18} />
+          ) : (
+            <ChevronRight size={18} />
+          )}
+        </span>
+        <span
+          style={{
+            fontSize: "18px",
+            fontWeight: "bold",
+          }}
+        >
+          Workouts{" "}
+          <span
+            style={{
+              fontSize: "14px",
+              fontWeight: "normal",
+            }}
+          >
+            ({standaloneTemplates.length}{" "}
+            {standaloneTemplates.length === 1 ? "workout" : "workouts"})
+          </span>
+        </span>
+        <span />
+      </button>
 
-          <option value="alpha">A → Z</option>
-        </select>
-      </div>
+      {workoutsExpanded && (
+        <>
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "10px",
+              justifyContent: "space-between",
+              marginBottom: "10px",
+            }}
+          >
+            <button onClick={addTemplate}>+ New Template</button>
 
-      {[...templates]
-        .filter((template) => !template.planId)
-
-        .sort((a, b) => {
-          if (templateSort === "alpha") {
-            return a.name.localeCompare(b.name);
-          }
-
-          return (
-            new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0)
-          );
-        })
-
-        .map((template) => (
-          <div key={template.id}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 180px",
-                alignItems: "center",
-                marginBottom: "8px",
-                columnGap: "8px",
-              }}
+            <select
+              value={templateSort}
+              onChange={(e) => setTemplateSort(e.target.value)}
             >
-              <button
+              <option value="recent">Recent</option>
+
+              <option value="alpha">A → Z</option>
+            </select>
+          </div>
+
+          {standaloneTemplates.map((template) => (
+            <div key={template.id}>
+              <div
                 style={{
-                  textAlign: "left",
-                  width: "100%",
-                  overflow: "hidden",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 180px",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                  columnGap: "8px",
                 }}
-                onClick={() => setSelectedTemplateId(template.id)}
               >
-                <span
+                <button
                   style={{
-                    display: "inline-block",
-
-                    maxWidth: "120px",
-
+                    textAlign: "left",
+                    width: "100%",
                     overflow: "hidden",
-
-                    textOverflow: "ellipsis",
-
-                    whiteSpace: "nowrap",
-
-                    verticalAlign: "middle",
                   }}
+                  onClick={() => setSelectedTemplateId(template.id)}
                 >
-                  {template.name}
-                </span>
-              </button>
+                  <span
+                    style={{
+                      display: "inline-block",
+
+                      maxWidth: "120px",
+
+                      overflow: "hidden",
+
+                      textOverflow: "ellipsis",
+
+                      whiteSpace: "nowrap",
+
+                      verticalAlign: "middle",
+                    }}
+                  >
+                    {template.name}
+                  </span>
+                </button>
 
               <div
                 style={{
@@ -2360,7 +2455,9 @@ export default function App() {
               </div>
             </div>
           </div>
-        ))}
+          ))}
+        </>
+      )}
     </div>,
     "home"
   );
