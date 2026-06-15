@@ -7,6 +7,7 @@ import {
   Circle,
   Dumbbell,
   Hash,
+  History,
   Link2,
   NotebookPen,
   Plus,
@@ -19,7 +20,6 @@ import {
   X,
 } from "lucide-react";
 import { equipmentOptions } from "../data/seedEquipment";
-import E1RMExplorerModal from "./E1RMExplorerSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
@@ -116,8 +116,6 @@ export default function SessionView({
   const [replacementExercise, setReplacementExercise] = useState(null);
   const [replacementTarget, setReplacementTarget] = useState(null);
   const [weightUnit, setWeightUnit] = useState("lb");
-  const [showE1RMExplorer, setShowE1RMExplorer] = useState(false);
-  const [e1RMExplorerData, setE1RMExplorerData] = useState(null);
   const [showWeightPicker, setShowWeightPicker] = useState(false);
   const [weightPickerData, setWeightPickerData] = useState(null);
   const [showRepsPicker, setShowRepsPicker] = useState(false);
@@ -435,13 +433,29 @@ export default function SessionView({
       rir: set.actualRir,
       weight: set.actualWeight,
     };
+    const suggested = {
+      e1rm: calculateE1RM(
+        "",
+        "",
+        "",
+        set.targetWeight,
+        set.targetReps,
+        set.targetRir
+      ),
+      reps: set.targetReps,
+      rir: set.targetRir,
+      weight: set.targetWeight,
+    };
     const alternatives = recommendation.result?.alternatives || [];
+
+    window.getSelection?.()?.removeAllRanges();
 
     setTargetAlternativesData({
       alternatives,
       current,
       exerciseId: exercise.id,
       setId: set.id,
+      suggested,
     });
   }
 
@@ -873,18 +887,35 @@ export default function SessionView({
     }));
   }
 
-  function getSupersetSequence(group) {
+  function getSupersetSequence(group, options = {}) {
     const exercises = session.exercises.filter(
       (exercise) => exercise.supersetGroup === group
     );
+    const lockedOrder =
+      options.supersetOrdersOverride?.[group] ||
+      session.supersetOrders?.[group] ||
+      [];
+    const orderIndexByExerciseId = new Map(
+      lockedOrder.map((exerciseId, index) => [exerciseId, index])
+    );
+    const orderedExercises = [...exercises].sort((a, b) => {
+      const aOrder = orderIndexByExerciseId.has(a.id)
+        ? orderIndexByExerciseId.get(a.id)
+        : Number.MAX_SAFE_INTEGER;
+      const bOrder = orderIndexByExerciseId.has(b.id)
+        ? orderIndexByExerciseId.get(b.id)
+        : Number.MAX_SAFE_INTEGER;
+
+      return aOrder - bOrder;
+    });
     const maxSetCount = Math.max(
       0,
-      ...exercises.map((exercise) => exercise.sets.length)
+      ...orderedExercises.map((exercise) => exercise.sets.length)
     );
     const sequence = [];
 
     for (let setIndex = 0; setIndex < maxSetCount; setIndex += 1) {
-      for (const exercise of exercises) {
+      for (const exercise of orderedExercises) {
         const set = exercise.sets[setIndex];
 
         if (set) {
@@ -902,9 +933,84 @@ export default function SessionView({
     return sequence;
   }
 
-  function getSetOrderSequence(exercise) {
+  function getSupersetExercises(group) {
+    return session.exercises.filter(
+      (exercise) => exercise.supersetGroup === group
+    );
+  }
+
+  function getSupersetCompletedSetCount(group) {
+    return getSupersetExercises(group).reduce(
+      (count, exercise) =>
+        count + exercise.sets.filter((set) => set.completed).length,
+      0
+    );
+  }
+
+  function getSupersetExerciseOrder(group, firstExerciseId) {
+    const exercises = getSupersetExercises(group);
+    const first = exercises.find((exercise) => exercise.id === firstExerciseId);
+    const rest = exercises.filter((exercise) => exercise.id !== firstExerciseId);
+
+    return first ? [first, ...rest].map((exercise) => exercise.id) : [];
+  }
+
+  function lockSupersetOrderForSet(exerciseId, setId) {
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+
+    if (!exercise?.supersetGroup) {
+      return;
+    }
+
+    const setIndex = exercise.sets.findIndex((set) => set.id === setId);
+
+    if (setIndex !== 0) {
+      return;
+    }
+
+    if (getSupersetCompletedSetCount(exercise.supersetGroup) > 0) {
+      return;
+    }
+
+    const order = getSupersetExerciseOrder(exercise.supersetGroup, exerciseId);
+
+    updateSession((s) => ({
+      ...s,
+      supersetOrders: {
+        ...(s.supersetOrders || {}),
+        [exercise.supersetGroup]: order,
+      },
+    }));
+  }
+
+  function getSupersetOrderOverrideForSet(exerciseId, setId) {
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+
+    if (!exercise?.supersetGroup) {
+      return null;
+    }
+
+    const setIndex = exercise.sets.findIndex((set) => set.id === setId);
+
+    if (setIndex !== 0) {
+      return null;
+    }
+
+    if (getSupersetCompletedSetCount(exercise.supersetGroup) > 0) {
+      return null;
+    }
+
+    return {
+      [exercise.supersetGroup]: getSupersetExerciseOrder(
+        exercise.supersetGroup,
+        exerciseId
+      ),
+    };
+  }
+
+  function getSetOrderSequence(exercise, options = {}) {
     return exercise.supersetGroup
-      ? getSupersetSequence(exercise.supersetGroup)
+      ? getSupersetSequence(exercise.supersetGroup, options)
       : exercise.sets.map((set, setIndex) => ({
           exercise,
           exerciseId: exercise.id,
@@ -914,14 +1020,14 @@ export default function SessionView({
         }));
   }
 
-  function findSetOrderItem(exerciseId, setId) {
+  function findSetOrderItem(exerciseId, setId, options = {}) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
     if (!exercise) {
       return null;
     }
 
-    const sequence = getSetOrderSequence(exercise);
+    const sequence = getSetOrderSequence(exercise, options);
     const index = sequence.findIndex(
       (item) => item.exerciseId === exerciseId && item.setId === setId
     );
@@ -942,6 +1048,14 @@ export default function SessionView({
       return false;
     }
 
+    if (
+      ordered.item.exercise.supersetGroup &&
+      ordered.item.setIndex === 0 &&
+      getSupersetCompletedSetCount(ordered.item.exercise.supersetGroup) === 0
+    ) {
+      return true;
+    }
+
     return ordered.sequence
       .slice(0, ordered.index)
       .every((item) => item.set.completed);
@@ -959,8 +1073,8 @@ export default function SessionView({
       .every((item) => !item.set.completed);
   }
 
-  function getNextActiveSetAfter(exerciseId, setId) {
-    const ordered = findSetOrderItem(exerciseId, setId);
+  function getNextActiveSetAfter(exerciseId, setId, options = {}) {
+    const ordered = findSetOrderItem(exerciseId, setId, options);
 
     if (!ordered) {
       return null;
@@ -968,7 +1082,11 @@ export default function SessionView({
 
     const next = ordered.sequence
       .slice(ordered.index + 1)
-      .find((item) => !item.set.completed);
+      .find(
+        (item) =>
+          !item.set.completed &&
+          !(item.exerciseId === exerciseId && item.setId === setId)
+      );
 
     if (next) {
       return {
@@ -977,20 +1095,48 @@ export default function SessionView({
       };
     }
 
-    const exerciseIndex = session.exercises.findIndex(
-      (exercise) => exercise.id === exerciseId
-    );
-    const nextExercise = session.exercises
-      .slice(exerciseIndex + 1)
-      .find((exercise) => exercise.sets.some((set) => !set.completed));
-    const nextSet = nextExercise?.sets.find((set) => !set.completed);
+    return getFirstActivatableSet({
+      skipExerciseId: exerciseId,
+      skipSetId: setId,
+      supersetOrdersOverride: options.supersetOrdersOverride,
+    });
+  }
 
-    return nextExercise && nextSet
-      ? {
-          exerciseId: nextExercise.id,
-          setId: nextSet.id,
+  function getFirstActivatableSet({
+    skipExerciseId,
+    skipSetId,
+    supersetOrdersOverride,
+  } = {}) {
+    for (const exercise of session.exercises) {
+      for (const set of exercise.sets) {
+        if (exercise.id === skipExerciseId && set.id === skipSetId) {
+          continue;
         }
-      : null;
+
+        const ordered = findSetOrderItem(exercise.id, set.id, {
+          supersetOrdersOverride,
+        });
+        const canActivate =
+          ordered &&
+          !ordered.item.set.completed &&
+          ordered.sequence
+            .slice(0, ordered.index)
+            .every(
+              (item) =>
+                item.set.completed ||
+                (item.exerciseId === skipExerciseId && item.setId === skipSetId)
+            );
+
+        if (canActivate) {
+          return {
+            exerciseId: exercise.id,
+            setId: set.id,
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   function resetRestTimer() {
@@ -1018,6 +1164,10 @@ export default function SessionView({
     if (!undo && !canActivateSet(exerciseId, setId)) {
       return;
     }
+
+    const supersetOrdersOverride = undo
+      ? null
+      : getSupersetOrderOverrideForSet(exerciseId, setId);
 
     updateSession((s) => ({
       ...s,
@@ -1068,7 +1218,11 @@ export default function SessionView({
       resetRestTimer();
     }
 
-    setActiveSet(getNextActiveSetAfter(exerciseId, setId));
+    setActiveSet(
+      getNextActiveSetAfter(exerciseId, setId, {
+        supersetOrdersOverride,
+      })
+    );
   }
   function deleteExercise(exerciseId) {
     updateSession((s) => ({
@@ -2262,7 +2416,7 @@ export default function SessionView({
                       const canUncomplete = canUncompleteSet(exercise.id, set.id);
 
                       const valueColor = isActive
-                        ? "#1976d2"
+                        ? "var(--accent)"
                         : isCompleted
                         ? "#444"
                         : "#aaa";
@@ -2295,6 +2449,7 @@ export default function SessionView({
                           }}
                           onClick={() => {
                             if (canActivate) {
+                              lockSupersetOrderForSet(exercise.id, set.id);
                               setActiveSet({
                                 exerciseId: exercise.id,
 
@@ -2313,9 +2468,13 @@ export default function SessionView({
                             boxSizing: "border-box",
                             gap: "4px",
 
-                            borderLeft: isActive ? "4px solid #1976d2" : "none",
+                            borderLeft: isActive
+                              ? "4px solid var(--accent)"
+                              : "none",
 
-                            background: isActive ? "#e3f2fd" : "transparent",
+                            background: isActive
+                              ? "color-mix(in srgb, var(--accent) 10%, var(--surface))"
+                              : "transparent",
 
                             fontWeight: isActive ? "bold" : "normal",
                           }}
@@ -2374,6 +2533,9 @@ export default function SessionView({
                               textAlign: "left",
                               width: "80px",
                               lineHeight: "1.1",
+                              touchAction: "manipulation",
+                              userSelect: "none",
+                              WebkitUserSelect: "none",
                             }}
                           >
                             <div
@@ -2521,28 +2683,12 @@ export default function SessionView({
                             </button>
 
                             <span
-                              onClick={() => {
-                                setE1RMExplorerData({
-                                  exerciseId: exercise.id,
-
-                                  setId: set.id,
-
-                                  weight: set.actualWeight || set.targetWeight,
-
-                                  reps: set.actualReps || set.targetReps,
-
-                                  rir: set.actualRir || set.targetRir,
-                                });
-
-                                setShowE1RMExplorer(true);
-                              }}
                               style={{
                                 display: "inline-block",
                                 width: "42px",
                                 textAlign: "center",
                                 fontSize: "13px",
                                 color: "var(--text-muted)",
-                                cursor: "pointer",
                               }}
                             >
                               {actualE1RM == null
@@ -2565,12 +2711,11 @@ export default function SessionView({
                             disabled={
                               set.completed
                                 ? !canUncomplete
-                                : activeSet?.exerciseId !== exercise.id ||
-                                  activeSet?.setId !== set.id ||
-                                  !canActivate
+                                : !canActivate
                             }
                             onClick={(e) => {
                               e.stopPropagation();
+                              lockSupersetOrderForSet(exercise.id, set.id);
                               markSetComplete(exercise.id, set.id);
                             }}
                           >
@@ -3411,37 +3556,122 @@ export default function SessionView({
 
                 <div
                   style={{
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
+                    display: "grid",
+                    gap: "8px",
                     marginBottom: "12px",
-                    padding: "10px",
                   }}
                 >
                   <div
                     style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginBottom: "4px",
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "10px",
+                      display: "grid",
+                      gap: "10px",
+                      gridTemplateColumns: "32px minmax(0, 1fr)",
+                      padding: "10px",
                     }}
                   >
-                    Most recent actual
-                  </div>
-                  <strong>
-                    {targetAlternativesData.current?.weight
-                      ? formatPrescriptionLabel(targetAlternativesData.current)
-                      : "No previous actual value"}
-                  </strong>
-                  {targetAlternativesData.current?.e1rm != null && (
                     <span
                       style={{
+                        alignItems: "center",
+                        background: "var(--surface-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "999px",
                         color: "var(--text-muted)",
-                        marginLeft: "8px",
+                        display: "inline-flex",
+                        height: "32px",
+                        justifyContent: "center",
+                        width: "32px",
                       }}
                     >
-                      e1RM {targetAlternativesData.current.e1rm.toFixed(1)}
+                      <History size={17} />
                     </span>
-                  )}
+                    <div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Most recent actual
+                      </div>
+                      <strong>
+                        {targetAlternativesData.current?.weight
+                          ? formatPrescriptionLabel(targetAlternativesData.current)
+                          : "No previous actual value"}
+                      </strong>
+                      {targetAlternativesData.current?.e1rm != null && (
+                        <span
+                          style={{
+                            color: "var(--text-muted)",
+                            marginLeft: "8px",
+                          }}
+                        >
+                          e1RM {targetAlternativesData.current.e1rm.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "10px",
+                      display: "grid",
+                      gap: "10px",
+                      gridTemplateColumns: "32px minmax(0, 1fr)",
+                      padding: "10px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        alignItems: "center",
+                        background: "var(--surface-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "999px",
+                        color: "var(--accent)",
+                        display: "inline-flex",
+                        height: "32px",
+                        justifyContent: "center",
+                        width: "32px",
+                      }}
+                    >
+                      <Target size={17} />
+                    </span>
+                    <div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Suggested target
+                      </div>
+                      <strong>
+                        {targetAlternativesData.suggested?.weight
+                          ? formatPrescriptionLabel(
+                              targetAlternativesData.suggested
+                            )
+                          : "No suggested target"}
+                      </strong>
+                      {targetAlternativesData.suggested?.e1rm != null && (
+                        <span
+                          style={{
+                            color: "var(--text-muted)",
+                            marginLeft: "8px",
+                          }}
+                        >
+                          e1RM {targetAlternativesData.suggested.e1rm.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div
@@ -3461,7 +3691,7 @@ export default function SessionView({
                       No alternatives are available for this target yet.
                     </div>
                   ) : (
-                    targetAlternativesData.alternatives.map((option) => (
+                    targetAlternativesData.alternatives.map((option, index) => (
                       <button
                         key={`${option.weight}-${option.reps}-${option.rir}`}
                         onClick={() => {
@@ -3476,11 +3706,28 @@ export default function SessionView({
                           alignItems: "center",
                           display: "grid",
                           gap: "8px",
-                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                          gridTemplateColumns: "28px minmax(0, 1fr) auto",
                           minHeight: "44px",
                           textAlign: "left",
                         }}
                       >
+                        <span
+                          style={{
+                            alignItems: "center",
+                            background: "var(--surface-muted)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "999px",
+                            color: "var(--text-muted)",
+                            display: "inline-flex",
+                            fontSize: "12px",
+                            fontWeight: "bold",
+                            height: "26px",
+                            justifyContent: "center",
+                            width: "26px",
+                          }}
+                        >
+                          {index + 1}
+                        </span>
                         <span>{formatPrescriptionLabel(option)}</span>
                         <span
                           style={{
@@ -3497,31 +3744,6 @@ export default function SessionView({
               </div>
             </div>
           )}
-
-          <E1RMExplorerModal
-            isOpen={showE1RMExplorer}
-            onClose={() => setShowE1RMExplorer(false)}
-            setData={e1RMExplorerData}
-            onSelectOption={(option) => {
-              if (!e1RMExplorerData) {
-                return;
-              }
-
-              updateActual(
-                e1RMExplorerData.exerciseId,
-                e1RMExplorerData.setId,
-                "actualWeight",
-                String(option.weight)
-              );
-
-              updateActual(
-                e1RMExplorerData.exerciseId,
-                e1RMExplorerData.setId,
-                "actualReps",
-                String(option.reps)
-              );
-            }}
-          />
 
           <WeightPickerModal
             isOpen={showWeightPicker}
