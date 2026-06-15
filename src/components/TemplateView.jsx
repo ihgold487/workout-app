@@ -957,8 +957,13 @@ export default function TemplateView({
                           size={exercise.supersetGroup ? 42 : 32}
                           onClick={() => {
                             const group = prompt(
-                              "Superset group (A, B, etc). Leave empty to clear."
+                              "Superset group (A, B, etc). Leave empty to clear.",
+                              exercise.supersetGroup || ""
                             );
+
+                            if (group === null) {
+                              return;
+                            }
 
                             setTemplates(
                               templates.map((t) =>
