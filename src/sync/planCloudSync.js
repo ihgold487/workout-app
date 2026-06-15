@@ -1,0 +1,423 @@
+import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { uploadWorkouts } from "./workoutCloudSync";
+
+const LOCAL_APP_SOURCE = "local_app";
+
+function assertCloudReady(session) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  if (!session?.user?.id) {
+    throw new Error("Sign in before using cloud sync.");
+  }
+}
+
+function parseLocalSourceKey(sourceKey) {
+  const numeric = Number(sourceKey);
+
+  return Number.isFinite(numeric) && String(numeric) === String(sourceKey)
+    ? numeric
+    : sourceKey;
+}
+
+function parseDate(value) {
+  const parsed = value ? new Date(value) : null;
+
+  return parsed && Number.isFinite(parsed.getTime())
+    ? parsed.toISOString()
+    : null;
+}
+
+function localPlanToCloud(plan, userId) {
+  return {
+    days_per_week: plan.daysPerWeek || null,
+    deleted_at: null,
+    description: plan.description || null,
+    duration_weeks: plan.durationWeeks || null,
+    ends_on: plan.endsOn || null,
+    is_open_ended: Boolean(plan.isOpenEnded),
+    name: plan.name,
+    plan_config: {
+      completions: plan.completions || [],
+      config: plan.config || {},
+      createdAt: plan.createdAt || null,
+      currentWeek: plan.currentWeek || 1,
+      goal: plan.goal || "maintain",
+      planType: plan.planType || "type-2",
+    },
+    source: LOCAL_APP_SOURCE,
+    source_key: String(plan.id),
+    starts_on: plan.startsOn || null,
+    status: plan.status || "inactive",
+    updated_at: new Date().toISOString(),
+    user_id: userId,
+  };
+}
+
+function localPlanWorkoutToCloud({
+  cloudPlanId,
+  cloudWorkoutId,
+  plan,
+  planWorkout,
+  position,
+  userId,
+}) {
+  const targetRir = plan.config?.rir ?? "";
+
+  return {
+    day_number: planWorkout.dayNumber || position,
+    deleted_at: null,
+    name: planWorkout.name || `Workout ${position}`,
+    phase: planWorkout.phase || null,
+    position,
+    target_rir_label: targetRir !== "" ? String(targetRir) : null,
+    target_rir_value: targetRir === "" ? 0 : Number.parseInt(targetRir, 10) || 0,
+    training_plan_id: cloudPlanId,
+    updated_at: new Date().toISOString(),
+    user_id: userId,
+    week_number: planWorkout.weekNumber || null,
+    workout_id: cloudWorkoutId || null,
+    workout_rules: {
+      planWorkoutId: planWorkout.planWorkoutId || null,
+      templateId: planWorkout.templateId || null,
+    },
+  };
+}
+
+async function loadWorkoutIdMap(userId) {
+  const { data, error } = await supabase
+    .from("workouts")
+    .select("id,source_key")
+    .eq("user_id", userId)
+    .eq("source", LOCAL_APP_SOURCE)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(data.map((workout) => [workout.source_key, workout.id]));
+}
+
+async function loadWorkoutSourceKeyMap(userId, workoutIds) {
+  if (workoutIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("workouts")
+    .select("id,source_key")
+    .in("id", workoutIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(data.map((workout) => [workout.id, workout.source_key]));
+}
+
+async function softDeleteMissingPlanWorkouts({
+  cloudPlanId,
+  keptIds,
+  userId,
+}) {
+  const { data, error } = await supabase
+    .from("training_plan_workouts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("training_plan_id", cloudPlanId)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw error;
+  }
+
+  const missingIds = data
+    .map((row) => row.id)
+    .filter((id) => !keptIds.includes(id));
+
+  if (missingIds.length === 0) {
+    return 0;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("training_plan_workouts")
+    .update({
+      deleted_at: new Date().toISOString(),
+    })
+    .in("id", missingIds);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  return missingIds.length;
+}
+
+async function upsertPlanWorkoutByPosition(record) {
+  const { data: existing, error: loadError } = await supabase
+    .from("training_plan_workouts")
+    .select("id")
+    .eq("user_id", record.user_id)
+    .eq("training_plan_id", record.training_plan_id)
+    .eq("position", record.position)
+    .maybeSingle();
+
+  if (loadError) {
+    throw loadError;
+  }
+
+  if (existing?.id) {
+    const { data, error } = await supabase
+      .from("training_plan_workouts")
+      .update(record)
+      .eq("id", existing.id)
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data.id;
+  }
+
+  const { data, error } = await supabase
+    .from("training_plan_workouts")
+    .insert(record)
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.id;
+}
+
+export async function uploadPlans(plans, templates, exerciseLibrary, session) {
+  assertCloudReady(session);
+
+  const userId = session.user.id;
+
+  await uploadWorkouts(templates, exerciseLibrary, session);
+
+  const planRecords = plans.map((plan) => localPlanToCloud(plan, userId));
+
+  if (planRecords.length > 0) {
+    const { error } = await supabase.from("training_plans").upsert(planRecords, {
+      onConflict: "user_id,source,source_key",
+    });
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  const { data: cloudPlans, error: cloudPlanError } = await supabase
+    .from("training_plans")
+    .select("id,source_key")
+    .eq("user_id", userId)
+    .eq("source", LOCAL_APP_SOURCE)
+    .is("deleted_at", null);
+
+  if (cloudPlanError) {
+    throw cloudPlanError;
+  }
+
+  const cloudPlansBySourceKey = new Map(
+    cloudPlans.map((plan) => [plan.source_key, plan.id])
+  );
+  const workoutIdsBySourceKey = await loadWorkoutIdMap(userId);
+
+  let syncedPlanWorkouts = 0;
+  let removedPlanWorkouts = 0;
+
+  for (const plan of plans) {
+    const cloudPlanId = cloudPlansBySourceKey.get(String(plan.id));
+
+    if (!cloudPlanId) {
+      continue;
+    }
+
+    const keptIds = [];
+
+    for (const [index, planWorkout] of (plan.workouts || []).entries()) {
+      const record = localPlanWorkoutToCloud({
+        cloudPlanId,
+        cloudWorkoutId: workoutIdsBySourceKey.get(String(planWorkout.templateId)),
+        plan,
+        planWorkout,
+        position: index + 1,
+        userId,
+      });
+      const id = await upsertPlanWorkoutByPosition(record);
+
+      keptIds.push(id);
+      syncedPlanWorkouts += 1;
+    }
+
+    removedPlanWorkouts += await softDeleteMissingPlanWorkouts({
+      cloudPlanId,
+      keptIds,
+      userId,
+    });
+  }
+
+  const sourceKeys = plans.map((plan) => String(plan.id));
+  const removedPlanIds = cloudPlans
+    .filter((plan) => !sourceKeys.includes(plan.source_key))
+    .map((plan) => plan.id);
+
+  if (removedPlanIds.length > 0) {
+    const { error } = await supabase
+      .from("training_plans")
+      .update({
+        deleted_at: new Date().toISOString(),
+      })
+      .in("id", removedPlanIds);
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  return {
+    removedPlanWorkouts,
+    removedPlans: removedPlanIds.length,
+    syncedPlanWorkouts,
+    syncedPlans: planRecords.length,
+  };
+}
+
+function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan) {
+  const planConfig = plan.plan_config || {};
+
+  return {
+    ...(existingPlan || {}),
+    completions: Array.isArray(planConfig.completions)
+      ? planConfig.completions
+      : [],
+    config: planConfig.config || {},
+    createdAt:
+      planConfig.createdAt || parseDate(plan.created_at) || existingPlan?.createdAt,
+    currentWeek: planConfig.currentWeek || 1,
+    daysPerWeek: plan.days_per_week || existingPlan?.daysPerWeek || null,
+    description: plan.description || existingPlan?.description || "",
+    durationWeeks: plan.duration_weeks || existingPlan?.durationWeeks || null,
+    goal: planConfig.goal || existingPlan?.goal || "maintain",
+    id: parseLocalSourceKey(plan.source_key),
+    isOpenEnded: Boolean(plan.is_open_ended),
+    name: plan.name,
+    planType: planConfig.planType || existingPlan?.planType || "type-2",
+    status: plan.status || "inactive",
+    workouts: planWorkouts.map((workout) => {
+      const rules = workout.workout_rules || {};
+      const templateId =
+        rules.templateId ||
+        (workout.workout_id && workoutSourceKeyById.has(workout.workout_id)
+          ? parseLocalSourceKey(workoutSourceKeyById.get(workout.workout_id))
+          : null);
+
+      return {
+        dayNumber: workout.day_number || workout.position,
+        name: workout.name,
+        phase: workout.phase || null,
+        planWorkoutId:
+          rules.planWorkoutId ||
+          `${parseLocalSourceKey(plan.source_key)}:workout-${workout.position}`,
+        templateId,
+        weekNumber: workout.week_number || null,
+      };
+    }),
+  };
+}
+
+export async function downloadPlans(currentPlans, templates, session) {
+  assertCloudReady(session);
+
+  const userId = session.user.id;
+  const { data: planRows, error: planError } = await supabase
+    .from("training_plans")
+    .select(
+      "id,name,description,duration_weeks,days_per_week,is_open_ended,starts_on,ends_on,status,plan_config,source_key,created_at,updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("source", LOCAL_APP_SOURCE)
+    .is("deleted_at", null)
+    .order("updated_at", {
+      ascending: false,
+    });
+
+  if (planError) {
+    throw planError;
+  }
+
+  const planIds = planRows.map((plan) => plan.id);
+  const existingPlansBySourceKey = new Map(
+    currentPlans.map((plan) => [String(plan.id), plan])
+  );
+
+  if (planIds.length === 0) {
+    return {
+      downloaded: 0,
+      localOnly: currentPlans.length,
+      plans: currentPlans,
+      updated: 0,
+    };
+  }
+
+  const { data: planWorkoutRows, error: planWorkoutError } = await supabase
+    .from("training_plan_workouts")
+    .select(
+      "id,training_plan_id,workout_id,week_number,day_number,position,name,phase,target_rir_value,target_rir_label,workout_rules"
+    )
+    .in("training_plan_id", planIds)
+    .is("deleted_at", null)
+    .order("position", {
+      ascending: true,
+    });
+
+  if (planWorkoutError) {
+    throw planWorkoutError;
+  }
+
+  const workoutSourceKeyById = await loadWorkoutSourceKeyMap(
+    userId,
+    planWorkoutRows.map((workout) => workout.workout_id).filter(Boolean)
+  );
+  const planWorkoutsByPlanId = new Map();
+
+  for (const workout of planWorkoutRows) {
+    const workouts = planWorkoutsByPlanId.get(workout.training_plan_id) || [];
+    workouts.push(workout);
+    planWorkoutsByPlanId.set(workout.training_plan_id, workouts);
+  }
+
+  const downloadedPlans = planRows.map((plan) =>
+    cloudPlanToLocal(
+      plan,
+      planWorkoutsByPlanId.get(plan.id) || [],
+      workoutSourceKeyById,
+      existingPlansBySourceKey.get(String(plan.source_key)),
+      templates
+    )
+  );
+  const downloadedSourceKeys = new Set(
+    downloadedPlans.map((plan) => String(plan.id))
+  );
+  const localOnlyPlans = currentPlans.filter(
+    (plan) => !downloadedSourceKeys.has(String(plan.id))
+  );
+
+  return {
+    downloaded: downloadedPlans.length,
+    localOnly: localOnlyPlans.length,
+    plans: [...downloadedPlans, ...localOnlyPlans],
+    updated: downloadedPlans.filter((plan) =>
+      existingPlansBySourceKey.has(String(plan.id))
+    ).length,
+  };
+}

@@ -66,6 +66,50 @@ function parseCompletedAt(value) {
   return new Date().toISOString();
 }
 
+function parseLocalSourceKey(sourceKey) {
+  const numeric = Number(sourceKey);
+
+  return Number.isFinite(numeric) && String(numeric) === String(sourceKey)
+    ? numeric
+    : sourceKey;
+}
+
+function formatCloudValue(label, value) {
+  if (label != null && label !== "") {
+    return String(label);
+  }
+
+  if (value == null || value === "") {
+    return "";
+  }
+
+  return String(value);
+}
+
+function normalizeLookupValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getLocalExerciseMatchKey(exercise) {
+  const equipment = Array.isArray(exercise.equipment)
+    ? exercise.equipment.filter(Boolean).join(", ")
+    : exercise.equipment || "";
+
+  return `${normalizeLookupValue(exercise.name)}||${normalizeLookupValue(
+    equipment
+  )}`;
+}
+
+function getCloudExerciseMatchKey(exercise) {
+  return `${normalizeLookupValue(exercise.exercise_name)}||${normalizeLookupValue(
+    exercise.equipment
+  )}`;
+}
+
 function localSessionToCloud(workout, userId, cloudWorkoutId) {
   return {
     completed_at: parseCompletedAt(workout.completedAt),
@@ -79,6 +123,101 @@ function localSessionToCloud(workout, userId, cloudWorkoutId) {
     user_id: userId,
     workout_id: cloudWorkoutId || null,
     workout_name: workout.templateName || workout.name || "Workout",
+  };
+}
+
+function buildLocalExerciseLookup(exerciseLibrary) {
+  return {
+    byCloudId: new Map(
+      exerciseLibrary
+        .filter((exercise) => exercise.exerciseId)
+        .map((exercise) => [exercise.exerciseId, exercise])
+    ),
+    byNameEquipment: new Map(
+      exerciseLibrary.map((exercise) => [
+        getLocalExerciseMatchKey(exercise),
+        exercise,
+      ])
+    ),
+  };
+}
+
+function cloudSetToLocal(set) {
+  return {
+    actualReps: formatCloudValue(null, set.actual_reps),
+    actualRir: formatCloudValue(set.actual_rir_label, set.actual_rir_value),
+    actualWeight: formatCloudValue(
+      set.actual_weight_label,
+      set.actual_weight_value
+    ),
+    completed: Boolean(set.completed_at),
+    id: parseLocalSourceKey(set.id),
+    isDropSet: Boolean(set.is_drop_set),
+    targetReps: formatCloudValue(
+      set.target_reps_label,
+      set.target_reps_min ?? set.target_reps_max
+    ),
+    targetRir: formatCloudValue(set.target_rir_label, set.target_rir_value),
+    targetWeight: formatCloudValue(
+      set.target_weight_label,
+      set.target_weight_value
+    ),
+  };
+}
+
+function cloudExerciseToLocal(exercise, sets, exerciseLookup) {
+  const matchedExercise =
+    exerciseLookup.byCloudId.get(exercise.exercise_id) ||
+    exerciseLookup.byNameEquipment.get(getCloudExerciseMatchKey(exercise));
+  const muscles = [
+    exercise.primary_muscle,
+    ...(exercise.secondary_muscles || []),
+  ].filter(Boolean);
+
+  return {
+    equipment: exercise.equipment ? [exercise.equipment] : [],
+    exerciseId: matchedExercise?.id || null,
+    id: parseLocalSourceKey(exercise.id),
+    imageAlt: matchedExercise?.imageAlt || "",
+    imageUrl: matchedExercise?.imageUrl || "",
+    muscles,
+    name: exercise.exercise_name,
+    note: exercise.notes || "",
+    sets,
+    supersetGroup: exercise.superset_group || null,
+  };
+}
+
+function formatCloudDate(value) {
+  const parsed = value ? new Date(value) : null;
+
+  if (parsed && Number.isFinite(parsed.getTime())) {
+    return parsed.toLocaleDateString();
+  }
+
+  return "";
+}
+
+function cloudSessionToLocal(session, exercises, workoutSourceKeyById, templates) {
+  const templateId =
+    session.workout_id && workoutSourceKeyById.has(session.workout_id)
+      ? parseLocalSourceKey(workoutSourceKeyById.get(session.workout_id))
+      : null;
+  const template = templates.find(
+    (item) => templateId != null && String(item.id) === String(templateId)
+  );
+
+  return {
+    completedAt: formatCloudDate(session.completed_at),
+    durationSeconds: session.duration_seconds || null,
+    exercises,
+    id: parseLocalSourceKey(session.source_key),
+    planId: template?.planId || null,
+    planWeek: null,
+    planWorkoutId: template?.planWorkoutId || null,
+    startedAt: formatCloudDate(session.started_at),
+    templateId,
+    templateName: session.workout_name || template?.name || "Workout",
   };
 }
 
@@ -412,5 +551,149 @@ export async function uploadWorkoutHistory(
     syncedExercises,
     syncedSessions: sessionRecords.length,
     syncedSets,
+  };
+}
+
+export async function downloadWorkoutHistory(
+  currentHistory,
+  templates,
+  exerciseLibrary,
+  session
+) {
+  assertCloudReady(session);
+
+  const userId = session.user.id;
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from("workout_sessions")
+    .select(
+      "id,workout_id,workout_name,started_at,completed_at,duration_seconds,source_key,updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("source", LOCAL_APP_SOURCE)
+    .is("deleted_at", null)
+    .order("completed_at", {
+      ascending: false,
+    });
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  const sessionIds = sessionRows.map((workout) => workout.id);
+  const existingHistoryBySourceKey = new Map(
+    currentHistory.map((workout) => [String(workout.id), workout])
+  );
+
+  if (sessionIds.length === 0) {
+    return {
+      downloaded: 0,
+      history: currentHistory,
+      localOnly: currentHistory.length,
+      updated: 0,
+    };
+  }
+
+  const { data: exerciseRows, error: exerciseError } = await supabase
+    .from("session_exercises")
+    .select(
+      "id,session_id,exercise_id,position,exercise_name,equipment,primary_muscle,secondary_muscles,superset_group,notes"
+    )
+    .in("session_id", sessionIds)
+    .is("deleted_at", null)
+    .order("position", {
+      ascending: true,
+    });
+
+  if (exerciseError) {
+    throw exerciseError;
+  }
+
+  const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+  let setRows = [];
+
+  if (exerciseIds.length > 0) {
+    const { data, error } = await supabase
+      .from("session_sets")
+      .select(
+        "id,session_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,actual_weight_value,actual_weight_label,actual_reps,actual_rir_value,actual_rir_label,estimated_1rm,is_drop_set,completed_at"
+      )
+      .in("session_exercise_id", exerciseIds)
+      .is("deleted_at", null)
+      .order("set_number", {
+        ascending: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    setRows = data;
+  }
+
+  const workoutIds = sessionRows
+    .map((workout) => workout.workout_id)
+    .filter(Boolean);
+  let workoutSourceKeyById = new Map();
+
+  if (workoutIds.length > 0) {
+    const { data, error } = await supabase
+      .from("workouts")
+      .select("id,source_key")
+      .in("id", workoutIds)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw error;
+    }
+
+    workoutSourceKeyById = new Map(
+      data.map((workout) => [workout.id, workout.source_key])
+    );
+  }
+
+  const setsByExerciseId = new Map();
+  for (const set of setRows) {
+    const sets = setsByExerciseId.get(set.session_exercise_id) || [];
+    sets.push(cloudSetToLocal(set));
+    setsByExerciseId.set(set.session_exercise_id, sets);
+  }
+
+  const exerciseLookup = buildLocalExerciseLookup(exerciseLibrary);
+  const exercisesBySessionId = new Map();
+
+  for (const exercise of exerciseRows) {
+    const exercises = exercisesBySessionId.get(exercise.session_id) || [];
+    exercises.push(
+      cloudExerciseToLocal(
+        exercise,
+        setsByExerciseId.get(exercise.id) || [],
+        exerciseLookup
+      )
+    );
+    exercisesBySessionId.set(exercise.session_id, exercises);
+  }
+
+  const downloadedHistory = sessionRows.map((workout) =>
+    cloudSessionToLocal(
+      workout,
+      exercisesBySessionId.get(workout.id) || [],
+      workoutSourceKeyById,
+      templates
+    )
+  );
+  const downloadedSourceKeys = new Set(
+    downloadedHistory.map((workout) => String(workout.id))
+  );
+  const localOnlyHistory = currentHistory.filter(
+    (workout) => !downloadedSourceKeys.has(String(workout.id))
+  );
+
+  return {
+    downloaded: downloadedHistory.length,
+    history: [...downloadedHistory, ...localOnlyHistory],
+    localOnly: localOnlyHistory.length,
+    updated: downloadedHistory.filter((workout) =>
+      existingHistoryBySourceKey.has(String(workout.id))
+    ).length,
   };
 }

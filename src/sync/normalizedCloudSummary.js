@@ -44,6 +44,22 @@ async function getUserActiveCount(table, session) {
   return count || 0;
 }
 
+async function getUserCount(table, session) {
+  const { count, error } = await supabase
+    .from(table)
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("user_id", session.user.id);
+
+  if (error) {
+    throw error;
+  }
+
+  return count || 0;
+}
+
 export async function getNormalizedCloudSummary(session) {
   assertCloudReady(session);
 
@@ -55,6 +71,13 @@ export async function getNormalizedCloudSummary(session) {
     workoutSessions,
     sessionExercises,
     sessionSets,
+    trainingPlans,
+    trainingPlanWorkouts,
+    nutritionEntries,
+    nutritionFoods,
+    nutritionTargets,
+    bodyMeasurements,
+    exercisePreferences,
   ] = await Promise.all([
     getActiveCount("exercises", session),
     getUserActiveCount("workouts", session),
@@ -63,6 +86,13 @@ export async function getNormalizedCloudSummary(session) {
     getUserActiveCount("workout_sessions", session),
     getUserActiveCount("session_exercises", session),
     getUserActiveCount("session_sets", session),
+    getUserActiveCount("training_plans", session),
+    getUserActiveCount("training_plan_workouts", session),
+    getUserActiveCount("nutrition_entries", session),
+    getActiveCount("nutrition_foods", session),
+    getUserActiveCount("nutrition_daily_targets", session),
+    getUserActiveCount("body_measurements", session),
+    getUserCount("user_exercise_preferences", session),
   ]);
 
   const { data: latestSession, error: latestError } = await supabase
@@ -97,11 +127,18 @@ export async function getNormalizedCloudSummary(session) {
   }
 
   return {
+    bodyMeasurements,
+    exercisePreferences,
     exercises,
     latestSession,
     maxE1RM: maxE1RMSet?.estimated_1rm ?? null,
+    nutritionEntries,
+    nutritionFoods,
+    nutritionTargets,
     sessionExercises,
     sessionSets,
+    trainingPlanWorkouts,
+    trainingPlans,
     workoutExerciseSets,
     workoutExercises,
     workoutSessions,

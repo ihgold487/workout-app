@@ -50,11 +50,17 @@ import {
   uploadWorkoutSnapshot,
 } from "./sync/workoutCloudSnapshot";
 import {
+  downloadExerciseLibraryWithPreferences,
   getCustomExercises,
+  uploadExercisePreferences,
   uploadCustomExercises,
 } from "./sync/exerciseCloudSync";
-import { uploadWorkouts } from "./sync/workoutCloudSync";
-import { uploadWorkoutHistory } from "./sync/sessionCloudSync";
+import { downloadWorkouts, uploadWorkouts } from "./sync/workoutCloudSync";
+import {
+  downloadWorkoutHistory,
+  uploadWorkoutHistory,
+} from "./sync/sessionCloudSync";
+import { downloadPlans, uploadPlans } from "./sync/planCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
@@ -98,6 +104,64 @@ function formatNormalizedSummary(summary) {
     summary.maxE1RM == null ? "" : ` Max e1RM stored: ${summary.maxE1RM.toFixed(1)}.`;
 
   return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}`;
+}
+
+const NUTRITION_LOG_KEY = "nutritionLogEntries";
+const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
+
+function readLocalArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+
+    return Array.isArray(value) ? value : [];
+  } catch (error) {
+    console.error(`Failed to read ${key}:`, error);
+
+    return [];
+  }
+}
+
+function getAuditLocalSummary(data) {
+  const planWorkouts = data.templates.filter((template) => template.planId).length;
+  const standaloneWorkouts = data.templates.length - planWorkouts;
+  const builtinExercises = data.exerciseLibrary.filter(
+    (exercise) => exercise.builtin
+  ).length;
+  const customExercises = data.exerciseLibrary.filter(
+    (exercise) => !exercise.builtin
+  ).length;
+  const activeExercises = data.exerciseLibrary.filter(
+    (exercise) => exercise.active !== "inactive"
+  ).length;
+  const nutritionEntries = readLocalArray(NUTRITION_LOG_KEY);
+  const bodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
+
+  return {
+    activeExercises,
+    bodyWeightEntries: bodyWeightEntries.length,
+    builtinExercises,
+    customExercises,
+    exerciseMetadata: Object.keys(data.exerciseMetadata || {}).length,
+    history: data.history.length,
+    nutritionEntries: nutritionEntries.length,
+    planWorkouts,
+    plans: data.plans.length,
+    sessionRecords: data.sessions.length,
+    standaloneWorkouts,
+    templates: data.templates.length,
+  };
+}
+
+function formatAuditLocalSummary(summary) {
+  return `${summary.templates} workout templates (${summary.standaloneWorkouts} standalone, ${summary.planWorkouts} plan workouts), ${summary.plans} plans, ${summary.history} completed workouts, ${summary.sessionRecords} saved session records, ${summary.builtinExercises} built-in exercises, ${summary.customExercises} custom exercises, ${summary.activeExercises} active exercises, ${summary.nutritionEntries} nutrition entries, ${summary.bodyWeightEntries} body weight entries`;
+}
+
+function formatAuditSnapshotSummary(summary) {
+  return `${summary.templates} workouts, ${summary.plans || 0} plans, ${summary.history} completed workouts, ${summary.customExercises} custom exercises`;
+}
+
+function formatAuditNormalizedSummary(summary) {
+  return `${summary.exercises} exercises, ${summary.exercisePreferences} exercise preferences, ${summary.workouts} workout rows, ${summary.trainingPlans} plans, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets, ${summary.nutritionEntries} nutrition entries, ${summary.bodyMeasurements} body measurements`;
 }
 
 const backupButtonStyle = {
@@ -445,6 +509,10 @@ export default function App() {
 
   const [syncLoading, setSyncLoading] = useState(false);
 
+  const [dataAuditStatus, setDataAuditStatus] = useState("");
+
+  const [dataAuditSummary, setDataAuditSummary] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -648,6 +716,48 @@ export default function App() {
     }
   }
 
+  async function uploadExercisePreferencesToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await uploadExercisePreferences(exerciseLibrary, authSession);
+      const unmatchedCopy =
+        result.unmatched.length > 0
+          ? ` ${result.unmatched.length} exercises could not be matched to normalized cloud rows yet.`
+          : "";
+
+      setSyncStatus(
+        `Exercise preferences synced: ${result.uploaded} rows (${result.active} active, ${result.inactive} inactive).${unmatchedCopy}`
+      );
+    } catch (error) {
+      console.error("Exercise preference sync failed:", error);
+      setSyncStatus(`Exercise preference sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function downloadExercisePreferencesFromCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await downloadExerciseLibraryWithPreferences(
+        exerciseLibrary,
+        authSession
+      );
+
+      setExerciseLibrary(result.exerciseLibrary);
+      setSyncStatus(
+        `Exercise preferences downloaded: ${result.updated} local exercises updated, ${result.addedCustomExercises} custom exercises added, ${result.inactive} inactive, ${result.preferences} preference rows read.`
+      );
+    } catch (error) {
+      console.error("Exercise preference download failed:", error);
+      setSyncStatus(`Exercise preference download failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   async function uploadWorkoutsToCloud() {
     setSyncLoading(true);
 
@@ -660,6 +770,28 @@ export default function App() {
     } catch (error) {
       console.error("Workout sync failed:", error);
       setSyncStatus(`Workout sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function downloadWorkoutsFromCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await downloadWorkouts(
+        templates,
+        exerciseLibrary,
+        authSession
+      );
+
+      setTemplates(result.templates);
+      setSyncStatus(
+        `Workouts downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts kept.`
+      );
+    } catch (error) {
+      console.error("Workout download failed:", error);
+      setSyncStatus(`Workout download failed: ${error.message}`);
     } finally {
       setSyncLoading(false);
     }
@@ -687,6 +819,69 @@ export default function App() {
     }
   }
 
+  async function downloadWorkoutHistoryFromCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await downloadWorkoutHistory(
+        history,
+        templates,
+        exerciseLibrary,
+        authSession
+      );
+
+      setHistory(result.history);
+      setSyncStatus(
+        `History downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts kept.`
+      );
+    } catch (error) {
+      console.error("Workout history download failed:", error);
+      setSyncStatus(`Workout history download failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function uploadPlansToCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await uploadPlans(
+        plans,
+        templates,
+        exerciseLibrary,
+        authSession
+      );
+
+      setSyncStatus(
+        `Plans synced: ${result.syncedPlans} plans, ${result.syncedPlanWorkouts} plan workouts. Removed ${result.removedPlans} plans.`
+      );
+    } catch (error) {
+      console.error("Plan sync failed:", error);
+      setSyncStatus(`Plan sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function downloadPlansFromCloud() {
+    setSyncLoading(true);
+
+    try {
+      const result = await downloadPlans(plans, templates, authSession);
+
+      setPlans(result.plans);
+      setSyncStatus(
+        `Plans downloaded: ${result.downloaded} cloud plans, ${result.updated} existing local plans updated, ${result.localOnly} local-only plans kept.`
+      );
+    } catch (error) {
+      console.error("Plan download failed:", error);
+      setSyncStatus(`Plan download failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   async function checkNormalizedCloudData() {
     setSyncLoading(true);
 
@@ -697,6 +892,56 @@ export default function App() {
     } catch (error) {
       console.error("Normalized cloud check failed:", error);
       setSyncStatus(`Normalized cloud check failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function runPersistenceAudit() {
+    setSyncLoading(true);
+
+    try {
+      const localData = getCurrentWorkoutData();
+      const localSummary = getAuditLocalSummary(localData);
+      let snapshotSummary = null;
+      let snapshotUpdatedAt = null;
+      let normalizedSummary = null;
+
+      if (authSession) {
+        const snapshot = await downloadWorkoutSnapshot(authSession);
+
+        if (snapshot) {
+          const snapshotData = parseWorkoutBackup(
+            {
+              data: snapshot.data,
+              schemaVersion: snapshot.schema_version,
+            },
+            {
+              seedExercises,
+            }
+          );
+
+          snapshotSummary = getWorkoutDataSummary(snapshotData);
+          snapshotUpdatedAt = snapshot.updated_at;
+        }
+
+        normalizedSummary = await getNormalizedCloudSummary(authSession);
+      }
+
+      setDataAuditSummary({
+        local: localSummary,
+        normalized: normalizedSummary,
+        snapshot: snapshotSummary,
+        snapshotUpdatedAt,
+      });
+      setDataAuditStatus(
+        authSession
+          ? "Audit complete. No data was changed."
+          : "Local audit complete. Sign in to include cloud checks."
+      );
+    } catch (error) {
+      console.error("Persistence audit failed:", error);
+      setDataAuditStatus(`Audit failed: ${error.message}`);
     } finally {
       setSyncLoading(false);
     }
@@ -1993,6 +2238,24 @@ export default function App() {
             </button>
             <button
               disabled={!authSession || syncLoading}
+              onClick={uploadExercisePreferencesToCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Sync Exercise Preferences
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={downloadExercisePreferencesFromCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Download Exercise Preferences
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
               onClick={uploadWorkoutsToCloud}
               style={{
                 marginLeft: "8px",
@@ -2002,12 +2265,48 @@ export default function App() {
             </button>
             <button
               disabled={!authSession || syncLoading}
+              onClick={downloadWorkoutsFromCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Download Workouts
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
               onClick={uploadWorkoutHistoryToCloud}
               style={{
                 marginLeft: "8px",
               }}
             >
               Sync History
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={downloadWorkoutHistoryFromCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Download History
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={uploadPlansToCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Sync Plans
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={downloadPlansFromCloud}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Download Plans
             </button>
             <button
               disabled={!authSession || syncLoading}
@@ -2028,6 +2327,130 @@ export default function App() {
               {getCustomExercises(exerciseLibrary).length} custom exercises
               ready for the normalized exercise table.
             </div>
+          </div>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              marginTop: "10px",
+              paddingTop: "10px",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "15px",
+                margin: "0 0 6px",
+              }}
+            >
+              Persistence Audit
+            </h3>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                margin: "0 0 8px",
+              }}
+            >
+              Read-only check of local data, cloud snapshot data, and normalized
+              Supabase rows.
+            </p>
+            <button disabled={syncLoading} onClick={runPersistenceAudit}>
+              Check Persistence
+            </button>
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "6px",
+              }}
+            >
+              {dataAuditStatus}
+            </div>
+            {dataAuditSummary && (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  marginTop: "8px",
+                  textAlign: "left",
+                }}
+              >
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                  }}
+                >
+                  <strong>Local IndexedDB / app state</strong>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {formatAuditLocalSummary(dataAuditSummary.local)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                  }}
+                >
+                  <strong>Cloud snapshot</strong>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {dataAuditSummary.snapshot
+                      ? `${formatAuditSnapshotSummary(
+                          dataAuditSummary.snapshot
+                        )}${
+                          dataAuditSummary.snapshotUpdatedAt
+                            ? ` Last updated ${new Date(
+                                dataAuditSummary.snapshotUpdatedAt
+                              ).toLocaleString()}.`
+                            : ""
+                        }`
+                      : authSession
+                        ? "No cloud snapshot found for this account."
+                        : "Sign in to check cloud snapshot data."}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                  }}
+                >
+                  <strong>Normalized Supabase</strong>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {dataAuditSummary.normalized
+                      ? formatAuditNormalizedSummary(dataAuditSummary.normalized)
+                      : "Sign in to check normalized cloud rows."}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

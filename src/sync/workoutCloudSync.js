@@ -55,6 +55,50 @@ function parseRir(value) {
   return Number.isFinite(parsed) ? Math.round(parsed) : 0;
 }
 
+function formatCloudValue(label, value) {
+  if (label != null && label !== "") {
+    return String(label);
+  }
+
+  if (value == null || value === "") {
+    return "";
+  }
+
+  return String(value);
+}
+
+function parseLocalSourceKey(sourceKey) {
+  const numeric = Number(sourceKey);
+
+  return Number.isFinite(numeric) && String(numeric) === String(sourceKey)
+    ? numeric
+    : sourceKey;
+}
+
+function normalizeLookupValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getLocalExerciseMatchKey(exercise) {
+  const equipment = Array.isArray(exercise.equipment)
+    ? exercise.equipment.filter(Boolean).join(", ")
+    : exercise.equipment || "";
+
+  return `${normalizeLookupValue(exercise.name)}||${normalizeLookupValue(
+    equipment
+  )}`;
+}
+
+function getCloudExerciseMatchKey(exercise) {
+  return `${normalizeLookupValue(exercise.exercise_name || exercise.name)}||${normalizeLookupValue(
+    exercise.equipment
+  )}`;
+}
+
 function localWorkoutToCloud(template, userId) {
   return {
     deleted_at: null,
@@ -164,6 +208,71 @@ async function loadCustomExerciseIdMap(userId) {
   }
 
   return new Map(data.map((exercise) => [exercise.source_key, exercise.id]));
+}
+
+function buildLocalExerciseLookup(exerciseLibrary) {
+  return {
+    byCloudId: new Map(
+      exerciseLibrary
+        .filter((exercise) => exercise.exerciseId)
+        .map((exercise) => [exercise.exerciseId, exercise])
+    ),
+    byNameEquipment: new Map(
+      exerciseLibrary.map((exercise) => [getLocalExerciseMatchKey(exercise), exercise])
+    ),
+  };
+}
+
+function cloudSetToLocal(set) {
+  return {
+    id: parseLocalSourceKey(set.id),
+    isDropSet: Boolean(set.is_drop_set),
+    targetReps: formatCloudValue(
+      set.target_reps_label,
+      set.target_reps_min ?? set.target_reps_max
+    ),
+    targetRir: formatCloudValue(set.target_rir_label, set.target_rir_value),
+    targetWeight: formatCloudValue(
+      set.target_weight_label,
+      set.target_weight_value
+    ),
+  };
+}
+
+function cloudWorkoutExerciseToLocal(exercise, sets, exerciseLookup) {
+  const matchedExercise =
+    exerciseLookup.byCloudId.get(exercise.exercise_id) ||
+    exerciseLookup.byNameEquipment.get(getCloudExerciseMatchKey(exercise));
+  const muscles = [
+    exercise.primary_muscle,
+    ...(exercise.secondary_muscles || []),
+  ].filter(Boolean);
+
+  return {
+    equipment: exercise.equipment ? [exercise.equipment] : [],
+    exerciseId: matchedExercise?.id || null,
+    id: parseLocalSourceKey(exercise.id),
+    imageAlt: matchedExercise?.imageAlt || "",
+    imageUrl: matchedExercise?.imageUrl || "",
+    muscles,
+    name: exercise.exercise_name,
+    note: exercise.notes || "",
+    sets,
+    supersetGroup: exercise.superset_group || null,
+  };
+}
+
+function cloudWorkoutToLocal(workout, exercises, existingTemplate) {
+  return {
+    ...(existingTemplate || {}),
+    description: workout.description || existingTemplate?.description || "",
+    exercises,
+    id: parseLocalSourceKey(workout.source_key),
+    lastCompleted: workout.last_completed_at
+      ? new Date(workout.last_completed_at).toLocaleDateString()
+      : existingTemplate?.lastCompleted || null,
+    name: workout.name,
+  };
 }
 
 export async function uploadWorkouts(templates, exerciseLibrary, session) {
@@ -334,5 +443,119 @@ export async function uploadWorkouts(templates, exerciseLibrary, session) {
     syncedExercises,
     syncedSets,
     syncedWorkouts: workoutRecords.length,
+  };
+}
+
+export async function downloadWorkouts(currentTemplates, exerciseLibrary, session) {
+  assertCloudReady(session);
+
+  const userId = session.user.id;
+  const { data: workoutRows, error: workoutError } = await supabase
+    .from("workouts")
+    .select("id,name,description,last_completed_at,source_key,updated_at")
+    .eq("user_id", userId)
+    .eq("source", LOCAL_APP_SOURCE)
+    .is("deleted_at", null)
+    .order("updated_at", {
+      ascending: false,
+    });
+
+  if (workoutError) {
+    throw workoutError;
+  }
+
+  const workoutIds = workoutRows.map((workout) => workout.id);
+  const existingTemplatesBySourceKey = new Map(
+    currentTemplates.map((template) => [String(template.id), template])
+  );
+
+  if (workoutIds.length === 0) {
+    return {
+      downloaded: 0,
+      templates: currentTemplates,
+      updated: 0,
+    };
+  }
+
+  const { data: exerciseRows, error: exerciseError } = await supabase
+    .from("workout_exercises")
+    .select(
+      "id,workout_id,exercise_id,position,exercise_name,equipment,primary_muscle,secondary_muscles,superset_group,notes"
+    )
+    .in("workout_id", workoutIds)
+    .is("deleted_at", null)
+    .order("position", {
+      ascending: true,
+    });
+
+  if (exerciseError) {
+    throw exerciseError;
+  }
+
+  const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+  let setRows = [];
+
+  if (exerciseIds.length > 0) {
+    const { data, error } = await supabase
+      .from("workout_exercise_sets")
+      .select(
+        "id,workout_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,is_drop_set"
+      )
+      .in("workout_exercise_id", exerciseIds)
+      .is("deleted_at", null)
+      .order("set_number", {
+        ascending: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    setRows = data;
+  }
+
+  const setsByExerciseId = new Map();
+  for (const set of setRows) {
+    const sets = setsByExerciseId.get(set.workout_exercise_id) || [];
+    sets.push(cloudSetToLocal(set));
+    setsByExerciseId.set(set.workout_exercise_id, sets);
+  }
+
+  const exercisesByWorkoutId = new Map();
+  const exerciseLookup = buildLocalExerciseLookup(exerciseLibrary);
+
+  for (const exercise of exerciseRows) {
+    const exercises = exercisesByWorkoutId.get(exercise.workout_id) || [];
+    exercises.push(
+      cloudWorkoutExerciseToLocal(
+        exercise,
+        setsByExerciseId.get(exercise.id) || [],
+        exerciseLookup
+      )
+    );
+    exercisesByWorkoutId.set(exercise.workout_id, exercises);
+  }
+
+  const downloadedTemplates = workoutRows.map((workout) =>
+    cloudWorkoutToLocal(
+      workout,
+      exercisesByWorkoutId.get(workout.id) || [],
+      existingTemplatesBySourceKey.get(String(workout.source_key))
+    )
+  );
+  const downloadedSourceKeys = new Set(
+    downloadedTemplates.map((template) => String(template.id))
+  );
+  const localOnlyTemplates = currentTemplates.filter(
+    (template) => !downloadedSourceKeys.has(String(template.id))
+  );
+
+  return {
+    downloaded: downloadedTemplates.length,
+    localOnly: localOnlyTemplates.length,
+    templates: [...downloadedTemplates, ...localOnlyTemplates],
+    updated: downloadedTemplates.filter((template) =>
+      existingTemplatesBySourceKey.has(String(template.id))
+    ).length,
   };
 }

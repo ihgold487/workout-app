@@ -485,6 +485,8 @@ create table if not exists public.training_plans (
   ends_on date,
   status text not null default 'draft',
   plan_config jsonb not null default '{}'::jsonb,
+  source text not null default 'user',
+  source_key text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
@@ -494,6 +496,15 @@ comment on column public.training_plans.plan_config is
   'Flexible planning rules for generation: muscle targets, RIR progression, supersets, rep ranges, and exercise inclusion rules.';
 
 create index if not exists training_plans_user_id_idx on public.training_plans (user_id);
+
+alter table public.training_plans
+add column if not exists source text not null default 'user';
+
+alter table public.training_plans
+add column if not exists source_key text;
+
+create unique index if not exists training_plans_user_source_key_idx
+on public.training_plans (user_id, source, source_key);
 
 drop trigger if exists training_plans_set_updated_at on public.training_plans;
 create trigger training_plans_set_updated_at
