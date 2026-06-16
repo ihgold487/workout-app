@@ -1,9 +1,16 @@
 export default function HistoryView({ selectedHistory }) {
+  const completedAtDetail = selectedHistory.completedAtIso
+    ? new Date(selectedHistory.completedAtIso).toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : selectedHistory.completedAt;
+
   return (
     <div style={{ padding: "20px" }}>
       <h1>{selectedHistory.templateName}</h1>
 
-      <p>Completed: {selectedHistory.completedAt}</p>
+      <p>Completed: {completedAtDetail}</p>
 
       {selectedHistory.exercises.map((exercise) => (
         <div

@@ -8,6 +8,18 @@ export default function WorkoutCalendar({ history }) {
 
   const today = new Date();
 
+  const getSessionDateString = (session) => {
+    if (session.completedAtIso) {
+      const parsed = new Date(session.completedAtIso);
+
+      if (Number.isFinite(parsed.getTime())) {
+        return parsed.toLocaleDateString();
+      }
+    }
+
+    return session.completedAt || "";
+  };
+
   const startOfWeek = new Date(today);
 
   const day = startOfWeek.getDay();
@@ -28,16 +40,18 @@ export default function WorkoutCalendar({ history }) {
     const dateString = date.toLocaleDateString();
 
     return history.some((session) => {
-      if (!session.completedAt) return false;
+      const completedAt = getSessionDateString(session);
 
-      return session.completedAt === dateString;
+      if (!completedAt) return false;
+
+      return completedAt === dateString;
     });
   };
 
   const workoutsForDate = (date) => {
     const dateString = date.toLocaleDateString();
 
-    return history.filter((session) => session.completedAt === dateString);
+    return history.filter((session) => getSessionDateString(session) === dateString);
   };
 
   return (
@@ -276,6 +290,15 @@ export default function WorkoutCalendar({ history }) {
                       }}
                     >
                       • {workout.templateName}
+                      {workout.completedAtIso
+                        ? ` (${new Date(workout.completedAtIso).toLocaleTimeString(
+                            [],
+                            {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            }
+                          )})`
+                        : ""}
                     </div>
                   ))}
                 </div>

@@ -146,17 +146,27 @@ export default function SessionView({
     return weightUnit === "kg" ? lbsToKg(weight) : weight;
   }
 
-  function formatList(value) {
-    if (Array.isArray(value)) {
-      return value.filter(Boolean).join(", ");
-    }
-
-    return value || "";
+function formatList(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(", ");
   }
 
-  function normalizeLookupValue(value) {
-    return String(value || "")
-      .toLowerCase()
+  return value || "";
+}
+
+function createCompletedWorkoutId(sessionId) {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `${sessionId}:completed:${crypto.randomUUID()}`;
+  }
+
+  return `${sessionId}:completed:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+function normalizeLookupValue(value) {
+  return String(value || "")
+    .toLowerCase()
       .replace(/&/g, "and")
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
@@ -1500,9 +1510,13 @@ export default function SessionView({
   function completeWorkout({ applyStructuralChanges = false } = {}) {
     const structuralChanges = hasStructuralChanges();
     const nextTemplateExercises = createNextTemplateExercisesFromSession();
+    const completedAtIso = new Date().toISOString();
     let completedWorkout = {
       ...session,
-      completedAt: new Date().toLocaleDateString(),
+      id: createCompletedWorkoutId(session.id),
+      sourceSessionId: session.id,
+      completedAt: new Date(completedAtIso).toLocaleDateString(),
+      completedAtIso,
     };
     let nextTemplates = templates;
 

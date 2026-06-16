@@ -194,14 +194,58 @@ Test:
 - Sync and hydrate device B.
 - Verify daily totals, macros, weight history, and future charts.
 
-### Phase 7: Automatic Sync
+### Phase 7: Discrete Automatic Sync
 
 - On first sign-in: hydrate IndexedDB from normalized Supabase.
 - On app open, hard quit/reopen, and resume with an existing session: pull latest
   changes.
-- On meaningful edits: debounce and push.
+- On meaningful save checkpoints: push local data, then pull.
 - On workout completion: push immediately if online.
 - If offline: queue changes and sync later.
+
+Initial implementation checkpoint:
+
+- Automatic normalized sync runs after an authenticated session is available and
+  IndexedDB has loaded.
+- If local workout data is empty and normalized Supabase already has user data,
+  the app hydrates from Supabase before pushing to avoid replacing cloud data
+  with an empty local cache.
+- If local workout data exists, automatic sync pushes local normalized data first
+  and then downloads normalized data.
+- Normal editing remains local-first. Broad state changes no longer trigger a
+  debounced full sync.
+- Completed workouts trigger an immediate sync attempt because they are durable
+  training records.
+- App focus, visibility resume, and returning online trigger periodic automatic
+  sync checks.
+- Startup/resume sync skips the expensive normalized upload path when local data
+  has not changed since the last successful normalized sync.
+- Small local dirty flags track broad changed domains: exercise preferences,
+  workout templates, completed history, and plans. The next sync checkpoint
+  pushes only the dirty broad domains rather than every normalized domain.
+- Clean devices treat missing normalized workout rows as cloud deletions during
+  pull, while devices with dirty local workout changes keep local-only workouts
+  until those changes can be pushed.
+- Clean devices also treat missing normalized plan rows as cloud deletions
+  during pull, while devices with dirty local plan changes keep local-only plans
+  until those changes can be pushed.
+- Clean devices treat missing normalized completed-history rows as cloud
+  deletions during pull, while devices with dirty local history keep local-only
+  completed workouts until those changes can be pushed.
+- A `Sync Now` button runs the same normalized push-then-pull flow explicitly.
+- A temporary `Pull Latest` button downloads normalized cloud state without
+  uploading first, discards local-only workout rows, and clears local dirty
+  flags. This is a migration/debugging safety rail for accepting cloud as
+  authoritative on a device with stale local data.
+- A temporary `Reset Workout Sync Data` button clears normalized plans,
+  workouts, completed history, saved sessions, and the snapshot row for the
+  signed-in user, then clears the matching local workout data on that device.
+  Built-in exercises, custom exercises, and exercise preferences are preserved.
+  This is only for establishing a clean sync baseline during migration testing.
+- Manual sync buttons remain available as migration safety rails.
+- Additional save checkpoints, fine-grained dirty records, explicit conflict UI,
+  nutrition/body-weight sync, and normalized in-progress workout sessions remain
+  pending.
 
 Test:
 

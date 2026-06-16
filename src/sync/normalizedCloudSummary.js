@@ -95,16 +95,15 @@ export async function getNormalizedCloudSummary(session) {
     getUserCount("user_exercise_preferences", session),
   ]);
 
-  const { data: latestSession, error: latestError } = await supabase
+  const { data: recentSessions, error: latestError } = await supabase
     .from("workout_sessions")
-    .select("completed_at,workout_name")
+    .select("completed_at,source_key,workout_name")
     .eq("user_id", session.user.id)
     .is("deleted_at", null)
     .order("completed_at", {
       ascending: false,
     })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
   if (latestError) {
     throw latestError;
@@ -130,11 +129,12 @@ export async function getNormalizedCloudSummary(session) {
     bodyMeasurements,
     exercisePreferences,
     exercises,
-    latestSession,
+    latestSession: recentSessions?.[0] || null,
     maxE1RM: maxE1RMSet?.estimated_1rm ?? null,
     nutritionEntries,
     nutritionFoods,
     nutritionTargets,
+    recentSessions: recentSessions || [],
     sessionExercises,
     sessionSets,
     trainingPlanWorkouts,

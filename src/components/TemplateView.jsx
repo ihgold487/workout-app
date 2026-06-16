@@ -313,12 +313,15 @@ export default function TemplateView({
     }
 
     const plan = plans.find((item) => item.id === template.planId);
+    const startedAtIso = new Date().toISOString();
     const session = {
       id: Date.now(),
 
       templateId: template.id,
 
       templateName: template.name,
+      startedAt: new Date(startedAtIso).toLocaleDateString(),
+      startedAtIso,
       planId: template.planId || null,
       planWeek: plan?.currentWeek || null,
       planWorkoutId: template.planWorkoutId || null,

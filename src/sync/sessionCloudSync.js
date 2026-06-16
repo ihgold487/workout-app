@@ -112,13 +112,16 @@ function getCloudExerciseMatchKey(exercise) {
 
 function localSessionToCloud(workout, userId, cloudWorkoutId) {
   return {
-    completed_at: parseCompletedAt(workout.completedAt),
+    completed_at: parseCompletedAt(workout.completedAtIso || workout.completedAt),
     deleted_at: null,
     duration_seconds: workout.durationSeconds || null,
     import_batch_id: null,
     source: LOCAL_APP_SOURCE,
     source_key: String(workout.id),
-    started_at: workout.startedAt ? parseCompletedAt(workout.startedAt) : null,
+    started_at:
+      workout.startedAtIso || workout.startedAt
+        ? parseCompletedAt(workout.startedAtIso || workout.startedAt)
+        : null,
     updated_at: new Date().toISOString(),
     user_id: userId,
     workout_id: cloudWorkoutId || null,
@@ -209,6 +212,7 @@ function cloudSessionToLocal(session, exercises, workoutSourceKeyById, templates
 
   return {
     completedAt: formatCloudDate(session.completed_at),
+    completedAtIso: session.completed_at || null,
     durationSeconds: session.duration_seconds || null,
     exercises,
     id: parseLocalSourceKey(session.source_key),
@@ -216,6 +220,7 @@ function cloudSessionToLocal(session, exercises, workoutSourceKeyById, templates
     planWeek: null,
     planWorkoutId: template?.planWorkoutId || null,
     startedAt: formatCloudDate(session.started_at),
+    startedAtIso: session.started_at || null,
     templateId,
     templateName: session.workout_name || template?.name || "Workout",
   };
@@ -372,7 +377,8 @@ export async function uploadWorkoutHistory(
   history,
   templates,
   exerciseLibrary,
-  session
+  session,
+  options = {}
 ) {
   assertCloudReady(session);
 
@@ -380,7 +386,9 @@ export async function uploadWorkoutHistory(
 
   // Completed sessions link back to planned workouts/exercises where possible,
   // so refresh planned workout rows before writing history rows.
-  await uploadWorkouts(templates, exerciseLibrary, session);
+  if (!options.skipWorkoutRefresh) {
+    await uploadWorkouts(templates, exerciseLibrary, session);
+  }
 
   const customExerciseIds = await loadCustomExerciseIdMap(userId);
   const workoutIds = await loadWorkoutIdMap(userId);
@@ -558,7 +566,8 @@ export async function downloadWorkoutHistory(
   currentHistory,
   templates,
   exerciseLibrary,
-  session
+  session,
+  options = {}
 ) {
   assertCloudReady(session);
 
@@ -587,8 +596,8 @@ export async function downloadWorkoutHistory(
   if (sessionIds.length === 0) {
     return {
       downloaded: 0,
-      history: currentHistory,
-      localOnly: currentHistory.length,
+      history: options.keepLocalOnly === false ? [] : currentHistory,
+      localOnly: options.keepLocalOnly === false ? 0 : currentHistory.length,
       updated: 0,
     };
   }
@@ -690,7 +699,10 @@ export async function downloadWorkoutHistory(
 
   return {
     downloaded: downloadedHistory.length,
-    history: [...downloadedHistory, ...localOnlyHistory],
+    history:
+      options.keepLocalOnly === false
+        ? downloadedHistory
+        : [...downloadedHistory, ...localOnlyHistory],
     localOnly: localOnlyHistory.length,
     updated: downloadedHistory.filter((workout) =>
       existingHistoryBySourceKey.has(String(workout.id))

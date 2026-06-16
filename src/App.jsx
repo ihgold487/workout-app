@@ -1,5 +1,5 @@
 /* global __BUILD_TIME__ */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -44,7 +44,7 @@ import {
   signUpWithPassword,
   subscribeToAuthChanges,
 } from "./sync/auth";
-import { isSupabaseConfigured } from "./sync/supabaseClient";
+import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import {
   downloadWorkoutSnapshot,
   uploadWorkoutSnapshot,
@@ -77,6 +77,30 @@ const UPDATE_CONFIRMATION_DURATION = 10 * 60 * 1000;
 const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
 
+const AUTO_SYNC_RESUME_INTERVAL = 5 * 60 * 1000;
+const AUTO_SYNC_SUPPRESS_MS = 4000;
+const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
+const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
+const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
+const NORMALIZED_SYNC_DOMAINS = [
+  "exercisePreferences",
+  "workouts",
+  "history",
+  "plans",
+];
+const NORMALIZED_WORKOUT_RESET_TABLES = [
+  "session_sets",
+  "session_exercises",
+  "workout_sessions",
+  "training_plan_workouts",
+  "training_plans",
+  "workout_exercise_sets",
+  "workout_exercises",
+  "workouts",
+  "import_batches",
+  "workout_data_snapshots",
+];
+
 const UPDATE_STATUS_COPY = {
   available: "Update available. Tap Update to install it.",
   checking: "Checking for update...",
@@ -106,6 +130,23 @@ function formatNormalizedSummary(summary) {
   return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}`;
 }
 
+function formatHistoryTimestamp(workout) {
+  const parsed = workout?.completedAtIso
+    ? new Date(workout.completedAtIso)
+    : workout?.completed_at
+      ? new Date(workout.completed_at)
+      : null;
+
+  if (parsed && Number.isFinite(parsed.getTime())) {
+    return parsed.toLocaleString([], {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
+  return workout?.completedAt || "unknown date";
+}
+
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 
@@ -122,8 +163,28 @@ function readLocalArray(key) {
 }
 
 function getAuditLocalSummary(data) {
-  const planWorkouts = data.templates.filter((template) => template.planId).length;
-  const standaloneWorkouts = data.templates.length - planWorkouts;
+  const planTemplateIds = getPlanTemplateIdSet(data.plans);
+  const planWorkouts = data.templates.filter(
+    (template) => template.planId || planTemplateIds.has(String(template.id))
+  ).length;
+  const standaloneTemplates = data.templates.filter(
+    (template) => !template.planId && !planTemplateIds.has(String(template.id))
+  );
+  const missingPlanWorkouts = data.plans.flatMap((plan) =>
+    (plan.workouts || [])
+      .filter(
+        (workout) =>
+          workout.templateId == null ||
+          !data.templates.some(
+            (template) => String(template.id) === String(workout.templateId)
+          )
+      )
+      .map((workout) => ({
+        planName: plan.name,
+        templateId: workout.templateId,
+        workoutName: workout.name,
+      }))
+  );
   const builtinExercises = data.exerciseLibrary.filter(
     (exercise) => exercise.builtin
   ).length;
@@ -143,11 +204,28 @@ function getAuditLocalSummary(data) {
     customExercises,
     exerciseMetadata: Object.keys(data.exerciseMetadata || {}).length,
     history: data.history.length,
+    historyDetails: data.history.map((workout) => ({
+      completedAt: workout.completedAt || "",
+      completedAtIso: workout.completedAtIso || null,
+      id: workout.id,
+      planId: workout.planId || null,
+      planWorkoutId: workout.planWorkoutId || null,
+      templateId: workout.templateId || null,
+      templateName: workout.templateName || workout.name || "Workout",
+    })),
+    missingPlanWorkouts,
     nutritionEntries: nutritionEntries.length,
     planWorkouts,
     plans: data.plans.length,
     sessionRecords: data.sessions.length,
-    standaloneWorkouts,
+    templateDetails: data.templates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      planId: template.planId || null,
+      planWorkoutId: template.planWorkoutId || null,
+    })),
+    standaloneWorkoutNames: standaloneTemplates.map((template) => template.name),
+    standaloneWorkouts: standaloneTemplates.length,
     templates: data.templates.length,
   };
 }
@@ -162,6 +240,185 @@ function formatAuditSnapshotSummary(summary) {
 
 function formatAuditNormalizedSummary(summary) {
   return `${summary.exercises} exercises, ${summary.exercisePreferences} exercise preferences, ${summary.workouts} workout rows, ${summary.trainingPlans} plans, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets, ${summary.nutritionEntries} nutrition entries, ${summary.bodyMeasurements} body measurements`;
+}
+
+function hasInactiveExercisePreference(exerciseLibrary) {
+  return exerciseLibrary.some((exercise) => exercise.active === "inactive");
+}
+
+function hasLocalNormalizedUserData(data) {
+  return (
+    data.templates.length > 0 ||
+    data.plans.length > 0 ||
+    data.history.length > 0 ||
+    data.sessions.length > 0 ||
+    getCustomExercises(data.exerciseLibrary).length > 0 ||
+    hasInactiveExercisePreference(data.exerciseLibrary)
+  );
+}
+
+function hasNormalizedCloudData(summary) {
+  return Boolean(
+    summary &&
+      (summary.workouts > 0 ||
+        summary.trainingPlans > 0 ||
+        summary.workoutSessions > 0 ||
+        summary.exercisePreferences > 0)
+  );
+}
+
+function attachPlanLinksToTemplates(templates, plans) {
+  const planLinksByTemplateId = new Map();
+
+  plans.forEach((plan) => {
+    (plan.workouts || []).forEach((workout) => {
+      if (workout.templateId == null) {
+        return;
+      }
+
+      planLinksByTemplateId.set(String(workout.templateId), {
+        planId: plan.id,
+        planWorkoutId: workout.planWorkoutId,
+      });
+    });
+  });
+
+  return templates.map((template) => {
+    const link = planLinksByTemplateId.get(String(template.id));
+    const nextTemplate = {
+      ...template,
+    };
+
+    if (link) {
+      nextTemplate.planId = link.planId;
+      nextTemplate.planWorkoutId = link.planWorkoutId;
+    } else {
+      delete nextTemplate.planId;
+      delete nextTemplate.planWorkoutId;
+    }
+
+    return nextTemplate;
+  });
+}
+
+function resolvePlanWorkoutTemplateIds(plans, templates) {
+  function normalizeGeneratedWorkoutName(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/\s+\(modified\)\s*$/g, "")
+      .replace(/\s+copy\s*$/g, "")
+      .replace(/\s+\([^)]*\)\s*$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  return plans.map((plan) => ({
+    ...plan,
+    workouts: (plan.workouts || []).map((workout) => {
+      const normalizedWorkoutName = normalizeGeneratedWorkoutName(workout.name);
+      const exactMatch =
+        workout.templateId != null
+          ? templates.find(
+              (template) => String(template.id) === String(workout.templateId)
+            )
+          : null;
+      const planWorkoutMatch = templates.find(
+        (template) =>
+          workout.planWorkoutId &&
+          template.planWorkoutId === workout.planWorkoutId
+      );
+      const planNameMatch = templates.find(
+        (template) =>
+          String(template.planId) === String(plan.id) &&
+          template.name === workout.name
+      );
+      const nameMatch = templates.find(
+        (template) =>
+          template.name === workout.name &&
+          (!template.planId || String(template.planId) === String(plan.id))
+      );
+      const normalizedNameMatch = templates.find(
+        (template) =>
+          normalizeGeneratedWorkoutName(template.name) ===
+            normalizedWorkoutName &&
+          (!template.planId || String(template.planId) === String(plan.id))
+      );
+      const matchedTemplate =
+        exactMatch ||
+        planWorkoutMatch ||
+        planNameMatch ||
+        nameMatch ||
+        normalizedNameMatch;
+
+      return {
+        ...workout,
+        templateId: matchedTemplate?.id ?? workout.templateId ?? null,
+      };
+    }),
+  }));
+}
+
+function getPlanTemplateIdSet(plans) {
+  const ids = new Set();
+
+  plans.forEach((plan) => {
+    (plan.workouts || []).forEach((workout) => {
+      if (workout.templateId != null) {
+        ids.add(String(workout.templateId));
+      }
+    });
+  });
+
+  return ids;
+}
+
+function getAutoSyncSummary({
+  exercisePreferences,
+  domains = [],
+  history,
+  mode,
+  plans,
+  workouts,
+}) {
+  const verb =
+    mode === "hydrate" ? "Hydrated" : mode === "check" ? "Checked" : "Synced";
+  const domainSummary =
+    domains.length > 0 ? ` Pushed: ${domains.join(", ")}.` : "";
+
+  return `${verb}: ${workouts.downloaded} workouts, ${plans.downloaded} plans, ${history.downloaded} completed workouts, ${exercisePreferences.updated} exercise preferences.${domainSummary}`;
+}
+
+function readNormalizedSyncDirtyDomains() {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(NORMALIZED_SYNC_DIRTY_DOMAINS_KEY) || "[]"
+    );
+
+    if (Array.isArray(value)) {
+      return value.filter((domain) => NORMALIZED_SYNC_DOMAINS.includes(domain));
+    }
+  } catch (error) {
+    console.error("Failed to read normalized sync dirty domains:", error);
+  }
+
+  return localStorage.getItem(NORMALIZED_SYNC_DIRTY_KEY) === "true"
+    ? [...NORMALIZED_SYNC_DOMAINS]
+    : [];
+}
+
+function writeNormalizedSyncDirtyDomains(domains) {
+  const uniqueDomains = [...new Set(domains)].filter((domain) =>
+    NORMALIZED_SYNC_DOMAINS.includes(domain)
+  );
+
+  localStorage.setItem(
+    NORMALIZED_SYNC_DIRTY_DOMAINS_KEY,
+    JSON.stringify(uniqueDomains)
+  );
+  localStorage.setItem(
+    NORMALIZED_SYNC_DIRTY_KEY,
+    uniqueDomains.length > 0 ? "true" : "false"
+  );
 }
 
 const backupButtonStyle = {
@@ -212,6 +469,16 @@ function getPlanCompletionsForWeek(plan, weekNumber) {
 function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
   return getPlanCompletionsForWeek(plan, weekNumber).some(
     (completion) => completion.planWorkoutId === planWorkoutId
+  );
+}
+
+function getMissingPlanWorkouts(plan, templates) {
+  return (plan.workouts || []).filter(
+    (workout) =>
+      workout.templateId == null ||
+      !templates.some(
+        (template) => String(template.id) === String(workout.templateId)
+      )
   );
 }
 
@@ -497,14 +764,14 @@ export default function App() {
 
   const [authStatus, setAuthStatus] = useState(
     isSupabaseConfigured
-      ? "Sync sign-in is optional."
+      ? "Sign in to enable automatic sync."
       : "Sync is not configured."
   );
 
   const [authLoading, setAuthLoading] = useState(false);
 
   const [syncStatus, setSyncStatus] = useState(
-    "Cloud upload/download is manual for now."
+    "Automatic sync runs after sign-in. Manual controls remain available."
   );
 
   const [syncLoading, setSyncLoading] = useState(false);
@@ -512,6 +779,36 @@ export default function App() {
   const [dataAuditStatus, setDataAuditStatus] = useState("");
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
+
+  const currentWorkoutDataRef = useRef(null);
+
+  const authSessionRef = useRef(null);
+
+  const automaticSyncInFlightRef = useRef(false);
+
+  const automaticSyncQueuedRef = useRef(false);
+
+  const automaticSyncHydratedUserRef = useRef(null);
+
+  const automaticSyncSuppressUntilRef = useRef(0);
+
+  const lastAutomaticSyncAttemptRef = useRef(0);
+
+  const localDataRevisionRef = useRef(0);
+
+  const normalizedSyncDirtyDomainsRef = useRef(
+    new Set(readNormalizedSyncDirtyDomains())
+  );
+
+  const exercisePreferencesDirtyReadyRef = useRef(false);
+
+  const workoutDirtyReadyRef = useRef(false);
+
+  const historyDirtyReadyRef = useRef(false);
+
+  const planDirtyReadyRef = useRef(false);
+
+  const previousHistoryLengthRef = useRef(history.length);
 
   useEffect(() => {
     let cancelled = false;
@@ -527,7 +824,7 @@ export default function App() {
         if (!cancelled) {
           setAuthSession(session);
           setAuthStatus(
-            session ? "Signed in. Cloud sync is manual." : "Signed out."
+            session ? "Signed in. Automatic sync is on." : "Signed out."
           );
         }
       } catch (error) {
@@ -544,7 +841,7 @@ export default function App() {
     const unsubscribe = subscribeToAuthChanges((session) => {
       setAuthSession(session);
       setAuthStatus(
-        session ? "Signed in. Cloud sync is manual." : "Signed out."
+        session ? "Signed in. Automatic sync is on." : "Signed out."
       );
     });
 
@@ -568,7 +865,7 @@ export default function App() {
     try {
       const session = await signInWithPassword(email, password);
       setAuthSession(session);
-      setAuthStatus("Signed in. Cloud sync is manual.");
+      setAuthStatus("Signed in. Automatic sync is on.");
     } catch (error) {
       console.error("Password sign-in failed:", error);
       setAuthStatus(`Sign-in failed: ${error.message}`);
@@ -593,7 +890,7 @@ export default function App() {
       setAuthSession(session);
       setAuthStatus(
         session
-          ? "Account created. Cloud sync is manual."
+          ? "Account created. Automatic sync is on."
           : "Account created. Check your email if confirmation is required."
       );
     } catch (error) {
@@ -639,6 +936,432 @@ export default function App() {
     setExerciseMetadata(data.exerciseMetadata);
     setSelectedSessionId(data.selectedSessionId);
   }
+
+  useEffect(() => {
+    localDataRevisionRef.current += 1;
+    currentWorkoutDataRef.current = {
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      plans,
+      selectedSessionId,
+      sessions,
+      templates,
+    };
+  }, [
+    templates,
+    plans,
+    history,
+    sessions,
+    exerciseLibrary,
+    exerciseMetadata,
+    selectedSessionId,
+  ]);
+
+  useEffect(() => {
+    authSessionRef.current = authSession;
+  }, [authSession]);
+
+  function isAutomaticSyncAvailable(session = authSessionRef.current) {
+    return Boolean(
+      isSupabaseConfigured &&
+        session?.user?.id &&
+        indexedDbReady &&
+        (typeof navigator === "undefined" || navigator.onLine)
+    );
+  }
+
+  function markNormalizedSyncDirty(domains = NORMALIZED_SYNC_DOMAINS) {
+    const nextDomains = new Set(normalizedSyncDirtyDomainsRef.current);
+
+    domains.forEach((domain) => {
+      if (NORMALIZED_SYNC_DOMAINS.includes(domain)) {
+        nextDomains.add(domain);
+      }
+    });
+
+    normalizedSyncDirtyDomainsRef.current = nextDomains;
+    writeNormalizedSyncDirtyDomains([...nextDomains]);
+  }
+
+  function markNormalizedSyncClean() {
+    normalizedSyncDirtyDomainsRef.current = new Set();
+    writeNormalizedSyncDirtyDomains([]);
+    localStorage.setItem(LAST_NORMALIZED_SYNC_KEY, new Date().toISOString());
+  }
+
+  async function uploadNormalizedWorkoutData(data, session, domains) {
+    const domainSet = new Set(domains);
+    const shouldSyncWorkouts =
+      domainSet.has("workouts") ||
+      domainSet.has("history") ||
+      domainSet.has("plans");
+    let workoutsUploaded = false;
+
+    if (domainSet.has("exercisePreferences")) {
+      await uploadExercisePreferences(data.exerciseLibrary, session);
+    }
+
+    if (shouldSyncWorkouts) {
+      await uploadWorkouts(data.templates, data.exerciseLibrary, session);
+      workoutsUploaded = true;
+    }
+
+    if (domainSet.has("history")) {
+      await uploadWorkoutHistory(
+        data.history,
+        data.templates,
+        data.exerciseLibrary,
+        session,
+        {
+          skipWorkoutRefresh: workoutsUploaded,
+        }
+      );
+    }
+
+    if (domainSet.has("plans")) {
+      await uploadPlans(
+        data.plans,
+        data.templates,
+        data.exerciseLibrary,
+        session,
+        {
+          skipWorkoutRefresh: workoutsUploaded,
+        }
+      );
+    }
+  }
+
+  async function downloadNormalizedWorkoutData(data, session, dirtyDomains = []) {
+    const dirtyDomainSet = new Set(dirtyDomains);
+    const exercisePreferences = await downloadExerciseLibraryWithPreferences(
+      data.exerciseLibrary,
+      session
+    );
+    const workoutData = await downloadWorkouts(
+      data.templates,
+      exercisePreferences.exerciseLibrary,
+      session,
+      {
+        keepLocalOnly: dirtyDomainSet.has("workouts"),
+      }
+    );
+    const historyData = await downloadWorkoutHistory(
+      data.history,
+      workoutData.templates,
+      exercisePreferences.exerciseLibrary,
+      session,
+      {
+        keepLocalOnly: dirtyDomainSet.has("history"),
+      }
+    );
+    const planData = await downloadPlans(
+      data.plans,
+      workoutData.templates,
+      session,
+      {
+        keepLocalOnly: dirtyDomainSet.has("plans"),
+      }
+    );
+    const resolvedPlans = resolvePlanWorkoutTemplateIds(
+      planData.plans,
+      workoutData.templates
+    );
+    const linkedTemplates = attachPlanLinksToTemplates(
+      workoutData.templates,
+      resolvedPlans
+    );
+    const nextData = {
+      ...data,
+      exerciseLibrary: exercisePreferences.exerciseLibrary,
+      history: historyData.history,
+      plans: resolvedPlans,
+      templates: linkedTemplates,
+    };
+
+    return {
+      exercisePreferences,
+      history: historyData,
+      nextData,
+      plans: planData,
+      workouts: workoutData,
+    };
+  }
+
+  async function pullLatestNormalizedData() {
+    setSyncLoading(true);
+
+    try {
+      const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+      const downloaded = await downloadNormalizedWorkoutData(data, authSession, []);
+
+      automaticSyncSuppressUntilRef.current =
+        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+      replaceWorkoutData(downloaded.nextData);
+      markNormalizedSyncClean();
+      setSyncStatus(
+        `${getAutoSyncSummary({
+          exercisePreferences: downloaded.exercisePreferences,
+          history: downloaded.history,
+          mode: "check",
+          plans: downloaded.plans,
+          workouts: downloaded.workouts,
+        })} Pulled latest cloud data.`
+      );
+    } catch (error) {
+      console.error("Pull latest failed:", error);
+      setSyncStatus(`Pull latest failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  function repairLocalPlanLinks() {
+    const resolvedPlans = resolvePlanWorkoutTemplateIds(plans, templates);
+    const linkedTemplates = attachPlanLinksToTemplates(templates, resolvedPlans);
+    const beforeBrokenLinks = getAuditLocalSummary({
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      plans,
+      sessions,
+      templates,
+    }).missingPlanWorkouts.length;
+    const afterBrokenLinks = getAuditLocalSummary({
+      exerciseLibrary,
+      exerciseMetadata,
+      history,
+      plans: resolvedPlans,
+      sessions,
+      templates: linkedTemplates,
+    }).missingPlanWorkouts.length;
+
+    setPlans(resolvedPlans);
+    setTemplates(linkedTemplates);
+
+    if (afterBrokenLinks < beforeBrokenLinks) {
+      markNormalizedSyncDirty(["plans", "workouts"]);
+    }
+
+    setSyncStatus(
+      `Plan link repair complete: ${beforeBrokenLinks} broken links before, ${afterBrokenLinks} after.`
+    );
+  }
+
+  async function runAutomaticNormalizedSync(reason = "auto") {
+    const session = authSessionRef.current;
+
+    if (!isAutomaticSyncAvailable(session)) {
+      return;
+    }
+
+    if (automaticSyncInFlightRef.current) {
+      automaticSyncQueuedRef.current = true;
+      setSyncStatus(
+        "Sync already in progress. New local changes will sync at the next checkpoint."
+      );
+      return;
+    }
+
+    automaticSyncInFlightRef.current = true;
+    lastAutomaticSyncAttemptRef.current = Date.now();
+    setSyncStatus(`Auto sync ${reason}...`);
+
+    try {
+      const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+      const syncStartRevision = localDataRevisionRef.current;
+      const forceUpload = reason === "workout completion";
+      const dirtyDomains = [...normalizedSyncDirtyDomainsRef.current];
+      const uploadDomains = forceUpload ? [...NORMALIZED_SYNC_DOMAINS] : dirtyDomains;
+      const cloudSummary = await getNormalizedCloudSummary(session);
+      const shouldHydrateFirst =
+        !hasLocalNormalizedUserData(data) &&
+        hasNormalizedCloudData(cloudSummary);
+      const shouldUpload =
+        !shouldHydrateFirst && uploadDomains.length > 0;
+      const mode = shouldHydrateFirst
+        ? "hydrate"
+        : shouldUpload
+          ? "sync"
+          : "check";
+
+      if (shouldUpload) {
+        await uploadNormalizedWorkoutData(data, session, uploadDomains);
+      }
+
+      const downloaded = await downloadNormalizedWorkoutData(
+        data,
+        session,
+        uploadDomains
+      );
+
+      if (localDataRevisionRef.current !== syncStartRevision) {
+        automaticSyncQueuedRef.current = true;
+        setSyncStatus(
+          "Sync finished, but newer local changes were detected. They will sync at the next checkpoint."
+        );
+        return;
+      }
+
+      automaticSyncSuppressUntilRef.current =
+        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+      replaceWorkoutData(downloaded.nextData);
+      automaticSyncHydratedUserRef.current = session.user.id;
+      markNormalizedSyncClean();
+      setSyncStatus(
+        `${getAutoSyncSummary({
+          exercisePreferences: downloaded.exercisePreferences,
+          domains: shouldUpload ? uploadDomains : [],
+          history: downloaded.history,
+          mode,
+          plans: downloaded.plans,
+          workouts: downloaded.workouts,
+        })} Last auto sync: ${new Date().toLocaleTimeString()}.`
+      );
+    } catch (error) {
+      console.error("Automatic normalized sync failed:", error);
+      setSyncStatus(`Auto sync failed: ${error.message}`);
+    } finally {
+      automaticSyncInFlightRef.current = false;
+      automaticSyncQueuedRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    if (!authSession?.user?.id || !indexedDbReady) {
+      return;
+    }
+
+    if (automaticSyncHydratedUserRef.current === authSession.user.id) {
+      return;
+    }
+
+    runAutomaticNormalizedSync("startup");
+    // Latest sync state is read from refs inside runAutomaticNormalizedSync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authSession, indexedDbReady]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    if (!exercisePreferencesDirtyReadyRef.current) {
+      exercisePreferencesDirtyReadyRef.current = true;
+      return;
+    }
+
+    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+      return;
+    }
+
+    markNormalizedSyncDirty(["exercisePreferences"]);
+  }, [exerciseLibrary, indexedDbReady]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    if (!workoutDirtyReadyRef.current) {
+      workoutDirtyReadyRef.current = true;
+      return;
+    }
+
+    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+      return;
+    }
+
+    markNormalizedSyncDirty(["workouts"]);
+  }, [templates, indexedDbReady]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    if (!historyDirtyReadyRef.current) {
+      historyDirtyReadyRef.current = true;
+      return;
+    }
+
+    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+      return;
+    }
+
+    markNormalizedSyncDirty(["history"]);
+  }, [history, indexedDbReady]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    if (!planDirtyReadyRef.current) {
+      planDirtyReadyRef.current = true;
+      return;
+    }
+
+    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+      return;
+    }
+
+    markNormalizedSyncDirty(["plans"]);
+  }, [plans, indexedDbReady]);
+
+  useEffect(() => {
+    const previousHistoryLength = previousHistoryLengthRef.current;
+
+    previousHistoryLengthRef.current = history.length;
+
+    if (!authSession?.user?.id || !indexedDbReady) {
+      return;
+    }
+
+    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+      return;
+    }
+
+    if (history.length > previousHistoryLength) {
+      markNormalizedSyncDirty(["history"]);
+      runAutomaticNormalizedSync("workout completion");
+    }
+    // Latest sync state is read from refs inside runAutomaticNormalizedSync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.length, authSession, indexedDbReady]);
+
+  useEffect(() => {
+    if (!authSession?.user?.id || !indexedDbReady) {
+      return undefined;
+    }
+
+    function syncAfterResume() {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      if (
+        Date.now() - lastAutomaticSyncAttemptRef.current <
+        AUTO_SYNC_RESUME_INTERVAL
+      ) {
+        return;
+      }
+
+      runAutomaticNormalizedSync("resume");
+    }
+
+    window.addEventListener("focus", syncAfterResume);
+    window.addEventListener("online", syncAfterResume);
+    document.addEventListener("visibilitychange", syncAfterResume);
+
+    return () => {
+      window.removeEventListener("focus", syncAfterResume);
+      window.removeEventListener("online", syncAfterResume);
+      document.removeEventListener("visibilitychange", syncAfterResume);
+    };
+    // Latest sync state is read from refs inside runAutomaticNormalizedSync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authSession, indexedDbReady]);
 
   async function uploadCurrentDataToCloud() {
     setSyncLoading(true);
@@ -782,12 +1505,15 @@ export default function App() {
       const result = await downloadWorkouts(
         templates,
         exerciseLibrary,
-        authSession
+        authSession,
+        {
+          keepLocalOnly: false,
+        }
       );
 
       setTemplates(result.templates);
       setSyncStatus(
-        `Workouts downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts kept.`
+        `Workouts downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts removed.`
       );
     } catch (error) {
       console.error("Workout download failed:", error);
@@ -827,12 +1553,15 @@ export default function App() {
         history,
         templates,
         exerciseLibrary,
-        authSession
+        authSession,
+        {
+          keepLocalOnly: false,
+        }
       );
 
       setHistory(result.history);
       setSyncStatus(
-        `History downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts kept.`
+        `History downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts removed.`
       );
     } catch (error) {
       console.error("Workout history download failed:", error);
@@ -868,11 +1597,22 @@ export default function App() {
     setSyncLoading(true);
 
     try {
-      const result = await downloadPlans(plans, templates, authSession);
+      const result = await downloadPlans(plans, templates, authSession, {
+        keepLocalOnly: false,
+      });
+      const resolvedPlans = resolvePlanWorkoutTemplateIds(
+        result.plans,
+        templates
+      );
+      const linkedTemplates = attachPlanLinksToTemplates(
+        templates,
+        resolvedPlans
+      );
 
-      setPlans(result.plans);
+      setPlans(resolvedPlans);
+      setTemplates(linkedTemplates);
       setSyncStatus(
-        `Plans downloaded: ${result.downloaded} cloud plans, ${result.updated} existing local plans updated, ${result.localOnly} local-only plans kept.`
+        `Plans downloaded: ${result.downloaded} cloud plans, ${result.updated} existing local plans updated, ${result.localOnly} local-only plans removed.`
       );
     } catch (error) {
       console.error("Plan download failed:", error);
@@ -892,6 +1632,87 @@ export default function App() {
     } catch (error) {
       console.error("Normalized cloud check failed:", error);
       setSyncStatus(`Normalized cloud check failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  async function resetWorkoutSyncData() {
+    const userId = authSession?.user?.id;
+
+    if (!userId || !supabase) {
+      setSyncStatus("Sign in before resetting workout sync data.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Reset workout sync data?\n\nThis deletes normalized plans, workouts, completed workout history, saved workout sessions, and the cloud snapshot for this signed-in user. It also clears the same workout data on this device.\n\nThe exercise library and exercise preferences are kept."
+    );
+
+    if (!confirmed) {
+      setSyncStatus("Workout sync reset canceled.");
+      return;
+    }
+
+    const typedConfirmation = window.prompt(
+      'Type "RESET" to permanently clear workout sync data for this user.'
+    );
+
+    if (typedConfirmation !== "RESET") {
+      setSyncStatus("Workout sync reset canceled.");
+      return;
+    }
+
+    setSyncLoading(true);
+
+    try {
+      for (const table of NORMALIZED_WORKOUT_RESET_TABLES) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .eq("user_id", userId);
+
+        if (error) {
+          throw new Error(`${table}: ${error.message}`);
+        }
+      }
+
+      automaticSyncSuppressUntilRef.current =
+        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+      const resetData = {
+        exerciseLibrary,
+        exerciseMetadata: {},
+        history: [],
+        plans: [],
+        selectedSessionId: null,
+        sessions: [],
+        templates: [],
+      };
+
+      saveWorkoutData(resetData, STORAGE_VERSION);
+      await saveWorkoutDataToIndexedDb(resetData, STORAGE_VERSION);
+      setTemplates([]);
+      setPlans([]);
+      setHistory([]);
+      setSessions([]);
+      setExerciseMetadata({});
+      setSelectedTemplateId(null);
+      setSelectedSessionId(null);
+      setSelectedHistory(null);
+      setSelectedHistoryList(null);
+      setConfirmDeleteTemplate(null);
+      setCompletedPlanActions(null);
+      setExtendPlanTarget(null);
+      setExpandedPlanIds({});
+      setDataAuditSummary(null);
+      setDataAuditStatus("");
+      markNormalizedSyncClean();
+      setSyncStatus(
+        "Workout sync data reset. Cloud plans, workouts, history, saved sessions, and this device's matching local data were cleared. Exercises were kept."
+      );
+    } catch (error) {
+      console.error("Workout sync reset failed:", error);
+      setSyncStatus(`Workout sync reset failed: ${error.message}`);
     } finally {
       setSyncLoading(false);
     }
@@ -1250,7 +2071,7 @@ export default function App() {
     const clonedPlanId = clonedAt;
     const clonedTemplates = (plan.workouts || []).map((planWorkout, index) => {
       const originalTemplate = templates.find(
-        (template) => template.id === planWorkout.templateId
+        (template) => String(template.id) === String(planWorkout.templateId)
       );
       const templateId = clonedAt + index + 1;
       const planWorkoutId = `${clonedPlanId}:workout-${index + 1}`;
@@ -1312,13 +2133,35 @@ export default function App() {
     }
 
     const planTemplateIds = new Set(
-      (plan.workouts || []).map((workout) => workout.templateId)
+      (plan.workouts || []).map((workout) => String(workout.templateId))
     );
 
+    markNormalizedSyncDirty(["plans", "workouts"]);
     setPlans(plans.filter((item) => item.id !== plan.id));
     setTemplates(
-      templates.filter((template) => !planTemplateIds.has(template.id))
+      templates.filter((template) => !planTemplateIds.has(String(template.id)))
     );
+  }
+
+  function deleteStandaloneTemplate(template, { includeHistory = false } = {}) {
+    markNormalizedSyncDirty(includeHistory ? ["workouts", "history"] : ["workouts"]);
+    setTemplates(templates.filter((item) => item.id !== template.id));
+
+    if (includeHistory) {
+      setHistory(
+        history.filter(
+          (workout) => String(workout.templateId) !== String(template.id)
+        )
+      );
+    }
+
+    setConfirmDeleteTemplate(null);
+  }
+
+  function getTemplateHistoryCount(templateId) {
+    return history.filter(
+      (workout) => String(workout.templateId) === String(templateId)
+    ).length;
   }
 
   function renderCompletedPlanActions() {
@@ -1539,6 +2382,7 @@ export default function App() {
     const active = plan.status === "active";
     const completed = plan.status === "completed";
     const expanded = expandedPlanIds[plan.id] ?? (isHomeView && active);
+    const missingWorkouts = getMissingPlanWorkouts(plan, templates);
 
     function toggleExpanded() {
       setExpandedPlanIds((current) => ({
@@ -1688,9 +2532,41 @@ export default function App() {
                 marginTop: "10px",
               }}
             >
+              {missingWorkouts.length > 0 && (
+                <div
+                  style={{
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger-border)",
+                    borderRadius: "6px",
+                    color: "var(--danger-text)",
+                    display: "grid",
+                    gap: "6px",
+                    padding: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Missing {missingWorkouts.length} generated{" "}
+                    {missingWorkouts.length === 1 ? "workout" : "workouts"}
+                  </div>
+                  <button
+                    onClick={() => deletePlan(plan)}
+                    style={{
+                      justifySelf: "start",
+                      minHeight: "32px",
+                    }}
+                  >
+                    Remove incomplete plan
+                  </button>
+                </div>
+              )}
               {(plan.workouts || []).map((planWorkout) => {
                 const template = templates.find(
-                  (item) => item.id === planWorkout.templateId
+                  (item) => String(item.id) === String(planWorkout.templateId)
                 );
                 const done = isPlanWorkoutComplete(
                   plan,
@@ -1705,13 +2581,19 @@ export default function App() {
                     onClick={() => template && setSelectedTemplateId(template.id)}
                     style={{
                       alignItems: "center",
-                      background: "var(--surface-raised)",
-                      border: "1px solid var(--border)",
+                      background: template
+                        ? "var(--surface-raised)"
+                        : "var(--surface-muted)",
+                      border: template
+                        ? "1px solid var(--border)"
+                        : "1px dashed var(--danger-border)",
                       borderRadius: "6px",
+                      color: template ? "var(--text)" : "var(--danger-text)",
                       display: "grid",
                       gap: "8px",
                       gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
                       minHeight: "44px",
+                      opacity: template ? 1 : 0.82,
                       padding: "7px 9px",
                       textAlign: "left",
                     }}
@@ -1748,7 +2630,13 @@ export default function App() {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      <Play size={15} /> Review
+                      {template ? (
+                        <>
+                          <Play size={15} /> Review
+                        </>
+                      ) : (
+                        "Missing"
+                      )}
                     </span>
                   </button>
                 );
@@ -2232,7 +3120,34 @@ export default function App() {
           >
             <button
               disabled={!authSession || syncLoading}
+              onClick={() => runAutomaticNormalizedSync("manual")}
+            >
+              Sync Now
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={pullLatestNormalizedData}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Pull Latest
+            </button>
+            <button
+              disabled={syncLoading}
+              onClick={repairLocalPlanLinks}
+              style={{
+                marginLeft: "8px",
+              }}
+            >
+              Repair Plan Links
+            </button>
+            <button
+              disabled={!authSession || syncLoading}
               onClick={uploadCustomExerciseLibraryToCloud}
+              style={{
+                marginLeft: "8px",
+              }}
             >
               Sync Custom Exercises
             </button>
@@ -2317,6 +3232,18 @@ export default function App() {
             >
               Check Normalized Data
             </button>
+            <button
+              disabled={!authSession || syncLoading}
+              onClick={resetWorkoutSyncData}
+              style={{
+                background: "var(--danger-bg)",
+                border: "1px solid var(--danger-border)",
+                color: "var(--danger-text)",
+                marginLeft: "8px",
+              }}
+            >
+              Reset Workout Sync Data
+            </button>
             <div
               style={{
                 color: "var(--text-muted)",
@@ -2394,6 +3321,84 @@ export default function App() {
                   >
                     {formatAuditLocalSummary(dataAuditSummary.local)}
                   </div>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "6px",
+                    }}
+                  >
+                    Standalone workout names:{" "}
+                    {dataAuditSummary.local.standaloneWorkoutNames.length > 0
+                      ? dataAuditSummary.local.standaloneWorkoutNames.join(", ")
+                      : "none"}
+                  </div>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    Completed workout names:{" "}
+                    {dataAuditSummary.local.historyDetails.length > 0
+                      ? dataAuditSummary.local.historyDetails
+                          .map(
+                            (workout) =>
+                              `${workout.templateName} (${formatHistoryTimestamp(
+                                workout
+                              )})${
+                                workout.planId ? " [plan]" : ""
+                              }`
+                          )
+                          .join("; ")
+                      : "none"}
+                  </div>
+                  <div
+                    style={{
+                      color:
+                        dataAuditSummary.local.missingPlanWorkouts.length > 0
+                          ? "var(--danger-text)"
+                          : "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    Broken plan workout links:{" "}
+                    {dataAuditSummary.local.missingPlanWorkouts.length > 0
+                      ? dataAuditSummary.local.missingPlanWorkouts
+                          .map(
+                            (workout) =>
+                              `${workout.planName} / ${workout.workoutName} -> ${workout.templateId || "missing template id"}`
+                          )
+                          .join("; ")
+                      : "none"}
+                  </div>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    Template ids:{" "}
+                    {dataAuditSummary.local.templateDetails.length > 0
+                      ? dataAuditSummary.local.templateDetails
+                          .map(
+                            (template) =>
+                              `${template.id}: ${template.name}${
+                                template.planId
+                                  ? ` [plan ${template.planId}]`
+                                  : ""
+                              }${
+                                template.planWorkoutId
+                                  ? ` [${template.planWorkoutId}]`
+                                  : ""
+                              }`
+                          )
+                          .join("; ")
+                      : "none"}
+                  </div>
                 </div>
 
                 <div
@@ -2448,6 +3453,27 @@ export default function App() {
                       ? formatAuditNormalizedSummary(dataAuditSummary.normalized)
                       : "Sign in to check normalized cloud rows."}
                   </div>
+                  {dataAuditSummary.normalized?.recentSessions && (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      Recent cloud completed workouts:{" "}
+                      {dataAuditSummary.normalized.recentSessions.length > 0
+                        ? dataAuditSummary.normalized.recentSessions
+                            .map(
+                              (workout) =>
+                                `${workout.workout_name} (${formatHistoryTimestamp(
+                                  workout
+                                )})`
+                            )
+                            .join("; ")
+                        : "none"}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2521,7 +3547,7 @@ export default function App() {
             }}
             onClick={() => setSelectedHistory(workout)}
           >
-            {workout.completedAt}
+            {formatHistoryTimestamp(workout)}
           </button>
         ))}
       </div>,
@@ -2571,8 +3597,11 @@ export default function App() {
     );
   }
 
+  const planTemplateIds = getPlanTemplateIdSet(plans);
   const standaloneTemplates = [...templates]
-    .filter((template) => !template.planId)
+    .filter(
+      (template) => !template.planId && !planTemplateIds.has(String(template.id))
+    )
     .sort((a, b) => {
       if (templateSort === "alpha") {
         return a.name.localeCompare(b.name);
@@ -2826,13 +3855,23 @@ export default function App() {
                         marginBottom: "16px",
                       }}
                     >
-                      Workout history tied to this template may be lost.
+                      {getTemplateHistoryCount(confirmDeleteTemplate.id) > 0
+                        ? `${getTemplateHistoryCount(
+                            confirmDeleteTemplate.id
+                          )} completed history ${
+                            getTemplateHistoryCount(confirmDeleteTemplate.id) ===
+                            1
+                              ? "entry is"
+                              : "entries are"
+                          } tied to this template.`
+                        : "No completed history is tied to this template."}
                     </div>
 
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
+                        display: "grid",
+                        gap: "8px",
+                        gridTemplateColumns: "1fr 1fr",
                       }}
                     >
                       <button onClick={() => setConfirmDeleteTemplate(null)}>
@@ -2840,17 +3879,23 @@ export default function App() {
                       </button>
 
                       <button
-                        onClick={() => {
-                          setTemplates(
-                            templates.filter(
-                              (t) => t.id !== confirmDeleteTemplate.id
-                            )
-                          );
-
-                          setConfirmDeleteTemplate(null);
+                        onClick={() =>
+                          deleteStandaloneTemplate(confirmDeleteTemplate)
+                        }
+                      >
+                        Template only
+                      </button>
+                      <button
+                        onClick={() =>
+                          deleteStandaloneTemplate(confirmDeleteTemplate, {
+                            includeHistory: true,
+                          })
+                        }
+                        style={{
+                          gridColumn: "1 / -1",
                         }}
                       >
-                        ✔️
+                        Template + history
                       </button>
                     </div>
                   </div>
@@ -2858,7 +3903,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     const matches = history.filter(
-                      (h) => h.templateId === template.id
+                      (h) => String(h.templateId) === String(template.id)
                     );
 
                     if (matches.length) {

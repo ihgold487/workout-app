@@ -61,6 +61,7 @@ function localPlanWorkoutToCloud({
   plan,
   planWorkout,
   position,
+  templateId,
   userId,
 }) {
   const targetRir = plan.config?.rir ?? "";
@@ -80,7 +81,7 @@ function localPlanWorkoutToCloud({
     workout_id: cloudWorkoutId || null,
     workout_rules: {
       planWorkoutId: planWorkout.planWorkoutId || null,
-      templateId: planWorkout.templateId || null,
+      templateId: templateId || planWorkout.templateId || null,
     },
   };
 }
@@ -197,12 +198,20 @@ async function upsertPlanWorkoutByPosition(record) {
   return data.id;
 }
 
-export async function uploadPlans(plans, templates, exerciseLibrary, session) {
+export async function uploadPlans(
+  plans,
+  templates,
+  exerciseLibrary,
+  session,
+  options = {}
+) {
   assertCloudReady(session);
 
   const userId = session.user.id;
 
-  await uploadWorkouts(templates, exerciseLibrary, session);
+  if (!options.skipWorkoutRefresh) {
+    await uploadWorkouts(templates, exerciseLibrary, session);
+  }
 
   const planRecords = plans.map((plan) => localPlanToCloud(plan, userId));
 
@@ -245,12 +254,21 @@ export async function uploadPlans(plans, templates, exerciseLibrary, session) {
     const keptIds = [];
 
     for (const [index, planWorkout] of (plan.workouts || []).entries()) {
+      const template =
+        templates.find(
+          (item) => String(item.id) === String(planWorkout.templateId)
+        ) ||
+        templates.find(
+          (item) => item.planWorkoutId === planWorkout.planWorkoutId
+        );
+      const templateId = template?.id || planWorkout.templateId;
       const record = localPlanWorkoutToCloud({
         cloudPlanId,
-        cloudWorkoutId: workoutIdsBySourceKey.get(String(planWorkout.templateId)),
+        cloudWorkoutId: workoutIdsBySourceKey.get(String(templateId)),
         plan,
         planWorkout,
         position: index + 1,
+        templateId,
         userId,
       });
       const id = await upsertPlanWorkoutByPosition(record);
@@ -316,10 +334,11 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
     workouts: planWorkouts.map((workout) => {
       const rules = workout.workout_rules || {};
       const templateId =
-        rules.templateId ||
-        (workout.workout_id && workoutSourceKeyById.has(workout.workout_id)
+        workout.workout_id && workoutSourceKeyById.has(workout.workout_id)
           ? parseLocalSourceKey(workoutSourceKeyById.get(workout.workout_id))
-          : null);
+          : rules.templateId != null
+            ? parseLocalSourceKey(rules.templateId)
+            : null;
 
       return {
         dayNumber: workout.day_number || workout.position,
@@ -335,7 +354,12 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
   };
 }
 
-export async function downloadPlans(currentPlans, templates, session) {
+export async function downloadPlans(
+  currentPlans,
+  templates,
+  session,
+  options = {}
+) {
   assertCloudReady(session);
 
   const userId = session.user.id;
@@ -363,8 +387,8 @@ export async function downloadPlans(currentPlans, templates, session) {
   if (planIds.length === 0) {
     return {
       downloaded: 0,
-      localOnly: currentPlans.length,
-      plans: currentPlans,
+      localOnly: options.keepLocalOnly === false ? 0 : currentPlans.length,
+      plans: options.keepLocalOnly === false ? [] : currentPlans,
       updated: 0,
     };
   }
@@ -411,11 +435,13 @@ export async function downloadPlans(currentPlans, templates, session) {
   const localOnlyPlans = currentPlans.filter(
     (plan) => !downloadedSourceKeys.has(String(plan.id))
   );
+  const keptLocalOnlyPlans =
+    options.keepLocalOnly === false ? [] : localOnlyPlans;
 
   return {
     downloaded: downloadedPlans.length,
     localOnly: localOnlyPlans.length,
-    plans: [...downloadedPlans, ...localOnlyPlans],
+    plans: [...downloadedPlans, ...keptLocalOnlyPlans],
     updated: downloadedPlans.filter((plan) =>
       existingPlansBySourceKey.has(String(plan.id))
     ).length,

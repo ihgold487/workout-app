@@ -446,7 +446,12 @@ export async function uploadWorkouts(templates, exerciseLibrary, session) {
   };
 }
 
-export async function downloadWorkouts(currentTemplates, exerciseLibrary, session) {
+export async function downloadWorkouts(
+  currentTemplates,
+  exerciseLibrary,
+  session,
+  options = {}
+) {
   assertCloudReady(session);
 
   const userId = session.user.id;
@@ -472,7 +477,8 @@ export async function downloadWorkouts(currentTemplates, exerciseLibrary, sessio
   if (workoutIds.length === 0) {
     return {
       downloaded: 0,
-      templates: currentTemplates,
+      localOnly: options.keepLocalOnly === false ? 0 : currentTemplates.length,
+      templates: options.keepLocalOnly === false ? [] : currentTemplates,
       updated: 0,
     };
   }
@@ -549,11 +555,13 @@ export async function downloadWorkouts(currentTemplates, exerciseLibrary, sessio
   const localOnlyTemplates = currentTemplates.filter(
     (template) => !downloadedSourceKeys.has(String(template.id))
   );
+  const keptLocalOnlyTemplates =
+    options.keepLocalOnly === false ? [] : localOnlyTemplates;
 
   return {
     downloaded: downloadedTemplates.length,
     localOnly: localOnlyTemplates.length,
-    templates: [...downloadedTemplates, ...localOnlyTemplates],
+    templates: [...downloadedTemplates, ...keptLocalOnlyTemplates],
     updated: downloadedTemplates.filter((template) =>
       existingTemplatesBySourceKey.has(String(template.id))
     ).length,
