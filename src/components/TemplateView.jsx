@@ -6,6 +6,7 @@ import {
   GripVertical,
   Link2,
   NotebookPen,
+  Pencil,
   Play,
   Plus,
   Repeat2,
@@ -134,6 +135,8 @@ export default function TemplateView({
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState(null);
   const linkedPlan = plans.find((item) => item.id === template.planId);
   const currentPlanWeek = linkedPlan?.currentWeek || 1;
   const planWorkoutCompleteThisWeek = Boolean(
@@ -218,6 +221,125 @@ export default function TemplateView({
 
   function getGoalMode(plan) {
     return plan?.goal === "progress" ? "progress" : "maintenance";
+  }
+
+  function cloneTemplateEditState(sourceTemplate = template) {
+    return {
+      exercises: structuredClone(sourceTemplate.exercises || []),
+    };
+  }
+
+  function enterEditMode(sourceTemplate = template) {
+    if (isEditMode) {
+      return;
+    }
+
+    setEditSnapshot(cloneTemplateEditState(sourceTemplate));
+    setIsEditMode(true);
+  }
+
+  function updateCurrentTemplate(updater, { requireEdit = true } = {}) {
+    if (requireEdit) {
+      enterEditMode();
+    }
+
+    setTemplates((currentTemplates) =>
+      currentTemplates.map((currentTemplate) =>
+        currentTemplate.id === template.id
+          ? updater(currentTemplate)
+          : currentTemplate
+      )
+    );
+  }
+
+  function clearSingleExerciseSupersets(exercises) {
+    const groupCounts = exercises.reduce((counts, exercise) => {
+      const group = String(exercise.supersetGroup || "").trim();
+
+      if (!group) {
+        return counts;
+      }
+
+      counts.set(group, (counts.get(group) || 0) + 1);
+      return counts;
+    }, new Map());
+
+    return exercises.map((exercise) => {
+      const group = String(exercise.supersetGroup || "").trim();
+
+      if (!group || groupCounts.get(group) < 2) {
+        return {
+          ...exercise,
+          supersetGroup: null,
+        };
+      }
+
+      return {
+        ...exercise,
+        supersetGroup: group,
+      };
+    });
+  }
+
+  function getGroupedExercises(exercises) {
+    return Object.values(
+      exercises.reduce((groups, exercise) => {
+        const key = exercise.supersetGroup || `single-${exercise.id}`;
+
+        if (!groups[key]) {
+          groups[key] = {
+            exercises: [],
+            group: exercise.supersetGroup,
+          };
+        }
+
+        groups[key].exercises.push(exercise);
+        return groups;
+      }, {})
+    );
+  }
+
+  function commitEditMode() {
+    updateCurrentTemplate(
+      (currentTemplate) => ({
+        ...currentTemplate,
+        exercises: clearSingleExerciseSupersets(currentTemplate.exercises || []),
+      }),
+      {
+        requireEdit: false,
+      }
+    );
+    setIsEditMode(false);
+    setEditSnapshot(null);
+  }
+
+  function cancelEditMode() {
+    if (editSnapshot) {
+      setTemplates((currentTemplates) =>
+        currentTemplates.map((currentTemplate) =>
+          currentTemplate.id === template.id
+            ? {
+                ...currentTemplate,
+                exercises: structuredClone(editSnapshot.exercises || []),
+              }
+            : currentTemplate
+        )
+      );
+    }
+
+    setShowAdd(false);
+    setSearch("");
+    setPendingExercise(null);
+    setNewExerciseValues({
+      weight: "",
+      reps: "",
+      sets: "",
+      rir: "",
+    });
+    setEditingExercise(null);
+    setEditingExerciseDraft(null);
+    setIsEditMode(false);
+    setEditSnapshot(null);
   }
 
   function formatTargetValue(value, fallback = "") {
@@ -383,6 +505,8 @@ export default function TemplateView({
   }
 
   function addExercise(exercise) {
+    enterEditMode();
+
     const weight = newExerciseValues.weight;
 
     const reps = newExerciseValues.reps;
@@ -407,32 +531,31 @@ export default function TemplateView({
       })
     );
 
-    setTemplates(
-      templates.map((t) =>
-        t.id === template.id
-          ? {
-              ...t,
+    updateCurrentTemplate(
+      (currentTemplate) => ({
+        ...currentTemplate,
 
-              exercises: [
-                ...t.exercises,
+        exercises: [
+          ...currentTemplate.exercises,
 
-                {
-                  id: Date.now(),
+          {
+            id: Date.now(),
 
-                  exerciseId: exercise.id,
+            exerciseId: exercise.id,
 
-                  name: exercise.name,
+            name: exercise.name,
 
-                  equipment: exercise.equipment,
+            equipment: exercise.equipment,
 
-                  muscles: exercise.muscles,
+            muscles: exercise.muscles,
 
-                  sets,
-                },
-              ],
-            }
-          : t
-      )
+            sets,
+          },
+        ],
+      }),
+      {
+        requireEdit: false,
+      }
     );
 
     setShowAdd(false);
@@ -445,6 +568,7 @@ export default function TemplateView({
       weight: "",
       reps: "",
       sets: "",
+      rir: "",
     });
   }
 
@@ -518,7 +642,7 @@ export default function TemplateView({
   return (
     <div
       style={{
-        padding: "20px",
+        padding: isEditMode ? "20px 20px 150px" : "20px",
       }}
     >
       <button
@@ -562,30 +686,47 @@ export default function TemplateView({
             gap: "8px",
           }}
         >
+          {!isEditMode && (
+            <button
+              disabled={!canStartWorkout}
+              onClick={startWorkout}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
+              }}
+            >
+              <Play size={16} /> Start
+            </button>
+          )}
           <button
-            disabled={!canStartWorkout}
-            onClick={startWorkout}
+            onClick={() => {
+              if (!isEditMode) {
+                enterEditMode();
+                return;
+              }
+
+              setShowAdd(true);
+            }}
             style={{
               alignItems: "center",
               display: "inline-flex",
               gap: "6px",
             }}
           >
-            <Play size={16} /> Start
-          </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-            }}
-          >
-            <Plus size={16} /> Add Exercise
+            {isEditMode ? (
+              <>
+                <Plus size={16} /> Add Exercise
+              </>
+            ) : (
+              <>
+                <Pencil size={16} /> Edit
+              </>
+            )}
           </button>
         </div>
 
-        {isPlanWorkout && (
+        {isPlanWorkout && !isEditMode && (
           <button
             onClick={addPlanWorkoutToWorkouts}
             style={{
@@ -598,7 +739,7 @@ export default function TemplateView({
           </button>
         )}
       </div>
-      {startDisabledReason && (
+      {!isEditMode && startDisabledReason && (
         <div
           style={{
             color: "var(--text-muted)",
@@ -774,6 +915,7 @@ export default function TemplateView({
                       weight: "",
                       reps: "",
                       sets: "",
+                      rir: "",
                     });
                   }}
                 >
@@ -790,6 +932,7 @@ export default function TemplateView({
                       weight: "",
                       reps: "",
                       sets: "",
+                      rir: "",
                     });
                   }}
                 >
@@ -817,34 +960,40 @@ export default function TemplateView({
 
             const reordered = arrayMove(template.exercises, oldIndex, newIndex);
 
-            setTemplates(
-              templates.map((t) =>
-                t.id === template.id
-                  ? {
-                      ...t,
-                      exercises: reordered,
-                    }
-                  : t
-              )
-            );
+            updateCurrentTemplate((currentTemplate) => ({
+              ...currentTemplate,
+              exercises: reordered,
+            }));
           }}
         >
           <SortableContext
             items={template.exercises.map((exercise) => exercise.id)}
             strategy={verticalListSortingStrategy}
           >
-            {template.exercises.map((exercise) => {
-              const exerciseDetail = getExerciseDetailRecord(exercise);
+            {getGroupedExercises(template.exercises).map((group) => (
+              <div
+                key={group.group || group.exercises[0].id}
+                style={{
+                  background: group.group ? "var(--surface-muted)" : "transparent",
+                  borderBottom: group.group ? "3px solid #777" : "none",
+                  borderRadius: "8px",
+                  borderTop: group.group ? "3px solid #777" : "none",
+                  marginBottom: "8px",
+                  padding: "12px",
+                }}
+              >
+                {group.exercises.map((exercise) => {
+                  const exerciseDetail = getExerciseDetailRecord(exercise);
 
-              return (
-                <SortableExerciseRow key={exercise.id} exercise={exercise}>
-                  {({ attributes, listeners }) => (
-                    <div
-                      key={exercise.id}
-                      style={{
-                        marginBottom: "20px",
-                      }}
-                    >
+                  return (
+                    <SortableExerciseRow key={exercise.id} exercise={exercise}>
+                      {({ attributes, listeners }) => (
+                        <div
+                          key={exercise.id}
+                          style={{
+                            marginBottom: "20px",
+                          }}
+                        >
                     <h3
                       style={{
                         display: "flex",
@@ -968,25 +1117,19 @@ export default function TemplateView({
                               return;
                             }
 
-                            setTemplates(
-                              templates.map((t) =>
-                                t.id === template.id
+                            updateCurrentTemplate((currentTemplate) => ({
+                              ...currentTemplate,
+
+                              exercises: currentTemplate.exercises.map((ex) =>
+                                ex.id === exercise.id
                                   ? {
-                                      ...t,
+                                      ...ex,
 
-                                      exercises: t.exercises.map((ex) =>
-                                        ex.id === exercise.id
-                                          ? {
-                                              ...ex,
-
-                                              supersetGroup: group || null,
-                                            }
-                                          : ex
-                                      ),
+                                      supersetGroup: group || null,
                                     }
-                                  : t
-                              )
-                            );
+                                  : ex
+                              ),
+                            }));
                           }}
                         >
                           <Link2 size={16} />
@@ -1008,19 +1151,13 @@ export default function TemplateView({
                           size={32}
                           tone="danger"
                           onClick={() => {
-                            setTemplates(
-                              templates.map((t) =>
-                                t.id === template.id
-                                  ? {
-                                      ...t,
+                            updateCurrentTemplate((currentTemplate) => ({
+                              ...currentTemplate,
 
-                                      exercises: t.exercises.filter(
-                                        (ex) => ex.id !== exercise.id
-                                      ),
-                                    }
-                                  : t
-                              )
-                            );
+                              exercises: currentTemplate.exercises.filter(
+                                (ex) => ex.id !== exercise.id
+                              ),
+                            }));
                           }}
                         >
                           <Trash2 size={16} />
@@ -1104,6 +1241,8 @@ export default function TemplateView({
                             <div
                               key={set.id}
                               onClick={() => {
+                                enterEditMode();
+
                                 setEditingExercise(exercise);
 
                                 setEditingExerciseDraft(
@@ -1139,12 +1278,55 @@ export default function TemplateView({
                       </div>
                     </div>
                   )}
-                </SortableExerciseRow>
-              );
-            })}
+                    </SortableExerciseRow>
+                  );
+                })}
+              </div>
+            ))}
           </SortableContext>
         </DndContext>
       }
+      {isEditMode && (
+        <div
+          style={{
+            alignItems: "center",
+            background: "var(--surface)",
+            borderTop: "1px solid var(--border)",
+            bottom: "calc(62px + env(safe-area-inset-bottom))",
+            boxShadow: "0 -8px 20px rgba(0,0,0,.08)",
+            boxSizing: "border-box",
+            display: "flex",
+            gap: "10px",
+            justifyContent: "space-between",
+            left: 0,
+            padding: "10px 16px",
+            position: "fixed",
+            right: 0,
+            zIndex: 1100,
+          }}
+        >
+          <button
+            onClick={cancelEditMode}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            Cancel <X size={16} />
+          </button>
+          <button
+            onClick={commitEditMode}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            OK <Check size={16} />
+          </button>
+        </div>
+      )}
       {editingExercise && (
         <div
           style={{
@@ -1406,21 +1588,13 @@ export default function TemplateView({
 
               <button
                 onClick={() => {
-                  setTemplates(
-                    templates.map((t) =>
-                      t.id === template.id
-                        ? {
-                            ...t,
+                  updateCurrentTemplate((currentTemplate) => ({
+                    ...currentTemplate,
 
-                            exercises: t.exercises.map((ex) =>
-                              ex.id === editingExercise.id
-                                ? editingExerciseDraft
-                                : ex
-                            ),
-                          }
-                        : t
-                    )
-                  );
+                    exercises: currentTemplate.exercises.map((ex) =>
+                      ex.id === editingExercise.id ? editingExerciseDraft : ex
+                    ),
+                  }));
 
                   setEditingExercise(null);
 

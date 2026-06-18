@@ -27,13 +27,10 @@ import NutritionView from "./components/NutritionView";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import {
   clearLegacyEquipmentStorage,
-  createWorkoutBackup,
   getSavedStorageVersion,
-  getWorkoutDataSummary,
   loadWorkoutData,
   loadWorkoutDataFromIndexedDb,
   markStorageVersion,
-  parseWorkoutBackup,
   saveWorkoutData,
   saveWorkoutDataToIndexedDb,
 } from "./storage/workoutStorage";
@@ -45,10 +42,6 @@ import {
   subscribeToAuthChanges,
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
-import {
-  downloadWorkoutSnapshot,
-  uploadWorkoutSnapshot,
-} from "./sync/workoutCloudSnapshot";
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
@@ -77,7 +70,9 @@ const UPDATE_CONFIRMATION_DURATION = 10 * 60 * 1000;
 const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
 
+const STARTUP_SPLASH_MINIMUM_MS = 1000;
 const AUTO_SYNC_RESUME_INTERVAL = 5 * 60 * 1000;
+const AUTO_SYNC_CHECKPOINT_DELAY_MS = 350;
 const AUTO_SYNC_SUPPRESS_MS = 4000;
 const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
@@ -113,10 +108,6 @@ const UPDATE_STATUS_COPY = {
 const BUILD_NOTICE_COPY = {
   updated: "Updated to the latest build.",
 };
-
-function formatBackupSummary(summary) {
-  return `${summary.templates} templates, ${summary.plans || 0} plans, ${summary.customExercises} custom exercises, ${summary.history} completed workouts`;
-}
 
 function formatNormalizedSummary(summary) {
   const latest = summary.latestSession
@@ -232,10 +223,6 @@ function getAuditLocalSummary(data) {
 
 function formatAuditLocalSummary(summary) {
   return `${summary.templates} workout templates (${summary.standaloneWorkouts} standalone, ${summary.planWorkouts} plan workouts), ${summary.plans} plans, ${summary.history} completed workouts, ${summary.sessionRecords} saved session records, ${summary.builtinExercises} built-in exercises, ${summary.customExercises} custom exercises, ${summary.activeExercises} active exercises, ${summary.nutritionEntries} nutrition entries, ${summary.bodyWeightEntries} body weight entries`;
-}
-
-function formatAuditSnapshotSummary(summary) {
-  return `${summary.templates} workouts, ${summary.plans || 0} plans, ${summary.history} completed workouts, ${summary.customExercises} custom exercises`;
 }
 
 function formatAuditNormalizedSummary(summary) {
@@ -421,24 +408,32 @@ function writeNormalizedSyncDirtyDomains(domains) {
   );
 }
 
-const backupButtonStyle = {
-  alignItems: "center",
-  appearance: "none",
-  background: "buttonface",
-  border: "1px solid #888",
-  borderRadius: "4px",
-  boxSizing: "border-box",
-  color: "buttontext",
-  cursor: "pointer",
-  display: "inline-flex",
-  font: "inherit",
-  gap: "4px",
-  justifyContent: "center",
-  lineHeight: 1.2,
-  margin: 0,
-  minHeight: "32px",
-  padding: "4px 8px",
-};
+function readLastNormalizedSyncAt() {
+  return localStorage.getItem(LAST_NORMALIZED_SYNC_KEY) || "";
+}
+
+function formatLastNormalizedSyncAt(value) {
+  if (!value) {
+    return "Never";
+  }
+
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "Unknown";
+  }
+
+  return parsed.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getCurrentTimeMs() {
+  return new Date().getTime();
+}
 
 const bottomNavButtonStyle = {
   alignItems: "center",
@@ -586,121 +581,6 @@ export default function App() {
     }
   }, []);
 
-  async function exportBackup() {
-    const summary = getWorkoutDataSummary({
-      templates,
-      plans,
-      history,
-      sessions,
-      exerciseLibrary,
-    });
-
-    const backup = createWorkoutBackup({
-      templates,
-      plans,
-      history,
-      sessions,
-      exerciseMetadata,
-      exerciseLibrary,
-      selectedSessionId,
-    });
-
-    const blob = new Blob(
-      [JSON.stringify(backup, null, 2)],
-
-      {
-        type: "application/json",
-      }
-    );
-
-    const filename = `workout-backup-${new Date().toISOString().slice(0, 10)}.json`;
-
-    const file = new File([blob], filename, {
-      type: "application/json",
-    });
-
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          text: `Workout backup: ${formatBackupSummary(summary)}`,
-          title: "Workout Backup",
-        });
-
-        setBackupStatus(
-          `Backup exported: ${formatBackupSummary(summary)}. Save it in Files or iCloud Drive.`
-        );
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          console.error("Backup share failed:", error);
-          setBackupStatus(`Backup export failed: ${error.message}`);
-        }
-      }
-
-      return;
-    }
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-
-    a.href = url;
-
-    a.download = filename;
-
-    a.click();
-
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
-  async function importBackup(event) {
-    const file = event.target.files[0];
-
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-
-      const data = JSON.parse(text);
-
-      const importedData = parseWorkoutBackup(data, {
-        seedExercises,
-      });
-
-      const summary = getWorkoutDataSummary(importedData);
-
-      const confirmed = window.confirm(
-        `Import this backup and replace the current app data?\n\n${formatBackupSummary(summary)}`
-      );
-
-      if (!confirmed) {
-        setBackupStatus("Import canceled. Current data was not changed.");
-        return;
-      }
-
-      setTemplates(importedData.templates);
-
-      setPlans(importedData.plans);
-
-      setHistory(importedData.history);
-
-      setSessions(importedData.sessions);
-
-      setExerciseLibrary(importedData.exerciseLibrary);
-
-      setExerciseMetadata(importedData.exerciseMetadata);
-
-      setSelectedSessionId(importedData.selectedSessionId);
-
-      setBackupStatus(`Backup imported: ${formatBackupSummary(summary)}.`);
-    } catch (error) {
-      console.error("Backup import failed:", error);
-      setBackupStatus(`Import failed: ${error.message}`);
-    } finally {
-      event.target.value = "";
-    }
-  }
-
   const [templates, setTemplates] = useState(initialWorkoutData.templates);
 
   const [plans, setPlans] = useState(initialWorkoutData.plans);
@@ -754,8 +634,6 @@ export default function App() {
 
   const [indexedDbReady, setIndexedDbReady] = useState(false);
 
-  const [backupStatus, setBackupStatus] = useState("");
-
   const [authSession, setAuthSession] = useState(null);
 
   const [authEmail, setAuthEmail] = useState("");
@@ -776,6 +654,12 @@ export default function App() {
 
   const [syncLoading, setSyncLoading] = useState(false);
 
+  const [lastNormalizedSyncAt, setLastNormalizedSyncAt] = useState(
+    readLastNormalizedSyncAt
+  );
+
+  const [showAdvancedSyncTools, setShowAdvancedSyncTools] = useState(false);
+
   const [dataAuditStatus, setDataAuditStatus] = useState("");
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
@@ -793,6 +677,8 @@ export default function App() {
   const automaticSyncSuppressUntilRef = useRef(0);
 
   const lastAutomaticSyncAttemptRef = useRef(0);
+
+  const checkpointSyncTimeoutRef = useRef(null);
 
   const localDataRevisionRef = useRef(0);
 
@@ -962,6 +848,13 @@ export default function App() {
     authSessionRef.current = authSession;
   }, [authSession]);
 
+  useEffect(
+    () => () => {
+      window.clearTimeout(checkpointSyncTimeoutRef.current);
+    },
+    []
+  );
+
   function isAutomaticSyncAvailable(session = authSessionRef.current) {
     return Boolean(
       isSupabaseConfigured &&
@@ -985,9 +878,25 @@ export default function App() {
   }
 
   function markNormalizedSyncClean() {
+    const syncedAt = new Date().toISOString();
+
     normalizedSyncDirtyDomainsRef.current = new Set();
     writeNormalizedSyncDirtyDomains([]);
-    localStorage.setItem(LAST_NORMALIZED_SYNC_KEY, new Date().toISOString());
+    localStorage.setItem(LAST_NORMALIZED_SYNC_KEY, syncedAt);
+    setLastNormalizedSyncAt(syncedAt);
+  }
+
+  function requestSyncCheckpoint(domains, reason = "checkpoint") {
+    markNormalizedSyncDirty(domains);
+
+    if (!isAutomaticSyncAvailable()) {
+      return;
+    }
+
+    window.clearTimeout(checkpointSyncTimeoutRef.current);
+    checkpointSyncTimeoutRef.current = window.setTimeout(() => {
+      runAutomaticNormalizedSync(reason);
+    }, AUTO_SYNC_CHECKPOINT_DELAY_MS);
   }
 
   async function uploadNormalizedWorkoutData(data, session, domains) {
@@ -999,6 +908,7 @@ export default function App() {
     let workoutsUploaded = false;
 
     if (domainSet.has("exercisePreferences")) {
+      await uploadCustomExercises(data.exerciseLibrary, session);
       await uploadExercisePreferences(data.exerciseLibrary, session);
     }
 
@@ -1096,7 +1006,7 @@ export default function App() {
       const downloaded = await downloadNormalizedWorkoutData(data, authSession, []);
 
       automaticSyncSuppressUntilRef.current =
-        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+        getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       replaceWorkoutData(downloaded.nextData);
       markNormalizedSyncClean();
       setSyncStatus(
@@ -1164,7 +1074,7 @@ export default function App() {
     }
 
     automaticSyncInFlightRef.current = true;
-    lastAutomaticSyncAttemptRef.current = Date.now();
+    lastAutomaticSyncAttemptRef.current = getCurrentTimeMs();
     setSyncStatus(`Auto sync ${reason}...`);
 
     try {
@@ -1204,7 +1114,7 @@ export default function App() {
       }
 
       automaticSyncSuppressUntilRef.current =
-        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+        getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       replaceWorkoutData(downloaded.nextData);
       automaticSyncHydratedUserRef.current = session.user.id;
       markNormalizedSyncClean();
@@ -1251,7 +1161,7 @@ export default function App() {
       return;
     }
 
-    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+    if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
 
@@ -1268,7 +1178,7 @@ export default function App() {
       return;
     }
 
-    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+    if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
 
@@ -1285,7 +1195,7 @@ export default function App() {
       return;
     }
 
-    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+    if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
 
@@ -1302,7 +1212,7 @@ export default function App() {
       return;
     }
 
-    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+    if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
 
@@ -1318,7 +1228,7 @@ export default function App() {
       return;
     }
 
-    if (Date.now() < automaticSyncSuppressUntilRef.current) {
+    if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
 
@@ -1341,7 +1251,7 @@ export default function App() {
       }
 
       if (
-        Date.now() - lastAutomaticSyncAttemptRef.current <
+        getCurrentTimeMs() - lastAutomaticSyncAttemptRef.current <
         AUTO_SYNC_RESUME_INTERVAL
       ) {
         return;
@@ -1362,265 +1272,6 @@ export default function App() {
     // Latest sync state is read from refs inside runAutomaticNormalizedSync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession, indexedDbReady]);
-
-  async function uploadCurrentDataToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const data = getCurrentWorkoutData();
-
-      await uploadWorkoutSnapshot(data, STORAGE_VERSION, authSession);
-      setSyncStatus(
-        `Uploaded to cloud: ${formatBackupSummary(getWorkoutDataSummary(data))}.`
-      );
-    } catch (error) {
-      console.error("Cloud upload failed:", error);
-      setSyncStatus(`Cloud upload failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function downloadCloudData() {
-    setSyncLoading(true);
-
-    try {
-      const snapshot = await downloadWorkoutSnapshot(authSession);
-
-      if (!snapshot) {
-        setSyncStatus("No cloud snapshot found for this account.");
-        return;
-      }
-
-      const importedData = parseWorkoutBackup(
-        {
-          data: snapshot.data,
-          schemaVersion: snapshot.schema_version,
-        },
-        {
-          seedExercises,
-        }
-      );
-
-      const summary = getWorkoutDataSummary(importedData);
-      const confirmed = window.confirm(
-        `Download cloud data and replace this device's current app data?\n\n${formatBackupSummary(summary)}`
-      );
-
-      if (!confirmed) {
-        setSyncStatus("Cloud download canceled. Current data was not changed.");
-        return;
-      }
-
-      replaceWorkoutData(importedData);
-      setSyncStatus(`Downloaded from cloud: ${formatBackupSummary(summary)}.`);
-    } catch (error) {
-      console.error("Cloud download failed:", error);
-      setSyncStatus(`Cloud download failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function uploadCustomExerciseLibraryToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await uploadCustomExercises(exerciseLibrary, authSession);
-
-      setSyncStatus(
-        `Custom exercises synced: ${result.uploaded} uploaded, ${result.deleted} removed from active cloud library.`
-      );
-    } catch (error) {
-      console.error("Custom exercise sync failed:", error);
-      setSyncStatus(`Custom exercise sync failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function uploadExercisePreferencesToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await uploadExercisePreferences(exerciseLibrary, authSession);
-      const unmatchedCopy =
-        result.unmatched.length > 0
-          ? ` ${result.unmatched.length} exercises could not be matched to normalized cloud rows yet.`
-          : "";
-
-      setSyncStatus(
-        `Exercise preferences synced: ${result.uploaded} rows (${result.active} active, ${result.inactive} inactive).${unmatchedCopy}`
-      );
-    } catch (error) {
-      console.error("Exercise preference sync failed:", error);
-      setSyncStatus(`Exercise preference sync failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function downloadExercisePreferencesFromCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await downloadExerciseLibraryWithPreferences(
-        exerciseLibrary,
-        authSession
-      );
-
-      setExerciseLibrary(result.exerciseLibrary);
-      setSyncStatus(
-        `Exercise preferences downloaded: ${result.updated} local exercises updated, ${result.addedCustomExercises} custom exercises added, ${result.inactive} inactive, ${result.preferences} preference rows read.`
-      );
-    } catch (error) {
-      console.error("Exercise preference download failed:", error);
-      setSyncStatus(`Exercise preference download failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function uploadWorkoutsToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await uploadWorkouts(templates, exerciseLibrary, authSession);
-
-      setSyncStatus(
-        `Workouts synced: ${result.syncedWorkouts} workouts, ${result.syncedExercises} exercises, ${result.syncedSets} sets. Removed ${result.removedWorkouts} workouts.`
-      );
-    } catch (error) {
-      console.error("Workout sync failed:", error);
-      setSyncStatus(`Workout sync failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function downloadWorkoutsFromCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await downloadWorkouts(
-        templates,
-        exerciseLibrary,
-        authSession,
-        {
-          keepLocalOnly: false,
-        }
-      );
-
-      setTemplates(result.templates);
-      setSyncStatus(
-        `Workouts downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts removed.`
-      );
-    } catch (error) {
-      console.error("Workout download failed:", error);
-      setSyncStatus(`Workout download failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function uploadWorkoutHistoryToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await uploadWorkoutHistory(
-        history,
-        templates,
-        exerciseLibrary,
-        authSession
-      );
-
-      setSyncStatus(
-        `History synced: ${result.syncedSessions} workouts, ${result.syncedExercises} exercises, ${result.syncedSets} sets. Removed ${result.removedSessions} workouts.`
-      );
-    } catch (error) {
-      console.error("Workout history sync failed:", error);
-      setSyncStatus(`Workout history sync failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function downloadWorkoutHistoryFromCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await downloadWorkoutHistory(
-        history,
-        templates,
-        exerciseLibrary,
-        authSession,
-        {
-          keepLocalOnly: false,
-        }
-      );
-
-      setHistory(result.history);
-      setSyncStatus(
-        `History downloaded: ${result.downloaded} cloud workouts, ${result.updated} existing local workouts updated, ${result.localOnly} local-only workouts removed.`
-      );
-    } catch (error) {
-      console.error("Workout history download failed:", error);
-      setSyncStatus(`Workout history download failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function uploadPlansToCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await uploadPlans(
-        plans,
-        templates,
-        exerciseLibrary,
-        authSession
-      );
-
-      setSyncStatus(
-        `Plans synced: ${result.syncedPlans} plans, ${result.syncedPlanWorkouts} plan workouts. Removed ${result.removedPlans} plans.`
-      );
-    } catch (error) {
-      console.error("Plan sync failed:", error);
-      setSyncStatus(`Plan sync failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function downloadPlansFromCloud() {
-    setSyncLoading(true);
-
-    try {
-      const result = await downloadPlans(plans, templates, authSession, {
-        keepLocalOnly: false,
-      });
-      const resolvedPlans = resolvePlanWorkoutTemplateIds(
-        result.plans,
-        templates
-      );
-      const linkedTemplates = attachPlanLinksToTemplates(
-        templates,
-        resolvedPlans
-      );
-
-      setPlans(resolvedPlans);
-      setTemplates(linkedTemplates);
-      setSyncStatus(
-        `Plans downloaded: ${result.downloaded} cloud plans, ${result.updated} existing local plans updated, ${result.localOnly} local-only plans removed.`
-      );
-    } catch (error) {
-      console.error("Plan download failed:", error);
-      setSyncStatus(`Plan download failed: ${error.message}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
 
   async function checkNormalizedCloudData() {
     setSyncLoading(true);
@@ -1646,7 +1297,7 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      "Reset workout sync data?\n\nThis deletes normalized plans, workouts, completed workout history, saved workout sessions, and the cloud snapshot for this signed-in user. It also clears the same workout data on this device.\n\nThe exercise library and exercise preferences are kept."
+      "Reset workout sync data?\n\nThis deletes normalized plans, workouts, completed workout history, saved workout sessions, and the old snapshot row for this signed-in user. It also clears the same workout data on this device.\n\nThe exercise library and exercise preferences are kept."
     );
 
     if (!confirmed) {
@@ -1678,7 +1329,7 @@ export default function App() {
       }
 
       automaticSyncSuppressUntilRef.current =
-        Date.now() + AUTO_SYNC_SUPPRESS_MS;
+        getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       const resetData = {
         exerciseLibrary,
         exerciseMetadata: {},
@@ -1724,36 +1375,13 @@ export default function App() {
     try {
       const localData = getCurrentWorkoutData();
       const localSummary = getAuditLocalSummary(localData);
-      let snapshotSummary = null;
-      let snapshotUpdatedAt = null;
-      let normalizedSummary = null;
-
-      if (authSession) {
-        const snapshot = await downloadWorkoutSnapshot(authSession);
-
-        if (snapshot) {
-          const snapshotData = parseWorkoutBackup(
-            {
-              data: snapshot.data,
-              schemaVersion: snapshot.schema_version,
-            },
-            {
-              seedExercises,
-            }
-          );
-
-          snapshotSummary = getWorkoutDataSummary(snapshotData);
-          snapshotUpdatedAt = snapshot.updated_at;
-        }
-
-        normalizedSummary = await getNormalizedCloudSummary(authSession);
-      }
+      const normalizedSummary = authSession
+        ? await getNormalizedCloudSummary(authSession)
+        : null;
 
       setDataAuditSummary({
         local: localSummary,
         normalized: normalizedSummary,
-        snapshot: snapshotSummary,
-        snapshotUpdatedAt,
       });
       setDataAuditStatus(
         authSession
@@ -1805,6 +1433,20 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      document.documentElement.classList.add("app-ready");
+    }, STARTUP_SPLASH_MINIMUM_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [indexedDbReady]);
 
   useEffect(() => {
     function handlePwaUpdateStatus(event) {
@@ -1942,11 +1584,14 @@ export default function App() {
         localStorage.getItem(LAST_AUTO_UPDATE_CHECK_KEY) || 0
       );
 
-      if (Date.now() - lastCheck < AUTO_UPDATE_CHECK_INTERVAL) {
+      if (getCurrentTimeMs() - lastCheck < AUTO_UPDATE_CHECK_INTERVAL) {
         return;
       }
 
-      localStorage.setItem(LAST_AUTO_UPDATE_CHECK_KEY, String(Date.now()));
+      localStorage.setItem(
+        LAST_AUTO_UPDATE_CHECK_KEY,
+        String(getCurrentTimeMs())
+      );
 
       const result = await window.checkForAppUpdate({
         applyUpdate: false,
@@ -1987,7 +1632,7 @@ export default function App() {
       ...templates,
 
       {
-        id: Date.now(),
+        id: getCurrentTimeMs(),
 
         name,
 
@@ -1996,6 +1641,7 @@ export default function App() {
         lastCompleted: null,
       },
     ]);
+    requestSyncCheckpoint(["workouts"], "workout save");
   }
 
   function activatePlan(planId) {
@@ -2015,6 +1661,7 @@ export default function App() {
       ...current,
       [planId]: true,
     }));
+    requestSyncCheckpoint(["plans"], "plan status");
   }
 
   function restartPlan(planId) {
@@ -2036,6 +1683,7 @@ export default function App() {
       [planId]: true,
     }));
     setCompletedPlanActions(null);
+    requestSyncCheckpoint(["plans"], "plan restart");
   }
 
   function extendPlan(planId, weeksToAdd) {
@@ -2064,10 +1712,11 @@ export default function App() {
     }));
     setCompletedPlanActions(null);
     setExtendPlanTarget(null);
+    requestSyncCheckpoint(["plans"], "plan extend");
   }
 
   function clonePlan(plan) {
-    const clonedAt = Date.now();
+    const clonedAt = getCurrentTimeMs();
     const clonedPlanId = clonedAt;
     const clonedTemplates = (plan.workouts || []).map((planWorkout, index) => {
       const originalTemplate = templates.find(
@@ -2121,6 +1770,7 @@ export default function App() {
       [clonedPlanId]: true,
     }));
     setCompletedPlanActions(null);
+    requestSyncCheckpoint(["plans", "workouts"], "plan clone");
   }
 
   function deletePlan(plan) {
@@ -2136,15 +1786,14 @@ export default function App() {
       (plan.workouts || []).map((workout) => String(workout.templateId))
     );
 
-    markNormalizedSyncDirty(["plans", "workouts"]);
     setPlans(plans.filter((item) => item.id !== plan.id));
     setTemplates(
       templates.filter((template) => !planTemplateIds.has(String(template.id)))
     );
+    requestSyncCheckpoint(["plans", "workouts"], "plan delete");
   }
 
   function deleteStandaloneTemplate(template, { includeHistory = false } = {}) {
-    markNormalizedSyncDirty(includeHistory ? ["workouts", "history"] : ["workouts"]);
     setTemplates(templates.filter((item) => item.id !== template.id));
 
     if (includeHistory) {
@@ -2156,6 +1805,10 @@ export default function App() {
     }
 
     setConfirmDeleteTemplate(null);
+    requestSyncCheckpoint(
+      includeHistory ? ["workouts", "history"] : ["workouts"],
+      "workout delete"
+    );
   }
 
   function getTemplateHistoryCount(templateId) {
@@ -2819,72 +2472,6 @@ export default function App() {
     );
   }
 
-  function renderBackupStatusDialog() {
-    if (!backupStatus) return null;
-
-    return (
-      <div
-        role="dialog"
-        aria-live="polite"
-        aria-label="Backup status"
-        style={{
-          background: "rgba(0,0,0,0.4)",
-          inset: 0,
-          position: "fixed",
-          zIndex: 1000,
-        }}
-        onClick={() => setBackupStatus("")}
-      >
-        <div
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "8px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-            color: "var(--text)",
-            left: "50%",
-            maxWidth: "320px",
-            padding: "14px",
-            position: "fixed",
-            top: "18px",
-            transform: "translateX(-50%)",
-            width: "calc(100% - 32px)",
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            aria-label="Dismiss backup status"
-            onClick={() => setBackupStatus("")}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "22px",
-              lineHeight: 1,
-              padding: "2px 6px",
-              position: "absolute",
-              right: "6px",
-              top: "6px",
-            }}
-          >
-            ×
-          </button>
-          <div
-            style={{
-              fontSize: "14px",
-              marginBottom: "12px",
-              paddingRight: "28px",
-              textAlign: "left",
-            }}
-          >
-            {backupStatus}
-          </div>
-          <button onClick={() => setBackupStatus("")}>OK</button>
-        </div>
-      </div>
-    );
-  }
-
   function renderSettings() {
     return (
       <div
@@ -2944,50 +2531,6 @@ export default function App() {
               {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
             </div>
           )}
-        </section>
-
-        <section
-          style={{
-            margin: "18px auto",
-            maxWidth: "420px",
-          }}
-        >
-          <h3>Backup</h3>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: "8px",
-              justifyContent: "center",
-              margin: "12px 0",
-            }}
-          >
-            <button onClick={exportBackup} style={backupButtonStyle}>
-              <span aria-hidden="true">⬇️</span>
-              <span>Export Backup</span>
-            </button>
-
-            <label
-              style={{
-                ...backupButtonStyle,
-              }}
-            >
-              <span aria-hidden="true">⬆️</span>
-              <span>Import Backup</span>
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={importBackup}
-                style={{
-                  height: "1px",
-                  opacity: 0,
-                  pointerEvents: "none",
-                  position: "absolute",
-                  width: "1px",
-                }}
-              />
-            </label>
-          </div>
         </section>
 
         <section
@@ -3080,27 +2623,6 @@ export default function App() {
             {authStatus}
           </div>
           <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              justifyContent: "center",
-              marginTop: "10px",
-            }}
-          >
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadCurrentDataToCloud}
-            >
-              ⬆️ Upload to Cloud
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={downloadCloudData}
-            >
-              ⬇️ Download from Cloud
-            </button>
-          </div>
-          <div
             role="status"
             aria-live="polite"
             style={{
@@ -3118,132 +2640,83 @@ export default function App() {
               paddingTop: "10px",
             }}
           >
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginBottom: "8px",
+              }}
+            >
+              Last synced: {formatLastNormalizedSyncAt(lastNormalizedSyncAt)}
+            </div>
             <button
               disabled={!authSession || syncLoading}
               onClick={() => runAutomaticNormalizedSync("manual")}
             >
               Sync Now
             </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={pullLatestNormalizedData}
+            <div
               style={{
-                marginLeft: "8px",
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "6px",
               }}
             >
-              Pull Latest
-            </button>
+              Automatic sync runs after startup, resume, workout completion, and
+              save checkpoints.
+            </div>
+          </div>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              marginTop: "10px",
+              paddingTop: "10px",
+            }}
+          >
             <button
-              disabled={syncLoading}
-              onClick={repairLocalPlanLinks}
-              style={{
-                marginLeft: "8px",
-              }}
+              aria-expanded={showAdvancedSyncTools}
+              onClick={() => setShowAdvancedSyncTools((visible) => !visible)}
             >
-              Repair Plan Links
+              {showAdvancedSyncTools ? "Hide" : "Show"} Advanced Migration Tools
             </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadCustomExerciseLibraryToCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Sync Custom Exercises
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadExercisePreferencesToCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Sync Exercise Preferences
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={downloadExercisePreferencesFromCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Download Exercise Preferences
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadWorkoutsToCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Sync Workouts
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={downloadWorkoutsFromCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Download Workouts
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadWorkoutHistoryToCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Sync History
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={downloadWorkoutHistoryFromCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Download History
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={uploadPlansToCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Sync Plans
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={downloadPlansFromCloud}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Download Plans
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={checkNormalizedCloudData}
-              style={{
-                marginLeft: "8px",
-              }}
-            >
-              Check Normalized Data
-            </button>
-            <button
-              disabled={!authSession || syncLoading}
-              onClick={resetWorkoutSyncData}
-              style={{
-                background: "var(--danger-bg)",
-                border: "1px solid var(--danger-border)",
-                color: "var(--danger-text)",
-                marginLeft: "8px",
-              }}
-            >
-              Reset Workout Sync Data
-            </button>
+            {showAdvancedSyncTools && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  justifyContent: "center",
+                  marginTop: "10px",
+                }}
+              >
+                <button
+                  disabled={!authSession || syncLoading}
+                  onClick={pullLatestNormalizedData}
+                >
+                  Pull Latest
+                </button>
+                <button disabled={syncLoading} onClick={repairLocalPlanLinks}>
+                  Repair Plan Links
+                </button>
+                <button
+                  disabled={!authSession || syncLoading}
+                  onClick={checkNormalizedCloudData}
+                >
+                  Check Normalized Data
+                </button>
+                <button
+                  disabled={!authSession || syncLoading}
+                  onClick={resetWorkoutSyncData}
+                  style={{
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger-border)",
+                    color: "var(--danger-text)",
+                  }}
+                >
+                  Reset Workout Sync Data
+                </button>
+              </div>
+            )}
             <div
               style={{
                 color: "var(--text-muted)",
@@ -3277,8 +2750,7 @@ export default function App() {
                 margin: "0 0 8px",
               }}
             >
-              Read-only check of local data, cloud snapshot data, and normalized
-              Supabase rows.
+              Read-only check of local data and normalized Supabase rows.
             </p>
             <button disabled={syncLoading} onClick={runPersistenceAudit}>
               Check Persistence
@@ -3409,38 +2881,6 @@ export default function App() {
                     padding: "8px",
                   }}
                 >
-                  <strong>Cloud snapshot</strong>
-                  <div
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                    }}
-                  >
-                    {dataAuditSummary.snapshot
-                      ? `${formatAuditSnapshotSummary(
-                          dataAuditSummary.snapshot
-                        )}${
-                          dataAuditSummary.snapshotUpdatedAt
-                            ? ` Last updated ${new Date(
-                                dataAuditSummary.snapshotUpdatedAt
-                              ).toLocaleString()}.`
-                            : ""
-                        }`
-                      : authSession
-                        ? "No cloud snapshot found for this account."
-                        : "Sign in to check cloud snapshot data."}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    padding: "8px",
-                  }}
-                >
                   <strong>Normalized Supabase</strong>
                   <div
                     style={{
@@ -3479,8 +2919,6 @@ export default function App() {
             )}
           </div>
         </section>
-
-        {renderBackupStatusDialog()}
       </div>
     );
   }
@@ -3494,7 +2932,10 @@ export default function App() {
       <ExerciseView
         exerciseLibrary={exerciseLibrary}
         history={history}
-        setExerciseLibrary={setExerciseLibrary}
+        setExerciseLibrary={(nextExerciseLibrary) => {
+          setExerciseLibrary(nextExerciseLibrary);
+          requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
+        }}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
       />,
@@ -3508,7 +2949,10 @@ export default function App() {
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         history={history}
-        onSave={goHome}
+        onSave={() => {
+          goHome();
+          requestSyncCheckpoint(["plans", "workouts"], "plan save");
+        }}
         plans={plans}
         setPlans={setPlans}
         setTemplates={setTemplates}
@@ -3582,7 +3026,10 @@ export default function App() {
       <TemplateView
         template={selectedTemplate}
         templates={templates}
-        setTemplates={setTemplates}
+        setTemplates={(nextTemplates) => {
+          setTemplates(nextTemplates);
+          requestSyncCheckpoint(["workouts"], "workout save");
+        }}
         exerciseLibrary={exerciseLibrary}
         setSelectedSessionId={setSelectedSessionId}
         sessions={sessions}
@@ -3811,7 +3258,7 @@ export default function App() {
                     const copy = {
                       ...template,
 
-                      id: Date.now(),
+                      id: getCurrentTimeMs(),
 
                       name: template.name + " copy",
 
@@ -3819,6 +3266,7 @@ export default function App() {
                     };
 
                     setTemplates([...templates, copy]);
+                    requestSyncCheckpoint(["workouts"], "workout save");
                   }}
                 >
                   ⧉

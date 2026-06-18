@@ -1483,5 +1483,68 @@
     "lineNumber": 167,
     "name": "Front Raises",
     "sourceKey": "manual-2026-06-09:front-raises-ez-curl-bar"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Sumo Goblet Squats Dumbbells exercise demonstration",
+    "imageFile": "2. Sumo Goblet Squats.gif",
+    "imageUrl": "exercise-media/manual-2026-06-17-sumo-goblet-squats-dumbbells.gif",
+    "lineNumber": 168,
+    "name": "Sumo Goblet Squats",
+    "sourceKey": "manual-2026-06-17:sumo-goblet-squats-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Goblet Squat 2 Sec Hold Dumbbells exercise demonstration",
+    "imageFile": "3. Goblet Squat 2 Sec Hold.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-goblet-squat-2-sec-hold-dumbbells.webp",
+    "lineNumber": 169,
+    "name": "Goblet Squat 2 Sec Hold",
+    "sourceKey": "manual-2026-06-17:goblet-squat-2-sec-hold-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Goblet Split Squat Dumbbells exercise demonstration",
+    "imageFile": "4. Goblet Split Squat.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-goblet-split-squat-dumbbells.webp",
+    "lineNumber": 170,
+    "name": "Goblet Split Squat",
+    "sourceKey": "manual-2026-06-17:goblet-split-squat-dumbbells"
+  },
+  {
+    "equipment": "Dumbbells",
+    "imageAlt": "Goblet Squat Jump Dumbbells exercise demonstration",
+    "imageFile": "5. Goblet Squat Jump.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-goblet-squat-jump-dumbbells.webp",
+    "lineNumber": 171,
+    "name": "Goblet Squat Jump",
+    "sourceKey": "manual-2026-06-17:goblet-squat-jump-dumbbells"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "Landmine Press Landmine exercise demonstration",
+    "imageFile": "6. Landmine Press.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-landmine-press-landmine.webp",
+    "lineNumber": 172,
+    "name": "Landmine Press",
+    "sourceKey": "manual-2026-06-17:landmine-press-landmine"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "Landmine Single Arm Press Landmine exercise demonstration",
+    "imageFile": "7. Landmine Single Arm Press.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-landmine-single-arm-press-landmine.webp",
+    "lineNumber": 173,
+    "name": "Landmine Single Arm Press",
+    "sourceKey": "manual-2026-06-17:landmine-single-arm-press-landmine"
+  },
+  {
+    "equipment": "Landmine",
+    "imageAlt": "Landmine Front Squat Landmine exercise demonstration",
+    "imageFile": "8. Landmine Front Squat.webp",
+    "imageUrl": "exercise-media/manual-2026-06-17-landmine-front-squat-landmine.webp",
+    "lineNumber": 174,
+    "name": "Landmine Front Squat",
+    "sourceKey": "manual-2026-06-17:landmine-front-squat-landmine"
   }
 ]

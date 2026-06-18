@@ -1245,21 +1245,46 @@ function normalizeLookupValue(value) {
   }
 
   function updateExerciseSupersetGroup(exerciseId, supersetGroup) {
-    updateSession((s) => ({
-      ...s,
+    updateSession((s) => {
+      const currentGroup = s.exercises.find(
+        (exercise) => exercise.id === exerciseId
+      )?.supersetGroup;
+      const groupsToReset = new Set([currentGroup, supersetGroup].filter(Boolean));
 
-      templateChanged: true,
+      return {
+        ...s,
 
-      exercises: s.exercises.map((ex) =>
-        ex.id === exerciseId
-          ? {
-              ...ex,
+        templateChanged: true,
+        supersetOrders: Object.fromEntries(
+          Object.entries(s.supersetOrders || {}).filter(
+            ([group]) => !groupsToReset.has(group)
+          )
+        ),
 
-              supersetGroup,
-            }
-          : ex
-      ),
-    }));
+        exercises: s.exercises.map((ex) =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+
+                supersetGroup,
+              }
+            : ex
+        ),
+      };
+    });
+  }
+
+  function editExerciseSupersetGroup(exercise) {
+    const group = prompt(
+      "Superset group (A, B, etc). Leave empty to clear.",
+      exercise.supersetGroup || ""
+    );
+
+    if (group === null) {
+      return;
+    }
+
+    updateExerciseSupersetGroup(exercise.id, group.trim() || null);
   }
 
   function replaceExercise(oldExerciseId, newExercise, replacementValues) {
@@ -2761,26 +2786,63 @@ function normalizeLookupValue(value) {
                   </>
                 }
 
-                <button
+                <div
                   style={{
                     alignItems: "center",
                     display: "inline-flex",
                     gap: "5px",
+                    justifyContent: "center",
                   }}
-                  onClick={() =>
-                    addSet(
-                      exercise.id,
-
-                      [...exercise.sets]
-
-                        .reverse()
-
-                        .find((s) => s.actualWeight || s.targetWeight)
-                    )
-                  }
                 >
-                  <Plus size={15} /> Add Set
-                </button>
+                  <button
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "5px",
+                    }}
+                    onClick={() =>
+                      addSet(
+                        exercise.id,
+
+                        [...exercise.sets]
+
+                          .reverse()
+
+                          .find((s) => s.actualWeight || s.targetWeight)
+                      )
+                    }
+                  >
+                    <Plus size={15} /> Add Set
+                  </button>
+
+                  <IconButton
+                    label={
+                      exercise.supersetGroup
+                        ? `Edit superset ${exercise.supersetGroup}`
+                        : "Link superset"
+                    }
+                    onClick={() => editExerciseSupersetGroup(exercise)}
+                    size={exercise.supersetGroup ? 40 : 34}
+                    style={{
+                      color: exercise.supersetGroup
+                        ? "var(--accent)"
+                        : "var(--text-muted)",
+                    }}
+                  >
+                    <Link2 size={16} />
+                    {exercise.supersetGroup && (
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          marginLeft: "-3px",
+                        }}
+                      >
+                        {exercise.supersetGroup}
+                      </span>
+                    )}
+                  </IconButton>
+                </div>
               </div>
             ))}
           </div>

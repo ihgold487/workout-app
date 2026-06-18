@@ -6,12 +6,11 @@ sync to durable per-user cloud persistence.
 ## Current State
 
 - IndexedDB `appData` is the daily local source of truth for workout data.
-- Manual JSON export/import is the safest complete user-controlled backup.
-- Manual cloud snapshot upload/download stores the same full app data in
-  `public.workout_data_snapshots`.
-- Normalized Supabase upload exists for parts of the workout model:
-  custom exercises, planned workouts, and workout history.
-- Normalized Supabase download/hydration is not yet the normal app path.
+- Normalized Supabase upload/download is the primary persistence path for
+  exercise preferences, custom exercises, workout templates, completed workout
+  history, and training plans.
+- The old manual JSON export/import and cloud snapshot buttons have been removed
+  from Settings to avoid competing persistence paths.
 - Nutrition and body weight UI currently persist locally with `localStorage`,
   even though normalized Supabase tables already exist for nutrition entries,
   foods, daily targets, and body measurements.
@@ -24,10 +23,8 @@ sync to durable per-user cloud persistence.
   after first sign-in, on app open, after a hard quit/reopen, and on resume.
 - Local edits are saved immediately, then synced to Supabase automatically when
   signed in and online.
-- Snapshot backup remains as a temporary recovery mechanism during migration,
-  not the main sync path.
-- Global JSON export/import is temporary migration safety tooling. The long-term
-  product should rely on automatic local saves plus automatic database sync.
+- The product should rely on automatic local saves plus automatic normalized
+  database sync.
 - Future export features, if needed, should be record/report exports such as
   workout history, exercise history, nutrition logs, or chart data. They should
   not require a matching global import path.
@@ -67,17 +64,14 @@ Every persisted domain must have:
 ### Phase 1: Audit And Safety Net
 
 - Keep IndexedDB snapshot persistence unchanged.
-- Keep manual JSON export/import.
-- Keep cloud snapshot upload/download.
 - Add or maintain a data audit checklist that compares local data categories
   with normalized cloud categories.
 
 Test:
 
-- Export JSON backup before each persistence change.
-- Import that backup into the same device and verify counts.
-- Upload/download snapshot and verify templates, plans, history, exercises, and
-  active exercise status survive.
+- Use persistence audit before and after persistence changes.
+- Verify templates, plans, history, exercises, and active exercise status survive
+  normalized sync round trips.
 
 ### Phase 2: Exercise Library And Preferences
 
@@ -216,6 +210,9 @@ Initial implementation checkpoint:
   debounced full sync.
 - Completed workouts trigger an immediate sync attempt because they are durable
   training records.
+- Plan/workout save checkpoints now request automatic normalized sync for the
+  affected broad domains, including generated plan saves, plan status changes,
+  template edits, template deletion, and exercise preference changes.
 - App focus, visibility resume, and returning online trigger periodic automatic
   sync checks.
 - Startup/resume sync skips the expensive normalized upload path when local data
@@ -238,11 +235,13 @@ Initial implementation checkpoint:
   flags. This is a migration/debugging safety rail for accepting cloud as
   authoritative on a device with stale local data.
 - A temporary `Reset Workout Sync Data` button clears normalized plans,
-  workouts, completed history, saved sessions, and the snapshot row for the
+  workouts, completed history, saved sessions, and the old snapshot row for the
   signed-in user, then clears the matching local workout data on that device.
   Built-in exercises, custom exercises, and exercise preferences are preserved.
   This is only for establishing a clean sync baseline during migration testing.
-- Manual sync buttons remain available as migration safety rails.
+- Settings now shows normal sync controls by default. Advanced migration tools
+  are limited to pull latest, repair plan links, normalized cloud count checks,
+  and reset workout sync data.
 - Additional save checkpoints, fine-grained dirty records, explicit conflict UI,
   nutrition/body-weight sync, and normalized in-progress workout sessions remain
   pending.
@@ -264,5 +263,5 @@ Settings should eventually show:
 - optional export tools for specific records or history reports
 
 Manual "upload to cloud", "download from cloud", global JSON export/import, and
-snapshot restore should be removed or hidden once normalized automatic sync is
-proven. During migration, they remain useful as safety rails.
+snapshot restore have been removed from Settings now that normalized automatic
+sync is the primary path.
