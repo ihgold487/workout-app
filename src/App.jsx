@@ -601,6 +601,8 @@ export default function App() {
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [templatePreviewEditActive, setTemplatePreviewEditActive] =
+    useState(false);
 
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState(null);
 
@@ -2328,6 +2330,10 @@ export default function App() {
   }
 
   function goHome() {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
     const activePlan = plans.find((plan) => plan.status === "active");
 
     if (activePlan) {
@@ -2347,6 +2353,10 @@ export default function App() {
   }
 
   function goExercises() {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
     setShowExercises(true);
     setShowPlans(false);
     setShowNutrition(false);
@@ -2357,6 +2367,10 @@ export default function App() {
   }
 
   function goPlans() {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
     setShowExercises(false);
     setShowPlans(true);
     setShowNutrition(false);
@@ -2367,6 +2381,10 @@ export default function App() {
   }
 
   function goNutrition() {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
     setShowExercises(false);
     setShowPlans(false);
     setShowNutrition(true);
@@ -2377,6 +2395,10 @@ export default function App() {
   }
 
   function goSettings() {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
     setShowExercises(false);
     setShowPlans(false);
     setShowNutrition(false);
@@ -2444,9 +2466,25 @@ export default function App() {
             <button
               key={item.key}
               aria-current={active ? "page" : undefined}
+              disabled={templatePreviewEditActive}
               onClick={item.onClick}
+              title={
+                templatePreviewEditActive
+                  ? "Finish workout edits with OK or Cancel first."
+                  : item.label
+              }
               style={
-                active ? activeBottomNavButtonStyle : bottomNavButtonStyle
+                templatePreviewEditActive
+                  ? {
+                      ...(active
+                        ? activeBottomNavButtonStyle
+                        : bottomNavButtonStyle),
+                      cursor: "not-allowed",
+                      opacity: 0.38,
+                    }
+                  : active
+                    ? activeBottomNavButtonStyle
+                    : bottomNavButtonStyle
               }
             >
               <Icon size={20} strokeWidth={active ? 2.5 : 2} />
@@ -3017,6 +3055,7 @@ export default function App() {
         setExerciseMetadata={setExerciseMetadata}
         setSelectedSessionId={setSelectedSessionId}
         setSelectedTemplateId={setSelectedTemplateId}
+        onEditModeChange={setTemplatePreviewEditActive}
       />
     );
   }

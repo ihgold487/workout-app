@@ -115,6 +115,7 @@ export default function TemplateView({
   sessions,
   setSessions,
   setSelectedSessionId,
+  onEditModeChange,
 }) {
   const [search, setSearch] = useState("");
 
@@ -141,6 +142,13 @@ export default function TemplateView({
   const [detailExercise, setDetailExercise] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
+  const [addToWorkoutsState, setAddToWorkoutsState] = useState({
+    added: false,
+    templateId: null,
+  });
+  const addedToWorkouts =
+    addToWorkoutsState.added &&
+    String(addToWorkoutsState.templateId) === String(template.id);
   const linkedPlan = plans.find((item) => item.id === template.planId);
   const currentPlanWeek = linkedPlan?.currentWeek || 1;
   const planWorkoutCompleteThisWeek = Boolean(
@@ -240,6 +248,7 @@ export default function TemplateView({
 
     setEditSnapshot(cloneTemplateEditState(sourceTemplate));
     setIsEditMode(true);
+    onEditModeChange?.(true);
   }
 
   function updateCurrentTemplate(updater, { requireEdit = true } = {}) {
@@ -297,6 +306,11 @@ export default function TemplateView({
     );
     setIsEditMode(false);
     setEditSnapshot(null);
+    onEditModeChange?.(false);
+    setAddToWorkoutsState({
+      added: false,
+      templateId: template.id,
+    });
   }
 
   function cancelEditMode() {
@@ -326,6 +340,7 @@ export default function TemplateView({
     setEditingExerciseDraft(null);
     setIsEditMode(false);
     setEditSnapshot(null);
+    onEditModeChange?.(false);
   }
 
   function formatTargetValue(value, fallback = "") {
@@ -576,6 +591,10 @@ export default function TemplateView({
       )
     );
     setEditingTemplateName(false);
+    setAddToWorkoutsState({
+      added: false,
+      templateId: template.id,
+    });
   }
 
   function addPlanWorkoutToWorkouts() {
@@ -600,6 +619,10 @@ export default function TemplateView({
     };
 
     setTemplates([...templates, copy]);
+    setAddToWorkoutsState({
+      added: true,
+      templateId: template.id,
+    });
   }
 
   function getLatestWorkoutPerformance(exerciseId) {
@@ -714,6 +737,7 @@ export default function TemplateView({
 
         {isPlanWorkout && !isEditMode && (
           <button
+            disabled={addedToWorkouts}
             onClick={addPlanWorkoutToWorkouts}
             style={{
               alignItems: "center",
@@ -721,7 +745,15 @@ export default function TemplateView({
               gap: "6px",
             }}
           >
-            <Plus size={16} /> Add to Workouts
+            {addedToWorkouts ? (
+              <>
+                <Check size={16} /> Added
+              </>
+            ) : (
+              <>
+                <Plus size={16} /> Add to Workouts
+              </>
+            )}
           </button>
         )}
       </div>
@@ -1115,6 +1147,19 @@ export default function TemplateView({
       }
       {isEditMode && (
         <div
+          aria-hidden="true"
+          style={{
+            bottom: 0,
+            left: 0,
+            position: "fixed",
+            right: 0,
+            top: "calc(100vh - 62px - env(safe-area-inset-bottom))",
+            zIndex: 1090,
+          }}
+        />
+      )}
+      {isEditMode && (
+        <div
           style={{
             alignItems: "center",
             background: "var(--surface)",
@@ -1136,21 +1181,39 @@ export default function TemplateView({
             onClick={cancelEditMode}
             style={{
               alignItems: "center",
+              background: "var(--danger-bg)",
+              border: "1px solid var(--danger-text)",
+              borderRadius: "999px",
+              color: "var(--danger-text)",
               display: "inline-flex",
-              gap: "6px",
+              fontWeight: "bold",
+              gap: "8px",
+              justifyContent: "center",
+              minHeight: "46px",
+              minWidth: "132px",
+              padding: "10px 18px",
             }}
           >
-            Cancel <X size={16} />
+            Cancel <X size={20} strokeWidth={2.6} />
           </button>
           <button
             onClick={commitEditMode}
             style={{
               alignItems: "center",
+              background: "var(--success-bg)",
+              border: "1px solid var(--success-text)",
+              borderRadius: "999px",
+              color: "var(--success-text)",
               display: "inline-flex",
-              gap: "6px",
+              fontWeight: "bold",
+              gap: "8px",
+              justifyContent: "center",
+              minHeight: "46px",
+              minWidth: "132px",
+              padding: "10px 18px",
             }}
           >
-            OK <Check size={16} />
+            OK <Check size={20} strokeWidth={2.8} />
           </button>
         </div>
       )}
