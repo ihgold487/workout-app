@@ -1,25 +1,285 @@
 import { useMemo, useState } from "react";
-import { BarChart3, RefreshCw, Replace, Save, X } from "lucide-react";
+import {
+  BarChart3,
+  GripVertical,
+  Link2,
+  RefreshCw,
+  Replace,
+  Save,
+  X,
+} from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  pointerWithin,
+  useDroppable,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import WeightPickerModal from "./WeightPickerModal";
+import {
+  WorkoutExercisePreviewGroup,
+  WorkoutExercisePreviewRow,
+} from "./WorkoutExercisePreviewList";
+import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import {
   createPlanExercise,
   generatePlanWorkouts,
 } from "../plans/planType2Generator";
 
-function formatEquipment(equipment) {
-  if (Array.isArray(equipment)) {
-    return equipment.filter(Boolean).join(", ");
+function formatList(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(", ");
   }
 
-  return equipment || "";
+  return value || "";
+}
+
+function normalizeLookupValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getExerciseKey(exercise) {
+  return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
+    formatList(exercise?.equipment)
+  )}`;
+}
+
+function getExerciseDetailRecord(exercise, exerciseLibrary) {
+  const exerciseKey = getExerciseKey(exercise);
+  const idMatch = exercise.exerciseId
+    ? exerciseLibrary.find(
+        (libraryExercise) =>
+          String(libraryExercise.id) === String(exercise.exerciseId)
+      )
+    : null;
+  const keyMatches = exerciseLibrary.filter(
+    (libraryExercise) => getExerciseKey(libraryExercise) === exerciseKey
+  );
+  const libraryExercise =
+    keyMatches.find((libraryItem) => libraryItem.imageUrl) ||
+    keyMatches[0] ||
+    idMatch ||
+    null;
+  const muscles = Array.isArray(exercise.muscles)
+    ? exercise.muscles
+    : Array.isArray(libraryExercise?.muscles)
+      ? libraryExercise.muscles
+      : [exercise.planMuscle].filter(Boolean);
+
+  return {
+    ...(libraryExercise || {}),
+    ...exercise,
+    equipment: exercise.equipment || libraryExercise?.equipment || [],
+    id: exercise.exerciseId || libraryExercise?.id || exercise.id,
+    imageAlt: libraryExercise?.imageAlt || exercise.imageAlt || "",
+    imageUrl: libraryExercise?.imageUrl || exercise.imageUrl || "",
+    muscles,
+  };
+}
+
+function dayPointerThenClosestCenter(args) {
+  const dayIntersections = pointerWithin(args).filter((intersection) =>
+    String(intersection.id).startsWith("day:")
+  );
+
+  return dayIntersections.length > 0
+    ? dayIntersections
+    : closestCenter(args);
+}
+
+function getEffectivePrimaryMuscle(exercise) {
+  return exercise?.muscles?.[0] || exercise?.planMuscle || "";
+}
+
+function findWorkoutIndexForSlot(layout, slotKey) {
+  return layout.findIndex((slotKeys) => slotKeys.includes(slotKey));
+}
+
+function moveSlotInLayout(layout, activeSlotKey, overId) {
+  const nextLayout = layout.map((slotKeys) => [...slotKeys]);
+  const fromWorkoutIndex = findWorkoutIndexForSlot(nextLayout, activeSlotKey);
+
+  if (fromWorkoutIndex < 0) {
+    return layout;
+  }
+
+  const fromIndex = nextLayout[fromWorkoutIndex].indexOf(activeSlotKey);
+  const overValue = String(overId || "");
+  const isDayDrop = overValue.startsWith("day:");
+  const isWorkoutDrop = overValue.startsWith("workout:");
+  const isSupersetDrop = overValue.startsWith("superset:");
+  const toWorkoutIndex = isDayDrop
+    ? Number(overValue.replace("day:", ""))
+    : isWorkoutDrop
+    ? Number(overValue.replace("workout:", ""))
+    : isSupersetDrop
+      ? Number(overValue.split(":")[1])
+      : findWorkoutIndexForSlot(nextLayout, overValue);
+
+  if (!Number.isInteger(toWorkoutIndex) || toWorkoutIndex < 0) {
+    return layout;
+  }
+
+  if (!isWorkoutDrop && fromWorkoutIndex === toWorkoutIndex) {
+    const toIndex = nextLayout[toWorkoutIndex].indexOf(overValue);
+
+    if (toIndex < 0 || fromIndex === toIndex) {
+      return layout;
+    }
+
+    nextLayout[toWorkoutIndex] = arrayMove(
+      nextLayout[toWorkoutIndex],
+      fromIndex,
+      toIndex
+    );
+    return nextLayout;
+  }
+
+  const [movedSlotKey] = nextLayout[fromWorkoutIndex].splice(fromIndex, 1);
+  const toIndex = isDayDrop || isWorkoutDrop || isSupersetDrop
+    ? nextLayout[toWorkoutIndex].length
+    : nextLayout[toWorkoutIndex].indexOf(overValue);
+
+  nextLayout[toWorkoutIndex].splice(
+    toIndex < 0 ? nextLayout[toWorkoutIndex].length : toIndex,
+    0,
+    movedSlotKey
+  );
+
+  return nextLayout;
+}
+
+function getDropSupersetGroup(overId, previewWorkouts) {
+  const overValue = String(overId || "");
+
+  if (overValue.startsWith("superset:")) {
+    return decodeURIComponent(overValue.split(":").slice(2).join(":"));
+  }
+
+  if (overValue.startsWith("day:") || overValue.startsWith("workout:")) {
+    return null;
+  }
+
+  const targetExercise = previewWorkouts
+    .flatMap((workout) => workout.exercises)
+    .find((exercise) => exercise.previewSlotKey === overValue);
+
+  return targetExercise?.supersetGroup || null;
+}
+
+function SortablePlanExerciseRow({ children, slotKey }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({
+      id: slotKey,
+    });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({
+        attributes,
+        listeners,
+      })}
+    </div>
+  );
+}
+
+function PlanWorkoutDropZone({ children, workoutKey }) {
+  const { setNodeRef } = useDroppable({
+    id: `workout:${workoutKey}`,
+  });
+
+  return <div ref={setNodeRef}>{children}</div>;
+}
+
+function PlanSupersetDropZone({ children, group, workoutKey }) {
+  const { setNodeRef } = useDroppable({
+    disabled: !group,
+    id: `superset:${workoutKey}:${encodeURIComponent(group || "")}`,
+  });
+
+  return <div ref={setNodeRef}>{children}</div>;
+}
+
+function PlanDayButton({ active, count, label, onClick, workoutKey }) {
+  const { isOver, setNodeRef } = useDroppable({
+    disabled: active,
+    id: `day:${workoutKey}`,
+  });
+  const highlighted = isOver && !active;
+
+  return (
+    <button
+      ref={setNodeRef}
+      aria-pressed={active}
+      onClick={onClick}
+      style={{
+        background: active
+          ? "var(--accent)"
+          : highlighted
+            ? "var(--surface-muted)"
+            : "var(--surface-raised)",
+        border: active
+          ? "1px solid var(--accent)"
+          : highlighted
+            ? "2px solid var(--accent)"
+            : "1px solid var(--border)",
+        boxShadow: highlighted ? "0 0 0 3px var(--accent-bg)" : "none",
+        color: active
+          ? "#fff"
+          : highlighted
+            ? "var(--accent)"
+            : "var(--text)",
+        display: "inline-flex",
+        flex: "1 1 0",
+        fontSize: "13px",
+        fontWeight: active ? "bold" : "normal",
+        justifyContent: "center",
+        minHeight: "38px",
+        minWidth: 0,
+        padding: highlighted ? "5px 7px" : "6px 8px",
+      }}
+    >
+      {label}
+      <span
+        style={{
+          color:
+            active || highlighted
+              ? active
+                ? "rgba(255,255,255,.78)"
+                : "var(--accent)"
+              : "var(--text-muted)",
+          fontSize: "11px",
+          marginLeft: "4px",
+        }}
+      >
+        ({count})
+      </span>
+    </button>
+  );
 }
 
 function getWorkoutSummary(workouts) {
   const workoutList = Array.isArray(workouts) ? workouts : [workouts];
   const exercises = workoutList.flatMap((workout) => workout.exercises);
   const muscleSets = exercises.reduce((summary, exercise) => {
-    const muscle = exercise.planMuscle || exercise.muscles?.[0] || "Unknown";
+    const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
 
     summary[muscle] = (summary[muscle] || 0) + exercise.sets.length;
 
@@ -222,26 +482,14 @@ function getDefaultPlanName(planType, daysPerWeek, durationWeeks) {
 }
 
 function PlanWorkoutPreview({
+  exerciseLibrary,
+  onEditSuperset,
   onRenameWorkout,
   onReplaceExercise,
+  onShowExerciseDetail,
   onShowSummary,
   workout,
 }) {
-  const groupedExercises = workout.exercises.reduce((groups, exercise) => {
-    const key = exercise.supersetGroup || `single-${exercise.id}`;
-
-    if (!groups[key]) {
-      groups[key] = {
-        label: exercise.supersetGroup,
-        exercises: [],
-      };
-    }
-
-    groups[key].exercises.push(exercise);
-
-    return groups;
-  }, {});
-
   return (
     <section
       style={{
@@ -290,99 +538,119 @@ function PlanWorkoutPreview({
         </button>
       </div>
 
-      {Object.values(groupedExercises).map((group) => (
+      <PlanWorkoutDropZone workoutKey={workout.previewWorkoutKey}>
         <div
-          key={group.label || group.exercises[0].id}
           style={{
-            background: group.label ? "var(--surface-muted)" : "transparent",
-            borderLeft: group.label ? "4px solid #1769aa" : "none",
-            borderRadius: "6px",
-            marginBottom: "10px",
-            padding: group.label ? "8px 10px" : "4px 0",
+            minHeight: "24px",
           }}
         >
-          {group.label && (
-            <div
-              style={{
-                color: "#1769aa",
-                fontSize: "12px",
-                fontWeight: "bold",
-                marginBottom: "6px",
-              }}
+          {getGroupedPreviewExercises(workout.exercises).map((group) => (
+            <PlanSupersetDropZone
+              key={group.group || group.exercises[0].id}
+              group={group.group}
+              workoutKey={workout.previewWorkoutKey}
             >
-              Superset {group.label}
-            </div>
-          )}
+              <WorkoutExercisePreviewGroup group={group.group}>
+                {group.exercises.map((exercise) => {
+                  const exerciseDetail = getExerciseDetailRecord(
+                    exercise,
+                    exerciseLibrary
+                  );
 
-          {group.exercises.map((exercise) => {
-            const firstSet = exercise.sets[0];
+                  return (
+                    <SortablePlanExerciseRow
+                      key={exercise.previewSlotKey}
+                      slotKey={exercise.previewSlotKey}
+                    >
+                      {({ attributes, listeners }) => (
+                      <WorkoutExercisePreviewRow
+                        exercise={exercise}
+                        exerciseDetail={exerciseDetail}
+                        onExerciseClick={() => onShowExerciseDetail(exerciseDetail)}
+                        leadingControl={
+                          <span
+                            {...attributes}
+                            {...listeners}
+                            style={{
+                              alignItems: "center",
+                              background: "var(--surface-raised)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "999px",
+                              color: "var(--text-muted)",
+                              cursor: "grab",
+                              display: "inline-flex",
+                              height: "32px",
+                              justifyContent: "center",
+                              padding: 0,
+                              touchAction: "none",
+                              userSelect: "none",
+                              width: "32px",
+                            }}
+                          >
+                            <GripVertical size={17} />
+                          </span>
+                        }
+                        actions={
+                          <>
+                            <button
+                              aria-label={
+                                exercise.supersetGroup
+                                  ? `Edit superset ${exercise.supersetGroup}`
+                                  : "Link superset"
+                              }
+                              onClick={() => onEditSuperset(exercise)}
+                              style={{
+                                alignItems: "center",
+                                color: exercise.supersetGroup
+                                  ? "var(--accent)"
+                                  : "var(--text-muted)",
+                                display: "inline-flex",
+                                gap: "1px",
+                                justifyContent: "center",
+                                minHeight: "32px",
+                                minWidth: exercise.supersetGroup ? "40px" : "34px",
+                                padding: "4px 6px",
+                              }}
+                            >
+                              <Link2 size={16} />
+                              {exercise.supersetGroup && (
+                                <span
+                                  style={{
+                                    fontSize: "10px",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {exercise.supersetGroup}
+                                </span>
+                              )}
+                            </button>
 
-            return (
-              <div
-                key={exercise.id}
-                style={{
-                  display: "grid",
-                  gap: "2px",
-                  marginBottom: "8px",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "grid",
-                    gap: "8px",
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
-                  }}
-                >
-                  <strong
-                    style={{
-                      lineHeight: 1.15,
-                      minWidth: 0,
-                    }}
-                  >
-                    {exercise.name}
-                  </strong>
-
-                  <button
-                    aria-label={`Replace ${exercise.name}`}
-                    onClick={() => onReplaceExercise(exercise)}
-                    style={{
-                      fontSize: "18px",
-                      lineHeight: 1,
-                      minHeight: "30px",
-                      minWidth: "34px",
-                      padding: "4px 6px",
-                    }}
-                  >
-                    <Replace size={17} />
-                  </button>
-                </div>
-                <span
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                  }}
-                >
-                  {[exercise.planMuscle, formatEquipment(exercise.equipment)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-                <span
-                  style={{
-                    fontSize: "12px",
-                  }}
-                >
-                  {exercise.sets.length} sets ·{" "}
-                  {firstSet.targetWeight
-                    ? `${firstSet.targetWeight} × ${firstSet.targetReps}`
-                    : `weight TBD × ${firstSet.targetReps}`}
-                  {firstSet.targetRir ? ` @ ${firstSet.targetRir} RIR` : ""}
-                </span>
-              </div>
-            );
-          })}
+                            <button
+                              aria-label={`Replace ${exercise.name}`}
+                              onClick={() => onReplaceExercise(exercise)}
+                              style={{
+                                alignItems: "center",
+                                display: "inline-flex",
+                                justifyContent: "center",
+                                minHeight: "32px",
+                                minWidth: "34px",
+                                padding: "4px 6px",
+                              }}
+                            >
+                              <Replace size={17} />
+                            </button>
+                          </>
+                        }
+                      />
+                      )}
+                    </SortablePlanExerciseRow>
+                  );
+                })}
+              </WorkoutExercisePreviewGroup>
+            </PlanSupersetDropZone>
+          ))}
         </div>
-      ))}
+      </PlanWorkoutDropZone>
     </section>
   );
 }
@@ -442,7 +710,11 @@ export default function PlansView({
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState("");
   const [summaryWorkout, setSummaryWorkout] = useState(null);
+  const [detailExercise, setDetailExercise] = useState(null);
   const [activeValuePicker, setActiveValuePicker] = useState(null);
+  const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
+  const [exerciseLayoutByWorkout, setExerciseLayoutByWorkout] = useState(null);
+  const [supersetGroupBySlot, setSupersetGroupBySlot] = useState({});
 
   const generatedPlan = useMemo(
     () =>
@@ -472,6 +744,60 @@ export default function PlansView({
     ]
   );
 
+  const exerciseSlotByKey = useMemo(() => {
+    const slots = new Map();
+
+    generatedPlan.workouts.forEach((workout, workoutIndex) => {
+      workout.exercises.forEach((exercise) => {
+        const slotKey = `${workoutIndex}:${exercise.id}`;
+
+        slots.set(slotKey, {
+          exercise,
+          slotKey,
+          workoutIndex,
+        });
+      });
+    });
+
+    return slots;
+  }, [generatedPlan.workouts]);
+
+  const normalizedExerciseLayout = useMemo(() => {
+    const defaultLayout = generatedPlan.workouts.map((workout, workoutIndex) =>
+      workout.exercises.map((exercise) => `${workoutIndex}:${exercise.id}`)
+    );
+
+    if (!exerciseLayoutByWorkout) {
+      return defaultLayout;
+    }
+
+    const validSlotKeys = new Set(exerciseSlotByKey.keys());
+    const usedSlotKeys = new Set();
+    const layout = generatedPlan.workouts.map((workout, workoutIndex) => {
+      const savedSlotKeys = exerciseLayoutByWorkout[workoutIndex] || [];
+
+      return savedSlotKeys.filter((slotKey) => {
+        if (!validSlotKeys.has(slotKey) || usedSlotKeys.has(slotKey)) {
+          return false;
+        }
+
+        usedSlotKeys.add(slotKey);
+        return true;
+      });
+    });
+
+    defaultLayout.forEach((slotKeys, workoutIndex) => {
+      slotKeys.forEach((slotKey) => {
+        if (!usedSlotKeys.has(slotKey)) {
+          layout[workoutIndex].push(slotKey);
+          usedSlotKeys.add(slotKey);
+        }
+      });
+    });
+
+    return layout;
+  }, [exerciseLayoutByWorkout, exerciseSlotByKey, generatedPlan.workouts]);
+
   const previewWorkouts = useMemo(
     () =>
       generatedPlan.workouts.map((workout, workoutIndex) => ({
@@ -483,9 +809,22 @@ export default function PlansView({
           ? workoutNameBySlot[workoutIndex]
           : getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks),
         previewWorkoutKey: workoutIndex,
-        exercises: workout.exercises.map((exercise) => {
-          const slotKey = `${workoutIndex}:${exercise.id}`;
+        exercises: normalizedExerciseLayout[workoutIndex]
+          .map((slotKey) => {
+          const slot = exerciseSlotByKey.get(slotKey);
+
+          if (!slot) {
+            return null;
+          }
+
+          const exercise = slot.exercise;
           const replacementExercise = replacementBySlot[slotKey];
+          const supersetGroup = Object.prototype.hasOwnProperty.call(
+            supersetGroupBySlot,
+            slotKey
+          )
+            ? supersetGroupBySlot[slotKey]
+            : exercise.supersetGroup;
           const previewExercise = replacementExercise
             ? createPlanExercise({
                 exercise: replacementExercise,
@@ -495,21 +834,28 @@ export default function PlansView({
                 reps,
                 rir,
                 setCount: exercise.sets.length,
-                supersetGroup: exercise.supersetGroup,
+                supersetGroup,
               })
-            : exercise;
+            : {
+                ...exercise,
+                supersetGroup,
+              };
 
           return {
             ...previewExercise,
             previewSlotKey: slotKey,
           };
-        }),
+          })
+          .filter(Boolean),
       })),
     [
       generatedPlan.workouts,
       goal,
       history,
+      exerciseSlotByKey,
+      normalizedExerciseLayout,
       replacementBySlot,
+      supersetGroupBySlot,
       reps,
       rir,
       daysPerWeek,
@@ -517,6 +863,26 @@ export default function PlansView({
       workoutNameBySlot,
     ]
   );
+
+  const allPreviewSlotKeys = useMemo(
+    () =>
+      previewWorkouts.flatMap((workout) =>
+        workout.exercises.map((exercise) => exercise.previewSlotKey)
+      ),
+    [previewWorkouts]
+  );
+  const displayedWorkoutIndex = Math.min(
+    activeWorkoutIndex,
+    Math.max(previewWorkouts.length - 1, 0)
+  );
+  const displayedWorkout = previewWorkouts[displayedWorkoutIndex];
+
+  function resetPlanPreviewEdits() {
+    setActiveWorkoutIndex(0);
+    setExerciseLayoutByWorkout(null);
+    setReplacementBySlot({});
+    setSupersetGroupBySlot({});
+  }
 
   function saveGeneratedPlan() {
     const savedAt = Date.now();
@@ -647,7 +1013,7 @@ export default function PlansView({
           <button
             onClick={() => {
               setSeed((value) => value + 1);
-              setReplacementBySlot({});
+              resetPlanPreviewEdits();
               setSaveStatus("");
             }}
             style={{
@@ -718,7 +1084,7 @@ export default function PlansView({
                   )
                 );
               }
-              setReplacementBySlot({});
+              resetPlanPreviewEdits();
               setWorkoutNameBySlot({});
               setSaveStatus("");
             }}
@@ -744,7 +1110,11 @@ export default function PlansView({
           Goal
           <select
             value={goal}
-            onChange={(event) => setGoal(event.target.value)}
+            onChange={(event) => {
+              setGoal(event.target.value);
+              resetPlanPreviewEdits();
+              setSaveStatus("");
+            }}
             style={{
               boxSizing: "border-box",
               font: "inherit",
@@ -799,29 +1169,99 @@ export default function PlansView({
         )}
       </section>
 
-      {previewWorkouts.map((workout) => (
-        <PlanWorkoutPreview
-          key={workout.previewWorkoutKey}
-          workout={workout}
-          onRenameWorkout={(renamedWorkout, name) => {
-            setWorkoutNameBySlot({
-              ...workoutNameBySlot,
-              [renamedWorkout.previewWorkoutKey]: name,
-            });
-            setSaveStatus("");
+      <DndContext
+        collisionDetection={dayPointerThenClosestCenter}
+        onDragEnd={({ active, over }) => {
+          if (!over || active.id === over.id) {
+            return;
+          }
+
+          setExerciseLayoutByWorkout((currentLayout) =>
+            moveSlotInLayout(
+              currentLayout || normalizedExerciseLayout,
+              String(active.id),
+              over.id
+            )
+          );
+          setSupersetGroupBySlot((currentGroups) => ({
+            ...currentGroups,
+            [String(active.id)]: getDropSupersetGroup(over.id, previewWorkouts),
+          }));
+          setSaveStatus("");
+        }}
+      >
+        <div
+          aria-label="Plan days"
+          style={{
+            display: "flex",
+            gap: "6px",
+            marginBottom: "12px",
+            overflowX: "auto",
+            paddingBottom: "2px",
           }}
-          onShowSummary={setSummaryWorkout}
-          onReplaceExercise={(exercise) => {
-            setPickerTarget(exercise);
-            setPickerMuscle(exercise.planMuscle || "");
-            setPickerSearch("");
-          }}
-        />
-      ))}
+        >
+          {previewWorkouts.map((workout) => (
+            <PlanDayButton
+              key={workout.previewWorkoutKey}
+              active={workout.previewWorkoutKey === displayedWorkoutIndex}
+              count={workout.exercises.length}
+              label={`Day ${workout.previewWorkoutKey + 1}`}
+              workoutKey={workout.previewWorkoutKey}
+              onClick={() => {
+                setActiveWorkoutIndex(workout.previewWorkoutKey);
+                setSaveStatus("");
+              }}
+            />
+          ))}
+        </div>
+
+        <SortableContext
+          items={allPreviewSlotKeys}
+          strategy={verticalListSortingStrategy}
+        >
+          {displayedWorkout && (
+            <PlanWorkoutPreview
+              key={displayedWorkout.previewWorkoutKey}
+              exerciseLibrary={exerciseLibrary}
+              workout={displayedWorkout}
+              onEditSuperset={(exercise) => {
+                const group = prompt(
+                  "Superset group (A, B, etc). Leave empty to clear.",
+                  exercise.supersetGroup || ""
+                );
+
+                if (group === null) {
+                  return;
+                }
+
+                setSupersetGroupBySlot((currentGroups) => ({
+                  ...currentGroups,
+                  [exercise.previewSlotKey]: group.trim() || null,
+                }));
+                setSaveStatus("");
+              }}
+              onRenameWorkout={(renamedWorkout, name) => {
+                setWorkoutNameBySlot({
+                  ...workoutNameBySlot,
+                  [renamedWorkout.previewWorkoutKey]: name,
+                });
+                setSaveStatus("");
+              }}
+              onShowSummary={setSummaryWorkout}
+              onShowExerciseDetail={setDetailExercise}
+              onReplaceExercise={(exercise) => {
+                setPickerTarget(exercise);
+                setPickerMuscle(getEffectivePrimaryMuscle(exercise));
+                setPickerSearch("");
+              }}
+            />
+          )}
+        </SortableContext>
+      </DndContext>
 
       {pickerTarget && (
         <ExercisePickerSheet
-          title={`Replace ${pickerTarget.planMuscle}`}
+          title={`Replace ${getEffectivePrimaryMuscle(pickerTarget) || "exercise"}`}
           exerciseLibrary={exerciseLibrary}
           history={history}
           search={pickerSearch}
@@ -837,6 +1277,14 @@ export default function PlansView({
             setPickerTarget(null);
             setSaveStatus("");
           }}
+        />
+      )}
+
+      {detailExercise && (
+        <ExerciseDetailDialog
+          exercise={detailExercise}
+          history={history}
+          onClose={() => setDetailExercise(null)}
         />
       )}
 
@@ -863,7 +1311,7 @@ export default function PlansView({
               getDefaultPlanName(planType, nextDaysPerWeek, durationWeeks)
             );
           }
-          setReplacementBySlot({});
+          resetPlanPreviewEdits();
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
@@ -884,6 +1332,7 @@ export default function PlansView({
               getDefaultPlanName(planType, daysPerWeek, nextDurationWeeks)
             );
           }
+          resetPlanPreviewEdits();
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
@@ -898,7 +1347,7 @@ export default function PlansView({
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => {
           setReps(String(value));
-          setReplacementBySlot({});
+          resetPlanPreviewEdits();
           setSaveStatus("");
         }}
       />
@@ -911,7 +1360,7 @@ export default function PlansView({
         values={[0, 1, 2, 3, 4, 5, 6]}
         onSelect={(value) => {
           setRir(String(value));
-          setReplacementBySlot({});
+          resetPlanPreviewEdits();
           setSaveStatus("");
         }}
       />

@@ -27,8 +27,12 @@ import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
-import ExerciseThumbnail from "./ExerciseThumbnail";
+import {
+  WorkoutExercisePreviewGroup,
+  WorkoutExercisePreviewRow,
+} from "./WorkoutExercisePreviewList";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { recommendSetTarget } from "../utils/targetRecommendation";
 
 function IconButton({
@@ -279,24 +283,6 @@ export default function TemplateView({
         supersetGroup: group,
       };
     });
-  }
-
-  function getGroupedExercises(exercises) {
-    return Object.values(
-      exercises.reduce((groups, exercise) => {
-        const key = exercise.supersetGroup || `single-${exercise.id}`;
-
-        if (!groups[key]) {
-          groups[key] = {
-            exercises: [],
-            group: exercise.supersetGroup,
-          };
-        }
-
-        groups[key].exercises.push(exercise);
-        return groups;
-      }, {})
-    );
   }
 
   function commitEditMode() {
@@ -970,318 +956,159 @@ export default function TemplateView({
             items={template.exercises.map((exercise) => exercise.id)}
             strategy={verticalListSortingStrategy}
           >
-            {getGroupedExercises(template.exercises).map((group) => (
-              <div
+            {getGroupedPreviewExercises(template.exercises).map((group) => (
+              <WorkoutExercisePreviewGroup
                 key={group.group || group.exercises[0].id}
-                style={{
-                  background: group.group ? "var(--surface-muted)" : "transparent",
-                  borderBottom: group.group ? "3px solid #777" : "none",
-                  borderRadius: "8px",
-                  borderTop: group.group ? "3px solid #777" : "none",
-                  marginBottom: "8px",
-                  padding: "12px",
-                }}
+                group={group.group}
               >
                 {group.exercises.map((exercise) => {
                   const exerciseDetail = getExerciseDetailRecord(exercise);
+                  const note = exerciseMetadata?.[exercise.exerciseId]?.note;
 
                   return (
                     <SortableExerciseRow key={exercise.id} exercise={exercise}>
                       {({ attributes, listeners }) => (
-                        <div
-                          key={exercise.id}
-                          style={{
-                            marginBottom: "20px",
-                          }}
-                        >
-                    <h3
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        width: "100%",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          flex: 1,
-                          gap: "4px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            alignItems: "center",
-                            display: "flex",
-                            flex: 1,
-                            gap: "6px",
-                            minWidth: 0,
-                          }}
-                        >
-                          <IconButton
-                            label="Exercise note"
-                            size={32}
-                            onClick={() => {
-                              const note = prompt(
-                                "Exercise note",
-                                exerciseMetadata[exercise.exerciseId]?.note ||
-                                  ""
-                              );
+                        <WorkoutExercisePreviewRow
+                          exercise={exercise}
+                          exerciseDetail={exerciseDetail}
+                          note={note}
+                          onExerciseClick={() => setDetailExercise(exerciseDetail)}
+                          onClearNote={
+                            note
+                              ? () => {
+                                  const updated = {
+                                    ...exerciseMetadata,
+                                  };
 
-                              if (note === null) return;
+                                  delete updated[exercise.exerciseId];
 
-                              setExerciseMetadata({
-                                ...exerciseMetadata,
-
-                                [exercise.exerciseId]: {
-                                  ...(exerciseMetadata[exercise.exerciseId] ||
-                                    {}),
-
-                                  note,
-                                },
-                              });
-                            }}
-                          >
-                            <NotebookPen size={16} />
-                          </IconButton>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDetailExercise(exerciseDetail)
-                            }
-                            style={{
-                              background: "transparent",
-                              border: 0,
-                              color: "var(--text)",
-                              cursor: "pointer",
-                              flex: 1,
-                              font: "inherit",
-                              fontWeight: "bold",
-                              minWidth: 0,
-                              overflowWrap: "break-word",
-                              padding: 0,
-                              textAlign: "left",
-                            }}
-                          >
-                            {`${exercise.name}${
-                              exercise.equipment?.[0]
-                                ? ", " + exercise.equipment[0]
-                                : ""
-                            }`}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "4px",
-                          marginLeft: "auto",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <span
-                          {...attributes}
-                          {...listeners}
-                          style={{
-                            alignItems: "center",
-                            background: "var(--surface-raised)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "999px",
-                            color: "var(--text-muted)",
-                            cursor: "grab",
-                            display: "inline-flex",
-                            height: "32px",
-                            justifyContent: "center",
-                            padding: 0,
-                            userSelect: "none",
-                            touchAction: "none",
-                            width: "32px",
-                          }}
-                        >
-                          <GripVertical size={17} />
-                        </span>
-
-                        <IconButton
-                          label="Edit superset"
-                          size={exercise.supersetGroup ? 42 : 32}
-                          onClick={() => {
-                            const group = prompt(
-                              "Superset group (A, B, etc). Leave empty to clear.",
-                              exercise.supersetGroup || ""
-                            );
-
-                            if (group === null) {
-                              return;
-                            }
-
-                            updateCurrentTemplate((currentTemplate) => ({
-                              ...currentTemplate,
-
-                              exercises: currentTemplate.exercises.map((ex) =>
-                                ex.id === exercise.id
-                                  ? {
-                                      ...ex,
-
-                                      supersetGroup: group || null,
-                                    }
-                                  : ex
-                              ),
-                            }));
-                          }}
-                        >
-                          <Link2 size={16} />
-                          {exercise.supersetGroup && (
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: "bold",
-                                marginLeft: "-3px",
-                              }}
-                            >
-                              {exercise.supersetGroup}
-                            </span>
-                          )}
-                        </IconButton>
-
-                        <IconButton
-                          label="Delete exercise"
-                          size={32}
-                          tone="danger"
-                          onClick={() => {
-                            updateCurrentTemplate((currentTemplate) => ({
-                              ...currentTemplate,
-
-                              exercises: currentTemplate.exercises.filter(
-                                (ex) => ex.id !== exercise.id
-                              ),
-                            }));
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </IconButton>
-                      </div>
-                    </h3>
-
-                    {(() => {
-                      const note =
-                        exerciseMetadata?.[exercise.exerciseId]?.note;
-
-                      return note && note.trim().length > 0 ? (
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--text-muted)",
-                            marginTop: "2px",
-                            marginLeft: "28px",
-                            textAlign: "left",
-                            width: "100%",
-                          }}
-                        >
-                          <span>
-                            <NotebookPen
-                              size={13}
-                              style={{
-                                marginRight: "4px",
-                                verticalAlign: "-2px",
-                              }}
-                            />
-                            {exerciseMetadata[exercise.exerciseId]?.note}
-                          </span>
-
-                          <IconButton
-                            label="Clear note"
-                            size={24}
-                            onClick={() => {
-                              const updated = {
-                                ...exerciseMetadata,
-                              };
-
-                              delete updated[exercise.exerciseId];
-
-                              setExerciseMetadata(updated);
-                            }}
-                            style={{
-                              marginLeft: "8px",
-                              verticalAlign: "-6px",
-                            }}
-                          >
-                            <X size={13} />
-                          </IconButton>
-                        </div>
-                      ) : null;
-                    })()}
-
-                      <div
-                        style={{
-                          alignItems: "flex-start",
-                          display: "flex",
-                          gap: "8px",
-                          marginTop: "6px",
-                        }}
-                      >
-                        <ExerciseThumbnail
-                          alt={
-                            exerciseDetail.imageAlt ||
-                            `${exercise.name} demonstration`
+                                  setExerciseMetadata(updated);
+                                }
+                              : null
                           }
-                          imageUrl={exerciseDetail.imageUrl}
-                          size={42}
-                        />
-                        <div
-                          style={{
-                            display: "grid",
-                            gap: "5px",
-                            minWidth: 0,
+                          onSetClick={() => {
+                            enterEditMode();
+
+                            setEditingExercise(exercise);
+
+                            setEditingExerciseDraft(structuredClone(exercise));
                           }}
-                        >
-                          {exercise.sets.map((set) => (
-                            <div
-                              key={set.id}
+                          leadingControl={
+                            <IconButton
+                              label="Exercise note"
+                              size={32}
                               onClick={() => {
-                                enterEditMode();
-
-                                setEditingExercise(exercise);
-
-                                setEditingExerciseDraft(
-                                  structuredClone(exercise)
+                                const nextNote = prompt(
+                                  "Exercise note",
+                                  exerciseMetadata[exercise.exerciseId]?.note || ""
                                 );
-                              }}
-                              style={{
-                                alignItems: "center",
-                                cursor: "pointer",
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "6px",
+
+                                if (nextNote === null) return;
+
+                                setExerciseMetadata({
+                                  ...exerciseMetadata,
+
+                                  [exercise.exerciseId]: {
+                                    ...(exerciseMetadata[exercise.exerciseId] || {}),
+
+                                    note: nextNote,
+                                  },
+                                });
                               }}
                             >
-                              <span>
-                                <Target size={14} /> {set.targetWeight}×
-                                {set.targetReps}
-                                {set.targetRir || set.rir
-                                  ? ` @ ${set.targetRir || set.rir}`
-                                  : ""}{" "}
-                                (<Dumbbell size={13} />{" "}
-                                {calculateE1RM(
-                                  null,
-                                  set.targetReps,
-                                  set.targetRir || set.rir,
-                                  set.targetWeight
-                                )?.toFixed(1)}
-                                )
+                              <NotebookPen size={16} />
+                            </IconButton>
+                          }
+                          actions={
+                            <>
+                              <span
+                                {...attributes}
+                                {...listeners}
+                                style={{
+                                  alignItems: "center",
+                                  background: "var(--surface-raised)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "999px",
+                                  color: "var(--text-muted)",
+                                  cursor: "grab",
+                                  display: "inline-flex",
+                                  height: "32px",
+                                  justifyContent: "center",
+                                  padding: 0,
+                                  touchAction: "none",
+                                  userSelect: "none",
+                                  width: "32px",
+                                }}
+                              >
+                                <GripVertical size={17} />
                               </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+
+                              <IconButton
+                                label="Edit superset"
+                                size={exercise.supersetGroup ? 42 : 32}
+                                onClick={() => {
+                                  const group = prompt(
+                                    "Superset group (A, B, etc). Leave empty to clear.",
+                                    exercise.supersetGroup || ""
+                                  );
+
+                                  if (group === null) {
+                                    return;
+                                  }
+
+                                  updateCurrentTemplate((currentTemplate) => ({
+                                    ...currentTemplate,
+
+                                    exercises: currentTemplate.exercises.map((ex) =>
+                                      ex.id === exercise.id
+                                        ? {
+                                            ...ex,
+
+                                            supersetGroup: group || null,
+                                          }
+                                        : ex
+                                    ),
+                                  }));
+                                }}
+                              >
+                                <Link2 size={16} />
+                                {exercise.supersetGroup && (
+                                  <span
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: "bold",
+                                      marginLeft: "-3px",
+                                    }}
+                                  >
+                                    {exercise.supersetGroup}
+                                  </span>
+                                )}
+                              </IconButton>
+
+                              <IconButton
+                                label="Delete exercise"
+                                size={32}
+                                tone="danger"
+                                onClick={() => {
+                                  updateCurrentTemplate((currentTemplate) => ({
+                                    ...currentTemplate,
+
+                                    exercises: currentTemplate.exercises.filter(
+                                      (ex) => ex.id !== exercise.id
+                                    ),
+                                  }));
+                                }}
+                              >
+                                <Trash2 size={16} />
+                              </IconButton>
+                            </>
+                          }
+                        />
+                      )}
                     </SortableExerciseRow>
                   );
                 })}
-              </div>
+              </WorkoutExercisePreviewGroup>
             ))}
           </SortableContext>
         </DndContext>
