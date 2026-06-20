@@ -10,13 +10,17 @@ import {
 } from "lucide-react";
 import {
   DndContext,
+  PointerSensor,
   closestCenter,
   pointerWithin,
+  useSensor,
+  useSensors,
   useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
+  horizontalListSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -90,6 +94,10 @@ function getExerciseDetailRecord(exercise, exerciseLibrary) {
 }
 
 function dayPointerThenClosestCenter(args) {
+  if (String(args.active?.id || "").startsWith("plan-day:")) {
+    return closestCenter(args);
+  }
+
   const dayIntersections = pointerWithin(args).filter((intersection) =>
     String(intersection.id).startsWith("day:")
   );
@@ -101,6 +109,45 @@ function dayPointerThenClosestCenter(args) {
 
 function getEffectivePrimaryMuscle(exercise) {
   return exercise?.muscles?.[0] || exercise?.planMuscle || "";
+}
+
+function normalizeDayOrder(dayOrder, workoutCount) {
+  const defaultOrder = Array.from({ length: workoutCount }, (_, index) => index);
+
+  if (!Array.isArray(dayOrder)) {
+    return defaultOrder;
+  }
+
+  const seen = new Set();
+  const validOrder = dayOrder.filter((workoutKey) => {
+    const valid =
+      Number.isInteger(workoutKey) &&
+      workoutKey >= 0 &&
+      workoutKey < workoutCount &&
+      !seen.has(workoutKey);
+
+    if (valid) {
+      seen.add(workoutKey);
+    }
+
+    return valid;
+  });
+
+  return [
+    ...validOrder,
+    ...defaultOrder.filter((workoutKey) => !seen.has(workoutKey)),
+  ];
+}
+
+function renameWorkoutForDayOrder(name, dayNumber, daysPerWeek, durationWeeks) {
+  const suffix =
+    daysPerWeek === "1" ? "(single)" : `(${daysPerWeek}d ${durationWeeks}wk)`;
+  const baseName = String(name || `Workout ${dayNumber}`)
+    .replace(/Workout\s+\d+/i, `Workout ${dayNumber}`)
+    .replace(/\((?:single|\d+d\s+\d+wk)\)$/i, "")
+    .trim();
+
+  return `${baseName} ${suffix}`;
 }
 
 function findWorkoutIndexForSlot(layout, slotKey) {
@@ -218,16 +265,35 @@ function PlanSupersetDropZone({ children, group, workoutKey }) {
 }
 
 function PlanDayButton({ active, count, label, onClick, workoutKey }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: `plan-day:${workoutKey}`,
+  });
   const { isOver, setNodeRef } = useDroppable({
     disabled: active,
     id: `day:${workoutKey}`,
   });
   const highlighted = isOver && !active;
+  const setRefs = (node) => {
+    setSortableNodeRef(node);
+    setNodeRef(node);
+  };
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   return (
     <button
-      ref={setNodeRef}
+      ref={setRefs}
       aria-pressed={active}
+      {...attributes}
+      {...listeners}
       onClick={onClick}
       style={{
         background: active
@@ -254,6 +320,9 @@ function PlanDayButton({ active, count, label, onClick, workoutKey }) {
         minHeight: "38px",
         minWidth: 0,
         padding: highlighted ? "5px 7px" : "6px 8px",
+        touchAction: "none",
+        userSelect: "none",
+        ...sortableStyle,
       }}
     >
       {label}
@@ -715,6 +784,15 @@ export default function PlansView({
   const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
   const [exerciseLayoutByWorkout, setExerciseLayoutByWorkout] = useState(null);
   const [supersetGroupBySlot, setSupersetGroupBySlot] = useState({});
+  const [dayOrder, setDayOrder] = useState(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 320,
+        tolerance: 8,
+      },
+    })
+  );
 
   const generatedPlan = useMemo(
     () =>
@@ -871,54 +949,95 @@ export default function PlansView({
       ),
     [previewWorkouts]
   );
-  const displayedWorkoutIndex = Math.min(
-    activeWorkoutIndex,
-    Math.max(previewWorkouts.length - 1, 0)
+  const orderedWorkoutKeys = useMemo(
+    () => normalizeDayOrder(dayOrder, previewWorkouts.length),
+    [dayOrder, previewWorkouts.length]
   );
-  const displayedWorkout = previewWorkouts[displayedWorkoutIndex];
+  const orderedPreviewWorkouts = useMemo(
+    () =>
+      orderedWorkoutKeys
+        .map((workoutKey, dayIndex) => {
+          const workout = previewWorkouts[workoutKey];
+
+          if (!workout) {
+            return null;
+          }
+
+          return {
+            ...workout,
+            dayNumber: dayIndex + 1,
+            name: renameWorkoutForDayOrder(
+              workout.name,
+              dayIndex + 1,
+              daysPerWeek,
+              durationWeeks
+            ),
+          };
+        })
+        .filter(Boolean),
+    [daysPerWeek, durationWeeks, orderedWorkoutKeys, previewWorkouts]
+  );
+  const displayedWorkout =
+    orderedPreviewWorkouts.find(
+      (workout) => workout.previewWorkoutKey === activeWorkoutIndex
+    ) ||
+    orderedPreviewWorkouts[0] ||
+    null;
+  const displayedWorkoutKey = displayedWorkout?.previewWorkoutKey ?? 0;
 
   function resetPlanPreviewEdits() {
     setActiveWorkoutIndex(0);
     setExerciseLayoutByWorkout(null);
     setReplacementBySlot({});
     setSupersetGroupBySlot({});
+    setDayOrder(null);
   }
 
   function saveGeneratedPlan() {
     const savedAt = Date.now();
     const planId = savedAt;
-    const workouts = previewWorkouts.map((workout, workoutIndex) => {
+    const workouts = orderedPreviewWorkouts.map((workout, workoutIndex) => {
       const savedWorkout = { ...workout };
 
       delete savedWorkout.previewWorkoutKey;
 
       const templateId = savedAt + workoutIndex + 1;
       const planWorkoutId = `${planId}:workout-${workoutIndex + 1}`;
+      const isSingleWorkout = daysPerWeek === "1";
 
       return {
         ...savedWorkout,
         id: templateId,
         name: workout.name,
         dayNumber: workoutIndex + 1,
-        planId,
-        planWorkoutId,
+        planId: isSingleWorkout ? null : planId,
+        planWorkoutId: isSingleWorkout ? null : planWorkoutId,
         exercises: workout.exercises.map((exercise, exerciseIndex) => {
-        const savedExercise = { ...exercise };
+          const savedExercise = { ...exercise };
 
-        delete savedExercise.previewSlotKey;
-        delete savedExercise.previewWorkoutKey;
+          delete savedExercise.previewSlotKey;
+          delete savedExercise.previewWorkoutKey;
 
-        return {
-          ...savedExercise,
-          id: savedAt + workoutIndex * 100 + exerciseIndex,
-          sets: exercise.sets.map((set, setIndex) => ({
-            ...set,
-            id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
-          })),
-        };
+          return {
+            ...savedExercise,
+            id: savedAt + workoutIndex * 100 + exerciseIndex,
+            sets: exercise.sets.map((set, setIndex) => ({
+              ...set,
+              id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
+            })),
+          };
         }),
       };
     });
+
+    if (daysPerWeek === "1") {
+      setTemplates([...templates, ...workouts]);
+      setSaveStatus("Saved workout.");
+      onSave?.({
+        type: "workout",
+      });
+      return;
+    }
 
     const plan = {
       id: planId,
@@ -948,7 +1067,9 @@ export default function PlansView({
     setPlans([...plans, plan]);
     setTemplates([...templates, ...workouts]);
     setSaveStatus(`Saved plan with ${workouts.length} workouts.`);
-    onSave?.();
+    onSave?.({
+      type: "plan",
+    });
   }
 
   return (
@@ -1039,7 +1160,7 @@ export default function PlansView({
             }}
           >
             <Save size={16} />
-            Save Plan
+            {daysPerWeek === "1" ? "Save Workout" : "Save Plan"}
           </button>
         </div>
 
@@ -1171,8 +1292,32 @@ export default function PlansView({
 
       <DndContext
         collisionDetection={dayPointerThenClosestCenter}
+        sensors={sensors}
         onDragEnd={({ active, over }) => {
           if (!over || active.id === over.id) {
+            return;
+          }
+
+          const activeValue = String(active.id);
+          const overValue = String(over.id);
+
+          if (activeValue.startsWith("plan-day:")) {
+            const activeWorkoutKey = Number(
+              activeValue.replace("plan-day:", "")
+            );
+            const overWorkoutKey = Number(
+              overValue
+                .replace("plan-day:", "")
+                .replace("day:", "")
+            );
+            const oldIndex = orderedWorkoutKeys.indexOf(activeWorkoutKey);
+            const newIndex = orderedWorkoutKeys.indexOf(overWorkoutKey);
+
+            if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+              setDayOrder(arrayMove(orderedWorkoutKeys, oldIndex, newIndex));
+              setSaveStatus("");
+            }
+
             return;
           }
 
@@ -1200,19 +1345,26 @@ export default function PlansView({
             paddingBottom: "2px",
           }}
         >
-          {previewWorkouts.map((workout) => (
-            <PlanDayButton
-              key={workout.previewWorkoutKey}
-              active={workout.previewWorkoutKey === displayedWorkoutIndex}
-              count={workout.exercises.length}
-              label={`Day ${workout.previewWorkoutKey + 1}`}
-              workoutKey={workout.previewWorkoutKey}
-              onClick={() => {
-                setActiveWorkoutIndex(workout.previewWorkoutKey);
-                setSaveStatus("");
-              }}
-            />
-          ))}
+          <SortableContext
+            items={orderedWorkoutKeys.map(
+              (workoutKey) => `plan-day:${workoutKey}`
+            )}
+            strategy={horizontalListSortingStrategy}
+          >
+            {orderedPreviewWorkouts.map((workout, dayIndex) => (
+              <PlanDayButton
+                key={workout.previewWorkoutKey}
+                active={workout.previewWorkoutKey === displayedWorkoutKey}
+                count={workout.exercises.length}
+                label={`Day ${dayIndex + 1}`}
+                workoutKey={workout.previewWorkoutKey}
+                onClick={() => {
+                  setActiveWorkoutIndex(workout.previewWorkoutKey);
+                  setSaveStatus("");
+                }}
+              />
+            ))}
+          </SortableContext>
         </div>
 
         <SortableContext
@@ -1291,7 +1443,7 @@ export default function PlansView({
       {summaryWorkout && (
         <WorkoutSummarySheet
           selectedWorkout={summaryWorkout}
-          workouts={previewWorkouts}
+          workouts={orderedPreviewWorkouts}
           onClose={() => setSummaryWorkout(null)}
         />
       )}

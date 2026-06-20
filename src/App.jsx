@@ -2987,9 +2987,12 @@ export default function App() {
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         history={history}
-        onSave={() => {
+        onSave={(result) => {
           goHome();
-          requestSyncCheckpoint(["plans", "workouts"], "plan save");
+          requestSyncCheckpoint(
+            result?.type === "workout" ? ["workouts"] : ["plans", "workouts"],
+            result?.type === "workout" ? "workout save" : "plan save"
+          );
         }}
         plans={plans}
         setPlans={setPlans}

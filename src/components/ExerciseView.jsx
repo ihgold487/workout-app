@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Copy, ImagePlus, Link, X } from "lucide-react";
 
 import { equipmentOptions } from "../data/seedEquipment";
 import {
@@ -36,6 +37,13 @@ const emptyDraft = {
   primaryMuscle: "Other",
   secondaryMuscles: [],
 };
+
+const cropPreviewSize = 260;
+const savedImageSize = 512;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
 
 function getExerciseDraft(exercise = {}) {
   const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
@@ -75,15 +83,37 @@ function toggleMuscle(muscles, muscle) {
     : [...muscles, muscle];
 }
 
+function getExerciseStatusButtonStyle(active) {
+  return {
+    background: active ? "var(--success-bg)" : "var(--danger-bg)",
+    border: `1px solid ${
+      active ? "var(--success-text)" : "var(--danger-text)"
+    }`,
+    color: active ? "var(--success-text)" : "var(--danger-text)",
+    fontWeight: "bold",
+  };
+}
+
 export default function ExerciseView({
   exerciseLibrary,
   history = [],
   setExerciseLibrary,
 }) {
+  const cropDragRef = useRef(null);
+  const photoInputRef = useRef(null);
   const [draft, setDraft] = useState(emptyDraft);
   const [detailExercise, setDetailExercise] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
   const [editingDraft, setEditingDraft] = useState(emptyDraft);
+  const [imageExercise, setImageExercise] = useState(null);
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
+  const [copyImageExerciseId, setCopyImageExerciseId] = useState("");
+  const [cropImage, setCropImage] = useState(null);
+  const [cropOffset, setCropOffset] = useState({
+    x: 0,
+    y: 0,
+  });
+  const [cropZoom, setCropZoom] = useState(1);
   const [exerciseType, setExerciseType] = useState("");
   const [exerciseStatus, setExerciseStatus] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState("");
@@ -93,6 +123,15 @@ export default function ExerciseView({
   const customExerciseCount = exerciseLibrary.filter(
     (exercise) => !exercise.builtin
   ).length;
+
+  useEffect(
+    () => () => {
+      if (cropImage?.url) {
+        URL.revokeObjectURL(cropImage.url);
+      }
+    },
+    [cropImage?.url]
+  );
 
   const filteredExercises = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -186,6 +225,180 @@ export default function ExerciseView({
           : exercise
       )
     );
+  }
+
+  function openImageSheet(event, exercise) {
+    event.stopPropagation();
+    setImageExercise(exercise);
+    setImageUrlDraft(exercise.imageUrl || "");
+    setCopyImageExerciseId("");
+    setCropImage(null);
+  }
+
+  function closeImageSheet() {
+    setImageExercise(null);
+    setImageUrlDraft("");
+    setCopyImageExerciseId("");
+    setCropImage(null);
+    setCropOffset({
+      x: 0,
+      y: 0,
+    });
+    setCropZoom(1);
+  }
+
+  function updateExerciseImage(exerciseId, imageUrl) {
+    setExerciseLibrary(
+      exerciseLibrary.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              imageUrl,
+            }
+          : exercise
+      )
+    );
+    setImageExercise((exercise) =>
+      exercise && exercise.id === exerciseId
+        ? {
+            ...exercise,
+            imageUrl,
+          }
+        : exercise
+    );
+  }
+
+  function saveImageUrl() {
+    if (!imageExercise) {
+      return;
+    }
+
+    updateExerciseImage(imageExercise.id, imageUrlDraft.trim());
+    closeImageSheet();
+  }
+
+  function copyExerciseImage() {
+    if (!imageExercise || !copyImageExerciseId) {
+      return;
+    }
+
+    const sourceExercise = exerciseLibrary.find(
+      (exercise) => String(exercise.id) === String(copyImageExerciseId)
+    );
+
+    if (!sourceExercise?.imageUrl) {
+      return;
+    }
+
+    updateExerciseImage(imageExercise.id, sourceExercise.imageUrl);
+    closeImageSheet();
+  }
+
+  function handleImageFile(file) {
+    if (!file || !imageExercise) {
+      return;
+    }
+
+    setCropImage({
+      name: file.name,
+      url: URL.createObjectURL(file),
+    });
+    setCropOffset({
+      x: 0,
+      y: 0,
+    });
+    setCropZoom(1);
+  }
+
+  function startCropDrag(event) {
+    cropDragRef.current = {
+      pointerId: event.pointerId,
+      startOffset: cropOffset,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveCropDrag(event) {
+    const drag = cropDragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setCropOffset({
+      x: clamp(drag.startOffset.x + event.clientX - drag.x, -160, 160),
+      y: clamp(drag.startOffset.y + event.clientY - drag.y, -160, 160),
+    });
+  }
+
+  function endCropDrag(event) {
+    if (cropDragRef.current?.pointerId === event.pointerId) {
+      cropDragRef.current = null;
+    }
+  }
+
+  function cancelCropImage() {
+    setCropImage(null);
+    setCropOffset({
+      x: 0,
+      y: 0,
+    });
+    setCropZoom(1);
+  }
+
+  function saveCroppedImage() {
+    if (!cropImage || !imageExercise) {
+      return;
+    }
+
+    const image = new Image();
+
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = savedImageSize;
+      canvas.height = savedImageSize;
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        alert("Unable to crop this image.");
+        return;
+      }
+
+      const naturalWidth = image.naturalWidth || image.width;
+      const naturalHeight = image.naturalHeight || image.height;
+      const baseScale = Math.max(
+        cropPreviewSize / naturalWidth,
+        cropPreviewSize / naturalHeight
+      );
+      const displayedWidth = naturalWidth * baseScale * cropZoom;
+      const displayedHeight = naturalHeight * baseScale * cropZoom;
+      const outputScale = savedImageSize / cropPreviewSize;
+
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, savedImageSize, savedImageSize);
+      context.drawImage(
+        image,
+        (cropPreviewSize / 2 + cropOffset.x - displayedWidth / 2) *
+          outputScale,
+        (cropPreviewSize / 2 + cropOffset.y - displayedHeight / 2) *
+          outputScale,
+        displayedWidth * outputScale,
+        displayedHeight * outputScale
+      );
+
+      updateExerciseImage(
+        imageExercise.id,
+        canvas.toDataURL("image/webp", 0.86)
+      );
+      closeImageSheet();
+    };
+
+    image.onerror = () => {
+      alert("Unable to load this image.");
+    };
+    image.src = cropImage.url;
   }
 
   function renderExerciseForm(formDraft, setFormDraft, { compact = false } = {}) {
@@ -514,11 +727,50 @@ export default function ExerciseView({
                   justifyContent: "space-between",
                 }}
               >
-                <ExerciseThumbnail
-                  alt={exercise.imageAlt || `${exercise.name} demonstration`}
-                  imageUrl={exercise.imageUrl}
-                  size={76}
-                />
+                {exercise.builtin ? (
+                  <ExerciseThumbnail
+                    alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                    imageUrl={exercise.imageUrl}
+                    size={76}
+                  />
+                ) : (
+                  <button
+                    aria-label={`Select image for ${exercise.name}`}
+                    onClick={(event) => openImageSheet(event, exercise)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      flex: "0 0 76px",
+                      height: "76px",
+                      padding: 0,
+                      width: "76px",
+                    }}
+                  >
+                    {exercise.imageUrl ? (
+                      <ExerciseThumbnail
+                        alt={exercise.imageAlt || `${exercise.name} demonstration`}
+                        imageUrl={exercise.imageUrl}
+                        size={76}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          alignItems: "center",
+                          background: "var(--surface-muted)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--text-muted)",
+                          display: "flex",
+                          height: "76px",
+                          justifyContent: "center",
+                          width: "76px",
+                        }}
+                      >
+                        <ImagePlus size={24} />
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 <div
                   style={{
@@ -540,8 +792,7 @@ export default function ExerciseView({
                     }}
                   >
                     {exercise.equipment?.[0] || "No equipment"} ·{" "}
-                    {exercise.builtin ? "Built-in" : "Custom"} ·{" "}
-                    {active ? "Active" : "Inactive"}
+                    {exercise.builtin ? "Built-in" : "Custom"}
                   </div>
                 </div>
 
@@ -558,6 +809,7 @@ export default function ExerciseView({
                       event.stopPropagation();
                       toggleExerciseStatus(exercise);
                     }}
+                    style={getExerciseStatusButtonStyle(active)}
                   >
                     {active ? "Active" : "Inactive"}
                   </button>
@@ -622,6 +874,275 @@ export default function ExerciseView({
           history={history}
           onClose={() => setDetailExercise(null)}
         />
+      )}
+
+      <input
+        ref={photoInputRef}
+        accept="image/*"
+        onChange={(event) => {
+          handleImageFile(event.target.files?.[0]);
+          event.target.value = "";
+        }}
+        style={{ display: "none" }}
+        type="file"
+      />
+
+      {imageExercise && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Select image for ${imageExercise.name}`}
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.45)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "16px",
+            position: "fixed",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface-raised)",
+              borderRadius: "10px",
+              boxShadow: "0 10px 28px rgba(0,0,0,.22)",
+              display: "grid",
+              gap: "12px",
+              maxHeight: "calc(100vh - 32px)",
+              maxWidth: "520px",
+              overflow: "auto",
+              padding: "14px",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1rem",
+                  margin: 0,
+                }}
+              >
+                Exercise Image
+              </h2>
+              <button
+                aria-label="Close image options"
+                onClick={closeImageSheet}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  height: "34px",
+                  justifyContent: "center",
+                  width: "34px",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+              }}
+            >
+              {imageExercise.name}
+            </div>
+
+            {cropImage ? (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "12px",
+                  justifyItems: "center",
+                }}
+              >
+                <div
+                  onPointerCancel={endCropDrag}
+                  onPointerDown={startCropDrag}
+                  onPointerMove={moveCropDrag}
+                  onPointerUp={endCropDrag}
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "2px solid var(--accent)",
+                    borderRadius: "10px",
+                    height: `${cropPreviewSize}px`,
+                    overflow: "hidden",
+                    position: "relative",
+                    touchAction: "none",
+                    width: `${cropPreviewSize}px`,
+                  }}
+                >
+                  <img
+                    alt="Crop preview"
+                    src={cropImage.url}
+                    style={{
+                      display: "block",
+                      height: "100%",
+                      left: "50%",
+                      objectFit: "cover",
+                      position: "absolute",
+                      top: "50%",
+                      transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropZoom})`,
+                      transformOrigin: "center",
+                      userSelect: "none",
+                      width: "100%",
+                    }}
+                  />
+                </div>
+
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "6px",
+                    width: "100%",
+                  }}
+                >
+                  Zoom
+                  <input
+                    max="3"
+                    min="1"
+                    onChange={(event) =>
+                      setCropZoom(Number.parseFloat(event.target.value))
+                    }
+                    step="0.05"
+                    type="range"
+                    value={cropZoom}
+                  />
+                </label>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    justifyContent: "space-between",
+                    width: "100%",
+                  }}
+                >
+                  <button onClick={cancelCropImage} type="button">
+                    Cancel
+                  </button>
+                  <button onClick={saveCroppedImage} type="button">
+                    Use Crop
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "6px",
+                    justifyContent: "center",
+                    minHeight: "42px",
+                  }}
+                >
+                  <ImagePlus size={17} /> Choose Photo
+                </button>
+
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "6px",
+                  }}
+                >
+                  <span
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    <Copy size={16} /> Copy from exercise
+                  </span>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                    }}
+                  >
+                    <select
+                      value={copyImageExerciseId}
+                      onChange={(event) =>
+                        setCopyImageExerciseId(event.target.value)
+                      }
+                      style={{ minWidth: 0 }}
+                    >
+                      <option value="">Choose exercise</option>
+                      {exerciseLibrary
+                        .filter(
+                          (exercise) =>
+                            exercise.imageUrl && exercise.id !== imageExercise.id
+                        )
+                        .map((exercise) => (
+                          <option key={exercise.id} value={exercise.id}>
+                            {exercise.name}
+                            {exercise.equipment?.[0]
+                              ? ` (${exercise.equipment[0]})`
+                              : ""}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      disabled={!copyImageExerciseId}
+                      onClick={copyExerciseImage}
+                      type="button"
+                    >
+                      Use
+                    </button>
+                  </div>
+                </label>
+
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "6px",
+                  }}
+                >
+                  <span
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    <Link size={16} /> Image URL
+                  </span>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                    }}
+                  >
+                    <input
+                      value={imageUrlDraft}
+                      onChange={(event) => setImageUrlDraft(event.target.value)}
+                      placeholder="https://..."
+                      style={{ minWidth: 0 }}
+                    />
+                    <button onClick={saveImageUrl} type="button">
+                      Save
+                    </button>
+                  </div>
+                </label>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {editingExercise && (

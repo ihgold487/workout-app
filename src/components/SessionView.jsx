@@ -1149,6 +1149,90 @@ function normalizeLookupValue(value) {
     return null;
   }
 
+  function getRestDurationForReps(reps) {
+    if (reps <= 6) {
+      return 180;
+    }
+
+    if (reps <= 8) {
+      return 150;
+    }
+
+    if (reps <= 10) {
+      return 120;
+    }
+
+    if (reps <= 12) {
+      return 90;
+    }
+
+    return 60;
+  }
+
+  function parseTimerReps(value) {
+    const match = String(value ?? "").match(/\d+/);
+    const reps = match ? Number.parseInt(match[0], 10) : null;
+
+    return Number.isFinite(reps) ? reps : null;
+  }
+
+  function getNextSetTimerReps(nextActiveSet, completedSetContext = {}) {
+    if (!nextActiveSet) {
+      return null;
+    }
+
+    const nextExercise = session.exercises.find(
+      (exercise) => exercise.id === nextActiveSet.exerciseId
+    );
+    const nextSetIndex =
+      nextExercise?.sets.findIndex((set) => set.id === nextActiveSet.setId) ??
+      -1;
+    const nextSet = nextExercise?.sets[nextSetIndex];
+
+    if (!nextSet) {
+      return null;
+    }
+
+    const nextTargetReps =
+      nextActiveSet.exerciseId === completedSetContext.exerciseId &&
+      nextSetIndex === completedSetContext.setIndex + 1
+        ? firstPresentValue(
+            completedSetContext.set?.actualReps,
+            completedSetContext.set?.targetReps,
+            nextSet.targetReps
+          )
+        : firstPresentValue(nextSet.targetReps, nextSet.actualReps);
+
+    return parseTimerReps(nextTargetReps);
+  }
+
+  function setRestTimerForNextSet(
+    nextActiveSet,
+    completedSetContext = {},
+    startedAt = null
+  ) {
+    const reps = getNextSetTimerReps(nextActiveSet, completedSetContext);
+
+    if (reps == null) {
+      return;
+    }
+
+    const duration = getRestDurationForReps(reps);
+    const wasActive = timerRunning || timerPaused || timerFinished;
+
+    setRestMinutes(Math.floor(duration / 60));
+    setRestRemainder(duration % 60);
+    setRestSeconds(duration);
+    setTimerExpiredAt(null);
+    setTimerFinished(false);
+    setTimerPaused(false);
+
+    if (wasActive) {
+      setTimerStartedAt(startedAt);
+      setTimerRunning(true);
+    }
+  }
+
   function resetRestTimer() {
     setTimerPaused(false);
     setTimerRunning(false);
@@ -1158,7 +1242,7 @@ function normalizeLookupValue(value) {
     setRestSeconds(restMinutes * 60 + restRemainder);
   }
 
-  function markSetComplete(exerciseId, setId) {
+  function markSetComplete(exerciseId, setId, completedAt = null) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
     const currentSet = exercise.sets.find((s) => s.id === setId);
@@ -1228,11 +1312,17 @@ function normalizeLookupValue(value) {
       resetRestTimer();
     }
 
-    setActiveSet(
-      getNextActiveSetAfter(exerciseId, setId, {
-        supersetOrdersOverride,
-      })
-    );
+    const nextActiveSet = getNextActiveSetAfter(exerciseId, setId, {
+      supersetOrdersOverride,
+    });
+
+    setRestTimerForNextSet(nextActiveSet, {
+      exerciseId,
+      set: currentSet,
+      setIndex: currentIndex,
+    }, completedAt);
+
+    setActiveSet(nextActiveSet);
   }
   function deleteExercise(exerciseId) {
     updateSession((s) => ({
@@ -2755,7 +2845,7 @@ function normalizeLookupValue(value) {
                             onClick={(e) => {
                               e.stopPropagation();
                               lockSupersetOrderForSet(exercise.id, set.id);
-                              markSetComplete(exercise.id, set.id);
+                              markSetComplete(exercise.id, set.id, Date.now());
                             }}
                           >
                             {set.completed ? (

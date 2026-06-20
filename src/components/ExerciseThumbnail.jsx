@@ -12,6 +12,7 @@ export default function ExerciseThumbnail({
   });
   const posterUrl = poster.imageUrl === imageUrl ? poster.url : "";
   const posterFailed = poster.imageUrl === imageUrl && poster.failed;
+  const displayUrl = posterUrl || (posterFailed ? imageUrl : "");
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +83,7 @@ export default function ExerciseThumbnail({
         width: `${size}px`,
       }}
     >
-      {!posterUrl ? (
+      {!displayUrl ? (
         <span
           aria-label={alt}
           role="img"
@@ -98,7 +99,7 @@ export default function ExerciseThumbnail({
       ) : (
         <img
           alt={alt}
-          src={posterUrl}
+          src={displayUrl}
           style={{
             display: "block",
             height: "100%",
