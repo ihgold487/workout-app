@@ -10,6 +10,7 @@ const WORKOUT_DATA_KEYS = {
   exerciseLibrary: "exerciseLibrary",
   exerciseMetadata: "exerciseMetadata",
   history: "history",
+  ownerUserId: "ownerUserId",
   plans: "plans",
   selectedSessionId: "selectedSessionId",
   sessions: "sessions",
@@ -58,6 +59,7 @@ function normalizeWorkoutData(data, { seedExercises }) {
     ),
     exerciseMetadata: objectOrEmpty(data?.exerciseMetadata),
     history: arrayOrEmpty(data?.history),
+    ownerUserId: data?.ownerUserId || null,
     plans: arrayOrEmpty(data?.plans),
     selectedSessionId: data?.selectedSessionId ?? null,
     sessions: arrayOrEmpty(data?.sessions),
@@ -91,6 +93,7 @@ export function loadWorkoutData({ seedExercises }) {
       exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
       exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
       history: readJson(WORKOUT_DATA_KEYS.history, []),
+      ownerUserId: readJson(WORKOUT_DATA_KEYS.ownerUserId, null),
       plans: readJson(WORKOUT_DATA_KEYS.plans, []),
       selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
       sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
@@ -106,6 +109,7 @@ export function saveWorkoutData(data, storageVersion) {
   writeJson(WORKOUT_DATA_KEYS.exerciseLibrary, data.exerciseLibrary);
   writeJson(WORKOUT_DATA_KEYS.exerciseMetadata, data.exerciseMetadata);
   writeJson(WORKOUT_DATA_KEYS.history, data.history);
+  writeJson(WORKOUT_DATA_KEYS.ownerUserId, data.ownerUserId || null);
   writeJson(WORKOUT_DATA_KEYS.plans, data.plans);
   writeJson(WORKOUT_DATA_KEYS.selectedSessionId, data.selectedSessionId);
   writeJson(WORKOUT_DATA_KEYS.sessions, data.sessions);
@@ -153,6 +157,7 @@ export function createWorkoutBackup(data) {
       exerciseLibrary: arrayOrEmpty(data.exerciseLibrary),
       exerciseMetadata: objectOrEmpty(data.exerciseMetadata),
       history: arrayOrEmpty(data.history),
+      ownerUserId: data.ownerUserId || null,
       plans: arrayOrEmpty(data.plans),
       selectedSessionId: data.selectedSessionId ?? null,
       sessions: arrayOrEmpty(data.sessions),

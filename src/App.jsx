@@ -589,6 +589,10 @@ export default function App() {
 
   const [history, setHistory] = useState(initialWorkoutData.history);
 
+  const [localOwnerUserId, setLocalOwnerUserId] = useState(
+    initialWorkoutData.ownerUserId || null
+  );
+
   // EXERCISE LIBRARY
   // merge saved exercises + missing built-in exercises
 
@@ -675,6 +679,8 @@ export default function App() {
   const automaticSyncQueuedRef = useRef(false);
 
   const automaticSyncHydratedUserRef = useRef(null);
+
+  const previousAuthUserIdRef = useRef(undefined);
 
   const automaticSyncSuppressUntilRef = useRef(0);
 
@@ -808,6 +814,7 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
+      ownerUserId: localOwnerUserId,
       plans,
       selectedSessionId,
       sessions,
@@ -822,7 +829,22 @@ export default function App() {
     setSessions(data.sessions);
     setExerciseLibrary(data.exerciseLibrary);
     setExerciseMetadata(data.exerciseMetadata);
+    setLocalOwnerUserId(data.ownerUserId || null);
     setSelectedSessionId(data.selectedSessionId);
+  }
+
+  function resetLocalWorkoutDataForUser(userId = null) {
+    setTemplates([]);
+    setPlans([]);
+    setHistory([]);
+    setSessions([]);
+    setExerciseLibrary(seedExercises);
+    setExerciseMetadata({});
+    setSelectedSessionId(null);
+    setLocalOwnerUserId(userId);
+    setSelectedTemplateId(null);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
   }
 
   useEffect(() => {
@@ -831,6 +853,7 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
+      ownerUserId: localOwnerUserId,
       plans,
       selectedSessionId,
       sessions,
@@ -843,12 +866,43 @@ export default function App() {
     sessions,
     exerciseLibrary,
     exerciseMetadata,
+    localOwnerUserId,
     selectedSessionId,
   ]);
 
   useEffect(() => {
     authSessionRef.current = authSession;
   }, [authSession]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    const nextUserId = authSession?.user?.id || null;
+    const previousUserId = previousAuthUserIdRef.current;
+    const switchedSignedInUsers =
+      previousUserId && nextUserId && previousUserId !== nextUserId;
+    const storedOwnerMismatch =
+      nextUserId && localOwnerUserId && localOwnerUserId !== nextUserId;
+    const unownedSignedInData =
+      nextUserId &&
+      !localOwnerUserId &&
+      hasLocalNormalizedUserData(
+        currentWorkoutDataRef.current || getCurrentWorkoutData()
+      );
+
+    if (switchedSignedInUsers || storedOwnerMismatch || unownedSignedInData) {
+      automaticSyncHydratedUserRef.current = null;
+      automaticSyncSuppressUntilRef.current = getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
+      normalizedSyncDirtyDomainsRef.current = new Set();
+      writeNormalizedSyncDirtyDomains([]);
+      resetLocalWorkoutDataForUser(nextUserId);
+      setSyncStatus("Account changed. Local data cleared before syncing this user.");
+    }
+
+    previousAuthUserIdRef.current = nextUserId;
+  }, [authSession?.user?.id, indexedDbReady, localOwnerUserId]);
 
   useEffect(
     () => () => {
@@ -987,6 +1041,7 @@ export default function App() {
       ...data,
       exerciseLibrary: exercisePreferences.exerciseLibrary,
       history: historyData.history,
+      ownerUserId: session.user.id,
       plans: resolvedPlans,
       templates: linkedTemplates,
     };
@@ -1144,6 +1199,16 @@ export default function App() {
       return;
     }
 
+    const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+    const hasUnownedLocalData =
+      !localOwnerUserId && hasLocalNormalizedUserData(data);
+    const hasDifferentOwner =
+      localOwnerUserId && localOwnerUserId !== authSession.user.id;
+
+    if (hasUnownedLocalData || hasDifferentOwner) {
+      return;
+    }
+
     if (automaticSyncHydratedUserRef.current === authSession.user.id) {
       return;
     }
@@ -1151,7 +1216,7 @@ export default function App() {
     runAutomaticNormalizedSync("startup");
     // Latest sync state is read from refs inside runAutomaticNormalizedSync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authSession, indexedDbReady]);
+  }, [authSession, indexedDbReady, localOwnerUserId]);
 
   useEffect(() => {
     if (!indexedDbReady) {
@@ -1418,6 +1483,7 @@ export default function App() {
           setSessions(indexedDbData.sessions);
           setExerciseLibrary(indexedDbData.exerciseLibrary);
           setExerciseMetadata(indexedDbData.exerciseMetadata);
+          setLocalOwnerUserId(indexedDbData.ownerUserId || null);
           setSelectedSessionId(indexedDbData.selectedSessionId);
         }
       } catch (error) {
@@ -1533,6 +1599,7 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
+      ownerUserId: localOwnerUserId,
       plans,
       selectedSessionId,
       sessions,
@@ -1553,6 +1620,7 @@ export default function App() {
     sessions,
     exerciseLibrary,
     exerciseMetadata,
+    localOwnerUserId,
     selectedSessionId,
     indexedDbReady,
   ]);
@@ -2989,6 +3057,10 @@ export default function App() {
         history={history}
         onSave={(result) => {
           goHome();
+          if (result?.type === "trainer-plan" || result?.type === "trainer-workout") {
+            return;
+          }
+
           requestSyncCheckpoint(
             result?.type === "workout" ? ["workouts"] : ["plans", "workouts"],
             result?.type === "workout" ? "workout save" : "plan save"

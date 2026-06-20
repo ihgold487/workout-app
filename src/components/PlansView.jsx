@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   GripVertical,
@@ -37,6 +37,7 @@ import {
   createPlanExercise,
   generatePlanWorkouts,
 } from "../plans/planType2Generator";
+import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 
 function formatList(value) {
   if (Array.isArray(value)) {
@@ -93,6 +94,27 @@ function getExerciseDetailRecord(exercise, exerciseLibrary) {
   };
 }
 
+function getExercisePreferenceKeys(exercise) {
+  return [
+    exercise?.exerciseId,
+    exercise?.id,
+    exercise?.sourceKey,
+    exercise?.source_key,
+  ]
+    .filter((value) => value !== "" && value != null)
+    .map(String);
+}
+
+function getPreferenceExerciseKeys(preference) {
+  return [
+    preference?.exercise_id,
+    preference?.metadata?.localExerciseId,
+    preference?.metadata?.localExerciseID,
+  ]
+    .filter((value) => value !== "" && value != null)
+    .map(String);
+}
+
 function dayPointerThenClosestCenter(args) {
   if (String(args.active?.id || "").startsWith("plan-day:")) {
     return closestCenter(args);
@@ -139,15 +161,12 @@ function normalizeDayOrder(dayOrder, workoutCount) {
   ];
 }
 
-function renameWorkoutForDayOrder(name, dayNumber, daysPerWeek, durationWeeks) {
-  const suffix =
-    daysPerWeek === "1" ? "(single)" : `(${daysPerWeek}d ${durationWeeks}wk)`;
-  const baseName = String(name || `Workout ${dayNumber}`)
-    .replace(/Workout\s+\d+/i, `Workout ${dayNumber}`)
-    .replace(/\((?:single|\d+d\s+\d+wk)\)$/i, "")
-    .trim();
+function renameWorkoutForDayOrder(name, dayNumber, planType) {
+  const compactPrefix = getCompactPlanTypeLabel(planType);
+  const fallbackName = `${compactPrefix} W${dayNumber}`;
+  const currentName = String(name || fallbackName).trim();
 
-  return `${baseName} ${suffix}`;
+  return currentName || fallbackName;
 }
 
 function findWorkoutIndexForSlot(layout, slotKey) {
@@ -536,10 +555,8 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
   );
 }
 
-function getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks) {
-  return daysPerWeek === "1"
-    ? `${workout.name} (single)`
-    : `${workout.name} (${daysPerWeek}d ${durationWeeks}wk)`;
+function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
+  return `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1}`;
 }
 
 function getGoalLabel(goal) {
@@ -728,6 +745,10 @@ function getPlanTypeLabel(planType) {
   return planType === "type-1" ? "Plan Type 1" : "Plan Type 2";
 }
 
+function getCompactPlanTypeLabel(planType) {
+  return planType === "type-1" ? "P1" : "P2";
+}
+
 function PlanPickerButton({ disabled = false, label, onClick, value }) {
   return (
     <label
@@ -785,6 +806,10 @@ export default function PlansView({
   const [exerciseLayoutByWorkout, setExerciseLayoutByWorkout] = useState(null);
   const [supersetGroupBySlot, setSupersetGroupBySlot] = useState({});
   const [dayOrder, setDayOrder] = useState(null);
+  const [trainerUsers, setTrainerUsers] = useState([]);
+  const [selectedTrainerUserId, setSelectedTrainerUserId] = useState("");
+  const [trainerPreferences, setTrainerPreferences] = useState([]);
+  const [trainerStatus, setTrainerStatus] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -793,13 +818,124 @@ export default function PlansView({
       },
     })
   );
+  const selectedTrainerUser =
+    trainerUsers.find((user) => user.user_id === selectedTrainerUserId) ||
+    trainerUsers.find((user) => user.is_self) ||
+    trainerUsers[0] ||
+    null;
+  const isTrainerTargetSelf = !selectedTrainerUser || selectedTrainerUser.is_self;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainerUsers() {
+      if (!isSupabaseConfigured || !supabase) {
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("list_trainer_users");
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setTrainerStatus(`Unable to load users: ${error.message}`);
+        return;
+      }
+
+      const users = Array.isArray(data) ? data : [];
+      setTrainerUsers(users);
+      setSelectedTrainerUserId((currentUserId) => {
+        if (currentUserId && users.some((user) => user.user_id === currentUserId)) {
+          return currentUserId;
+        }
+
+        return users.find((user) => user.is_self)?.user_id || users[0]?.user_id || "";
+      });
+      setTrainerStatus("");
+    }
+
+    loadTrainerUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainerPreferences() {
+      if (!selectedTrainerUserId || !isSupabaseConfigured || !supabase) {
+        setTrainerPreferences([]);
+        return;
+      }
+
+      const { data, error } = await supabase.rpc(
+        "get_trainer_user_exercise_preferences",
+        {
+          target_user_id: selectedTrainerUserId,
+        }
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setTrainerStatus(`Unable to load exercise preferences: ${error.message}`);
+        setTrainerPreferences([]);
+        return;
+      }
+
+      setTrainerPreferences(Array.isArray(data) ? data : []);
+      setTrainerStatus("");
+    }
+
+    loadTrainerPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrainerUserId]);
+
+  const generatorExerciseLibrary = useMemo(() => {
+    if (isTrainerTargetSelf) {
+      return exerciseLibrary;
+    }
+
+    const preferenceByKey = new Map();
+    trainerPreferences.forEach((preference) => {
+      getPreferenceExerciseKeys(preference).forEach((key) => {
+        preferenceByKey.set(key, preference);
+      });
+    });
+
+    return exerciseLibrary
+      .filter((exercise) => exercise.builtin)
+      .map((exercise) => {
+        const preference = getExercisePreferenceKeys(exercise)
+          .map((key) => preferenceByKey.get(key))
+          .find(Boolean);
+
+        return {
+          ...exercise,
+          active: preference?.exclude_from_plans ? "inactive" : "active",
+        };
+      });
+  }, [
+    exerciseLibrary,
+    isTrainerTargetSelf,
+    trainerPreferences,
+  ]);
 
   const generatedPlan = useMemo(
     () =>
       generatePlanWorkouts({
         daysPerWeek,
         durationWeeks,
-        exerciseLibrary,
+        exerciseLibrary: generatorExerciseLibrary,
         exerciseMetadata,
         goal,
         history,
@@ -811,7 +947,7 @@ export default function PlansView({
     [
       daysPerWeek,
       durationWeeks,
-      exerciseLibrary,
+      generatorExerciseLibrary,
       exerciseMetadata,
       goal,
       history,
@@ -885,7 +1021,7 @@ export default function PlansView({
           workoutIndex
         )
           ? workoutNameBySlot[workoutIndex]
-          : getDefaultSavedWorkoutName(workout, daysPerWeek, durationWeeks),
+          : getDefaultSavedWorkoutName(workout, workoutIndex, planType),
         previewWorkoutKey: workoutIndex,
         exercises: normalizedExerciseLayout[workoutIndex]
           .map((slotKey) => {
@@ -969,8 +1105,7 @@ export default function PlansView({
             name: renameWorkoutForDayOrder(
               workout.name,
               dayIndex + 1,
-              daysPerWeek,
-              durationWeeks
+              planType
             ),
           };
         })
@@ -993,7 +1128,7 @@ export default function PlansView({
     setDayOrder(null);
   }
 
-  function saveGeneratedPlan() {
+  async function saveGeneratedPlan() {
     const savedAt = Date.now();
     const planId = savedAt;
     const workouts = orderedPreviewWorkouts.map((workout, workoutIndex) => {
@@ -1030,7 +1165,38 @@ export default function PlansView({
       };
     });
 
+    if (!isTrainerTargetSelf && !selectedTrainerUserId) {
+      setSaveStatus("Choose a user before saving.");
+      return;
+    }
+
+    if (!isTrainerTargetSelf && (!isSupabaseConfigured || !supabase)) {
+      setSaveStatus("Sign in and configure Supabase before saving for another user.");
+      return;
+    }
+
     if (daysPerWeek === "1") {
+      if (!isTrainerTargetSelf) {
+        setSaveStatus("Saving workout for selected user...");
+
+        const { error } = await supabase.rpc("create_trainer_workout_for_user", {
+          target_user_id: selectedTrainerUserId,
+          workout_payload: workouts[0],
+        });
+
+        if (error) {
+          setSaveStatus(`Unable to save workout: ${error.message}`);
+          return;
+        }
+
+        setSaveStatus("Saved workout for selected user.");
+        onSave?.({
+          targetUserId: selectedTrainerUserId,
+          type: "trainer-workout",
+        });
+        return;
+      }
+
       setTemplates([...templates, ...workouts]);
       setSaveStatus("Saved workout.");
       onSave?.({
@@ -1064,6 +1230,28 @@ export default function PlansView({
       })),
     };
 
+    if (!isTrainerTargetSelf) {
+      setSaveStatus("Saving plan for selected user...");
+
+      const { error } = await supabase.rpc("create_trainer_plan_for_user", {
+        target_user_id: selectedTrainerUserId,
+        plan_payload: plan,
+        workouts_payload: workouts,
+      });
+
+      if (error) {
+        setSaveStatus(`Unable to save plan: ${error.message}`);
+        return;
+      }
+
+      setSaveStatus(`Saved plan for ${selectedTrainerUser.display_name}.`);
+      onSave?.({
+        targetUserId: selectedTrainerUserId,
+        type: "trainer-plan",
+      });
+      return;
+    }
+
     setPlans([...plans, plan]);
     setTemplates([...templates, ...workouts]);
     setSaveStatus(`Saved plan with ${workouts.length} workouts.`);
@@ -1079,6 +1267,58 @@ export default function PlansView({
       }}
     >
       <h1>Plans</h1>
+
+      {trainerUsers.length > 1 && (
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+            marginBottom: "12px",
+          }}
+        >
+          User name
+          <select
+            value={selectedTrainerUserId}
+            onChange={(event) => {
+              setSelectedTrainerUserId(event.target.value);
+              resetPlanPreviewEdits();
+              setWorkoutNameBySlot({});
+              setSaveStatus("");
+            }}
+            style={{
+              boxSizing: "border-box",
+              font: "inherit",
+              minHeight: "40px",
+              padding: "6px 10px",
+              width: "100%",
+            }}
+          >
+            {trainerUsers.map((user) => (
+              <option key={user.user_id} value={user.user_id}>
+                {user.display_name}
+                {user.is_self ? " (you)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {trainerStatus && (
+        <div
+          role="status"
+          style={{
+            background: "var(--warning-bg)",
+            border: "1px solid #e6c86e",
+            borderRadius: "6px",
+            color: "var(--warning-text)",
+            fontSize: "13px",
+            marginBottom: "12px",
+            padding: "8px",
+          }}
+        >
+          {trainerStatus}
+        </div>
+      )}
 
       <div
         style={{
@@ -1414,7 +1654,7 @@ export default function PlansView({
       {pickerTarget && (
         <ExercisePickerSheet
           title={`Replace ${getEffectivePrimaryMuscle(pickerTarget) || "exercise"}`}
-          exerciseLibrary={exerciseLibrary}
+          exerciseLibrary={generatorExerciseLibrary}
           history={history}
           search={pickerSearch}
           selectedMuscle={pickerMuscle}

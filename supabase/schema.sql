@@ -90,6 +90,83 @@ for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+create or replace function public.create_profile_for_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (user_id, display_name)
+  values (
+    new.id,
+    coalesce(
+      nullif(new.raw_user_meta_data->>'display_name', ''),
+      nullif(new.raw_user_meta_data->>'name', ''),
+      new.email
+    )
+  )
+  on conflict (user_id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists auth_users_create_profile on auth.users;
+create trigger auth_users_create_profile
+after insert on auth.users
+for each row
+execute function public.create_profile_for_auth_user();
+
+insert into public.profiles (user_id, display_name)
+select
+  au.id,
+  coalesce(
+    nullif(au.raw_user_meta_data->>'display_name', ''),
+    nullif(au.raw_user_meta_data->>'name', ''),
+    au.email
+  )
+from auth.users au
+on conflict (user_id) do nothing;
+
+create table if not exists public.trainer_user_access (
+  trainer_user_id uuid not null references auth.users (id) on delete cascade,
+  trainee_user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (trainer_user_id, trainee_user_id),
+  constraint trainer_user_access_no_self_check check (trainer_user_id <> trainee_user_id)
+);
+
+comment on table public.trainer_user_access is
+  'Allows approved trainer users to prepare plans for listed trainee users. Rows should be managed by a database owner/admin, not ordinary clients.';
+
+create index if not exists trainer_user_access_trainee_user_id_idx
+on public.trainer_user_access (trainee_user_id);
+
+alter table public.trainer_user_access enable row level security;
+
+drop policy if exists "Trainers can read their trainee access" on public.trainer_user_access;
+create policy "Trainers can read their trainee access"
+on public.trainer_user_access
+for select
+using (auth.uid() = trainer_user_id);
+
+create table if not exists public.trainer_admins (
+  trainer_user_id uuid primary key references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+comment on table public.trainer_admins is
+  'Allows approved trainer users to prepare plans for all app users. Rows should be managed by a database owner/admin, not ordinary clients.';
+
+alter table public.trainer_admins enable row level security;
+
+drop policy if exists "Trainer admins can read their own grant" on public.trainer_admins;
+create policy "Trainer admins can read their own grant"
+on public.trainer_admins
+for select
+using (auth.uid() = trainer_user_id);
+
 create table if not exists public.exercises (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users (id) on delete cascade,
@@ -188,6 +265,583 @@ on public.user_exercise_preferences
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+create or replace function public.can_train_user(target_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select target_user_id = auth.uid()
+    or exists (
+      select 1
+      from public.trainer_admins ta
+      where ta.trainer_user_id = auth.uid()
+    )
+    or exists (
+      select 1
+      from public.trainer_user_access tua
+      where tua.trainer_user_id = auth.uid()
+        and tua.trainee_user_id = target_user_id
+    );
+$$;
+
+create or replace function public.list_trainer_users()
+returns table (
+  user_id uuid,
+  display_name text,
+  is_self boolean
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    p.user_id,
+    coalesce(nullif(p.display_name, ''), 'Signed-in user') as display_name,
+    p.user_id = auth.uid() as is_self
+  from public.profiles p
+  where p.user_id = auth.uid()
+     or exists (
+       select 1
+       from public.trainer_admins ta
+       where ta.trainer_user_id = auth.uid()
+     )
+     or exists (
+       select 1
+       from public.trainer_user_access tua
+       where tua.trainer_user_id = auth.uid()
+         and tua.trainee_user_id = p.user_id
+     )
+  order by (p.user_id = auth.uid()) desc, lower(coalesce(p.display_name, ''));
+$$;
+
+create or replace function public.get_trainer_user_exercise_preferences(target_user_id uuid)
+returns table (
+  exercise_id uuid,
+  is_favorite boolean,
+  include_in_plans boolean,
+  exclude_from_plans boolean,
+  preferred_equipment text,
+  notes text,
+  metadata jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    uep.exercise_id,
+    uep.is_favorite,
+    uep.include_in_plans,
+    uep.exclude_from_plans,
+    uep.preferred_equipment,
+    uep.notes,
+    uep.metadata
+  from public.user_exercise_preferences uep
+  where uep.user_id = target_user_id
+    and public.can_train_user(target_user_id);
+$$;
+
+create or replace function public.get_trainer_debug_context()
+returns table (
+  current_user_id uuid,
+  has_admin_grant boolean,
+  profile_count integer,
+  visible_trainer_user_count integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    auth.uid() as current_user_id,
+    exists (
+      select 1
+      from public.trainer_admins ta
+      where ta.trainer_user_id = auth.uid()
+    ) as has_admin_grant,
+    (select count(*)::integer from public.profiles) as profile_count,
+    (select count(*)::integer from public.list_trainer_users()) as visible_trainer_user_count;
+$$;
+
+create or replace function public.create_trainer_plan_for_user(
+  target_user_id uuid,
+  plan_payload jsonb,
+  workouts_payload jsonb
+)
+returns table (
+  plan_source_key text,
+  workout_count integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cloud_plan_id uuid;
+  cloud_workout_id uuid;
+  current_workout jsonb;
+  current_exercise jsonb;
+  current_set jsonb;
+  current_plan_workout jsonb;
+  local_workout_id text;
+  local_workout_ids text[] := '{}';
+  workout_cloud_ids uuid[] := '{}';
+  workout_index integer := 0;
+  exercise_index integer := 0;
+  set_index integer := 0;
+  plan_workout_index integer := 0;
+  target_rir text;
+  target_reps text;
+  target_weight text;
+  exercise_muscles jsonb;
+  inserted_workout_exercise_id uuid;
+begin
+  if not public.can_train_user(target_user_id) then
+    raise exception 'Not authorized to create plans for this user.';
+  end if;
+
+  if target_user_id is null then
+    raise exception 'target_user_id is required.';
+  end if;
+
+  if nullif(plan_payload->>'id', '') is null then
+    raise exception 'plan_payload.id is required.';
+  end if;
+
+  insert into public.training_plans (
+    user_id,
+    name,
+    description,
+    duration_weeks,
+    days_per_week,
+    is_open_ended,
+    starts_on,
+    ends_on,
+    status,
+    plan_config,
+    source,
+    source_key,
+    deleted_at,
+    updated_at
+  )
+  values (
+    target_user_id,
+    coalesce(nullif(plan_payload->>'name', ''), 'Training Plan'),
+    nullif(plan_payload->>'description', ''),
+    nullif(plan_payload->>'durationWeeks', '')::integer,
+    nullif(plan_payload->>'daysPerWeek', '')::integer,
+    coalesce((plan_payload->>'isOpenEnded')::boolean, false),
+    nullif(plan_payload->>'startsOn', '')::date,
+    nullif(plan_payload->>'endsOn', '')::date,
+    coalesce(nullif(plan_payload->>'status', ''), 'inactive'),
+    jsonb_build_object(
+      'completions', coalesce(plan_payload->'completions', '[]'::jsonb),
+      'config', coalesce(plan_payload->'config', '{}'::jsonb),
+      'createdAt', plan_payload->>'createdAt',
+      'currentWeek', coalesce(nullif(plan_payload->>'currentWeek', '')::integer, 1),
+      'goal', coalesce(nullif(plan_payload->>'goal', ''), 'maintain'),
+      'planType', coalesce(nullif(plan_payload->>'planType', ''), 'type-2')
+    ),
+    'local_app',
+    plan_payload->>'id',
+    null,
+    now()
+  )
+  on conflict (user_id, source, source_key)
+  do update set
+    name = excluded.name,
+    description = excluded.description,
+    duration_weeks = excluded.duration_weeks,
+    days_per_week = excluded.days_per_week,
+    is_open_ended = excluded.is_open_ended,
+    starts_on = excluded.starts_on,
+    ends_on = excluded.ends_on,
+    status = excluded.status,
+    plan_config = excluded.plan_config,
+    deleted_at = null,
+    updated_at = now()
+  returning id into cloud_plan_id;
+
+  for current_workout in
+    select value from jsonb_array_elements(coalesce(workouts_payload, '[]'::jsonb))
+  loop
+    workout_index := workout_index + 1;
+    local_workout_id := current_workout->>'id';
+
+    if nullif(local_workout_id, '') is null then
+      raise exception 'workout id is required.';
+    end if;
+
+    insert into public.workouts (
+      user_id,
+      name,
+      description,
+      parent_workout_id,
+      source,
+      source_key,
+      last_completed_at,
+      deleted_at,
+      updated_at
+    )
+    values (
+      target_user_id,
+      coalesce(nullif(current_workout->>'name', ''), 'Workout'),
+      nullif(current_workout->>'description', ''),
+      null,
+      'local_app',
+      local_workout_id,
+      null,
+      null,
+      now()
+    )
+    on conflict (user_id, source, source_key)
+    do update set
+      name = excluded.name,
+      description = excluded.description,
+      deleted_at = null,
+      updated_at = now()
+    returning id into cloud_workout_id;
+
+    local_workout_ids := array_append(local_workout_ids, local_workout_id);
+    workout_cloud_ids := array_append(workout_cloud_ids, cloud_workout_id);
+
+    delete from public.workout_exercises
+    where user_id = target_user_id
+      and workout_id = cloud_workout_id;
+
+    exercise_index := 0;
+    for current_exercise in
+      select value from jsonb_array_elements(coalesce(current_workout->'exercises', '[]'::jsonb))
+    loop
+      exercise_index := exercise_index + 1;
+      exercise_muscles := coalesce(current_exercise->'muscles', '[]'::jsonb);
+
+      insert into public.workout_exercises (
+        user_id,
+        workout_id,
+        exercise_id,
+        position,
+        exercise_name,
+        equipment,
+        primary_muscle,
+        secondary_muscles,
+        superset_group,
+        notes,
+        deleted_at,
+        updated_at
+      )
+      values (
+        target_user_id,
+        cloud_workout_id,
+        null,
+        exercise_index,
+        coalesce(nullif(current_exercise->>'name', ''), 'Exercise'),
+        nullif(current_exercise->'equipment'->>0, ''),
+        nullif(exercise_muscles->>0, ''),
+        coalesce(
+          array(
+            select value
+            from jsonb_array_elements_text(exercise_muscles) with ordinality as muscles(value, position)
+            where position > 1
+          ),
+          '{}'
+        ),
+        nullif(current_exercise->>'supersetGroup', ''),
+        nullif(current_exercise->>'note', ''),
+        null,
+        now()
+      )
+      returning id into inserted_workout_exercise_id;
+
+      set_index := 0;
+      for current_set in
+        select value from jsonb_array_elements(coalesce(current_exercise->'sets', '[]'::jsonb))
+      loop
+        set_index := set_index + 1;
+        target_reps := nullif(current_set->>'targetReps', '');
+        target_rir := nullif(coalesce(current_set->>'targetRir', current_set->>'rir'), '');
+        target_weight := nullif(current_set->>'targetWeight', '');
+
+        insert into public.workout_exercise_sets (
+          user_id,
+          workout_exercise_id,
+          set_number,
+          target_weight_value,
+          target_weight_label,
+          target_reps_min,
+          target_reps_max,
+          target_reps_label,
+          target_rir_value,
+          target_rir_label,
+          is_drop_set,
+          deleted_at,
+          updated_at
+        )
+        values (
+          target_user_id,
+          inserted_workout_exercise_id,
+          set_index,
+          case
+            when target_weight ~ '^\+?[0-9]+(\.[0-9]+)?$'
+              then replace(target_weight, '+', '')::numeric
+            else null
+          end,
+          target_weight,
+          case when target_reps ~ '^[0-9]+$' then target_reps::integer else null end,
+          case when target_reps ~ '^[0-9]+$' then target_reps::integer else null end,
+          target_reps,
+          case
+            when target_rir = '5+' then 6
+            when target_rir ~ '^[0-9]+$' then target_rir::integer
+            else 0
+          end,
+          target_rir,
+          coalesce((current_set->>'isDropSet')::boolean, false),
+          null,
+          now()
+        );
+      end loop;
+    end loop;
+  end loop;
+
+  delete from public.training_plan_workouts
+  where user_id = target_user_id
+    and training_plan_id = cloud_plan_id;
+
+  for current_plan_workout in
+    select value from jsonb_array_elements(coalesce(plan_payload->'workouts', '[]'::jsonb))
+  loop
+    plan_workout_index := plan_workout_index + 1;
+    local_workout_id := current_plan_workout->>'templateId';
+    cloud_workout_id := null;
+
+    if array_length(local_workout_ids, 1) is not null then
+      for workout_index in 1..array_length(local_workout_ids, 1) loop
+        if local_workout_ids[workout_index] = local_workout_id then
+          cloud_workout_id := workout_cloud_ids[workout_index];
+          exit;
+        end if;
+      end loop;
+    end if;
+
+    target_rir := nullif(plan_payload->'config'->>'rir', '');
+
+    insert into public.training_plan_workouts (
+      user_id,
+      training_plan_id,
+      workout_id,
+      week_number,
+      day_number,
+      position,
+      name,
+      phase,
+      target_rir_value,
+      target_rir_label,
+      workout_rules,
+      deleted_at,
+      updated_at
+    )
+    values (
+      target_user_id,
+      cloud_plan_id,
+      cloud_workout_id,
+      nullif(current_plan_workout->>'weekNumber', '')::integer,
+      coalesce(nullif(current_plan_workout->>'dayNumber', '')::integer, plan_workout_index),
+      plan_workout_index,
+      coalesce(nullif(current_plan_workout->>'name', ''), 'Workout'),
+      nullif(current_plan_workout->>'phase', ''),
+      case
+        when target_rir = '5+' then 6
+        when target_rir ~ '^[0-9]+$' then target_rir::integer
+        else 0
+      end,
+      target_rir,
+      jsonb_build_object(
+        'planWorkoutId', current_plan_workout->>'planWorkoutId',
+        'templateId', current_plan_workout->>'templateId'
+      ),
+      null,
+      now()
+    );
+  end loop;
+
+  return query
+  select plan_payload->>'id', coalesce(jsonb_array_length(workouts_payload), 0);
+end;
+$$;
+
+create or replace function public.create_trainer_workout_for_user(
+  target_user_id uuid,
+  workout_payload jsonb
+)
+returns table (
+  workout_source_key text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cloud_workout_id uuid;
+  current_exercise jsonb;
+  current_set jsonb;
+  exercise_index integer := 0;
+  set_index integer := 0;
+  target_rir text;
+  target_reps text;
+  target_weight text;
+  exercise_muscles jsonb;
+  inserted_workout_exercise_id uuid;
+begin
+  if not public.can_train_user(target_user_id) then
+    raise exception 'Not authorized to create workouts for this user.';
+  end if;
+
+  if target_user_id is null then
+    raise exception 'target_user_id is required.';
+  end if;
+
+  if nullif(workout_payload->>'id', '') is null then
+    raise exception 'workout_payload.id is required.';
+  end if;
+
+  insert into public.workouts (
+    user_id,
+    name,
+    description,
+    parent_workout_id,
+    source,
+    source_key,
+    last_completed_at,
+    deleted_at,
+    updated_at
+  )
+  values (
+    target_user_id,
+    coalesce(nullif(workout_payload->>'name', ''), 'Workout'),
+    nullif(workout_payload->>'description', ''),
+    null,
+    'local_app',
+    workout_payload->>'id',
+    null,
+    null,
+    now()
+  )
+  on conflict (user_id, source, source_key)
+  do update set
+    name = excluded.name,
+    description = excluded.description,
+    deleted_at = null,
+    updated_at = now()
+  returning id into cloud_workout_id;
+
+  delete from public.workout_exercises
+  where user_id = target_user_id
+    and workout_id = cloud_workout_id;
+
+  for current_exercise in
+    select value from jsonb_array_elements(coalesce(workout_payload->'exercises', '[]'::jsonb))
+  loop
+    exercise_index := exercise_index + 1;
+    exercise_muscles := coalesce(current_exercise->'muscles', '[]'::jsonb);
+
+    insert into public.workout_exercises (
+      user_id,
+      workout_id,
+      exercise_id,
+      position,
+      exercise_name,
+      equipment,
+      primary_muscle,
+      secondary_muscles,
+      superset_group,
+      notes,
+      deleted_at,
+      updated_at
+    )
+    values (
+      target_user_id,
+      cloud_workout_id,
+      null,
+      exercise_index,
+      coalesce(nullif(current_exercise->>'name', ''), 'Exercise'),
+      nullif(current_exercise->'equipment'->>0, ''),
+      nullif(exercise_muscles->>0, ''),
+      coalesce(
+        array(
+          select value
+          from jsonb_array_elements_text(exercise_muscles) with ordinality as muscles(value, position)
+          where position > 1
+        ),
+        '{}'
+      ),
+      nullif(current_exercise->>'supersetGroup', ''),
+      nullif(current_exercise->>'note', ''),
+      null,
+      now()
+    )
+    returning id into inserted_workout_exercise_id;
+
+    set_index := 0;
+    for current_set in
+      select value from jsonb_array_elements(coalesce(current_exercise->'sets', '[]'::jsonb))
+    loop
+      set_index := set_index + 1;
+      target_reps := nullif(current_set->>'targetReps', '');
+      target_rir := nullif(coalesce(current_set->>'targetRir', current_set->>'rir'), '');
+      target_weight := nullif(current_set->>'targetWeight', '');
+
+      insert into public.workout_exercise_sets (
+        user_id,
+        workout_exercise_id,
+        set_number,
+        target_weight_value,
+        target_weight_label,
+        target_reps_min,
+        target_reps_max,
+        target_reps_label,
+        target_rir_value,
+        target_rir_label,
+        is_drop_set,
+        deleted_at,
+        updated_at
+      )
+      values (
+        target_user_id,
+        inserted_workout_exercise_id,
+        set_index,
+        case
+          when target_weight ~ '^\+?[0-9]+(\.[0-9]+)?$'
+            then replace(target_weight, '+', '')::numeric
+          else null
+        end,
+        target_weight,
+        case when target_reps ~ '^[0-9]+$' then target_reps::integer else null end,
+        case when target_reps ~ '^[0-9]+$' then target_reps::integer else null end,
+        target_reps,
+        case
+          when target_rir = '5+' then 6
+          when target_rir ~ '^[0-9]+$' then target_rir::integer
+          else 0
+        end,
+        target_rir,
+        coalesce((current_set->>'isDropSet')::boolean, false),
+        null,
+        now()
+      );
+    end loop;
+  end loop;
+
+  return query
+  select workout_payload->>'id';
+end;
+$$;
 
 create table if not exists public.workouts (
   id uuid primary key default gen_random_uuid(),
