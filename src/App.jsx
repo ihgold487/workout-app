@@ -109,6 +109,14 @@ const BUILD_NOTICE_COPY = {
   updated: "Updated to the latest build.",
 };
 
+function safeSetLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.error(`Failed to write ${key} to localStorage:`, error);
+  }
+}
+
 function formatNormalizedSummary(summary) {
   const latest = summary.latestSession
     ? ` Latest: ${summary.latestSession.workout_name} on ${new Date(
@@ -398,11 +406,11 @@ function writeNormalizedSyncDirtyDomains(domains) {
     NORMALIZED_SYNC_DOMAINS.includes(domain)
   );
 
-  localStorage.setItem(
+  safeSetLocalStorage(
     NORMALIZED_SYNC_DIRTY_DOMAINS_KEY,
     JSON.stringify(uniqueDomains)
   );
-  localStorage.setItem(
+  safeSetLocalStorage(
     NORMALIZED_SYNC_DIRTY_KEY,
     uniqueDomains.length > 0 ? "true" : "false"
   );
@@ -496,7 +504,7 @@ function getInitialBuildNotice() {
   );
 
   if (!lastSeenBuildTime) {
-    localStorage.setItem(LAST_SEEN_BUILD_KEY, BUILD_TIME);
+    safeSetLocalStorage(LAST_SEEN_BUILD_KEY, BUILD_TIME);
 
     if (pendingUpdate?.buildTime && pendingUpdate.buildTime !== BUILD_TIME) {
       localStorage.removeItem(PENDING_UPDATE_KEY);
@@ -505,7 +513,7 @@ function getInitialBuildNotice() {
       return "updated";
     }
   } else if (lastSeenBuildTime !== BUILD_TIME) {
-    localStorage.setItem(LAST_SEEN_BUILD_KEY, BUILD_TIME);
+    safeSetLocalStorage(LAST_SEEN_BUILD_KEY, BUILD_TIME);
     localStorage.removeItem(PENDING_UPDATE_KEY);
     rememberUpdateConfirmation();
 
@@ -535,7 +543,7 @@ function getSavedUpdateConfirmation() {
 }
 
 function rememberPendingUpdate() {
-  localStorage.setItem(
+  safeSetLocalStorage(
     PENDING_UPDATE_KEY,
     JSON.stringify({
       buildTime: BUILD_TIME,
@@ -545,7 +553,7 @@ function rememberPendingUpdate() {
 }
 
 function rememberUpdateConfirmation() {
-  localStorage.setItem(
+  safeSetLocalStorage(
     UPDATE_CONFIRMATION_KEY,
     JSON.stringify({
       expiresAt: Date.now() + UPDATE_CONFIRMATION_DURATION,
@@ -938,7 +946,7 @@ export default function App() {
 
     normalizedSyncDirtyDomainsRef.current = new Set();
     writeNormalizedSyncDirtyDomains([]);
-    localStorage.setItem(LAST_NORMALIZED_SYNC_KEY, syncedAt);
+    safeSetLocalStorage(LAST_NORMALIZED_SYNC_KEY, syncedAt);
     setLastNormalizedSyncAt(syncedAt);
   }
 
@@ -1658,7 +1666,7 @@ export default function App() {
         return;
       }
 
-      localStorage.setItem(
+      safeSetLocalStorage(
         LAST_AUTO_UPDATE_CHECK_KEY,
         String(getCurrentTimeMs())
       );
@@ -3038,6 +3046,7 @@ export default function App() {
       <ExerciseView
         exerciseLibrary={exerciseLibrary}
         history={history}
+        session={authSession}
         setExerciseLibrary={(nextExerciseLibrary) => {
           setExerciseLibrary(nextExerciseLibrary);
           requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");

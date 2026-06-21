@@ -1,3 +1,4 @@
+import { ImagePlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function ExerciseThumbnail({
@@ -64,10 +65,6 @@ export default function ExerciseThumbnail({
     };
   }, [imageUrl]);
 
-  if (!imageUrl) {
-    return null;
-  }
-
   return (
     <span
       style={{
@@ -83,7 +80,14 @@ export default function ExerciseThumbnail({
         width: `${size}px`,
       }}
     >
-      {!displayUrl ? (
+      {!imageUrl ? (
+        <ImagePlus
+          aria-label={alt}
+          color="var(--text-muted)"
+          role="img"
+          size={Math.max(18, Math.round(size * 0.36))}
+        />
+      ) : !displayUrl ? (
         <span
           aria-label={alt}
           role="img"

@@ -10,6 +10,14 @@ const BUILD_TIME = __BUILD_TIME__;
 const PENDING_UPDATE_KEY = "pendingPwaUpdate";
 const UPDATE_CHECK_TIMEOUT = 5000;
 
+function safeSetLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.error(`Failed to write ${key} to localStorage:`, error);
+  }
+}
+
 function emitPwaUpdateStatus(status) {
   window.dispatchEvent(
     new CustomEvent("pwa-update-status", {
@@ -21,7 +29,7 @@ function emitPwaUpdateStatus(status) {
 }
 
 function rememberPendingUpdate() {
-  localStorage.setItem(
+  safeSetLocalStorage(
     PENDING_UPDATE_KEY,
     JSON.stringify({
       buildTime: BUILD_TIME,

@@ -45,6 +45,29 @@ function cloudExerciseFromLocal(exercise, userId) {
   };
 }
 
+function cloudBuiltinExerciseFromLocal(exercise, userId) {
+  const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
+  const sourceKey = [
+    "trainer-promoted",
+    userId,
+    String(exercise.sourceKey || exercise.id),
+  ].join(":");
+
+  return {
+    description: exercise.description || exercise.note || null,
+    equipment: firstArrayValue(exercise.equipment),
+    image_alt: exercise.imageAlt || exercise.image_alt || null,
+    image_storage_path:
+      exercise.imageStoragePath || exercise.image_storage_path || null,
+    image_url: exercise.imageUrl || exercise.image_url || null,
+    name: exercise.name,
+    primary_muscle: muscles[0] || null,
+    secondary_muscles: remainingArrayValues(muscles),
+    source: "trainer_promoted",
+    source_key: sourceKey,
+  };
+}
+
 export function getCustomExercises(exerciseLibrary) {
   return exerciseLibrary.filter((exercise) => !exercise.builtin);
 }
@@ -59,10 +82,40 @@ function firstEquipmentValue(value) {
   return firstArrayValue(value) || "";
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
 function getExerciseMatchKey(exercise) {
   return `${normalizeText(exercise.name)}::${normalizeText(
     firstEquipmentValue(exercise.equipment)
   )}`;
+}
+
+async function findBuiltInExerciseId(exercise) {
+  const equipment = firstEquipmentValue(exercise.equipment);
+  let query = supabase
+    .from(EXERCISES_TABLE)
+    .select("id")
+    .eq("is_builtin", true)
+    .is("user_id", null)
+    .is("deleted_at", null)
+    .eq("name", exercise.name)
+    .limit(1);
+
+  query = equipment
+    ? query.eq("equipment", equipment)
+    : query.is("equipment", null);
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.[0]?.id || null;
 }
 
 export async function uploadCustomExercises(exerciseLibrary, session) {
@@ -124,6 +177,61 @@ export async function uploadCustomExercises(exerciseLibrary, session) {
     deleted: deletedIds.length,
     uploaded: records.length,
   };
+}
+
+export async function promoteCustomExerciseToBuiltIn(exercise, session) {
+  assertCloudReady(session);
+
+  if (!exercise || exercise.builtin) {
+    throw new Error("Choose a custom exercise to add as built-in.");
+  }
+
+  const { data, error } = await supabase.rpc(
+    "promote_custom_exercise_to_builtin",
+    {
+      exercise_payload: cloudBuiltinExerciseFromLocal(exercise, session.user.id),
+    }
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateBuiltInExercise(
+  exercise,
+  session,
+  lookupExercise = exercise
+) {
+  assertCloudReady(session);
+
+  if (!exercise?.builtin) {
+    throw new Error("Choose a built-in exercise to update.");
+  }
+
+  const exerciseId =
+    lookupExercise.exerciseId ||
+    (isUuid(lookupExercise.id) ? lookupExercise.id : null) ||
+    (await findBuiltInExerciseId(lookupExercise));
+
+  if (!exerciseId) {
+    throw new Error(
+      "Unable to find this built-in exercise in the database. Sync first, then try again."
+    );
+  }
+
+  const { data, error } = await supabase.rpc("update_builtin_exercise", {
+    exercise_id: exerciseId,
+    exercise_payload: cloudBuiltinExerciseFromLocal(exercise, session.user.id),
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 async function loadCloudExercisePreferenceTargets(userId) {
@@ -352,6 +460,26 @@ export async function downloadExerciseLibraryWithPreferences(
   const existingLocalIds = new Set(
     mergedExercises.map((exercise) => String(exercise.id))
   );
+  const addedBuiltInExercises = cloudExercises
+    .filter(
+      (exercise) =>
+        exercise.is_builtin &&
+        exercise.user_id === null &&
+        !matchedCloudExerciseIds.has(exercise.id)
+    )
+    .map((exercise) => {
+      const localExercise = cloudExerciseToLocal(exercise);
+      const preference = preferencesByExerciseId.get(exercise.id);
+
+      return {
+        ...localExercise,
+        active: getPreferenceStatus(preference),
+      };
+    })
+    .filter((exercise) => !existingLocalIds.has(String(exercise.id)));
+  addedBuiltInExercises.forEach((exercise) => {
+    existingLocalIds.add(String(exercise.id));
+  });
   const addedCustomExercises = cloudExercises
     .filter(
       (exercise) =>
@@ -370,16 +498,24 @@ export async function downloadExerciseLibraryWithPreferences(
     })
     .filter((exercise) => !existingLocalIds.has(String(exercise.id)));
 
-  inactive += addedCustomExercises.filter(
+  inactive += [...addedBuiltInExercises, ...addedCustomExercises].filter(
     (exercise) => exercise.active === EXERCISE_STATUS.inactive
   ).length;
 
   return {
+    addedBuiltInExercises: addedBuiltInExercises.length,
     addedCustomExercises: addedCustomExercises.length,
-    exerciseLibrary: [...mergedExercises, ...addedCustomExercises],
+    exerciseLibrary: [
+      ...mergedExercises,
+      ...addedBuiltInExercises,
+      ...addedCustomExercises,
+    ],
     inactive,
     preferences: preferences.length,
-    total: mergedExercises.length + addedCustomExercises.length,
+    total:
+      mergedExercises.length +
+      addedBuiltInExercises.length +
+      addedCustomExercises.length,
     updated,
   };
 }

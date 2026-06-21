@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { LineChart, ListChecks, X } from "lucide-react";
+import { ImagePlus, LineChart, ListChecks, X } from "lucide-react";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 
 function formatEquipment(equipment) {
@@ -328,19 +328,20 @@ export default function ExerciseDetailDialog({
               marginTop: "12px",
             }}
           >
-            {exercise.imageUrl && (
-              <div
-                style={{
-                  alignItems: "center",
-                  background: "var(--surface-muted)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  display: "flex",
-                  justifyContent: "center",
-                  minHeight: "260px",
-                  overflow: "hidden",
-                }}
-              >
+            <div
+              style={{
+                alignItems: "center",
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                color: "var(--text-muted)",
+                display: "flex",
+                justifyContent: "center",
+                minHeight: "260px",
+                overflow: "hidden",
+              }}
+            >
+              {exercise.imageUrl ? (
                 <img
                   alt={exercise.imageAlt || `${exercise.name} demonstration`}
                   src={exercise.imageUrl}
@@ -351,8 +352,14 @@ export default function ExerciseDetailDialog({
                     width: "100%",
                   }}
                 />
-              </div>
-            )}
+              ) : (
+                <ImagePlus
+                  aria-label={`${exercise.name} image placeholder`}
+                  role="img"
+                  size={48}
+                />
+              )}
+            </div>
 
             <div
               style={{

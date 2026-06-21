@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, ImagePlus, Link, X } from "lucide-react";
+import { Copy, ImagePlus, X } from "lucide-react";
 
 import { equipmentOptions } from "../data/seedEquipment";
 import {
@@ -7,11 +7,17 @@ import {
   getExerciseStatus,
   isExerciseActive,
 } from "../utils/exerciseStatus";
+import {
+  promoteCustomExerciseToBuiltIn,
+  updateBuiltInExercise,
+} from "../sync/exerciseCloudSync";
+import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
 const muscleGroups = [
   "Abs",
+  "Obliques",
   "Biceps",
   "Calves",
   "Chest",
@@ -39,10 +45,47 @@ const emptyDraft = {
 };
 
 const cropPreviewSize = 260;
+const draftImageExerciseId = "__draft_custom_exercise__";
 const savedImageSize = 512;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function bytesIncludeAscii(bytes, text) {
+  const codes = Array.from(text).map((character) => character.charCodeAt(0));
+
+  return bytes.some((_, index) =>
+    codes.every((code, codeIndex) => bytes[index + codeIndex] === code)
+  );
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function isAnimatedImageFile(file) {
+  const fileType = file.type.toLowerCase();
+
+  if (fileType === "image/gif") {
+    return true;
+  }
+
+  if (fileType !== "image/webp" && fileType !== "image/png") {
+    return false;
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  return fileType === "image/webp"
+    ? bytesIncludeAscii(bytes, "ANIM")
+    : bytesIncludeAscii(bytes, "acTL");
 }
 
 function getExerciseDraft(exercise = {}) {
@@ -97,17 +140,28 @@ function getExerciseStatusButtonStyle(active) {
 export default function ExerciseView({
   exerciseLibrary,
   history = [],
+  session = null,
   setExerciseLibrary,
 }) {
+  const addExerciseSectionRef = useRef(null);
   const cropDragRef = useRef(null);
+  const cropOffsetRef = useRef({
+    x: 0,
+    y: 0,
+  });
+  const cropPinchRef = useRef(null);
+  const cropPointersRef = useRef(new Map());
+  const cropZoomRef = useRef(1);
   const photoInputRef = useRef(null);
   const [draft, setDraft] = useState(emptyDraft);
   const [detailExercise, setDetailExercise] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
   const [editingDraft, setEditingDraft] = useState(emptyDraft);
+  const [editingSaveStatus, setEditingSaveStatus] = useState("");
   const [imageExercise, setImageExercise] = useState(null);
-  const [imageUrlDraft, setImageUrlDraft] = useState("");
+  const [imageSaveStatus, setImageSaveStatus] = useState("");
   const [copyImageExerciseId, setCopyImageExerciseId] = useState("");
+  const [copyImageSearch, setCopyImageSearch] = useState("");
   const [cropImage, setCropImage] = useState(null);
   const [cropOffset, setCropOffset] = useState({
     x: 0,
@@ -115,6 +169,9 @@ export default function ExerciseView({
   });
   const [cropZoom, setCropZoom] = useState(1);
   const [exerciseType, setExerciseType] = useState("");
+  const [promoteExerciseStatus, setPromoteExerciseStatus] = useState("");
+  const [promotingExerciseId, setPromotingExerciseId] = useState(null);
+  const [trainerCanAddBuiltIns, setTrainerCanAddBuiltIns] = useState(false);
   const [exerciseStatus, setExerciseStatus] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("");
@@ -132,6 +189,66 @@ export default function ExerciseView({
     },
     [cropImage?.url]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainerPermission() {
+      setTrainerCanAddBuiltIns(false);
+
+      if (!session?.user?.id || !isSupabaseConfigured || !supabase) {
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("trainer_admins")
+        .select("trainer_user_id")
+        .eq("trainer_user_id", session.user.id)
+        .maybeSingle();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        console.error("Unable to load trainer permission:", error);
+        return;
+      }
+
+      setTrainerCanAddBuiltIns(Boolean(data));
+    }
+
+    loadTrainerPermission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  function setNextCropOffset(nextOffset) {
+    cropOffsetRef.current = nextOffset;
+    setCropOffset(nextOffset);
+  }
+
+  function setNextCropZoom(nextZoom) {
+    cropZoomRef.current = nextZoom;
+    setCropZoom(nextZoom);
+  }
+
+  function resetCropGestures() {
+    cropDragRef.current = null;
+    cropPinchRef.current = null;
+    cropPointersRef.current.clear();
+  }
+
+  function resetCropAdjustment() {
+    resetCropGestures();
+    setNextCropOffset({
+      x: 0,
+      y: 0,
+    });
+    setNextCropZoom(1);
+  }
 
   const filteredExercises = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -171,6 +288,33 @@ export default function ExerciseView({
     selectedMuscle,
   ]);
 
+  const copyImageExercises = useMemo(() => {
+    if (!imageExercise) {
+      return [];
+    }
+
+    const normalizedSearch = copyImageSearch.trim().toLowerCase();
+
+    return exerciseLibrary
+      .filter((exercise) => {
+        if (!exercise.imageUrl || exercise.id === imageExercise.id) {
+          return false;
+        }
+
+        const searchableText = [
+          exercise.name,
+          exercise.equipment?.[0],
+          exercise.muscles?.[0],
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return !normalizedSearch || searchableText.includes(normalizedSearch);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [copyImageSearch, exerciseLibrary, imageExercise]);
+
   function addExercise() {
     if (!draft.name.trim()) {
       alert("Exercise name required");
@@ -191,23 +335,61 @@ export default function ExerciseView({
   function startEdit(exercise) {
     setEditingExercise(exercise);
     setEditingDraft(getExerciseDraft(exercise));
+    setEditingSaveStatus("");
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingDraft.name.trim()) {
       alert("Exercise name required");
       return;
     }
 
+    const updatedExercise = exerciseFromDraft(editingDraft, editingExercise);
+
+    if (editingExercise.builtin) {
+      if (!trainerCanAddBuiltIns) {
+        setEditingSaveStatus("Only trainer admins can edit built-in exercises.");
+        return;
+      }
+
+      setEditingSaveStatus("Saving built-in exercise...");
+
+      try {
+        const updatedExerciseId = await updateBuiltInExercise(
+          updatedExercise,
+          session,
+          editingExercise
+        );
+
+        setExerciseLibrary(
+          exerciseLibrary.map((exercise) =>
+            exercise.id === editingExercise.id
+              ? {
+                  ...updatedExercise,
+                  exerciseId: updatedExerciseId || updatedExercise.exerciseId,
+                }
+              : exercise
+          )
+        );
+        setEditingExercise(null);
+        setEditingDraft(emptyDraft);
+        setEditingSaveStatus("");
+      } catch (error) {
+        console.error("Failed to update built-in exercise:", error);
+        setEditingSaveStatus(`Unable to save built-in exercise: ${error.message}`);
+      }
+
+      return;
+    }
+
     setExerciseLibrary(
       exerciseLibrary.map((exercise) =>
-        exercise.id === editingExercise.id
-          ? exerciseFromDraft(editingDraft, exercise)
-          : exercise
+        exercise.id === editingExercise.id ? updatedExercise : exercise
       )
     );
     setEditingExercise(null);
     setEditingDraft(emptyDraft);
+    setEditingSaveStatus("");
   }
 
   function toggleExerciseStatus(exerciseToToggle) {
@@ -227,33 +409,164 @@ export default function ExerciseView({
     );
   }
 
+  function duplicateExercise(event, exercise) {
+    event.stopPropagation();
+    setDraft({
+      ...getExerciseDraft(exercise),
+      name: `${exercise.name} - copy`,
+    });
+    requestAnimationFrame(() => {
+      addExerciseSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  async function addCustomExerciseAsBuiltIn(event, exercise) {
+    event.stopPropagation();
+
+    if (!trainerCanAddBuiltIns) {
+      setPromoteExerciseStatus("Only trainer admins can add built-in exercises.");
+      return;
+    }
+
+    setPromotingExerciseId(exercise.id);
+    setPromoteExerciseStatus(`Adding ${exercise.name} as built-in...`);
+
+    try {
+      const promotedExerciseId = await promoteCustomExerciseToBuiltIn(
+        exercise,
+        session
+      );
+
+      setExerciseLibrary(
+        exerciseLibrary.map((item) =>
+          item.id === exercise.id
+            ? {
+                ...item,
+                builtin: true,
+                exerciseId: promotedExerciseId || item.exerciseId,
+                source: "trainer_promoted",
+                sourceKey:
+                  item.sourceKey ||
+                  ["trainer-promoted", session.user.id, String(item.id)].join(
+                    ":"
+                  ),
+              }
+            : item
+        )
+      );
+      setPromoteExerciseStatus(`${exercise.name} is now a built-in exercise.`);
+    } catch (error) {
+      console.error("Failed to add exercise as built-in:", error);
+      setPromoteExerciseStatus(
+        `Unable to add ${exercise.name} as built-in: ${error.message}`
+      );
+    } finally {
+      setPromotingExerciseId(null);
+    }
+  }
+
+  function openDraftImageSheet(event) {
+    event.stopPropagation();
+    setImageExercise({
+      id: draftImageExerciseId,
+      imageUrl: draft.imageUrl,
+      name: draft.name.trim() || "New custom exercise",
+    });
+    setCopyImageExerciseId("");
+    setCopyImageSearch("");
+    setCropImage(null);
+    setImageSaveStatus("");
+    resetCropAdjustment();
+  }
+
   function openImageSheet(event, exercise) {
     event.stopPropagation();
     setImageExercise(exercise);
-    setImageUrlDraft(exercise.imageUrl || "");
     setCopyImageExerciseId("");
+    setCopyImageSearch("");
     setCropImage(null);
+    setImageSaveStatus("");
+    resetCropAdjustment();
   }
 
   function closeImageSheet() {
     setImageExercise(null);
-    setImageUrlDraft("");
+    setImageSaveStatus("");
     setCopyImageExerciseId("");
+    setCopyImageSearch("");
     setCropImage(null);
-    setCropOffset({
-      x: 0,
-      y: 0,
-    });
-    setCropZoom(1);
+    resetCropAdjustment();
   }
 
-  function updateExerciseImage(exerciseId, imageUrl) {
+  async function updateExerciseImage(exerciseId, imageUrl) {
+    if (!String(imageUrl || "").trim()) {
+      setImageSaveStatus("Choose an image before saving.");
+      return false;
+    }
+
+    if (exerciseId === draftImageExerciseId) {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        imageUrl,
+      }));
+      setImageExercise((exercise) =>
+        exercise?.id === draftImageExerciseId
+          ? {
+              ...exercise,
+              imageUrl,
+            }
+          : exercise
+      );
+      return true;
+    }
+
+    const existingExercise =
+      exerciseLibrary.find((exercise) => exercise.id === exerciseId) ||
+      imageExercise;
+
+    if (!existingExercise) {
+      setImageSaveStatus("Unable to find this exercise.");
+      return false;
+    }
+
+    const updatedExercise = {
+      ...existingExercise,
+      imageUrl,
+    };
+
+    if (existingExercise.builtin) {
+      if (!trainerCanAddBuiltIns) {
+        setImageSaveStatus("Only trainer admins can edit built-in images.");
+        return false;
+      }
+
+      setImageSaveStatus("Saving built-in image...");
+
+      try {
+        const updatedExerciseId = await updateBuiltInExercise(
+          updatedExercise,
+          session,
+          existingExercise
+        );
+
+        updatedExercise.exerciseId =
+          updatedExerciseId || updatedExercise.exerciseId;
+      } catch (error) {
+        console.error("Failed to update built-in exercise image:", error);
+        setImageSaveStatus(`Unable to save built-in image: ${error.message}`);
+        return false;
+      }
+    }
+
     setExerciseLibrary(
       exerciseLibrary.map((exercise) =>
         exercise.id === exerciseId
           ? {
               ...exercise,
-              imageUrl,
+              ...updatedExercise,
             }
           : exercise
       )
@@ -262,22 +575,15 @@ export default function ExerciseView({
       exercise && exercise.id === exerciseId
         ? {
             ...exercise,
-            imageUrl,
+            ...updatedExercise,
           }
         : exercise
     );
+    setImageSaveStatus("");
+    return true;
   }
 
-  function saveImageUrl() {
-    if (!imageExercise) {
-      return;
-    }
-
-    updateExerciseImage(imageExercise.id, imageUrlDraft.trim());
-    closeImageSheet();
-  }
-
-  function copyExerciseImage() {
+  async function copyExerciseImage() {
     if (!imageExercise || !copyImageExerciseId) {
       return;
     }
@@ -290,12 +596,28 @@ export default function ExerciseView({
       return;
     }
 
-    updateExerciseImage(imageExercise.id, sourceExercise.imageUrl);
-    closeImageSheet();
+    if (await updateExerciseImage(imageExercise.id, sourceExercise.imageUrl)) {
+      closeImageSheet();
+    }
   }
 
-  function handleImageFile(file) {
+  async function handleImageFile(file) {
     if (!file || !imageExercise) {
+      return;
+    }
+
+    try {
+      if (await isAnimatedImageFile(file)) {
+        const imageUrl = await readFileAsDataUrl(file);
+
+        if (await updateExerciseImage(imageExercise.id, imageUrl)) {
+          closeImageSheet();
+        }
+        return;
+      }
+    } catch (error) {
+      console.error("Unable to preserve animated image:", error);
+      alert("Unable to load this image.");
       return;
     }
 
@@ -303,49 +625,147 @@ export default function ExerciseView({
       name: file.name,
       url: URL.createObjectURL(file),
     });
-    setCropOffset({
-      x: 0,
-      y: 0,
-    });
-    setCropZoom(1);
+    resetCropAdjustment();
   }
 
-  function startCropDrag(event) {
-    cropDragRef.current = {
-      pointerId: event.pointerId,
-      startOffset: cropOffset,
+  function getCropPointerCenter(points, element) {
+    const bounds = element.getBoundingClientRect();
+    const averageX =
+      points.reduce((total, point) => total + point.x, 0) / points.length;
+    const averageY =
+      points.reduce((total, point) => total + point.y, 0) / points.length;
+
+    return {
+      x: averageX - bounds.left - cropPreviewSize / 2,
+      y: averageY - bounds.top - cropPreviewSize / 2,
+    };
+  }
+
+  function getCropPointerDistance(points) {
+    const [first, second] = points;
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
+  function getActiveCropPointers() {
+    return Array.from(cropPointersRef.current.values()).slice(0, 2);
+  }
+
+  function startCropGesture(event) {
+    cropPointersRef.current.set(event.pointerId, {
       x: event.clientX,
       y: event.clientY,
-    };
+    });
     event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    if (cropPointersRef.current.size === 1) {
+      cropDragRef.current = {
+        pointerId: event.pointerId,
+        startOffset: cropOffsetRef.current,
+        x: event.clientX,
+        y: event.clientY,
+      };
+      cropPinchRef.current = null;
+      return;
+    }
+
+    const points = getActiveCropPointers();
+    cropDragRef.current = null;
+    cropPinchRef.current = {
+      center: getCropPointerCenter(points, event.currentTarget),
+      distance: Math.max(getCropPointerDistance(points), 1),
+      startOffset: cropOffsetRef.current,
+      startZoom: cropZoomRef.current,
+    };
   }
 
-  function moveCropDrag(event) {
+  function moveCropGesture(event) {
+    if (!cropPointersRef.current.has(event.pointerId)) {
+      return;
+    }
+
+    cropPointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    if (cropPointersRef.current.size >= 2 && cropPinchRef.current) {
+      const points = getActiveCropPointers();
+      const pinch = cropPinchRef.current;
+      const distance = getCropPointerDistance(points);
+      const currentCenter = getCropPointerCenter(points, event.currentTarget);
+      const nextZoom = clamp(
+        pinch.startZoom * (distance / pinch.distance),
+        1,
+        3
+      );
+      const zoomRatio = nextZoom / pinch.startZoom;
+
+      setNextCropZoom(nextZoom);
+      setNextCropOffset({
+        x: clamp(
+          currentCenter.x - (pinch.center.x - pinch.startOffset.x) * zoomRatio,
+          -160,
+          160
+        ),
+        y: clamp(
+          currentCenter.y - (pinch.center.y - pinch.startOffset.y) * zoomRatio,
+          -160,
+          160
+        ),
+      });
+      return;
+    }
+
+    if (!cropDragRef.current) {
+      cropDragRef.current = {
+        pointerId: event.pointerId,
+        startOffset: cropOffsetRef.current,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    }
     const drag = cropDragRef.current;
 
     if (!drag || drag.pointerId !== event.pointerId) {
       return;
     }
 
-    setCropOffset({
+    setNextCropOffset({
       x: clamp(drag.startOffset.x + event.clientX - drag.x, -160, 160),
       y: clamp(drag.startOffset.y + event.clientY - drag.y, -160, 160),
     });
   }
 
-  function endCropDrag(event) {
+  function endCropGesture(event) {
+    cropPointersRef.current.delete(event.pointerId);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+
     if (cropDragRef.current?.pointerId === event.pointerId) {
       cropDragRef.current = null;
+    }
+
+    if (cropPointersRef.current.size === 1) {
+      const [[pointerId, point]] = cropPointersRef.current.entries();
+      cropDragRef.current = {
+        pointerId,
+        startOffset: cropOffsetRef.current,
+        x: point.x,
+        y: point.y,
+      };
+      cropPinchRef.current = null;
+      return;
+    }
+
+    if (cropPointersRef.current.size === 0) {
+      cropPinchRef.current = null;
     }
   }
 
   function cancelCropImage() {
     setCropImage(null);
-    setCropOffset({
-      x: 0,
-      y: 0,
-    });
-    setCropZoom(1);
+    resetCropAdjustment();
   }
 
   function saveCroppedImage() {
@@ -355,7 +775,7 @@ export default function ExerciseView({
 
     const image = new Image();
 
-    image.onload = () => {
+    image.onload = async () => {
       const canvas = document.createElement("canvas");
       canvas.width = savedImageSize;
       canvas.height = savedImageSize;
@@ -388,11 +808,14 @@ export default function ExerciseView({
         displayedHeight * outputScale
       );
 
-      updateExerciseImage(
-        imageExercise.id,
-        canvas.toDataURL("image/webp", 0.86)
-      );
-      closeImageSheet();
+      if (
+        await updateExerciseImage(
+          imageExercise.id,
+          canvas.toDataURL("image/webp", 0.86)
+        )
+      ) {
+        closeImageSheet();
+      }
     };
 
     image.onerror = () => {
@@ -401,7 +824,11 @@ export default function ExerciseView({
     image.src = cropImage.url;
   }
 
-  function renderExerciseForm(formDraft, setFormDraft, { compact = false } = {}) {
+  function renderExerciseForm(
+    formDraft,
+    setFormDraft,
+    { compact = false, draftImagePicker = false } = {}
+  ) {
     const availableSecondaryMuscles = muscleGroups.filter(
       (muscle) => muscle !== formDraft.primaryMuscle
     );
@@ -456,25 +883,52 @@ export default function ExerciseView({
           placeholder="Description or notes"
           rows={compact ? 2 : 3}
           style={{
-            gridColumn: compact ? "auto" : "1 / -1",
+            gridColumn: compact || draftImagePicker ? "auto" : "1 / -1",
+            minHeight: draftImagePicker ? "92px" : undefined,
             resize: "vertical",
           }}
         />
 
-        <input
-          value={formDraft.imageUrl}
-          onChange={(event) =>
-            setFormDraft({
-              ...formDraft,
-              imageUrl: event.target.value,
-            })
-          }
-          placeholder="Image URL"
-          style={{
-            gridColumn: compact ? "auto" : "1 / -1",
-            minWidth: 0,
-          }}
-        />
+        {draftImagePicker && (
+          <button
+            aria-label="Select image for new custom exercise"
+            onClick={openDraftImageSheet}
+            style={{
+              alignItems: "center",
+              alignSelf: "stretch",
+              background: "transparent",
+              border: "none",
+              display: "flex",
+              justifyContent: "center",
+              padding: 0,
+            }}
+            type="button"
+          >
+            {formDraft.imageUrl ? (
+              <ExerciseThumbnail
+                alt={`${formDraft.name || "Custom exercise"} image`}
+                imageUrl={formDraft.imageUrl}
+                size={92}
+              />
+            ) : (
+              <span
+                style={{
+                  alignItems: "center",
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "var(--text-muted)",
+                  display: "flex",
+                  height: "92px",
+                  justifyContent: "center",
+                  width: "92px",
+                }}
+              >
+                <ImagePlus size={28} />
+              </span>
+            )}
+          </button>
+        )}
 
         <label
           style={{
@@ -597,6 +1051,7 @@ export default function ExerciseView({
       </h1>
 
       <section
+        ref={addExerciseSectionRef}
         style={{
           border: "1px solid var(--border)",
           borderRadius: "6px",
@@ -604,25 +1059,44 @@ export default function ExerciseView({
           padding: "12px",
         }}
       >
-        <h2
+        <div
           style={{
-            fontSize: "1rem",
-            margin: "0 0 10px",
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+            justifyContent: "space-between",
+            marginBottom: "10px",
           }}
         >
-          Add Custom Exercise
-        </h2>
+          <h2
+            style={{
+              fontSize: "1rem",
+              margin: 0,
+            }}
+          >
+            Add Custom Exercise
+          </h2>
+          <button onClick={() => setDraft(emptyDraft)} type="button">
+            Clear
+          </button>
+        </div>
 
-        {renderExerciseForm(draft, setDraft)}
+        {renderExerciseForm(draft, setDraft, {
+          draftImagePicker: true,
+        })}
 
-        <button
-          onClick={addExercise}
+        <div
           style={{
+            alignItems: "flex-end",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px",
+            justifyContent: "flex-end",
             marginTop: "10px",
           }}
         >
-          + Add Exercise
-        </button>
+          <button onClick={addExercise}>+ Add Exercise</button>
+        </div>
       </section>
 
       <section
@@ -727,7 +1201,7 @@ export default function ExerciseView({
                   justifyContent: "space-between",
                 }}
               >
-                {exercise.builtin ? (
+                {exercise.builtin && !trainerCanAddBuiltIns ? (
                   <ExerciseThumbnail
                     alt={exercise.imageAlt || `${exercise.name} demonstration`}
                     imageUrl={exercise.imageUrl}
@@ -799,6 +1273,7 @@ export default function ExerciseView({
                 <div
                   style={{
                     display: "flex",
+                    flexDirection: "column",
                     flexWrap: "wrap",
                     gap: "6px",
                     justifyContent: "flex-end",
@@ -814,26 +1289,56 @@ export default function ExerciseView({
                     {active ? "Active" : "Inactive"}
                   </button>
 
+                  {exercise.builtin && (
+                    <>
+                      {trainerCanAddBuiltIns && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startEdit(exercise);
+                          }}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={(event) => duplicateExercise(event, exercise)}
+                        type="button"
+                      >
+                        Duplicate
+                      </button>
+                    </>
+                  )}
+
                   {!exercise.builtin && (
                     <>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        startEdit(exercise);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setExerciseLibrary(
-                          exerciseLibrary.filter((item) => item.id !== exercise.id)
-                        );
-                      }}
-                    >
-                      Delete
-                    </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startEdit(exercise);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExerciseLibrary(
+                            exerciseLibrary.filter(
+                              (item) => item.id !== exercise.id
+                            )
+                          );
+                        }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={(event) => duplicateExercise(event, exercise)}
+                        type="button"
+                      >
+                        Duplicate
+                      </button>
                     </>
                   )}
                 </div>
@@ -863,10 +1368,45 @@ export default function ExerciseView({
                   {exercise.description || exercise.note}
                 </div>
               )}
+
+              {!exercise.builtin && trainerCanAddBuiltIns && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    marginTop: "8px",
+                  }}
+                >
+                  <button
+                    disabled={promotingExerciseId === exercise.id}
+                    onClick={(event) =>
+                      addCustomExerciseAsBuiltIn(event, exercise)
+                    }
+                    type="button"
+                  >
+                    {promotingExerciseId === exercise.id
+                      ? "Adding..."
+                      : "Add as Built-in"}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {promoteExerciseStatus && (
+        <div
+          role="status"
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "13px",
+            marginTop: "10px",
+          }}
+        >
+          {promoteExerciseStatus}
+        </div>
+      )}
 
       {detailExercise && (
         <ExerciseDetailDialog
@@ -957,6 +1497,19 @@ export default function ExerciseView({
               {imageExercise.name}
             </div>
 
+            {imageSaveStatus && (
+              <div
+                style={{
+                  color: imageSaveStatus.startsWith("Unable")
+                    ? "var(--danger-text)"
+                    : "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {imageSaveStatus}
+              </div>
+            )}
+
             {cropImage ? (
               <div
                 style={{
@@ -966,10 +1519,10 @@ export default function ExerciseView({
                 }}
               >
                 <div
-                  onPointerCancel={endCropDrag}
-                  onPointerDown={startCropDrag}
-                  onPointerMove={moveCropDrag}
-                  onPointerUp={endCropDrag}
+                  onPointerCancel={endCropGesture}
+                  onPointerDown={startCropGesture}
+                  onPointerMove={moveCropGesture}
+                  onPointerUp={endCropGesture}
                   style={{
                     background: "var(--surface-muted)",
                     border: "2px solid var(--accent)",
@@ -998,26 +1551,6 @@ export default function ExerciseView({
                     }}
                   />
                 </div>
-
-                <label
-                  style={{
-                    display: "grid",
-                    gap: "6px",
-                    width: "100%",
-                  }}
-                >
-                  Zoom
-                  <input
-                    max="3"
-                    min="1"
-                    onChange={(event) =>
-                      setCropZoom(Number.parseFloat(event.target.value))
-                    }
-                    step="0.05"
-                    type="range"
-                    value={cropZoom}
-                  />
-                </label>
 
                 <div
                   style={{
@@ -1050,7 +1583,7 @@ export default function ExerciseView({
                   <ImagePlus size={17} /> Choose Photo
                 </button>
 
-                <label
+                <div
                   style={{
                     display: "grid",
                     gap: "6px",
@@ -1070,75 +1603,135 @@ export default function ExerciseView({
                     style={{
                       display: "grid",
                       gap: "8px",
-                      gridTemplateColumns: "minmax(0, 1fr) auto",
                     }}
                   >
-                    <select
-                      value={copyImageExerciseId}
+                    <input
+                      aria-label="Search exercises with images"
+                      placeholder="Search exercises"
+                      type="search"
+                      value={copyImageSearch}
                       onChange={(event) =>
-                        setCopyImageExerciseId(event.target.value)
+                        setCopyImageSearch(event.target.value)
                       }
-                      style={{ minWidth: 0 }}
+                      style={{
+                        minWidth: 0,
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 1,
+                      }}
+                    />
+
+                    <div
+                      role="listbox"
+                      aria-label="Exercises with images"
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        display: "grid",
+                        maxHeight: "250px",
+                        overflowY: "auto",
+                      }}
                     >
-                      <option value="">Choose exercise</option>
-                      {exerciseLibrary
-                        .filter(
-                          (exercise) =>
-                            exercise.imageUrl && exercise.id !== imageExercise.id
-                        )
-                        .map((exercise) => (
-                          <option key={exercise.id} value={exercise.id}>
-                            {exercise.name}
-                            {exercise.equipment?.[0]
-                              ? ` (${exercise.equipment[0]})`
-                              : ""}
-                          </option>
-                        ))}
-                    </select>
+                      {copyImageExercises.length > 0 ? (
+                        copyImageExercises.map((exercise) => {
+                          const selected =
+                            String(copyImageExerciseId) === String(exercise.id);
+
+                          return (
+                            <button
+                              key={exercise.id}
+                              aria-selected={selected}
+                              onClick={() =>
+                                setCopyImageExerciseId(String(exercise.id))
+                              }
+                              role="option"
+                              style={{
+                                alignItems: "center",
+                                background: selected
+                                  ? "var(--surface-muted)"
+                                  : "var(--surface)",
+                                border: "none",
+                                borderBottom: "1px solid var(--border)",
+                                borderRadius: 0,
+                                color: "var(--text)",
+                                display: "grid",
+                                gap: "10px",
+                                gridTemplateColumns: "46px minmax(0, 1fr)",
+                                minHeight: "58px",
+                                padding: "6px 8px",
+                                textAlign: "left",
+                                width: "100%",
+                              }}
+                              type="button"
+                            >
+                              <ExerciseThumbnail
+                                alt={
+                                  exercise.imageAlt ||
+                                  `${exercise.name} demonstration`
+                                }
+                                imageUrl={exercise.imageUrl}
+                                size={46}
+                              />
+                              <span
+                                style={{
+                                  display: "grid",
+                                  gap: "2px",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {exercise.name}
+                                </span>
+                                <span
+                                  style={{
+                                    color: "var(--text-muted)",
+                                    fontSize: "12px",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {[
+                                    exercise.equipment?.[0],
+                                    exercise.muscles?.[0],
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ") || "Exercise image"}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "13px",
+                            padding: "12px",
+                            textAlign: "center",
+                          }}
+                        >
+                          No matching exercise images
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       disabled={!copyImageExerciseId}
                       onClick={copyExerciseImage}
                       type="button"
                     >
-                      Use
+                      Use Selected
                     </button>
                   </div>
-                </label>
+                </div>
 
-                <label
-                  style={{
-                    display: "grid",
-                    gap: "6px",
-                  }}
-                >
-                  <span
-                    style={{
-                      alignItems: "center",
-                      display: "inline-flex",
-                      gap: "6px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    <Link size={16} /> Image URL
-                  </span>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "8px",
-                      gridTemplateColumns: "minmax(0, 1fr) auto",
-                    }}
-                  >
-                    <input
-                      value={imageUrlDraft}
-                      onChange={(event) => setImageUrlDraft(event.target.value)}
-                      placeholder="https://..."
-                      style={{ minWidth: 0 }}
-                    />
-                    <button onClick={saveImageUrl} type="button">
-                      Save
-                    </button>
-                  </div>
-                </label>
               </>
             )}
           </div>
@@ -1177,12 +1770,28 @@ export default function ExerciseView({
                 margin: "0 0 10px",
               }}
             >
-              Edit Custom Exercise
+              {editingExercise.builtin
+                ? "Edit Built-in Exercise"
+                : "Edit Custom Exercise"}
             </h2>
 
             {renderExerciseForm(editingDraft, setEditingDraft, {
               compact: true,
             })}
+
+            {editingSaveStatus && (
+              <div
+                style={{
+                  color: editingSaveStatus.startsWith("Unable")
+                    ? "var(--danger-text)"
+                    : "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "10px",
+                }}
+              >
+                {editingSaveStatus}
+              </div>
+            )}
 
             <div
               style={{
@@ -1196,11 +1805,15 @@ export default function ExerciseView({
                 onClick={() => {
                   setEditingExercise(null);
                   setEditingDraft(emptyDraft);
+                  setEditingSaveStatus("");
                 }}
+                type="button"
               >
                 Cancel
               </button>
-              <button onClick={saveEdit}>Save</button>
+              <button onClick={saveEdit} type="button">
+                Save
+              </button>
             </div>
           </div>
         </div>

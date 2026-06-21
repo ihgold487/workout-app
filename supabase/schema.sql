@@ -369,6 +369,153 @@ as $$
     (select count(*)::integer from public.list_trainer_users()) as visible_trainer_user_count;
 $$;
 
+create or replace function public.promote_custom_exercise_to_builtin(
+  exercise_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  promoted_exercise_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before adding built-in exercises.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.trainer_admins ta
+    where ta.trainer_user_id = auth.uid()
+  ) then
+    raise exception 'Not authorized to add built-in exercises.';
+  end if;
+
+  if nullif(trim(exercise_payload->>'name'), '') is null then
+    raise exception 'Exercise name is required.';
+  end if;
+
+  insert into public.exercises (
+    user_id,
+    name,
+    description,
+    image_url,
+    image_storage_path,
+    image_alt,
+    equipment,
+    primary_muscle,
+    secondary_muscles,
+    is_builtin,
+    source,
+    source_key,
+    deleted_at
+  )
+  values (
+    null,
+    trim(exercise_payload->>'name'),
+    nullif(exercise_payload->>'description', ''),
+    nullif(exercise_payload->>'image_url', ''),
+    nullif(exercise_payload->>'image_storage_path', ''),
+    nullif(exercise_payload->>'image_alt', ''),
+    nullif(exercise_payload->>'equipment', ''),
+    nullif(exercise_payload->>'primary_muscle', ''),
+    coalesce(
+      array(
+        select jsonb_array_elements_text(exercise_payload->'secondary_muscles')
+      ),
+      '{}'::text[]
+    ),
+    true,
+    coalesce(nullif(exercise_payload->>'source', ''), 'trainer_promoted'),
+    coalesce(
+      nullif(exercise_payload->>'source_key', ''),
+      'trainer-promoted:' || auth.uid()::text || ':' || gen_random_uuid()::text
+    ),
+    null
+  )
+  on conflict (source, source_key)
+  where user_id is null
+  do update set
+    name = excluded.name,
+    description = excluded.description,
+    image_url = excluded.image_url,
+    image_storage_path = excluded.image_storage_path,
+    image_alt = excluded.image_alt,
+    equipment = excluded.equipment,
+    primary_muscle = excluded.primary_muscle,
+    secondary_muscles = excluded.secondary_muscles,
+    is_builtin = true,
+    deleted_at = null
+  returning id into promoted_exercise_id;
+
+  return promoted_exercise_id;
+end;
+$$;
+
+create or replace function public.update_builtin_exercise(
+  exercise_id uuid,
+  exercise_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_exercise_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before editing built-in exercises.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.trainer_admins ta
+    where ta.trainer_user_id = auth.uid()
+  ) then
+    raise exception 'Not authorized to edit built-in exercises.';
+  end if;
+
+  if exercise_id is null then
+    raise exception 'exercise_id is required.';
+  end if;
+
+  if nullif(trim(exercise_payload->>'name'), '') is null then
+    raise exception 'Exercise name is required.';
+  end if;
+
+  update public.exercises
+  set
+    name = trim(exercise_payload->>'name'),
+    description = nullif(exercise_payload->>'description', ''),
+    image_url = nullif(exercise_payload->>'image_url', ''),
+    image_storage_path = nullif(exercise_payload->>'image_storage_path', ''),
+    image_alt = nullif(exercise_payload->>'image_alt', ''),
+    equipment = nullif(exercise_payload->>'equipment', ''),
+    primary_muscle = nullif(exercise_payload->>'primary_muscle', ''),
+    secondary_muscles = coalesce(
+      array(
+        select jsonb_array_elements_text(exercise_payload->'secondary_muscles')
+      ),
+      '{}'::text[]
+    ),
+    is_builtin = true,
+    user_id = null,
+    deleted_at = null
+  where id = exercise_id
+    and user_id is null
+    and is_builtin = true
+  returning id into updated_exercise_id;
+
+  if updated_exercise_id is null then
+    raise exception 'Built-in exercise not found.';
+  end if;
+
+  return updated_exercise_id;
+end;
+$$;
+
 create or replace function public.create_trainer_plan_for_user(
   target_user_id uuid,
   plan_payload jsonb,
