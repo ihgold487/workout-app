@@ -1434,6 +1434,17 @@ create unique index if not exists nutrition_foods_public_source_key_idx
 on public.nutrition_foods (source, source_key)
 where user_id is null;
 
+create unique index if not exists nutrition_foods_supplemental_unique_idx
+on public.nutrition_foods (
+  lower(name),
+  lower(coalesce(brand, '')),
+  coalesce(serving_size, 0),
+  coalesce(serving_unit, '')
+)
+where user_id is null
+  and source = 'supplemental_library'
+  and deleted_at is null;
+
 drop trigger if exists nutrition_foods_set_updated_at on public.nutrition_foods;
 create trigger nutrition_foods_set_updated_at
 before update on public.nutrition_foods
@@ -1467,11 +1478,761 @@ on public.nutrition_foods
 for delete
 using (auth.uid() = user_id and source = 'user');
 
+create or replace function public.add_supplemental_nutrition_food(
+  food_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  inserted_food_id uuid;
+  normalized_brand text;
+  normalized_name text;
+  source_key_value text;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before adding foods to the shared library.';
+  end if;
+
+  if nullif(trim(food_payload->>'name'), '') is null then
+    raise exception 'Food name is required.';
+  end if;
+
+  normalized_name := lower(trim(food_payload->>'name'));
+  normalized_brand := lower(coalesce(nullif(trim(food_payload->>'brand'), ''), ''));
+
+  if exists (
+    select 1
+    from public.nutrition_foods nf
+    where nf.user_id is null
+      and nf.source = 'supplemental_library'
+      and nf.deleted_at is null
+      and lower(nf.name) = normalized_name
+      and lower(coalesce(nf.brand, '')) = normalized_brand
+      and coalesce(nf.serving_size, 0) = coalesce(nullif(food_payload->>'serving_amount', '')::numeric, 1)
+      and coalesce(nf.serving_unit, '') = coalesce(nullif(food_payload->>'serving_unit', ''), 'serving')
+  ) then
+    raise exception 'A matching food already exists in the shared library.';
+  end if;
+
+  source_key_value := 'supplemental:' || md5(
+    normalized_name || ':' ||
+    normalized_brand || ':' ||
+    coalesce(nullif(food_payload->>'serving_amount', ''), '1') || ':' ||
+    coalesce(nullif(food_payload->>'serving_unit', ''), 'serving')
+  );
+
+  insert into public.nutrition_foods (
+    user_id,
+    name,
+    brand,
+    barcode,
+    serving_size,
+    serving_unit,
+    calories,
+    protein_grams,
+    carb_grams,
+    fat_grams,
+    source,
+    source_key,
+    metadata,
+    deleted_at
+  )
+  values (
+    null,
+    trim(food_payload->>'name'),
+    nullif(trim(food_payload->>'brand'), ''),
+    nullif(trim(food_payload->>'barcode'), ''),
+    coalesce(nullif(food_payload->>'serving_amount', '')::numeric, 1),
+    coalesce(nullif(food_payload->>'serving_unit', ''), 'serving'),
+    coalesce(nullif(food_payload->>'calories', '')::integer, 0),
+    coalesce(nullif(food_payload->>'protein', '')::numeric, 0),
+    coalesce(nullif(food_payload->>'carbs', '')::numeric, 0),
+    coalesce(nullif(food_payload->>'fat', '')::numeric, 0),
+    'supplemental_library',
+    source_key_value,
+    jsonb_build_object(
+      'created_by', auth.uid(),
+      'created_from', 'nutrition_view'
+    ),
+    null
+  )
+  returning id into inserted_food_id;
+
+  return inserted_food_id;
+end;
+$$;
+
+create or replace function public.update_supplemental_nutrition_food(
+  target_food_id uuid,
+  food_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_brand text;
+  normalized_name text;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before updating shared library foods.';
+  end if;
+
+  if target_food_id is null then
+    raise exception 'Food id is required.';
+  end if;
+
+  if nullif(trim(food_payload->>'name'), '') is null then
+    raise exception 'Food name is required.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.nutrition_foods nf
+    where nf.id = target_food_id
+      and nf.user_id is null
+      and nf.source = 'supplemental_library'
+      and nf.deleted_at is null
+  ) then
+    raise exception 'Shared library food was not found.';
+  end if;
+
+  normalized_name := lower(trim(food_payload->>'name'));
+  normalized_brand := lower(coalesce(nullif(trim(food_payload->>'brand'), ''), ''));
+
+  if exists (
+    select 1
+    from public.nutrition_foods nf
+    where nf.id <> target_food_id
+      and nf.user_id is null
+      and nf.source = 'supplemental_library'
+      and nf.deleted_at is null
+      and lower(nf.name) = normalized_name
+      and lower(coalesce(nf.brand, '')) = normalized_brand
+      and coalesce(nf.serving_size, 0) = coalesce(nullif(food_payload->>'serving_amount', '')::numeric, 1)
+      and coalesce(nf.serving_unit, '') = coalesce(nullif(food_payload->>'serving_unit', ''), 'serving')
+  ) then
+    raise exception 'A matching food already exists in the shared library.';
+  end if;
+
+  update public.nutrition_foods
+  set
+    name = trim(food_payload->>'name'),
+    brand = nullif(trim(food_payload->>'brand'), ''),
+    barcode = nullif(trim(food_payload->>'barcode'), ''),
+    serving_size = coalesce(nullif(food_payload->>'serving_amount', '')::numeric, 1),
+    serving_unit = coalesce(nullif(food_payload->>'serving_unit', ''), 'serving'),
+    calories = coalesce(nullif(food_payload->>'calories', '')::integer, 0),
+    protein_grams = coalesce(nullif(food_payload->>'protein', '')::numeric, 0),
+    carb_grams = coalesce(nullif(food_payload->>'carbs', '')::numeric, 0),
+    fat_grams = coalesce(nullif(food_payload->>'fat', '')::numeric, 0),
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'updated_by', auth.uid(),
+      'updated_from', 'nutrition_view'
+    ),
+    deleted_at = null
+  where id = target_food_id
+    and user_id is null
+    and source = 'supplemental_library'
+    and deleted_at is null;
+
+  return target_food_id;
+end;
+$$;
+
+create or replace function public.delete_supplemental_nutrition_food(
+  target_food_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before deleting shared library foods.';
+  end if;
+
+  if target_food_id is null then
+    raise exception 'Food id is required.';
+  end if;
+
+  update public.nutrition_foods
+  set
+    deleted_at = now(),
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'deleted_by', auth.uid(),
+      'deleted_from', 'nutrition_view'
+    )
+  where id = target_food_id
+    and user_id is null
+    and source = 'supplemental_library'
+    and deleted_at is null;
+
+  if not found then
+    raise exception 'Shared library food was not found.';
+  end if;
+
+  return target_food_id;
+end;
+$$;
+
+create table if not exists public.nutrition_recipes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users (id) on delete cascade,
+  name text not null,
+  description text,
+  serving_size numeric,
+  serving_unit text,
+  servings_per_recipe numeric,
+  calories numeric not null default 0,
+  protein_grams numeric not null default 0,
+  carb_grams numeric not null default 0,
+  fat_grams numeric not null default 0,
+  source text not null default 'user',
+  source_key text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint nutrition_recipes_owner_check check (
+    (source <> 'user' and user_id is null)
+    or (source = 'user' and user_id is not null)
+  )
+);
+
+comment on table public.nutrition_recipes is
+  'Saved recipes assembled from USDA foods, shared library foods, or manual ingredient snapshots.';
+
+comment on column public.nutrition_recipes.calories is
+  'Total calories for the full recipe, not per serving.';
+
+create index if not exists nutrition_recipes_user_id_idx on public.nutrition_recipes (user_id);
+create index if not exists nutrition_recipes_name_idx on public.nutrition_recipes (lower(name));
+create unique index if not exists nutrition_recipes_user_source_key_idx
+on public.nutrition_recipes (user_id, source, source_key);
+create unique index if not exists nutrition_recipes_public_source_key_idx
+on public.nutrition_recipes (source, source_key)
+where user_id is null;
+create unique index if not exists nutrition_recipes_supplemental_unique_idx
+on public.nutrition_recipes (
+  lower(name),
+  coalesce(serving_size, 0),
+  coalesce(serving_unit, ''),
+  coalesce(servings_per_recipe, 0)
+)
+where user_id is null
+  and source = 'supplemental_recipe_library'
+  and deleted_at is null;
+
+drop trigger if exists nutrition_recipes_set_updated_at on public.nutrition_recipes;
+create trigger nutrition_recipes_set_updated_at
+before update on public.nutrition_recipes
+for each row
+execute function public.set_updated_at();
+
+alter table public.nutrition_recipes enable row level security;
+
+drop policy if exists "Users can read public and own nutrition recipes" on public.nutrition_recipes;
+create policy "Users can read public and own nutrition recipes"
+on public.nutrition_recipes
+for select
+using (user_id is null or auth.uid() = user_id);
+
+drop policy if exists "Users can insert custom nutrition recipes" on public.nutrition_recipes;
+create policy "Users can insert custom nutrition recipes"
+on public.nutrition_recipes
+for insert
+with check (auth.uid() = user_id and source = 'user');
+
+drop policy if exists "Users can update custom nutrition recipes" on public.nutrition_recipes;
+create policy "Users can update custom nutrition recipes"
+on public.nutrition_recipes
+for update
+using (auth.uid() = user_id and source = 'user')
+with check (auth.uid() = user_id and source = 'user');
+
+drop policy if exists "Users can delete custom nutrition recipes" on public.nutrition_recipes;
+create policy "Users can delete custom nutrition recipes"
+on public.nutrition_recipes
+for delete
+using (auth.uid() = user_id and source = 'user');
+
+create table if not exists public.nutrition_recipe_ingredients (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references public.nutrition_recipes (id) on delete cascade,
+  food_id uuid references public.nutrition_foods (id) on delete set null,
+  position integer not null,
+  ingredient_name text not null,
+  brand text,
+  amount numeric not null default 1,
+  unit text not null default 'serving',
+  calories numeric not null default 0,
+  protein_grams numeric not null default 0,
+  carb_grams numeric not null default 0,
+  fat_grams numeric not null default 0,
+  external_source text,
+  external_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  unique (recipe_id, position)
+);
+
+comment on table public.nutrition_recipe_ingredients is
+  'Ingredient snapshots for saved recipes. Macro values are for the amount used in the full recipe.';
+
+create index if not exists nutrition_recipe_ingredients_recipe_id_idx
+on public.nutrition_recipe_ingredients (recipe_id);
+create index if not exists nutrition_recipe_ingredients_food_id_idx
+on public.nutrition_recipe_ingredients (food_id);
+
+drop trigger if exists nutrition_recipe_ingredients_set_updated_at on public.nutrition_recipe_ingredients;
+create trigger nutrition_recipe_ingredients_set_updated_at
+before update on public.nutrition_recipe_ingredients
+for each row
+execute function public.set_updated_at();
+
+alter table public.nutrition_recipe_ingredients enable row level security;
+
+drop policy if exists "Users can read public and own recipe ingredients" on public.nutrition_recipe_ingredients;
+create policy "Users can read public and own recipe ingredients"
+on public.nutrition_recipe_ingredients
+for select
+using (
+  exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = recipe_id
+      and (nr.user_id is null or auth.uid() = nr.user_id)
+  )
+);
+
+drop policy if exists "Users can insert custom recipe ingredients" on public.nutrition_recipe_ingredients;
+create policy "Users can insert custom recipe ingredients"
+on public.nutrition_recipe_ingredients
+for insert
+with check (
+  exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = recipe_id
+      and auth.uid() = nr.user_id
+      and nr.source = 'user'
+  )
+);
+
+drop policy if exists "Users can update custom recipe ingredients" on public.nutrition_recipe_ingredients;
+create policy "Users can update custom recipe ingredients"
+on public.nutrition_recipe_ingredients
+for update
+using (
+  exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = recipe_id
+      and auth.uid() = nr.user_id
+      and nr.source = 'user'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = recipe_id
+      and auth.uid() = nr.user_id
+      and nr.source = 'user'
+  )
+);
+
+drop policy if exists "Users can delete custom recipe ingredients" on public.nutrition_recipe_ingredients;
+create policy "Users can delete custom recipe ingredients"
+on public.nutrition_recipe_ingredients
+for delete
+using (
+  exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = recipe_id
+      and auth.uid() = nr.user_id
+      and nr.source = 'user'
+  )
+);
+
+create or replace function public.add_supplemental_nutrition_recipe(
+  recipe_payload jsonb,
+  ingredients_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_ingredient jsonb;
+  inserted_recipe_id uuid;
+  ingredient_count integer;
+  ingredient_position integer := 0;
+  normalized_name text;
+  recipe_serving_size numeric;
+  recipe_serving_unit text;
+  recipe_servings_per_recipe numeric;
+  source_key_value text;
+  total_calories numeric := 0;
+  total_carbs numeric := 0;
+  total_fat numeric := 0;
+  total_protein numeric := 0;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before adding recipes to the shared library.';
+  end if;
+
+  if nullif(trim(recipe_payload->>'name'), '') is null then
+    raise exception 'Recipe name is required.';
+  end if;
+
+  if jsonb_typeof(coalesce(ingredients_payload, '[]'::jsonb)) <> 'array' then
+    raise exception 'Recipe ingredients must be an array.';
+  end if;
+
+  ingredient_count := jsonb_array_length(coalesce(ingredients_payload, '[]'::jsonb));
+
+  if ingredient_count = 0 then
+    raise exception 'At least one ingredient is required.';
+  end if;
+
+  normalized_name := lower(trim(recipe_payload->>'name'));
+  recipe_serving_size := coalesce(nullif(recipe_payload->>'serving_size', '')::numeric, 1);
+  recipe_serving_unit := coalesce(nullif(recipe_payload->>'serving_unit', ''), 'serving');
+  recipe_servings_per_recipe := coalesce(nullif(recipe_payload->>'servings_per_recipe', '')::numeric, 1);
+
+  for current_ingredient in
+    select value from jsonb_array_elements(ingredients_payload)
+  loop
+    if nullif(trim(current_ingredient->>'ingredient_name'), '') is null then
+      raise exception 'Ingredient name is required.';
+    end if;
+
+    total_calories := total_calories + coalesce(nullif(current_ingredient->>'calories', '')::numeric, 0);
+    total_protein := total_protein + coalesce(nullif(current_ingredient->>'protein', '')::numeric, 0);
+    total_carbs := total_carbs + coalesce(nullif(current_ingredient->>'carbs', '')::numeric, 0);
+    total_fat := total_fat + coalesce(nullif(current_ingredient->>'fat', '')::numeric, 0);
+  end loop;
+
+  if exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.user_id is null
+      and nr.source = 'supplemental_recipe_library'
+      and nr.deleted_at is null
+      and lower(nr.name) = normalized_name
+      and coalesce(nr.serving_size, 0) = recipe_serving_size
+      and coalesce(nr.serving_unit, '') = recipe_serving_unit
+      and coalesce(nr.servings_per_recipe, 0) = recipe_servings_per_recipe
+  ) then
+    raise exception 'A matching recipe already exists in the shared library.';
+  end if;
+
+  source_key_value := 'supplemental-recipe:' || md5(
+    normalized_name || ':' ||
+    recipe_serving_size::text || ':' ||
+    recipe_serving_unit || ':' ||
+    recipe_servings_per_recipe::text
+  );
+
+  insert into public.nutrition_recipes (
+    user_id,
+    name,
+    description,
+    serving_size,
+    serving_unit,
+    servings_per_recipe,
+    calories,
+    protein_grams,
+    carb_grams,
+    fat_grams,
+    source,
+    source_key,
+    metadata,
+    deleted_at
+  )
+  values (
+    null,
+    trim(recipe_payload->>'name'),
+    nullif(trim(recipe_payload->>'description'), ''),
+    recipe_serving_size,
+    recipe_serving_unit,
+    recipe_servings_per_recipe,
+    total_calories,
+    total_protein,
+    total_carbs,
+    total_fat,
+    'supplemental_recipe_library',
+    source_key_value,
+    jsonb_build_object(
+      'created_by', auth.uid(),
+      'created_from', 'nutrition_view'
+    ),
+    null
+  )
+  returning id into inserted_recipe_id;
+
+  for current_ingredient in
+    select value from jsonb_array_elements(ingredients_payload)
+  loop
+    ingredient_position := ingredient_position + 1;
+
+    insert into public.nutrition_recipe_ingredients (
+      recipe_id,
+      food_id,
+      position,
+      ingredient_name,
+      brand,
+      amount,
+      unit,
+      calories,
+      protein_grams,
+      carb_grams,
+      fat_grams,
+      external_source,
+      external_id,
+      metadata,
+      deleted_at
+    )
+    values (
+      inserted_recipe_id,
+      nullif(current_ingredient->>'food_id', '')::uuid,
+      coalesce(nullif(current_ingredient->>'position', '')::integer, ingredient_position),
+      trim(current_ingredient->>'ingredient_name'),
+      nullif(trim(current_ingredient->>'brand'), ''),
+      coalesce(nullif(current_ingredient->>'amount', '')::numeric, 1),
+      coalesce(nullif(current_ingredient->>'unit', ''), 'serving'),
+      coalesce(nullif(current_ingredient->>'calories', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'protein', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'carbs', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'fat', '')::numeric, 0),
+      nullif(current_ingredient->>'external_source', ''),
+      nullif(current_ingredient->>'external_id', ''),
+      coalesce(current_ingredient->'metadata', '{}'::jsonb),
+      null
+    );
+  end loop;
+
+  return inserted_recipe_id;
+end;
+$$;
+
+create or replace function public.update_supplemental_nutrition_recipe(
+  target_recipe_id uuid,
+  recipe_payload jsonb,
+  ingredients_payload jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_ingredient jsonb;
+  ingredient_count integer;
+  ingredient_position integer := 0;
+  normalized_name text;
+  recipe_serving_size numeric;
+  recipe_serving_unit text;
+  recipe_servings_per_recipe numeric;
+  total_calories numeric := 0;
+  total_carbs numeric := 0;
+  total_fat numeric := 0;
+  total_protein numeric := 0;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before updating shared library recipes.';
+  end if;
+
+  if target_recipe_id is null then
+    raise exception 'Recipe id is required.';
+  end if;
+
+  if nullif(trim(recipe_payload->>'name'), '') is null then
+    raise exception 'Recipe name is required.';
+  end if;
+
+  if jsonb_typeof(coalesce(ingredients_payload, '[]'::jsonb)) <> 'array' then
+    raise exception 'Recipe ingredients must be an array.';
+  end if;
+
+  ingredient_count := jsonb_array_length(coalesce(ingredients_payload, '[]'::jsonb));
+
+  if ingredient_count = 0 then
+    raise exception 'At least one ingredient is required.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id = target_recipe_id
+      and nr.user_id is null
+      and nr.source = 'supplemental_recipe_library'
+      and nr.deleted_at is null
+  ) then
+    raise exception 'Shared library recipe was not found.';
+  end if;
+
+  normalized_name := lower(trim(recipe_payload->>'name'));
+  recipe_serving_size := coalesce(nullif(recipe_payload->>'serving_size', '')::numeric, 1);
+  recipe_serving_unit := coalesce(nullif(recipe_payload->>'serving_unit', ''), 'serving');
+  recipe_servings_per_recipe := coalesce(nullif(recipe_payload->>'servings_per_recipe', '')::numeric, 1);
+
+  for current_ingredient in
+    select value from jsonb_array_elements(ingredients_payload)
+  loop
+    if nullif(trim(current_ingredient->>'ingredient_name'), '') is null then
+      raise exception 'Ingredient name is required.';
+    end if;
+
+    total_calories := total_calories + coalesce(nullif(current_ingredient->>'calories', '')::numeric, 0);
+    total_protein := total_protein + coalesce(nullif(current_ingredient->>'protein', '')::numeric, 0);
+    total_carbs := total_carbs + coalesce(nullif(current_ingredient->>'carbs', '')::numeric, 0);
+    total_fat := total_fat + coalesce(nullif(current_ingredient->>'fat', '')::numeric, 0);
+  end loop;
+
+  if exists (
+    select 1
+    from public.nutrition_recipes nr
+    where nr.id <> target_recipe_id
+      and nr.user_id is null
+      and nr.source = 'supplemental_recipe_library'
+      and nr.deleted_at is null
+      and lower(nr.name) = normalized_name
+      and coalesce(nr.serving_size, 0) = recipe_serving_size
+      and coalesce(nr.serving_unit, '') = recipe_serving_unit
+      and coalesce(nr.servings_per_recipe, 0) = recipe_servings_per_recipe
+  ) then
+    raise exception 'A matching recipe already exists in the shared library.';
+  end if;
+
+  update public.nutrition_recipes
+  set
+    name = trim(recipe_payload->>'name'),
+    description = nullif(trim(recipe_payload->>'description'), ''),
+    serving_size = recipe_serving_size,
+    serving_unit = recipe_serving_unit,
+    servings_per_recipe = recipe_servings_per_recipe,
+    calories = total_calories,
+    protein_grams = total_protein,
+    carb_grams = total_carbs,
+    fat_grams = total_fat,
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'updated_by', auth.uid(),
+      'updated_from', 'nutrition_view'
+    ),
+    deleted_at = null
+  where id = target_recipe_id
+    and user_id is null
+    and source = 'supplemental_recipe_library'
+    and deleted_at is null;
+
+  delete from public.nutrition_recipe_ingredients
+  where recipe_id = target_recipe_id;
+
+  for current_ingredient in
+    select value from jsonb_array_elements(ingredients_payload)
+  loop
+    ingredient_position := ingredient_position + 1;
+
+    insert into public.nutrition_recipe_ingredients (
+      recipe_id,
+      food_id,
+      position,
+      ingredient_name,
+      brand,
+      amount,
+      unit,
+      calories,
+      protein_grams,
+      carb_grams,
+      fat_grams,
+      external_source,
+      external_id,
+      metadata,
+      deleted_at
+    )
+    values (
+      target_recipe_id,
+      nullif(current_ingredient->>'food_id', '')::uuid,
+      coalesce(nullif(current_ingredient->>'position', '')::integer, ingredient_position),
+      trim(current_ingredient->>'ingredient_name'),
+      nullif(trim(current_ingredient->>'brand'), ''),
+      coalesce(nullif(current_ingredient->>'amount', '')::numeric, 1),
+      coalesce(nullif(current_ingredient->>'unit', ''), 'serving'),
+      coalesce(nullif(current_ingredient->>'calories', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'protein', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'carbs', '')::numeric, 0),
+      coalesce(nullif(current_ingredient->>'fat', '')::numeric, 0),
+      nullif(current_ingredient->>'external_source', ''),
+      nullif(current_ingredient->>'external_id', ''),
+      coalesce(current_ingredient->'metadata', '{}'::jsonb),
+      null
+    );
+  end loop;
+
+  return target_recipe_id;
+end;
+$$;
+
+create or replace function public.delete_supplemental_nutrition_recipe(
+  target_recipe_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in before deleting shared library recipes.';
+  end if;
+
+  if target_recipe_id is null then
+    raise exception 'Recipe id is required.';
+  end if;
+
+  update public.nutrition_recipes
+  set
+    deleted_at = now(),
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'deleted_by', auth.uid(),
+      'deleted_from', 'nutrition_view'
+    )
+  where id = target_recipe_id
+    and user_id is null
+    and source = 'supplemental_recipe_library'
+    and deleted_at is null;
+
+  if not found then
+    raise exception 'Shared library recipe was not found.';
+  end if;
+
+  update public.nutrition_recipe_ingredients
+  set deleted_at = now()
+  where recipe_id = target_recipe_id
+    and deleted_at is null;
+
+  return target_recipe_id;
+end;
+$$;
+
 create table if not exists public.nutrition_entries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   entry_date date not null,
   food_id uuid references public.nutrition_foods (id) on delete set null,
+  recipe_id uuid references public.nutrition_recipes (id) on delete set null,
   food_name text not null,
   meal text,
   quantity numeric,
@@ -1495,6 +2256,9 @@ create index if not exists nutrition_entries_user_date_idx
 on public.nutrition_entries (user_id, entry_date desc);
 create unique index if not exists nutrition_entries_user_source_key_idx
 on public.nutrition_entries (user_id, source, source_key);
+
+alter table public.nutrition_entries
+add column if not exists recipe_id uuid references public.nutrition_recipes (id) on delete set null;
 
 drop trigger if exists nutrition_entries_set_updated_at on public.nutrition_entries;
 create trigger nutrition_entries_set_updated_at

@@ -3085,7 +3085,7 @@ export default function App() {
   }
 
   if (showNutrition) {
-    return renderAppShell(<NutritionView />, "nutrition");
+    return renderAppShell(<NutritionView session={authSession} />, "nutrition");
   }
 
   if (selectedHistory) {
@@ -3180,6 +3180,9 @@ export default function App() {
       return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
     });
 
+  const calendarNutritionEntries = readLocalArray(NUTRITION_LOG_KEY);
+  const calendarBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
+
   return renderAppShell(
     <div
       style={{
@@ -3188,7 +3191,11 @@ export default function App() {
     >
       <h1>Workout Log</h1>
 
-      <WorkoutCalendar history={history} />
+      <WorkoutCalendar
+        bodyWeightEntries={calendarBodyWeightEntries}
+        history={history}
+        nutritionEntries={calendarNutritionEntries}
+      />
 
       <hr />
 
