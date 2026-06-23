@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { Plus, ScanBarcode, Scale, Search, Trash2, Utensils, X } from "lucide-react";
+import BodyWeightSheet from "./BodyWeightSheet";
+import WeightPickerModal from "./WeightPickerModal";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
@@ -907,7 +909,10 @@ export default function NutritionView({ session = null }) {
   );
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
-  const [weightDraft, setWeightDraft] = useState("");
+  const [weightSheetInitialAdding, setWeightSheetInitialAdding] =
+    useState(false);
+  const [weightSheetOpen, setWeightSheetOpen] = useState(false);
+  const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState("usda");
   const [foodSearchResults, setFoodSearchResults] = useState([]);
@@ -955,15 +960,10 @@ export default function NutritionView({ session = null }) {
     () => entries.filter((entry) => entry.date === selectedDate),
     [entries, selectedDate]
   );
-  const dayBodyWeight = useMemo(
-    () => bodyWeightEntries.find((entry) => entry.date === selectedDate),
-    [bodyWeightEntries, selectedDate]
-  );
-  const recentBodyWeights = useMemo(
+  const latestBodyWeight = useMemo(
     () =>
-      [...bodyWeightEntries]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 7),
+      [...bodyWeightEntries].sort((a, b) => b.date.localeCompare(a.date))[0] ||
+      null,
     [bodyWeightEntries]
   );
   const totals = useMemo(() => totalEntries(dayEntries), [dayEntries]);
@@ -1703,25 +1703,25 @@ export default function NutritionView({ session = null }) {
     updateEntries(entries.filter((entry) => entry.id !== entryId));
   }
 
-  function saveBodyWeight() {
-    const weight = parseMacroValue(weightDraft);
+  function saveBodyWeight(entryDate, weightValue) {
+    const weight = parseMacroValue(weightValue);
 
     if (!weight) {
       return;
     }
 
+    const existingEntry = bodyWeightEntries.find((entry) => entry.date === entryDate);
     const nextEntries = [
-      ...bodyWeightEntries.filter((entry) => entry.date !== selectedDate),
+      ...bodyWeightEntries.filter((entry) => entry.date !== entryDate),
       {
-        date: selectedDate,
-        id: dayBodyWeight?.id || Date.now(),
+        date: entryDate,
+        id: existingEntry?.id || Date.now(),
         unit: "lb",
         weight,
       },
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     updateBodyWeightEntries(nextEntries);
-    setWeightDraft("");
   }
 
   function removeBodyWeight(entryDate) {
@@ -1808,6 +1808,98 @@ export default function NutritionView({ session = null }) {
         </div>
       </header>
 
+      <section
+        aria-label="Body weight"
+        onClick={() => {
+          setWeightSheetInitialAdding(false);
+          setWeightSheetOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setWeightSheetInitialAdding(false);
+            setWeightSheetOpen(true);
+          }
+        }}
+        role="button"
+        style={{
+          alignItems: "center",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "10px",
+          gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
+          marginBottom: "14px",
+          padding: "10px 12px",
+          cursor: "pointer",
+        }}
+        tabIndex={0}
+      >
+        <Scale size={20} color="#ef6c00" />
+        <strong>Body weight</strong>
+        <span
+          style={{
+            color: latestBodyWeight ? "var(--text-h)" : "var(--text-muted)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {latestBodyWeight
+            ? `${latestBodyWeight.weight} ${latestBodyWeight.unit || "lb"}`
+            : "No weight logged"}
+        </span>
+        <button
+          aria-label="Add body weight"
+          onClick={(event) => {
+            event.stopPropagation();
+
+            if (latestBodyWeight) {
+              setWeightPickerOpen(true);
+              return;
+            }
+
+            setWeightSheetInitialAdding(true);
+            setWeightSheetOpen(true);
+          }}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            justifyContent: "center",
+            minHeight: "34px",
+            minWidth: "34px",
+            padding: 0,
+          }}
+          type="button"
+        >
+          <Plus size={18} />
+        </button>
+      </section>
+
+      {weightSheetOpen && (
+        <BodyWeightSheet
+          entries={bodyWeightEntries}
+          entryDate={selectedDate}
+          initialAdding={weightSheetInitialAdding}
+          onClose={() => {
+            setWeightSheetOpen(false);
+            setWeightSheetInitialAdding(false);
+          }}
+          onDelete={removeBodyWeight}
+          onSave={saveBodyWeight}
+        />
+      )}
+
+      <WeightPickerModal
+        increment={0.1}
+        isOpen={weightPickerOpen}
+        onClose={() => setWeightPickerOpen(false)}
+        onSelect={(value) => saveBodyWeight(selectedDate, value)}
+        range={50}
+        title="Select body weight"
+        value={latestBodyWeight?.weight || ""}
+      />
+
       <label
         style={{
           display: "grid",
@@ -1870,122 +1962,6 @@ export default function NutritionView({ session = null }) {
             </div>
           </div>
         ))}
-      </section>
-
-      <section
-        style={{
-          borderTop: "1px solid var(--border)",
-          marginBottom: "16px",
-          paddingTop: "14px",
-        }}
-      >
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            gap: "8px",
-            marginBottom: "10px",
-          }}
-        >
-          <Scale size={20} color="#1769aa" />
-          <h2
-            style={{
-              fontSize: "18px",
-              margin: 0,
-            }}
-          >
-            Body weight
-          </h2>
-        </div>
-
-        <div
-          style={{
-            alignItems: "end",
-            display: "grid",
-            gap: "8px",
-            gridTemplateColumns: "minmax(0, 1fr) auto",
-          }}
-        >
-          <label
-            style={{
-              display: "grid",
-              gap: "5px",
-              minWidth: 0,
-            }}
-          >
-            {dayBodyWeight
-              ? `${dayBodyWeight.weight} ${dayBodyWeight.unit}`
-              : "No weight logged"}
-            <input
-              aria-label="Body weight"
-              inputMode="decimal"
-              placeholder="Weight"
-              value={weightDraft}
-              onChange={(event) => setWeightDraft(event.target.value)}
-              style={{
-                boxSizing: "border-box",
-                font: "inherit",
-                minHeight: "42px",
-                minWidth: 0,
-                padding: "7px 10px",
-                width: "100%",
-              }}
-            />
-          </label>
-          <button
-            disabled={!parseMacroValue(weightDraft)}
-            onClick={saveBodyWeight}
-            style={{
-              minHeight: "42px",
-              padding: "7px 12px",
-            }}
-          >
-            Save
-          </button>
-        </div>
-
-        {recentBodyWeights.length > 0 && (
-          <div
-            style={{
-              display: "grid",
-              gap: "6px",
-              marginTop: "10px",
-            }}
-          >
-            {recentBodyWeights.map((entry) => (
-              <div
-                key={entry.date}
-                style={{
-                  alignItems: "center",
-                  color: "var(--text-muted)",
-                  display: "grid",
-                  fontSize: "13px",
-                  gap: "8px",
-                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
-                }}
-              >
-                <span>{entry.date}</span>
-                <strong>
-                  {entry.weight} {entry.unit}
-                </strong>
-                <button
-                  aria-label={`Remove body weight for ${entry.date}`}
-                  onClick={() => removeBodyWeight(entry.date)}
-                  style={{
-                    alignItems: "center",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    minHeight: "30px",
-                    minWidth: "34px",
-                    padding: "3px 6px",
-                  }}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
       <section

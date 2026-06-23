@@ -176,6 +176,7 @@ export default function WeightPickerModal({
   onSelect,
   weightUnit,
   increment,
+  range,
   title,
   values,
 }) {
@@ -187,14 +188,15 @@ export default function WeightPickerModal({
     }
 
     const generatedOptions = [];
-    const start = Math.max(0, current - 20 * step);
+    const spread = range ?? 20 * step;
+    const start = Math.max(0, current - spread);
 
-    for (let value = start; value <= current + 20 * step; value += step) {
+    for (let value = start; value <= current + spread; value += step) {
       generatedOptions.push(Number(value.toFixed(2)));
     }
 
     return generatedOptions;
-  }, [current, step, values]);
+  }, [current, range, step, values]);
 
   if (!isOpen) {
     return null;

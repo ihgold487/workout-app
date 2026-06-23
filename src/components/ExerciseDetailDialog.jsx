@@ -47,6 +47,27 @@ function getSetValue(set, actualField, targetField) {
   return set[actualField] || set[targetField] || "";
 }
 
+function getDateKey(value) {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function daysBetween(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  return Math.round((end - start) / 86400000);
+}
+
 function buildExerciseHistory(exercise, history) {
   return [...(history || [])]
     .flatMap((workout) => {
@@ -84,6 +105,9 @@ function buildExerciseHistory(exercise, history) {
       return [
         {
           completedAt: workout.completedAt || "Unknown date",
+          completedDateKey: getDateKey(
+            workout.completedAtIso || workout.completed_at || workout.completedAt
+          ),
           sets,
           templateName: workout.templateName || workout.name || "Workout",
           maxWeight: maxWeight || null,
@@ -96,12 +120,13 @@ function buildExerciseHistory(exercise, history) {
 
 function MetricChart({ data, metric }) {
   const points = data
-    .map((entry, index) => ({
-      index,
+    .map((entry) => ({
+      dateKey: entry.completedDateKey,
       label: entry.completedAt,
       value: metric === "maxWeight" ? entry.maxWeight : entry.maxE1RM,
     }))
-    .filter((point) => Number.isFinite(point.value));
+    .filter((point) => Number.isFinite(point.value) && point.dateKey)
+    .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
   if (points.length < 2) {
     return (
@@ -123,19 +148,25 @@ function MetricChart({ data, metric }) {
   const min = Math.min(...points.map((point) => point.value));
   const max = Math.max(...points.map((point) => point.value));
   const range = max - min || 1;
-  const path = points
-    .map((point, pointIndex) => {
-      const x =
-        padding +
-        (pointIndex / Math.max(1, points.length - 1)) * (width - padding * 2);
-      const y =
-        height -
-        padding -
-        ((point.value - min) / range) * (height - padding * 2);
+  const firstDate = points[0].dateKey;
+  const lastDate = points[points.length - 1].dateKey;
+  const dateSpan = Math.max(1, daysBetween(firstDate, lastDate));
+  const plotted = points.map((point) => {
+    const x =
+      padding +
+      (daysBetween(firstDate, point.dateKey) / dateSpan) *
+        (width - padding * 2);
+    const y =
+      height -
+      padding -
+      ((point.value - min) / range) * (height - padding * 2);
 
-      return `${pointIndex === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
+    return {
+      ...point,
+      x,
+      y,
+    };
+  });
 
   return (
     <svg
@@ -163,31 +194,50 @@ function MetricChart({ data, metric }) {
         y2={height - padding}
         stroke="var(--border)"
       />
-      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="3" />
-      {points.map((point, pointIndex) => {
-        const x =
-          padding +
-          (pointIndex / Math.max(1, points.length - 1)) * (width - padding * 2);
-        const y =
-          height -
-          padding -
-          ((point.value - min) / range) * (height - padding * 2);
+      {plotted.slice(1).map((point, index) => {
+        const previous = plotted[index];
+        const skippedDays = daysBetween(previous.dateKey, point.dateKey) > 1;
 
         return (
-          <circle
-            key={`${point.label}-${pointIndex}`}
-            cx={x}
-            cy={y}
-            fill="var(--accent)"
-            r="4"
+          <line
+            key={`${previous.dateKey}-${point.dateKey}-${index}`}
+            x1={previous.x}
+            x2={point.x}
+            y1={previous.y}
+            y2={point.y}
+            stroke="var(--accent)"
+            strokeDasharray={skippedDays ? "5 5" : undefined}
+            strokeLinecap="round"
+            strokeWidth="3"
           />
         );
       })}
+      {plotted.map((point, pointIndex) => (
+        <circle
+          key={`${point.label}-${pointIndex}`}
+          cx={point.x}
+          cy={point.y}
+          fill="var(--accent)"
+          r="4"
+        />
+      ))}
       <text x={padding} y="16" fill="var(--text-muted)" fontSize="11">
         {max.toFixed(1)}
       </text>
       <text x={padding} y={height - 6} fill="var(--text-muted)" fontSize="11">
         {min.toFixed(1)}
+      </text>
+      <text x={padding} y={height - 18} fill="var(--text-muted)" fontSize="10">
+        {firstDate}
+      </text>
+      <text
+        x={width - padding}
+        y={height - 18}
+        fill="var(--text-muted)"
+        fontSize="10"
+        textAnchor="end"
+      >
+        {lastDate}
       </text>
     </svg>
   );

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Dumbbell, Scale, Utensils, X } from "lucide-react";
+import BodyWeightSheet from "./BodyWeightSheet";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+
+const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 
 function getLocalDateKey(date) {
   const year = date.getFullYear();
@@ -28,10 +31,48 @@ export default function WorkoutCalendar({
   const [expanded, setExpanded] = useState(false);
 
   const [displayedMonth, setDisplayedMonth] = useState(new Date());
+  const [localBodyWeightEntries, setLocalBodyWeightEntries] =
+    useState(bodyWeightEntries);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedFood, setSelectedFood] = useState(null);
+  const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
 
   const today = new Date();
+
+  const updateBodyWeightEntries = (nextEntries) => {
+    setLocalBodyWeightEntries(nextEntries);
+    localStorage.setItem(BODY_WEIGHT_LOG_KEY, JSON.stringify(nextEntries));
+  };
+
+  const saveBodyWeight = (entryDate, weightValue) => {
+    const weight = Number.parseFloat(String(weightValue).trim());
+
+    if (!Number.isFinite(weight) || weight <= 0) {
+      return;
+    }
+
+    const existingEntry = localBodyWeightEntries.find(
+      (entry) => entry.date === entryDate
+    );
+    const nextEntries = [
+      ...localBodyWeightEntries.filter((entry) => entry.date !== entryDate),
+      {
+        date: entryDate,
+        id: existingEntry?.id || Date.now(),
+        unit: "lb",
+        weight,
+      },
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    updateBodyWeightEntries(nextEntries);
+  };
+
+  const removeBodyWeight = (entryDate) => {
+    updateBodyWeightEntries(
+      localBodyWeightEntries.filter((entry) => entry.date !== entryDate)
+    );
+  };
 
   const getSessionDateKey = (session) => {
     if (session.completedAtIso) {
@@ -92,7 +133,7 @@ export default function WorkoutCalendar({
   const bodyWeightForDate = (date) => {
     const dateKey = getLocalDateKey(date);
 
-    return bodyWeightEntries.find((entry) => entry.date === dateKey);
+    return localBodyWeightEntries.find((entry) => entry.date === dateKey);
   };
 
   const getDateSummary = (date) => {
@@ -163,6 +204,8 @@ export default function WorkoutCalendar({
         setExpanded((current) => {
           if (current) {
             setSelectedDate(null);
+            setSelectedFood(null);
+            setSelectedWeight(null);
             setSelectedWorkout(null);
           }
 
@@ -498,15 +541,28 @@ export default function WorkoutCalendar({
                               <Scale size={15} color="#ef6c00" />
                               Weight
                             </div>
-                            <div
-                              style={{
-                                color: "var(--text-muted)",
-                                fontSize: "13px",
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedWeight(summary.bodyWeight);
                               }}
+                              style={{
+                                background: "var(--surface-muted)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "8px",
+                                color: "var(--text-muted)",
+                                display: "block",
+                                fontSize: "13px",
+                                font: "inherit",
+                                padding: "8px",
+                                textAlign: "left",
+                                width: "100%",
+                              }}
+                              type="button"
                             >
-                              • {summary.bodyWeight.weight}{" "}
+                              {summary.bodyWeight.weight}{" "}
                               {summary.bodyWeight.unit || "lb"}
-                            </div>
+                            </button>
                           </div>
                         )}
 
@@ -526,19 +582,32 @@ export default function WorkoutCalendar({
                               Food
                             </div>
                             {summary.foods.map((food) => (
-                              <div
+                              <button
                                 key={food.id}
-                                style={{
-                                  color: "var(--text-muted)",
-                                  fontSize: "13px",
-                                  marginBottom: "4px",
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedFood(food);
                                 }}
+                                style={{
+                                  background: "var(--surface-muted)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "8px",
+                                  color: "var(--text-muted)",
+                                  display: "block",
+                                  fontSize: "13px",
+                                  font: "inherit",
+                                  marginBottom: "4px",
+                                  padding: "8px",
+                                  textAlign: "left",
+                                  width: "100%",
+                                }}
+                                type="button"
                               >
-                                • {food.name} · {formatMacro(food.calories, "cal")} cal
+                                {food.name} · {formatMacro(food.calories, "cal")} cal
                                 {food.servingDescription
                                   ? ` · ${food.servingDescription}`
                                   : ""}
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -550,6 +619,166 @@ export default function WorkoutCalendar({
             </div>
           );
         })()}
+
+      {selectedWeight && (
+        <BodyWeightSheet
+          entries={localBodyWeightEntries}
+          entryDate={selectedWeight.date || getLocalDateKey(today)}
+          onClose={() => setSelectedWeight(null)}
+          onDelete={removeBodyWeight}
+          onSave={saveBodyWeight}
+        />
+      )}
+
+      {selectedFood && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Food details"
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedFood(null);
+          }}
+          style={{
+            alignItems: "flex-end",
+            background: "rgba(0,0,0,.45)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            position: "fixed",
+            zIndex: 2200,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              borderRadius: "18px 18px 0 0",
+              boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "14px",
+              maxHeight: "76vh",
+              maxWidth: "560px",
+              overflowY: "auto",
+              padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <div
+                style={{
+                  minWidth: 0,
+                }}
+              >
+                <h2
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: "18px",
+                    gap: "8px",
+                    lineHeight: 1.15,
+                    margin: 0,
+                  }}
+                >
+                  <Utensils size={18} color="#fbc02d" />
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {selectedFood.name}
+                  </span>
+                </h2>
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "3px",
+                  }}
+                >
+                  {selectedFood.date}
+                  {selectedFood.servingDescription
+                    ? ` · ${selectedFood.servingDescription}`
+                    : ""}
+                </div>
+              </div>
+              <button
+                aria-label="Close food details"
+                onClick={() => setSelectedFood(null)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "36px",
+                  minWidth: "36px",
+                  padding: 0,
+                }}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              }}
+            >
+              {[
+                ["Calories", formatMacro(selectedFood.calories, "cal")],
+                ["Protein", formatMacro(selectedFood.protein)],
+                ["Carbs", formatMacro(selectedFood.carbs)],
+                ["Fat", formatMacro(selectedFood.fat)],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    display: "grid",
+                    gap: "3px",
+                    padding: "10px",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "11px",
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+
+            {(selectedFood.source || selectedFood.sourceKey || selectedFood.recipeId) && (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {selectedFood.source ? `Source: ${selectedFood.source}` : ""}
+                {selectedFood.recipeId ? " · Recipe" : ""}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {selectedWorkout && (
         <div
