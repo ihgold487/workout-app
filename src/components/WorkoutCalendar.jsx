@@ -200,6 +200,510 @@ function getExerciseIncreaseFlags({ exercise, history, selectedWorkout }) {
   );
 }
 
+export function CompletedWorkoutSheet({
+  history = [],
+  onClose,
+  workout,
+  zIndex = 2200,
+}) {
+  const [selectedWorkoutExercise, setSelectedWorkoutExercise] = useState(null);
+  const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
+    useState(null);
+
+  if (!workout) {
+    return null;
+  }
+
+  const closeSheet = () => {
+    setSelectedWorkoutExerciseDetail(null);
+    setSelectedWorkoutExercise(null);
+    onClose?.();
+  };
+
+  return (
+    <>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Workout details"
+        onClick={(event) => {
+          event.stopPropagation();
+          closeSheet();
+        }}
+        style={{
+          alignItems: "flex-end",
+          background: "rgba(0,0,0,.45)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          position: "fixed",
+          zIndex,
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            background: "var(--surface-raised)",
+            borderRadius: "18px 18px 0 0",
+            boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+            boxSizing: "border-box",
+            display: "grid",
+            gap: "12px",
+            maxHeight: "86vh",
+            maxWidth: "680px",
+            overflowY: "auto",
+            padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <div
+              style={{
+                minWidth: 0,
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "18px",
+                  lineHeight: 1.15,
+                  margin: 0,
+                }}
+              >
+                {workout.templateName || workout.workout_name || "Workout"}
+              </h2>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "3px",
+                }}
+              >
+                Completed{" "}
+                {workout.completedAtIso
+                  ? new Date(workout.completedAtIso).toLocaleString([], {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })
+                  : workout.completedAt || "on selected date"}
+              </div>
+            </div>
+            <button
+              aria-label="Close workout details"
+              onClick={closeSheet}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: 0,
+              }}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {(workout.exercises || []).map((exercise) => {
+            const increaseFlags = getExerciseIncreaseFlags({
+              exercise,
+              history,
+              selectedWorkout: workout,
+            });
+
+            return (
+              <button
+                key={exercise.id}
+                onClick={() => setSelectedWorkoutExercise(exercise)}
+                style={{
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  color: "var(--text-h)",
+                  display: "grid",
+                  gap: "10px",
+                  font: "inherit",
+                  padding: "10px",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+                type="button"
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "10px",
+                    gridTemplateColumns: "52px minmax(0, 1fr)",
+                  }}
+                >
+                  <ExerciseThumbnail
+                    alt={exercise.imageAlt || exercise.name || "Exercise"}
+                    imageUrl={exercise.imageUrl}
+                    size={52}
+                  />
+                  <div
+                    style={{
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        gap: "6px",
+                        minWidth: 0,
+                      }}
+                    >
+                      <strong
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {exercise.name}
+                      </strong>
+                      {increaseFlags.previous && (
+                        <ArrowUp
+                          aria-label="Improved from previous workout"
+                          color="#c62828"
+                          size={20}
+                          strokeWidth={3.2}
+                          style={{
+                            flex: "0 0 auto",
+                          }}
+                        />
+                      )}
+                      {increaseFlags.allTime && (
+                        <ArrowUp
+                          aria-label="New all-time high"
+                          color="#1565c0"
+                          size={20}
+                          strokeWidth={3.2}
+                          style={{
+                            flex: "0 0 auto",
+                          }}
+                        />
+                      )}
+                    </div>
+                    {exercise.note && (
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "3px",
+                        }}
+                      >
+                        {exercise.note}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "6px",
+                  }}
+                >
+                  {(exercise.sets || []).map((set, setIndex) => {
+                    const actualWeight = firstPresentValue(
+                      set.actualWeight,
+                      set.actual_weight
+                    );
+                    const actualReps = firstPresentValue(
+                      set.actualReps,
+                      set.actual_reps
+                    );
+                    const actualRir = firstPresentValue(
+                      set.actualRir,
+                      set.actual_rir
+                    );
+
+                    return (
+                      <div
+                        key={set.id || setIndex}
+                        style={{
+                          alignItems: "center",
+                          background: "var(--surface-muted)",
+                          borderRadius: "8px",
+                          display: "grid",
+                          fontSize: "13px",
+                          gap: "8px",
+                          gridTemplateColumns: "42px 1fr 1fr 1fr",
+                          padding: "8px",
+                        }}
+                      >
+                        <strong>Set {setIndex + 1}</strong>
+                        <span>{actualWeight || "-"} lb</span>
+                        <span>{actualReps || "-"} reps</span>
+                        <span>RIR {actualRir ?? "-"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedWorkoutExercise && (() => {
+        const summary = calculateExerciseSummary(selectedWorkoutExercise);
+        const comparisons = buildExerciseComparisons({
+          exercise: selectedWorkoutExercise,
+          history,
+          selectedWorkout: workout,
+        });
+        const metrics = [
+          ["volume", "Volume", "Total weight x reps across all sets", 0],
+          ["volumeMax", "Volume Max", "Highest weight x reps for one set", 0],
+          ["e1rmMax", "1 Rep Max", "Best estimated 1RM set", 1],
+          ["e1rmAverage", "1 Rep Max Average", "Average estimated 1RM", 1],
+          ["weightMax", "Weight Max", "Highest set weight", 1],
+          ["weightAverage", "Weight Average", "Average set weight", 1],
+        ];
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedWorkoutExercise.name} workout summary`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectedWorkoutExerciseDetail(null);
+              setSelectedWorkoutExercise(null);
+            }}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: zIndex + 100,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxHeight: "82vh",
+                maxWidth: "600px",
+                overflowY: "auto",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "10px",
+                    gridTemplateColumns: "40px minmax(0, 1fr)",
+                    minWidth: 0,
+                  }}
+                >
+                  <ExerciseThumbnail
+                    alt={selectedWorkoutExercise.name || "Exercise"}
+                    imageUrl={selectedWorkoutExercise.imageUrl}
+                    size={40}
+                  />
+                  <div
+                    style={{
+                      minWidth: 0,
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
+                      }
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        color: "var(--text-h)",
+                        fontSize: "18px",
+                        fontWeight: "bold",
+                        lineHeight: 1.15,
+                        margin: 0,
+                        padding: 0,
+                        textAlign: "left",
+                      }}
+                      type="button"
+                    >
+                      {selectedWorkoutExercise.name}
+                    </button>
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "3px",
+                      }}
+                    >
+                      Workout performance summary
+                    </div>
+                  </div>
+                </div>
+                <button
+                  aria-label="Close exercise summary"
+                  onClick={() => {
+                    setSelectedWorkoutExerciseDetail(null);
+                    setSelectedWorkoutExercise(null);
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "36px",
+                    minWidth: "36px",
+                    padding: 0,
+                  }}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                {metrics.map(([key, label, description, decimals]) => {
+                  const value = summary[key];
+                  const previousValue = comparisons.previousSummary?.[key];
+                  const allTimeValue = comparisons.allTimeHighs[key];
+                  const previousIncrease = formatPercentIncrease(
+                    value,
+                    previousValue
+                  );
+                  const allTimeIncrease = formatPercentIncrease(value, allTimeValue);
+
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        display: "grid",
+                        gap: "6px",
+                        padding: "10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          alignItems: "start",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                        }}
+                      >
+                        <div>
+                          <strong>{label}</strong>
+                          <div
+                            style={{
+                              color: "var(--text-muted)",
+                              fontSize: "12px",
+                              marginTop: "2px",
+                            }}
+                          >
+                            {description}
+                          </div>
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: "18px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatMetricValue(value, decimals)}
+                        </strong>
+                      </div>
+
+                      {(previousIncrease || allTimeIncrease) && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "6px",
+                          }}
+                        >
+                          {previousIncrease && (
+                            <span
+                              style={{
+                                background:
+                                  "color-mix(in srgb, #c62828 14%, var(--surface))",
+                                border: "1px solid #c62828",
+                                borderRadius: "999px",
+                                color: "#c62828",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                padding: "3px 8px",
+                              }}
+                            >
+                              Previous {previousIncrease}
+                            </span>
+                          )}
+                          {allTimeIncrease && (
+                            <span
+                              style={{
+                                background:
+                                  "color-mix(in srgb, #1565c0 14%, var(--surface))",
+                                border: "1px solid #1565c0",
+                                borderRadius: "999px",
+                                color: "#1565c0",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                padding: "3px 8px",
+                              }}
+                            >
+                              All-time {allTimeIncrease}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {selectedWorkoutExerciseDetail && (
+        <ExerciseDetailDialog
+          exercise={selectedWorkoutExerciseDetail}
+          history={history}
+          onClose={() => setSelectedWorkoutExerciseDetail(null)}
+          zIndex={zIndex + 200}
+        />
+      )}
+    </>
+  );
+}
+
 export default function WorkoutCalendar({
   bodyWeightEntries = [],
   history,
@@ -1269,36 +1773,51 @@ export default function WorkoutCalendar({
               >
                 <div
                   style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "10px",
+                    gridTemplateColumns: "40px minmax(0, 1fr)",
                     minWidth: 0,
                   }}
                 >
-                  <button
-                    onClick={() =>
-                      setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
-                    }
-                    style={{
-                      background: "transparent",
-                      border: 0,
-                      color: "var(--text-h)",
-                      fontSize: "18px",
-                      fontWeight: "bold",
-                      lineHeight: 1.15,
-                      margin: 0,
-                      padding: 0,
-                      textAlign: "left",
-                    }}
-                    type="button"
-                  >
-                    {selectedWorkoutExercise.name}
-                  </button>
+                  <ExerciseThumbnail
+                    alt={selectedWorkoutExercise.name || "Exercise"}
+                    imageUrl={selectedWorkoutExercise.imageUrl}
+                    size={40}
+                  />
                   <div
                     style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "3px",
+                      minWidth: 0,
                     }}
                   >
-                    Workout performance summary
+                    <button
+                      onClick={() =>
+                        setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
+                      }
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        color: "var(--text-h)",
+                        fontSize: "18px",
+                        fontWeight: "bold",
+                        lineHeight: 1.15,
+                        margin: 0,
+                        padding: 0,
+                        textAlign: "left",
+                      }}
+                      type="button"
+                    >
+                      {selectedWorkoutExercise.name}
+                    </button>
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "3px",
+                      }}
+                    >
+                      Workout performance summary
+                    </div>
                   </div>
                 </div>
                 <button

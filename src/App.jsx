@@ -20,11 +20,10 @@ import {
 import { seedExercises } from "./data/seedExercises";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
-import HistoryView from "./components/HistoryView";
 import ExerciseView from "./components/ExerciseView";
 import PlansView from "./components/PlansView";
 import NutritionView from "./components/NutritionView";
-import WorkoutCalendar from "./components/WorkoutCalendar";
+import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import {
   clearLegacyEquipmentStorage,
   getSavedStorageVersion,
@@ -3088,13 +3087,6 @@ export default function App() {
     return renderAppShell(<NutritionView session={authSession} />, "nutrition");
   }
 
-  if (selectedHistory) {
-    return renderAppShell(
-      <HistoryView selectedHistory={selectedHistory} />,
-      "home"
-    );
-  }
-
   if (selectedHistoryList) {
     return renderAppShell(
       <div
@@ -3116,6 +3108,13 @@ export default function App() {
             {formatHistoryTimestamp(workout)}
           </button>
         ))}
+        {selectedHistory && (
+          <CompletedWorkoutSheet
+            history={history}
+            onClose={() => setSelectedHistory(null)}
+            workout={selectedHistory}
+          />
+        )}
       </div>,
       "home"
     );
