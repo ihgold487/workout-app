@@ -248,6 +248,7 @@ export default function ExerciseDetailDialog({
   history = [],
   onClose,
   onSelect,
+  zIndex = 1400,
 }) {
   const [activeTab, setActiveTab] = useState("info");
   const [chartMetric, setChartMetric] = useState("maxWeight");
@@ -272,10 +273,11 @@ export default function ExerciseDetailDialog({
         inset: 0,
         justifyContent: "center",
         position: "fixed",
-        zIndex: 1400,
+        zIndex,
       }}
     >
       <div
+        onClick={(event) => event.stopPropagation()}
         style={{
           background: "var(--surface-raised)",
           borderRadius: "18px 18px 0 0",

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Dumbbell, Scale, Utensils, X } from "lucide-react";
+import { ArrowUp, Dumbbell, Scale, Utensils, X } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
+import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import { calculateE1RM } from "../utils/e1rm";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 
@@ -23,6 +25,181 @@ function firstPresentValue(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function parseMetricValue(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace("+", ""));
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatMetricValue(value, decimals = 1) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return "-";
+  }
+
+  return parsed.toFixed(decimals);
+}
+
+function formatPercentIncrease(value, referenceValue) {
+  if (!Number.isFinite(value) || !Number.isFinite(referenceValue) || referenceValue <= 0) {
+    return null;
+  }
+
+  if (value <= referenceValue) {
+    return null;
+  }
+
+  return `+${(((value - referenceValue) / referenceValue) * 100).toFixed(1)}%`;
+}
+
+function getWorkoutTime(workout) {
+  const parsed = new Date(
+    workout.completedAtIso || workout.completed_at || workout.completedAt || 0
+  );
+
+  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+}
+
+function getExerciseMatchKey(exercise) {
+  const id = firstPresentValue(exercise.exerciseId, exercise.exercise_id, exercise.id);
+
+  if (id) {
+    return `id:${id}`;
+  }
+
+  const equipment = Array.isArray(exercise.equipment)
+    ? exercise.equipment.filter(Boolean).join(", ")
+    : exercise.equipment || "";
+
+  return `name:${String(exercise.name || "").toLowerCase()}|${String(
+    equipment
+  ).toLowerCase()}`;
+}
+
+function getSetMetrics(set) {
+  const weight = parseMetricValue(
+    firstPresentValue(set.actualWeight, set.actual_weight, set.targetWeight)
+  );
+  const reps = parseMetricValue(
+    firstPresentValue(set.actualReps, set.actual_reps, set.targetReps)
+  );
+  const rir = firstPresentValue(set.actualRir, set.actual_rir, set.targetRir);
+  const e1rm = calculateE1RM(weight, reps, rir);
+
+  return {
+    e1rm: Number.isFinite(e1rm) ? e1rm : null,
+    reps,
+    volume: Number.isFinite(weight) && Number.isFinite(reps) ? weight * reps : null,
+    weight,
+  };
+}
+
+function average(values) {
+  const numericValues = values.filter(Number.isFinite);
+
+  if (numericValues.length === 0) {
+    return null;
+  }
+
+  return numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+}
+
+function calculateExerciseSummary(exercise) {
+  const setMetrics = (exercise?.sets || []).map(getSetMetrics);
+  const volumes = setMetrics.map((set) => set.volume);
+  const e1rms = setMetrics.map((set) => set.e1rm);
+  const weights = setMetrics.map((set) => set.weight);
+  const validVolumes = volumes.filter(Number.isFinite);
+  const validE1rms = e1rms.filter(Number.isFinite);
+  const validWeights = weights.filter(Number.isFinite);
+
+  return {
+    e1rmAverage: average(validE1rms),
+    e1rmMax: validE1rms.length > 0 ? Math.max(...validE1rms) : null,
+    volume:
+      validVolumes.length > 0
+        ? validVolumes.reduce((sum, value) => sum + value, 0)
+        : null,
+    volumeMax: validVolumes.length > 0 ? Math.max(...validVolumes) : null,
+    weightAverage: average(validWeights),
+    weightMax: validWeights.length > 0 ? Math.max(...validWeights) : null,
+  };
+}
+
+function buildExerciseComparisons({ exercise, history, selectedWorkout }) {
+  const matchKey = getExerciseMatchKey(exercise);
+  const selectedTime = getWorkoutTime(selectedWorkout);
+  const selectedId = selectedWorkout?.id;
+  const priorSummaries = (history || [])
+    .filter((workout) => workout.id !== selectedId && getWorkoutTime(workout) < selectedTime)
+    .flatMap((workout) => {
+      const match = (workout.exercises || []).find(
+        (item) => getExerciseMatchKey(item) === matchKey
+      );
+
+      if (!match) {
+        return [];
+      }
+
+      return [
+        {
+          completedAt: workout.completedAt,
+          completedTime: getWorkoutTime(workout),
+          summary: calculateExerciseSummary(match),
+        },
+      ];
+    })
+    .sort((a, b) => b.completedTime - a.completedTime);
+
+  const previousSummary = priorSummaries[0]?.summary || null;
+  const allTimeHighs = priorSummaries.reduce((highs, entry) => {
+    Object.entries(entry.summary).forEach(([key, value]) => {
+      if (!Number.isFinite(value)) {
+        return;
+      }
+
+      highs[key] = !Number.isFinite(highs[key]) ? value : Math.max(highs[key], value);
+    });
+
+    return highs;
+  }, {});
+
+  return {
+    allTimeHighs,
+    previousSummary,
+  };
+}
+
+function getExerciseIncreaseFlags({ exercise, history, selectedWorkout }) {
+  const summary = calculateExerciseSummary(exercise);
+  const comparisons = buildExerciseComparisons({
+    exercise,
+    history,
+    selectedWorkout,
+  });
+
+  return Object.keys(summary).reduce(
+    (flags, key) => {
+      const value = summary[key];
+
+      if (formatPercentIncrease(value, comparisons.previousSummary?.[key])) {
+        flags.previous = true;
+      }
+
+      if (formatPercentIncrease(value, comparisons.allTimeHighs[key])) {
+        flags.allTime = true;
+      }
+
+      return flags;
+    },
+    {
+      allTime: false,
+      previous: false,
+    }
+  );
+}
+
 export default function WorkoutCalendar({
   bodyWeightEntries = [],
   history,
@@ -37,6 +214,9 @@ export default function WorkoutCalendar({
   const [selectedFood, setSelectedFood] = useState(null);
   const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
+    useState(null);
+  const [selectedWorkoutExercise, setSelectedWorkoutExercise] = useState(null);
 
   const today = new Date();
 
@@ -207,6 +387,8 @@ export default function WorkoutCalendar({
             setSelectedFood(null);
             setSelectedWeight(null);
             setSelectedWorkout(null);
+            setSelectedWorkoutExerciseDetail(null);
+            setSelectedWorkoutExercise(null);
           }
 
           return !current;
@@ -496,6 +678,8 @@ export default function WorkoutCalendar({
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setSelectedWorkout(workout);
+                                  setSelectedWorkoutExerciseDetail(null);
+                                  setSelectedWorkoutExercise(null);
                                 }}
                                 style={{
                                   background: "var(--surface-muted)",
@@ -788,6 +972,8 @@ export default function WorkoutCalendar({
           onClick={(event) => {
             event.stopPropagation();
             setSelectedWorkout(null);
+            setSelectedWorkoutExerciseDetail(null);
+            setSelectedWorkoutExercise(null);
           }}
           style={{
             alignItems: "flex-end",
@@ -856,7 +1042,11 @@ export default function WorkoutCalendar({
               </div>
               <button
                 aria-label="Close workout details"
-                onClick={() => setSelectedWorkout(null)}
+                onClick={() => {
+                  setSelectedWorkout(null);
+                  setSelectedWorkoutExerciseDetail(null);
+                  setSelectedWorkoutExercise(null);
+                }}
                 style={{
                   alignItems: "center",
                   display: "inline-flex",
@@ -871,17 +1061,31 @@ export default function WorkoutCalendar({
               </button>
             </div>
 
-            {(selectedWorkout.exercises || []).map((exercise) => (
-              <div
-                key={exercise.id}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  display: "grid",
-                  gap: "10px",
-                  padding: "10px",
-                }}
-              >
+            {(selectedWorkout.exercises || []).map((exercise) => {
+              const increaseFlags = getExerciseIncreaseFlags({
+                exercise,
+                history,
+                selectedWorkout,
+              });
+
+              return (
+                <button
+                  key={exercise.id}
+                  onClick={() => setSelectedWorkoutExercise(exercise)}
+                  style={{
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text-h)",
+                    display: "grid",
+                    gap: "10px",
+                    font: "inherit",
+                    padding: "10px",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                  type="button"
+                >
                 <div
                   style={{
                     alignItems: "center",
@@ -900,16 +1104,47 @@ export default function WorkoutCalendar({
                       minWidth: 0,
                     }}
                   >
-                    <strong
+                    <div
                       style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        alignItems: "center",
+                        display: "flex",
+                        gap: "6px",
+                        minWidth: 0,
                       }}
                     >
-                      {exercise.name}
-                    </strong>
+                      <strong
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {exercise.name}
+                      </strong>
+                      {increaseFlags.previous && (
+                        <ArrowUp
+                          aria-label="Improved from previous workout"
+                          color="#c62828"
+                          size={20}
+                          strokeWidth={3.2}
+                          style={{
+                            flex: "0 0 auto",
+                          }}
+                        />
+                      )}
+                      {increaseFlags.allTime && (
+                        <ArrowUp
+                          aria-label="New all-time high"
+                          color="#1565c0"
+                          size={20}
+                          strokeWidth={3.2}
+                          style={{
+                            flex: "0 0 auto",
+                          }}
+                        />
+                      )}
+                    </div>
                     {exercise.note && (
                       <div
                         style={{
@@ -966,10 +1201,241 @@ export default function WorkoutCalendar({
                     );
                   })}
                 </div>
-              </div>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
+      )}
+
+      {selectedWorkout && selectedWorkoutExercise && (() => {
+        const summary = calculateExerciseSummary(selectedWorkoutExercise);
+        const comparisons = buildExerciseComparisons({
+          exercise: selectedWorkoutExercise,
+          history,
+          selectedWorkout,
+        });
+        const metrics = [
+          ["volume", "Volume", "Total weight x reps across all sets", 0],
+          ["volumeMax", "Volume Max", "Highest weight x reps for one set", 0],
+          ["e1rmMax", "1 Rep Max", "Best estimated 1RM set", 1],
+          ["e1rmAverage", "1 Rep Max Average", "Average estimated 1RM", 1],
+          ["weightMax", "Weight Max", "Highest set weight", 1],
+          ["weightAverage", "Weight Average", "Average set weight", 1],
+        ];
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedWorkoutExercise.name} workout summary`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectedWorkoutExerciseDetail(null);
+              setSelectedWorkoutExercise(null);
+            }}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: 2300,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxHeight: "82vh",
+                maxWidth: "600px",
+                overflowY: "auto",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div
+                  style={{
+                    minWidth: 0,
+                  }}
+                >
+                  <button
+                    onClick={() =>
+                      setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
+                    }
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      color: "var(--text-h)",
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                      lineHeight: 1.15,
+                      margin: 0,
+                      padding: 0,
+                      textAlign: "left",
+                    }}
+                    type="button"
+                  >
+                    {selectedWorkoutExercise.name}
+                  </button>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "3px",
+                    }}
+                  >
+                    Workout performance summary
+                  </div>
+                </div>
+                <button
+                  aria-label="Close exercise summary"
+                  onClick={() => {
+                    setSelectedWorkoutExerciseDetail(null);
+                    setSelectedWorkoutExercise(null);
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "36px",
+                    minWidth: "36px",
+                    padding: 0,
+                  }}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                {metrics.map(([key, label, description, decimals]) => {
+                  const value = summary[key];
+                  const previousValue = comparisons.previousSummary?.[key];
+                  const allTimeValue = comparisons.allTimeHighs[key];
+                  const previousIncrease = formatPercentIncrease(
+                    value,
+                    previousValue
+                  );
+                  const allTimeIncrease = formatPercentIncrease(value, allTimeValue);
+
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        display: "grid",
+                        gap: "6px",
+                        padding: "10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          alignItems: "start",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                        }}
+                      >
+                        <div>
+                          <strong>{label}</strong>
+                          <div
+                            style={{
+                              color: "var(--text-muted)",
+                              fontSize: "12px",
+                              marginTop: "2px",
+                            }}
+                          >
+                            {description}
+                          </div>
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: "18px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatMetricValue(value, decimals)}
+                        </strong>
+                      </div>
+
+                      {(previousIncrease || allTimeIncrease) && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "6px",
+                          }}
+                        >
+                          {previousIncrease && (
+                            <span
+                              style={{
+                                background:
+                                  "color-mix(in srgb, #c62828 14%, var(--surface))",
+                                border: "1px solid #c62828",
+                                borderRadius: "999px",
+                                color: "#c62828",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                padding: "3px 8px",
+                              }}
+                            >
+                              Previous {previousIncrease}
+                            </span>
+                          )}
+                          {allTimeIncrease && (
+                            <span
+                              style={{
+                                background:
+                                  "color-mix(in srgb, #1565c0 14%, var(--surface))",
+                                border: "1px solid #1565c0",
+                                borderRadius: "999px",
+                                color: "#1565c0",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                padding: "3px 8px",
+                              }}
+                            >
+                              All-time {allTimeIncrease}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {selectedWorkoutExerciseDetail && (
+        <ExerciseDetailDialog
+          exercise={selectedWorkoutExerciseDetail}
+          history={history}
+          onClose={() => setSelectedWorkoutExerciseDetail(null)}
+          zIndex={2400}
+        />
       )}
     </div>
   );
