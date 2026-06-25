@@ -3,6 +3,12 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { Plus, ScanBarcode, Scale, Search, Trash2, Utensils, X } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
+import {
+  deleteBodyWeightEntry,
+  downloadBodyWeightEntries,
+  uploadBodyWeightEntries,
+  upsertBodyWeightEntry,
+} from "../sync/bodyMeasurementCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
@@ -911,6 +917,7 @@ export default function NutritionView({ session = null }) {
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [weightSheetInitialAdding, setWeightSheetInitialAdding] =
     useState(false);
+  const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
@@ -975,6 +982,48 @@ export default function NutritionView({ session = null }) {
     foodSearchResults.length > 0 ||
     librarySearchResults.length > 0 ||
     recipeSearchResults.length > 0;
+
+  useEffect(() => {
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncBodyWeights() {
+      setWeightSyncStatus("Syncing body weight...");
+
+      try {
+        const localEntries = readBodyWeightEntries();
+
+        if (localEntries.length > 0) {
+          await uploadBodyWeightEntries(localEntries, session);
+        }
+
+        const cloudEntries = await downloadBodyWeightEntries(session);
+
+        if (cancelled) {
+          return;
+        }
+
+        setBodyWeightEntries(cloudEntries);
+        saveBodyWeightEntries(cloudEntries);
+        setWeightSyncStatus("");
+      } catch (error) {
+        console.error("Failed to sync body weight entries:", error);
+
+        if (!cancelled) {
+          setWeightSyncStatus("Body weight sync failed. Local changes were kept.");
+        }
+      }
+    }
+
+    syncBodyWeights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   useEffect(() => {
     if (!showBarcodeScanner) {
@@ -1703,7 +1752,7 @@ export default function NutritionView({ session = null }) {
     updateEntries(entries.filter((entry) => entry.id !== entryId));
   }
 
-  function saveBodyWeight(entryDate, weightValue) {
+  async function saveBodyWeight(entryDate, weightValue) {
     const weight = parseMacroValue(weightValue);
 
     if (!weight) {
@@ -1711,23 +1760,52 @@ export default function NutritionView({ session = null }) {
     }
 
     const existingEntry = bodyWeightEntries.find((entry) => entry.date === entryDate);
+    const nextEntry = {
+      date: entryDate,
+      id: existingEntry?.id || Date.now(),
+      unit: "lb",
+      weight,
+    };
     const nextEntries = [
       ...bodyWeightEntries.filter((entry) => entry.date !== entryDate),
-      {
-        date: entryDate,
-        id: existingEntry?.id || Date.now(),
-        unit: "lb",
-        weight,
-      },
+      nextEntry,
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     updateBodyWeightEntries(nextEntries);
+
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      return;
+    }
+
+    setWeightSyncStatus("Saving body weight...");
+
+    try {
+      await upsertBodyWeightEntry(nextEntry, session);
+      setWeightSyncStatus("");
+    } catch (error) {
+      console.error("Failed to save body weight to cloud:", error);
+      setWeightSyncStatus("Body weight saved locally; cloud save failed.");
+    }
   }
 
-  function removeBodyWeight(entryDate) {
+  async function removeBodyWeight(entryDate) {
     updateBodyWeightEntries(
       bodyWeightEntries.filter((entry) => entry.date !== entryDate)
     );
+
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      return;
+    }
+
+    setWeightSyncStatus("Deleting body weight...");
+
+    try {
+      await deleteBodyWeightEntry(entryDate, session);
+      setWeightSyncStatus("");
+    } catch (error) {
+      console.error("Failed to delete body weight from cloud:", error);
+      setWeightSyncStatus("Body weight deleted locally; cloud delete failed.");
+    }
   }
 
   const macroCards = [
@@ -1875,6 +1953,20 @@ export default function NutritionView({ session = null }) {
           <Plus size={18} />
         </button>
       </section>
+
+      {weightSyncStatus && (
+        <div
+          style={{
+            color: weightSyncStatus.includes("failed")
+              ? "var(--danger-text)"
+              : "var(--text-muted)",
+            fontSize: "12px",
+            margin: "-6px 0 12px",
+          }}
+        >
+          {weightSyncStatus}
+        </div>
+      )}
 
       {weightSheetOpen && (
         <BodyWeightSheet

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  ClipboardList,
   GripVertical,
   Link2,
   RefreshCw,
@@ -1266,7 +1267,24 @@ export default function PlansView({
         padding: "20px",
       }}
     >
-      <h1>Plans</h1>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "10px",
+          marginBottom: "16px",
+        }}
+      >
+        <ClipboardList size={26} />
+        <h1
+          style={{
+            fontSize: "1.6rem",
+            margin: 0,
+          }}
+        >
+          Plans
+        </h1>
+      </div>
 
       {trainerUsers.length > 1 && (
         <label

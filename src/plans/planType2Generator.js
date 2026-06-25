@@ -1,5 +1,6 @@
 import { isExerciseActive } from "../utils/exerciseStatus";
 import { recommendSetTarget } from "../utils/targetRecommendation";
+import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 
 const CHEST_MUSCLES = ["Chest", "Upper Chest"];
 const LEG_MUSCLES = ["Glutes", "Quads", "Hamstrings"];
@@ -443,6 +444,7 @@ function getRecommendedTargetPrescription(exercise, options) {
     setIndex: options.setIndex,
     targetReps: options.reps,
     targetRir: options.rir,
+    weightIncrement: getExerciseWeightIncrement(exercise),
   });
 
   return recommendation.result?.recommendation || null;

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Circle,
   Dumbbell,
+  Flame,
   Hash,
   History,
   Link2,
@@ -27,6 +28,10 @@ import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import { calculateE1RM } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import { recommendSetTarget } from "../utils/targetRecommendation";
+import {
+  getExerciseWeightIncrement,
+  roundWeightToIncrement,
+} from "../utils/weightIncrement";
 
 function IconButton({
   children,
@@ -129,6 +134,7 @@ export default function SessionView({
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
+  const [warmupExerciseId, setWarmupExerciseId] = useState(null);
 
   function lbsToKg(lbs) {
     const num = parseFloat(lbs);
@@ -269,6 +275,7 @@ function normalizeLookupValue(value) {
       setIndex,
       targetReps: reps,
       targetRir: rir,
+      weightIncrement: getExerciseWeightIncrement(exercise),
     });
 
     const weight = recommendation.result?.recommendation?.weight;
@@ -284,6 +291,7 @@ function normalizeLookupValue(value) {
       setIndex,
       targetReps: set.targetReps,
       targetRir: set.targetRir,
+      weightIncrement: getExerciseWeightIncrement(exercise),
     });
   }
 
@@ -307,6 +315,201 @@ function normalizeLookupValue(value) {
     }
 
     return `${prescription.weight} × ${prescription.reps} @ ${prescription.rir}`;
+  }
+
+  function parseSessionNumber(value) {
+    if (value === "" || value == null) {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(String(value).replace(/^\+/, ""));
+
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function formatWarmupWeight(value) {
+    if (value == null || !Number.isFinite(value)) {
+      return "—";
+    }
+
+    const displayValue = weightUnit === "kg" ? Number(lbsToKg(value)) : value;
+
+    return Number.isInteger(displayValue)
+      ? String(displayValue)
+      : displayValue.toFixed(1).replace(/\.0$/, "");
+  }
+
+  function formatWarmupPercent(value) {
+    return value == null || !Number.isFinite(value)
+      ? "—"
+      : `${(value * 100).toFixed(1).replace(/\.0$/, "")}%`;
+  }
+
+  function chooseWarmupWeight(baseE1RM, reps, rir, targetPercent, weightIncrement) {
+    const rawWeight = (baseE1RM * targetPercent) / (1 + (reps + rir) / 30);
+    const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
+    const increment = Number(weightIncrement) > 0 ? Number(weightIncrement) : null;
+    const candidateWeights = increment
+      ? Array.from({ length: 11 }, (_, index) =>
+          roundWeightToIncrement(
+            Math.max(0, roundedWeight + (index - 5) * increment),
+            increment
+          )
+        )
+      : [roundedWeight];
+    const candidates = candidateWeights
+      .filter((candidate) => candidate > 0)
+      .map((candidate) => {
+        const e1rm = calculateE1RM(candidate, reps, rir);
+
+        return {
+          e1rm,
+          percent: e1rm / baseE1RM,
+          weight: candidate,
+        };
+      })
+      .sort(
+        (a, b) =>
+          Math.abs(a.percent - targetPercent) -
+            Math.abs(b.percent - targetPercent) || a.weight - b.weight
+      );
+
+    return candidates[0] || null;
+  }
+
+  function chooseWarmupWeightInRange(
+    baseE1RM,
+    reps,
+    rir,
+    minPercent,
+    maxPercent,
+    weightIncrement
+  ) {
+    const midpoint = (minPercent + maxPercent) / 2;
+    const rawWeight = (baseE1RM * midpoint) / (1 + (reps + rir) / 30);
+    const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
+    const increment = Number(weightIncrement) > 0 ? Number(weightIncrement) : null;
+    const candidateWeights = increment
+      ? Array.from({ length: 11 }, (_, index) =>
+          roundWeightToIncrement(
+            Math.max(0, roundedWeight + (index - 5) * increment),
+            increment
+          )
+        )
+      : [roundedWeight];
+    const candidates = candidateWeights
+      .filter((candidate) => candidate > 0)
+      .map((candidate) => {
+        const e1rm = calculateE1RM(candidate, reps, rir);
+        const percent = e1rm / baseE1RM;
+        const inRange = percent >= minPercent && percent <= maxPercent;
+        const rangeDistance =
+          percent < minPercent
+            ? minPercent - percent
+            : percent > maxPercent
+              ? percent - maxPercent
+              : 0;
+
+        return {
+          e1rm,
+          inRange,
+          percent,
+          rangeDistance,
+          weight: candidate,
+        };
+      })
+      .sort(
+        (a, b) =>
+          Number(b.inRange) - Number(a.inRange) ||
+          a.rangeDistance - b.rangeDistance ||
+          Math.abs(a.percent - midpoint) - Math.abs(b.percent - midpoint) ||
+          a.weight - b.weight
+      );
+
+    return candidates[0] || null;
+  }
+
+  function getWarmupRecommendations(exercise) {
+    const firstSet = exercise?.sets?.[0];
+
+    if (!firstSet) {
+      return null;
+    }
+
+    const baseWeight = parseSessionNumber(
+      firstPresentValue(firstSet.targetWeight, firstSet.actualWeight)
+    );
+    const baseReps = parseSessionNumber(
+      firstPresentValue(firstSet.targetReps, firstSet.actualReps)
+    );
+    const targetRir = parseSessionNumber(
+      firstPresentValue(firstSet.targetRir, firstSet.actualRir, 0)
+    );
+    const baseE1RM = calculateE1RM(baseWeight, baseReps, targetRir);
+    const weightIncrement = getExerciseWeightIncrement(exercise);
+
+    if (baseWeight == null || baseReps == null || targetRir == null || baseE1RM == null) {
+      return {
+        baseE1RM: null,
+        baseReps,
+        baseWeight,
+        targetRir,
+      };
+    }
+
+    return {
+      baseE1RM,
+      baseReps,
+      baseWeight,
+      options: [
+        {
+          label: "2 warmup sets",
+          sets: [
+            {
+              note: "35-40% e1RM",
+              reps: 9,
+              target: chooseWarmupWeightInRange(
+                baseE1RM,
+                9,
+                targetRir,
+                0.35,
+                0.4,
+                weightIncrement
+              ),
+            },
+            {
+              note: "Closest to 65% e1RM",
+              reps: 7,
+              target: chooseWarmupWeight(
+                baseE1RM,
+                7,
+                targetRir,
+                0.65,
+                weightIncrement
+              ),
+            },
+          ],
+        },
+        {
+          label: "1 warmup set",
+          sets: [
+            {
+              note: "50-55% e1RM",
+              reps: 8,
+              target: chooseWarmupWeightInRange(
+                baseE1RM,
+                8,
+                targetRir,
+                0.5,
+                0.55,
+                weightIncrement
+              ),
+            },
+          ],
+        },
+      ],
+      targetRir,
+    };
   }
 
 
@@ -1709,6 +1912,13 @@ function normalizeLookupValue(value) {
     setSelectedTemplateId(null);
   }
 
+  const warmupExercise = warmupExerciseId
+    ? session.exercises.find((exercise) => exercise.id === warmupExerciseId)
+    : null;
+  const warmupRecommendations = warmupExercise
+    ? getWarmupRecommendations(warmupExercise)
+    : null;
+
   return (
     <div
       style={{
@@ -2372,6 +2582,27 @@ function normalizeLookupValue(value) {
                       <Trash2 size={17} />
                     </IconButton>
                   </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-start",
+                    marginTop: "8px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setWarmupExerciseId(exercise.id)}
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      padding: "7px 10px",
+                    }}
+                  >
+                    <Flame size={15} /> Warmup sets
+                  </button>
                 </div>
 
                 {(expandedNotes[exercise.id] ||
@@ -3979,6 +4210,227 @@ function normalizeLookupValue(value) {
               );
             }}
           />
+
+          {warmupExercise && (
+            <div
+              style={{
+                alignItems: "flex-end",
+                background: "rgba(0,0,0,.45)",
+                display: "flex",
+                inset: 0,
+                justifyContent: "center",
+                position: "fixed",
+                zIndex: 9999,
+              }}
+            >
+              <div
+                style={{
+                  background: "var(--surface-raised)",
+                  borderRadius: "18px 18px 0 0",
+                  boxSizing: "border-box",
+                  maxHeight: "82vh",
+                  overflowY: "auto",
+                  padding: "16px",
+                  paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    gap: "12px",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        gap: "8px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      <Flame size={18} />
+                      <span>Warmup sets</span>
+                    </div>
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "13px",
+                        marginTop: "3px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {warmupExercise.name}
+                    </div>
+                  </div>
+
+                  <IconButton
+                    label="Close warmup sets"
+                    onClick={() => setWarmupExerciseId(null)}
+                    size={34}
+                  >
+                    <X size={17} />
+                  </IconButton>
+                </div>
+
+                {!warmupRecommendations?.baseE1RM ? (
+                  <div
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      color: "var(--text-muted)",
+                      fontSize: "14px",
+                      padding: "12px",
+                    }}
+                  >
+                    Add a target weight and target reps to the first working set
+                    to calculate warmups.
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        marginBottom: "12px",
+                        padding: "10px",
+                      }}
+                    >
+                      Based on set 1:{" "}
+                      <strong>
+                        {formatWarmupWeight(warmupRecommendations.baseWeight)}
+                        {weightUnit} x {warmupRecommendations.baseReps} @{" "}
+                        {warmupRecommendations.targetRir}
+                      </strong>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {" "}
+                        (e1RM{" "}
+                        {formatWarmupWeight(warmupRecommendations.baseE1RM)}
+                        {weightUnit})
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "12px",
+                      }}
+                    >
+                      {warmupRecommendations.options.map((option) => (
+                        <div
+                          key={option.label}
+                          style={{
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: "bold",
+                              marginBottom: "12px",
+                            }}
+                          >
+                            {option.label}
+                          </div>
+
+                          <div
+                            style={{
+                              display: "grid",
+                              gap: "8px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                alignItems: "center",
+                                color: "var(--text-muted)",
+                                display: "grid",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                gap: "8px",
+                                gridTemplateColumns: "46px 1fr 44px 54px",
+                                textAlign: "center",
+                              }}
+                            >
+                              <span style={{ textAlign: "left" }}>Set</span>
+                              <span
+                                title="Weight"
+                                style={{
+                                  alignItems: "center",
+                                  display: "inline-flex",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <Weight size={15} aria-label="Weight" />
+                              </span>
+                              <span
+                                title="Reps"
+                                style={{
+                                  alignItems: "center",
+                                  display: "inline-flex",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <Hash size={15} aria-label="Reps" />
+                              </span>
+                              <span>%</span>
+                            </div>
+
+                            {option.sets.map((warmupSet, index) => (
+                              <div
+                                key={`${option.label}-${warmupSet.reps}`}
+                                style={{
+                                  alignItems: "center",
+                                  display: "grid",
+                                  gap: "8px",
+                                  gridTemplateColumns:
+                                    "46px 1fr 44px 54px",
+                                  textAlign: "center",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    color: "var(--text-muted)",
+                                    fontSize: "13px",
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  Set {index + 1}
+                                </span>
+                                <strong style={{ whiteSpace: "nowrap" }}>
+                                  {formatWarmupWeight(warmupSet.target?.weight)}
+                                  {weightUnit}
+                                </strong>
+                                <span>{warmupSet.reps}</span>
+                                <span
+                                  style={{
+                                    color: "var(--text-muted)",
+                                    fontSize: "13px",
+                                  }}
+                                >
+                                  {formatWarmupPercent(
+                                    warmupSet.target?.percent
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {detailExercise && (
             <ExerciseDetailDialog

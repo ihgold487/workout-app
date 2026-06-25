@@ -34,6 +34,7 @@ import {
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { recommendSetTarget } from "../utils/targetRecommendation";
+import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 
 function IconButton({
   children,
@@ -425,6 +426,7 @@ export default function TemplateView({
       setIndex,
       targetReps,
       targetRir,
+      weightIncrement: getExerciseWeightIncrement(recommendationExercise),
     });
 
     return recommendation.result?.recommendation || null;

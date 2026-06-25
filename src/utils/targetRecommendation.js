@@ -1,4 +1,5 @@
 import { calculateE1RM } from "./e1rm.js";
+import { roundWeightToIncrement } from "./weightIncrement.js";
 
 export const GOAL_MODE_PROGRESSIONS = {
   aggressive: 0.02,
@@ -190,14 +191,6 @@ function getProgressionPercent(goalMode, progressionPercent) {
   return GOAL_MODE_PROGRESSIONS[goalMode] ?? GOAL_MODE_PROGRESSIONS.maintenance;
 }
 
-function roundToIncrement(value, increment) {
-  if (!increment || increment <= 0) {
-    return value;
-  }
-
-  return Math.round(value / increment) * increment;
-}
-
 function uniqueNumbers(values) {
   return [...new Set(values.map((value) => Number(value.toFixed(4))))];
 }
@@ -268,12 +261,17 @@ export function recommendTargetPrescription({
 
   for (let candidateReps = minReps; candidateReps <= maxReps; candidateReps += 1) {
     const rawWeight = targetE1RM / (1 + (candidateReps + rir) / 30);
-    const roundedWeight = roundToIncrement(rawWeight, weightIncrement);
-    const weightOptions = uniqueNumbers([
-      roundedWeight - weightIncrement,
-      roundedWeight,
-      roundedWeight + weightIncrement,
-    ]).filter((weight) => weight >= minWeight);
+    const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
+    const hasIncrement = Number(weightIncrement) > 0;
+    const weightOptions = uniqueNumbers(
+      hasIncrement
+        ? [
+            roundWeightToIncrement(roundedWeight - weightIncrement, weightIncrement),
+            roundedWeight,
+            roundWeightToIncrement(roundedWeight + weightIncrement, weightIncrement),
+          ]
+        : [roundedWeight]
+    ).filter((weight) => weight >= minWeight);
 
     weightOptions.forEach((weight) => {
       const e1rm = calculateE1RM(weight, candidateReps, rir);

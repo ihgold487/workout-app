@@ -3,6 +3,11 @@ import { ArrowUp, Dumbbell, Scale, Utensils, X } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import {
+  deleteBodyWeightEntry,
+  upsertBodyWeightEntry,
+} from "../sync/bodyMeasurementCloudSync";
+import { isSupabaseConfigured } from "../sync/supabaseClient";
 import { calculateE1RM } from "../utils/e1rm";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
@@ -185,18 +190,48 @@ function getExerciseIncreaseFlags({ exercise, history, selectedWorkout }) {
 
       if (formatPercentIncrease(value, comparisons.previousSummary?.[key])) {
         flags.previous = true;
+        flags.previousCount += 1;
       }
 
       if (formatPercentIncrease(value, comparisons.allTimeHighs[key])) {
         flags.allTime = true;
+        flags.allTimeCount += 1;
       }
 
       return flags;
     },
     {
       allTime: false,
+      allTimeCount: 0,
       previous: false,
+      previousCount: 0,
     }
+  );
+}
+
+function IncreaseBadge({ color, count, label }) {
+  if (!count) {
+    return null;
+  }
+
+  return (
+    <span
+      aria-label={`${count} ${label}`}
+      title={`${count} ${label}`}
+      style={{
+        alignItems: "center",
+        color,
+        display: "inline-flex",
+        flex: "0 0 auto",
+        fontSize: "13px",
+        fontWeight: "bold",
+        gap: "1px",
+        lineHeight: 1,
+      }}
+    >
+      <span>{count}</span>
+      <ArrowUp aria-hidden="true" color={color} size={20} strokeWidth={3.2} />
+    </span>
   );
 }
 
@@ -371,28 +406,16 @@ export function CompletedWorkoutSheet({
                       >
                         {exercise.name}
                       </strong>
-                      {increaseFlags.previous && (
-                        <ArrowUp
-                          aria-label="Improved from previous workout"
-                          color="#c62828"
-                          size={20}
-                          strokeWidth={3.2}
-                          style={{
-                            flex: "0 0 auto",
-                          }}
-                        />
-                      )}
-                      {increaseFlags.allTime && (
-                        <ArrowUp
-                          aria-label="New all-time high"
-                          color="#1565c0"
-                          size={20}
-                          strokeWidth={3.2}
-                          style={{
-                            flex: "0 0 auto",
-                          }}
-                        />
-                      )}
+                      <IncreaseBadge
+                        color="#c62828"
+                        count={increaseFlags.previousCount}
+                        label="improvements from previous workout"
+                      />
+                      <IncreaseBadge
+                        color="#1565c0"
+                        count={increaseFlags.allTimeCount}
+                        label="new all-time highs"
+                      />
                     </div>
                     {exercise.note && (
                       <div
@@ -708,6 +731,7 @@ export default function WorkoutCalendar({
   bodyWeightEntries = [],
   history,
   nutritionEntries = [],
+  session = null,
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -729,7 +753,7 @@ export default function WorkoutCalendar({
     localStorage.setItem(BODY_WEIGHT_LOG_KEY, JSON.stringify(nextEntries));
   };
 
-  const saveBodyWeight = (entryDate, weightValue) => {
+  const saveBodyWeight = async (entryDate, weightValue) => {
     const weight = Number.parseFloat(String(weightValue).trim());
 
     if (!Number.isFinite(weight) || weight <= 0) {
@@ -750,12 +774,28 @@ export default function WorkoutCalendar({
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     updateBodyWeightEntries(nextEntries);
+
+    if (session?.user?.id && isSupabaseConfigured) {
+      try {
+        await upsertBodyWeightEntry(nextEntries.find((entry) => entry.date === entryDate), session);
+      } catch (error) {
+        console.error("Failed to save body weight from calendar:", error);
+      }
+    }
   };
 
-  const removeBodyWeight = (entryDate) => {
+  const removeBodyWeight = async (entryDate) => {
     updateBodyWeightEntries(
       localBodyWeightEntries.filter((entry) => entry.date !== entryDate)
     );
+
+    if (session?.user?.id && isSupabaseConfigured) {
+      try {
+        await deleteBodyWeightEntry(entryDate, session);
+      } catch (error) {
+        console.error("Failed to delete body weight from calendar:", error);
+      }
+    }
   };
 
   const getSessionDateKey = (session) => {
@@ -1626,28 +1666,16 @@ export default function WorkoutCalendar({
                       >
                         {exercise.name}
                       </strong>
-                      {increaseFlags.previous && (
-                        <ArrowUp
-                          aria-label="Improved from previous workout"
-                          color="#c62828"
-                          size={20}
-                          strokeWidth={3.2}
-                          style={{
-                            flex: "0 0 auto",
-                          }}
-                        />
-                      )}
-                      {increaseFlags.allTime && (
-                        <ArrowUp
-                          aria-label="New all-time high"
-                          color="#1565c0"
-                          size={20}
-                          strokeWidth={3.2}
-                          style={{
-                            flex: "0 0 auto",
-                          }}
-                        />
-                      )}
+                      <IncreaseBadge
+                        color="#c62828"
+                        count={increaseFlags.previousCount}
+                        label="improvements from previous workout"
+                      />
+                      <IncreaseBadge
+                        color="#1565c0"
+                        count={increaseFlags.allTimeCount}
+                        label="new all-time highs"
+                      />
                     </div>
                     {exercise.note && (
                       <div

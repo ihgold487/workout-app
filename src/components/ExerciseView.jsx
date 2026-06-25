@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, ImagePlus, X } from "lucide-react";
+import { Copy, Dumbbell, ImagePlus, X } from "lucide-react";
 
 import { equipmentOptions } from "../data/seedEquipment";
 import {
@@ -1025,30 +1025,32 @@ export default function ExerciseView({
       <div
         style={{
           alignItems: "center",
-          display: "flex",
-          gap: "8px",
-          justifyContent: "flex-end",
+          display: "grid",
+          gap: "10px",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto",
           marginBottom: "12px",
         }}
       >
+        <Dumbbell size={26} />
+        <h1
+          style={{
+            fontSize: "1.6rem",
+            margin: 0,
+          }}
+        >
+          Exercises
+        </h1>
         <div
           style={{
             color: "var(--text-muted)",
             fontSize: "12px",
+            textAlign: "right",
+            whiteSpace: "nowrap",
           }}
         >
           {exerciseLibrary.length} exercises · {customExerciseCount} custom
         </div>
       </div>
-
-      <h1
-        style={{
-          fontSize: "1.6rem",
-          margin: "0 0 12px",
-        }}
-      >
-        Exercises
-      </h1>
 
       <section
         ref={addExerciseSectionRef}

@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Copy,
   Dumbbell,
+  History,
   Home,
   Play,
   RotateCcw,
@@ -2592,7 +2593,23 @@ export default function App() {
           padding: "20px",
         }}
       >
-        <h2>Settings</h2>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "10px",
+            marginBottom: "16px",
+          }}
+        >
+          <Settings size={26} />
+          <h2
+            style={{
+              margin: 0,
+            }}
+          >
+            Settings
+          </h2>
+        </div>
 
         <section
           style={{
@@ -3096,18 +3113,35 @@ export default function App() {
       >
         <h2>History</h2>
 
-        {selectedHistoryList.map((workout) => (
-          <button
-            key={workout.id}
-            style={{
-              display: "block",
-              marginBottom: "8px",
-            }}
-            onClick={() => setSelectedHistory(workout)}
-          >
-            {formatHistoryTimestamp(workout)}
-          </button>
-        ))}
+        <div
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
+          {selectedHistoryList.map((workout) => (
+            <button
+              key={workout.id}
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                color: "var(--text-h)",
+                display: "block",
+                font: "inherit",
+                fontSize: "13px",
+                padding: "8px",
+                textAlign: "left",
+                width: "100%",
+              }}
+              onClick={() => setSelectedHistory(workout)}
+              type="button"
+            >
+              {workout.templateName || workout.workout_name || "Workout"}
+              {` (${formatHistoryTimestamp(workout)})`}
+            </button>
+          ))}
+        </div>
         {selectedHistory && (
           <CompletedWorkoutSheet
             history={history}
@@ -3188,12 +3222,41 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h1>Workout Log</h1>
+      <div
+        style={{
+          alignItems: "center",
+          display: "grid",
+          gap: "10px",
+          gridTemplateColumns: "34px minmax(0, 1fr) 34px",
+          marginBottom: "16px",
+        }}
+      >
+        <img
+          alt=""
+          src={`${import.meta.env.BASE_URL}workout-icon.png`}
+          style={{
+            borderRadius: "8px",
+            height: "34px",
+            width: "34px",
+          }}
+        />
+        <h1
+          style={{
+            fontSize: "1.85rem",
+            margin: 0,
+            textAlign: "center",
+          }}
+        >
+          Workout Log
+        </h1>
+        <span />
+      </div>
 
       <WorkoutCalendar
         bodyWeightEntries={calendarBodyWeightEntries}
         history={history}
         nutritionEntries={calendarNutritionEntries}
+        session={authSession}
       />
 
       <hr />
@@ -3325,11 +3388,23 @@ export default function App() {
               marginBottom: "10px",
             }}
           >
-            <button onClick={addTemplate}>+ New Template</button>
+            <button
+              onClick={addTemplate}
+              style={{
+                minHeight: "40px",
+                padding: "8px 12px",
+              }}
+            >
+              + New Template
+            </button>
 
             <select
               value={templateSort}
               onChange={(e) => setTemplateSort(e.target.value)}
+              style={{
+                minHeight: "40px",
+                padding: "8px 10px",
+              }}
             >
               <option value="recent">Recent</option>
 
@@ -3338,51 +3413,78 @@ export default function App() {
           </div>
 
           {standaloneTemplates.map((template) => (
-            <div key={template.id}>
+            <div
+              key={template.id}
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                display: "grid",
+                gap: "10px",
+                marginBottom: "8px",
+                padding: "10px",
+              }}
+            >
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 180px",
                   alignItems: "center",
-                  marginBottom: "8px",
-                  columnGap: "8px",
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
                 }}
               >
                 <button
                   style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    minWidth: 0,
+                    padding: 0,
                     textAlign: "left",
                     width: "100%",
-                    overflow: "hidden",
                   }}
                   onClick={() => setSelectedTemplateId(template.id)}
                 >
-                  <span
+                  <strong
                     style={{
-                      display: "inline-block",
-
-                      maxWidth: "120px",
-
+                      display: "block",
                       overflow: "hidden",
-
                       textOverflow: "ellipsis",
-
                       whiteSpace: "nowrap",
-
-                      verticalAlign: "middle",
                     }}
                   >
                     {template.name}
+                  </strong>
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      display: "block",
+                      fontSize: "12px",
+                      marginTop: "3px",
+                    }}
+                  >
+                    {template.lastCompleted
+                      ? `Last completed ${new Date(
+                          template.lastCompleted
+                        ).toLocaleDateString([], {
+                          month: "numeric",
+                          day: "numeric",
+                          year: "2-digit",
+                        })}`
+                      : "Never completed"}
                   </span>
                 </button>
 
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
                   alignItems: "center",
+                  display: "flex",
+                  gap: "6px",
                 }}
               >
                 <button
+                  aria-label={`Duplicate ${template.name}`}
                   onClick={() => {
                     const copy = {
                       ...template,
@@ -3397,11 +3499,52 @@ export default function App() {
                     setTemplates([...templates, copy]);
                     requestSyncCheckpoint(["workouts"], "workout save");
                   }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "34px",
+                    minWidth: "34px",
+                    padding: "5px",
+                  }}
                 >
-                  ⧉
+                  <Copy size={16} />
                 </button>{" "}
-                <button onClick={() => setConfirmDeleteTemplate(template)}>
-                  🗑
+                <button
+                  aria-label={`${template.name} history`}
+                  onClick={() => {
+                    const matches = history.filter(
+                      (h) => String(h.templateId) === String(template.id)
+                    );
+
+                    if (matches.length) {
+                      setSelectedHistoryList(matches);
+                    }
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "34px",
+                    minWidth: "34px",
+                    padding: "5px",
+                  }}
+                >
+                  <History size={16} />
+                </button>
+                <button
+                  aria-label={`Delete ${template.name}`}
+                  onClick={() => setConfirmDeleteTemplate(template)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "34px",
+                    minWidth: "34px",
+                    padding: "5px",
+                  }}
+                >
+                  <Trash2 size={16} />
                 </button>{" "}
                 {confirmDeleteTemplate && (
                   <div
@@ -3477,26 +3620,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    const matches = history.filter(
-                      (h) => String(h.templateId) === String(template.id)
-                    );
-
-                    if (matches.length) {
-                      setSelectedHistoryList(matches);
-                    }
-                  }}
-                >
-                  🕘
-                </button>{" "}
-                {template.lastCompleted
-                  ? new Date(template.lastCompleted).toLocaleDateString([], {
-                      month: "numeric",
-                      day: "numeric",
-                      year: "2-digit",
-                    })
-                  : "Never"}
               </div>
             </div>
           </div>

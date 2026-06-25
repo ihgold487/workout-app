@@ -13,4 +13,5 @@ export const equipmentOptions = [
   "Landmine",
   "Bench",
   "Pullup Bar",
+  "Tricep Bar",
 ];
