@@ -26,6 +26,7 @@ const TREND_OPTIONS = [
   { label: "2 weeks", value: 14 },
   { label: "1 month", value: 30 },
 ];
+const CHART_SETTINGS_STORAGE_KEY = "bodyWeightChartSettings";
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -46,6 +47,56 @@ function daysBetween(startDate, endDate) {
 
 function getOptionLabel(options, value) {
   return options.find((option) => option.value === value)?.label || "";
+}
+
+function isValidOptionValue(options, value) {
+  return options.some((option) => option.value === value);
+}
+
+function getStoredChartSettings() {
+  if (typeof window === "undefined") {
+    return {
+      rangeDays: null,
+      trendDays: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(CHART_SETTINGS_STORAGE_KEY) || "{}"
+    );
+    const rangeDays = isValidOptionValue(RANGE_OPTIONS, parsed.rangeDays)
+      ? parsed.rangeDays
+      : null;
+    const trendDays = isValidOptionValue(TREND_OPTIONS, parsed.trendDays)
+      ? parsed.trendDays
+      : null;
+
+    return {
+      rangeDays,
+      trendDays,
+    };
+  } catch {
+    return {
+      rangeDays: null,
+      trendDays: null,
+    };
+  }
+}
+
+function saveStoredChartSettings(settings) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      CHART_SETTINGS_STORAGE_KEY,
+      JSON.stringify(settings)
+    );
+  } catch (error) {
+    console.warn("Failed to save body weight chart settings:", error);
+  }
 }
 
 function filterPointsByRange(points, rangeDays) {
@@ -483,9 +534,8 @@ export default function BodyWeightSheet({
   const [adding, setAdding] = useState(initialAdding);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [rangeDays, setRangeDays] = useState(null);
+  const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
-  const [trendDays, setTrendDays] = useState(null);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
   const sortedEntries = useMemo(
     () => [...entries].sort((a, b) => b.date.localeCompare(a.date)),
@@ -494,8 +544,22 @@ export default function BodyWeightSheet({
   const latestEntry = sortedEntries[0] || null;
   const latestWeight = latestEntry ? parseWeight(latestEntry.weight) : null;
   const parsedDraft = parseWeight(draft);
+  const { rangeDays, trendDays } = chartSettings;
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
   const trendLabel = getOptionLabel(TREND_OPTIONS, trendDays);
+
+  function updateChartSettings(nextSettings) {
+    setChartSettings((currentSettings) => {
+      const updatedSettings = {
+        ...currentSettings,
+        ...nextSettings,
+      };
+
+      saveStoredChartSettings(updatedSettings);
+
+      return updatedSettings;
+    });
+  }
 
   function saveEntry() {
     if (!parsedDraft) {
@@ -760,7 +824,7 @@ export default function BodyWeightSheet({
       {rangeSheetOpen && (
         <SelectionSheet
           onClose={() => setRangeSheetOpen(false)}
-          onSelect={setRangeDays}
+          onSelect={(value) => updateChartSettings({ rangeDays: value })}
           options={RANGE_OPTIONS}
           selectedValue={rangeDays}
           title="Weight range"
@@ -769,7 +833,7 @@ export default function BodyWeightSheet({
       {trendSheetOpen && (
         <SelectionSheet
           onClose={() => setTrendSheetOpen(false)}
-          onSelect={setTrendDays}
+          onSelect={(value) => updateChartSettings({ trendDays: value })}
           options={TREND_OPTIONS}
           selectedValue={trendDays}
           title="Weight trend"
