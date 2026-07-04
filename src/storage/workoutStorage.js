@@ -110,14 +110,14 @@ export function loadWorkoutData({ seedExercises }) {
 }
 
 export function saveWorkoutData(data, storageVersion) {
-  writeJson(WORKOUT_DATA_KEYS.exerciseLibrary, data.exerciseLibrary);
-  writeJson(WORKOUT_DATA_KEYS.exerciseMetadata, data.exerciseMetadata);
-  writeJson(WORKOUT_DATA_KEYS.history, data.history);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseLibrary);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseMetadata);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.history);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.plans);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.sessions);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.templates);
   writeJson(WORKOUT_DATA_KEYS.ownerUserId, data.ownerUserId || null);
-  writeJson(WORKOUT_DATA_KEYS.plans, data.plans);
   writeJson(WORKOUT_DATA_KEYS.selectedSessionId, data.selectedSessionId);
-  writeJson(WORKOUT_DATA_KEYS.sessions, data.sessions);
-  writeJson(WORKOUT_DATA_KEYS.templates, data.templates);
   writeJson(STORAGE_VERSION_KEY, storageVersion);
 }
 
