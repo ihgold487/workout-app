@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+import {
+  BarcodeFormat,
+  BrowserMultiFormatReader,
+} from "@zxing/browser";
+import { DecodeHintType } from "@zxing/library";
 import { Plus, ScanBarcode, Scale, Search, Trash2, Utensils, X } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
@@ -37,6 +41,13 @@ const PORTION_UNIT_OPTIONS = [
   ["bar", "bars"],
   ["packet", "packets"],
   ["container", "containers"],
+];
+const FATSECRET_SEARCH_DETAIL_LIMIT = 5;
+const FOOD_BARCODE_FORMATS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
 ];
 
 const emptyEntry = {
@@ -449,6 +460,12 @@ function getServingDescription(food) {
   return "100g reference";
 }
 
+function getFatSecretFoodKey(food) {
+  return String(food?.fatsecretFoodId || food?.fdcId || "")
+    .replace(/^fatsecret:/, "")
+    .trim();
+}
+
 async function searchFoodDataCentral(query) {
   const params = new URLSearchParams({
     api_key: FDC_API_KEY,
@@ -463,6 +480,113 @@ async function searchFoodDataCentral(query) {
   }
 
   return response.json();
+}
+
+async function searchFatSecretFoods(query) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.functions.invoke("fatsecret-search-foods", {
+    body: {
+      maxResults: 12,
+      query,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return {
+    foods: Array.isArray(data?.foods) ? data.foods : [],
+  };
+}
+
+async function fetchFatSecretFoodDetails(foodId) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.functions.invoke("fatsecret-search-foods", {
+    body: {
+      action: "getFood",
+      foodId,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data?.food || null;
+}
+
+async function searchFatSecretFoodByBarcode(barcode) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.functions.invoke("fatsecret-search-foods", {
+    body: {
+      action: "barcode",
+      barcode,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data?.food || null;
+}
+
+function storeHydratedFatSecretFood(food) {
+  const key = getFatSecretFoodKey(food);
+
+  if (!key) {
+    return;
+  }
+
+  return {
+    [key]: {
+      food,
+      status: "loaded",
+    },
+  };
+}
+
+function getFatSecretPortionOptions(food) {
+  const servings = Array.isArray(food.fatsecretServings)
+    ? food.fatsecretServings
+    : [];
+
+  return servings.length > 0
+    ? servings.map((serving) => ({
+        baseMacros: serving.sourceServing || {
+          calories: 0,
+          carbs: 0,
+          fat: 0,
+          protein: 0,
+        },
+        key: serving.key,
+        label: serving.label || "serving",
+        servingId: serving.servingId || "",
+        servingMultiplier: 1,
+      }))
+    : getPortionOptions(food);
 }
 
 async function searchFoodDataCentralByBarcode(barcode) {
@@ -923,6 +1047,7 @@ export default function NutritionView({ session = null }) {
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState("usda");
   const [foodSearchResults, setFoodSearchResults] = useState([]);
+  const [fatSecretDetailsById, setFatSecretDetailsById] = useState({});
   const [librarySearchResults, setLibrarySearchResults] = useState([]);
   const [recipeSearchResults, setRecipeSearchResults] = useState([]);
   const [foodSearchStatus, setFoodSearchStatus] = useState("");
@@ -962,6 +1087,8 @@ export default function NutritionView({ session = null }) {
   const foodNameInputRef = useRef(null);
   const barcodeVideoRef = useRef(null);
   const barcodeControlsRef = useRef(null);
+  const barcodeSearchHandlerRef = useRef(null);
+  const fatSecretHydrationRunRef = useRef(0);
 
   const dayEntries = useMemo(
     () => entries.filter((entry) => entry.date === selectedDate),
@@ -1033,14 +1160,18 @@ export default function NutritionView({ session = null }) {
     }
 
     let cancelled = false;
-    const codeReader = new BrowserMultiFormatReader();
+    const barcodeHints = new Map();
+
+    barcodeHints.set(DecodeHintType.POSSIBLE_FORMATS, FOOD_BARCODE_FORMATS);
+
+    const codeReader = new BrowserMultiFormatReader(barcodeHints);
 
     async function startBarcodeScanner() {
       if (!barcodeVideoRef.current) {
         return;
       }
 
-      setBarcodeStatus("Point the camera at a UPC barcode.");
+      setBarcodeStatus("Point the camera at a UPC/EAN barcode.");
 
       try {
         const controls = await codeReader.decodeFromVideoDevice(
@@ -1052,11 +1183,15 @@ export default function NutritionView({ session = null }) {
             }
 
             const barcode = result.getText();
+            const barcodeFormat = result.getBarcodeFormat?.();
 
             barcodeControlsRef.current?.stop?.();
             barcodeControlsRef.current = null;
             setBarcodeDraft(barcode);
-            searchFoodsByBarcode(barcode);
+            setBarcodeStatus(
+              `Scanned ${BarcodeFormat[barcodeFormat] || "barcode"} ${barcode}.`
+            );
+            barcodeSearchHandlerRef.current?.(barcode);
           }
         );
 
@@ -1132,6 +1267,7 @@ export default function NutritionView({ session = null }) {
   function clearFoodSearch() {
     setFoodSearchQuery("");
     setFoodSearchResults([]);
+    setFatSecretDetailsById({});
     setLibrarySearchResults([]);
     setRecipeSearchResults([]);
     setFoodSearchStatus("");
@@ -1150,29 +1286,44 @@ export default function NutritionView({ session = null }) {
     }
 
     setFoodSearchLoading(true);
-    setFoodSearchStatus(
-      foodSearchSource === "usda" ? "Searching USDA..." : "Searching app library..."
-    );
     setFoodSearchResults([]);
+    setFatSecretDetailsById({});
     setLibrarySearchResults([]);
     setRecipeSearchResults([]);
 
+    const sourceSearchLabel =
+      foodSearchSource === "usda"
+        ? "USDA"
+        : foodSearchSource === "fatsecret"
+          ? "FatSecret"
+          : "app library";
+
+    setFoodSearchStatus(`Searching ${sourceSearchLabel}...`);
+
     try {
-      if (foodSearchSource === "usda") {
-        if (!FDC_API_KEY) {
+      if (foodSearchSource === "usda" || foodSearchSource === "fatsecret") {
+        if (foodSearchSource === "usda" && !FDC_API_KEY) {
           setFoodSearchStatus(
             "Add VITE_USDA_FDC_API_KEY to your local environment to search FoodData Central."
           );
           return;
         }
 
-        const fdcResult = await searchFoodDataCentral(query);
-        const foods = Array.isArray(fdcResult.foods) ? fdcResult.foods : [];
+        const searchResult =
+          foodSearchSource === "usda"
+            ? await searchFoodDataCentral(query)
+            : await searchFatSecretFoods(query);
+        const foods = Array.isArray(searchResult.foods) ? searchResult.foods : [];
 
         setFoodSearchResults(foods);
         setFoodResultsSheetOpen(foods.length > 0);
+        if (foodSearchSource === "fatsecret") {
+          hydrateFatSecretSearchResults(foods);
+        }
         setFoodSearchStatus(
-          foods.length ? `${foods.length} USDA foods found` : "No USDA foods found"
+          foods.length
+            ? `${foods.length} ${sourceSearchLabel} foods found`
+            : `No ${sourceSearchLabel} foods found`
         );
         return;
       }
@@ -1194,6 +1345,7 @@ export default function NutritionView({ session = null }) {
       console.error("Food search failed:", error);
       setFoodSearchStatus(error.message);
       setFoodSearchResults([]);
+      setFatSecretDetailsById({});
       setLibrarySearchResults([]);
       setRecipeSearchResults([]);
     } finally {
@@ -1208,7 +1360,7 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
-    if (!FDC_API_KEY) {
+    if (foodSearchSource === "usda" && !FDC_API_KEY) {
       setBarcodeStatus(
         "Add VITE_USDA_FDC_API_KEY to your local environment to search FoodData Central."
       );
@@ -1217,14 +1369,39 @@ export default function NutritionView({ session = null }) {
 
     setFoodSearchQuery(barcode);
     setFoodSearchLoading(true);
-    setFoodSearchStatus(`Searching UPC ${barcode}...`);
-    setBarcodeStatus(`Searching UPC ${barcode}...`);
+    setFoodSearchStatus(`Searching ${foodSearchSource === "fatsecret" ? "FatSecret" : "UPC"} ${barcode}...`);
+    setBarcodeStatus(`Searching ${foodSearchSource === "fatsecret" ? "FatSecret" : "UPC"} ${barcode}...`);
 
     try {
+      if (foodSearchSource === "fatsecret") {
+        const food = await searchFatSecretFoodByBarcode(barcode);
+        const foods = food ? [food] : [];
+        const hydratedDetails = food ? storeHydratedFatSecretFood(food) : null;
+
+        setFoodSearchResults(foods);
+        setFatSecretDetailsById(hydratedDetails || {});
+        setLibrarySearchResults([]);
+        setRecipeSearchResults([]);
+        setFoodResultsSheetOpen(foods.length > 0);
+        setFoodSearchStatus(
+          foods.length
+            ? `Found 1 FatSecret food for barcode ${barcode}`
+            : "No FatSecret food found for that barcode"
+        );
+        setBarcodeStatus(
+          foods.length
+            ? "Found 1 FatSecret food."
+            : "No FatSecret food found for that barcode."
+        );
+        setShowBarcodeScanner(false);
+        return;
+      }
+
       const result = await searchFoodDataCentralByBarcode(barcode);
       const foods = Array.isArray(result.foods) ? result.foods : [];
 
       setFoodSearchResults(foods);
+      setFatSecretDetailsById({});
       setLibrarySearchResults([]);
       setRecipeSearchResults([]);
       setFoodResultsSheetOpen(foods.length > 0);
@@ -1237,10 +1414,11 @@ export default function NutritionView({ session = null }) {
       );
       setShowBarcodeScanner(false);
     } catch (error) {
-      console.error("FoodData Central barcode search failed:", error);
+      console.error("Barcode search failed:", error);
       setFoodSearchStatus(error.message);
       setBarcodeStatus(error.message);
       setFoodSearchResults([]);
+      setFatSecretDetailsById({});
       setLibrarySearchResults([]);
       setRecipeSearchResults([]);
     } finally {
@@ -1248,29 +1426,133 @@ export default function NutritionView({ session = null }) {
     }
   }
 
-  function selectFoodResult(food) {
-    const macros = getFoodServingMacros(food);
+  barcodeSearchHandlerRef.current = searchFoodsByBarcode;
+
+  function hydrateFatSecretSearchResults(foods) {
+    const targets = foods
+      .filter((food) => food.source === "fatsecret" && getFatSecretFoodKey(food))
+      .slice(0, FATSECRET_SEARCH_DETAIL_LIMIT);
+
+    if (targets.length === 0) {
+      return;
+    }
+
+    const hydrationRun = fatSecretHydrationRunRef.current + 1;
+    fatSecretHydrationRunRef.current = hydrationRun;
+
+    setFatSecretDetailsById((current) => {
+      const nextDetails = {
+        ...current,
+      };
+
+      targets.forEach((food) => {
+        const key = getFatSecretFoodKey(food);
+
+        nextDetails[key] = {
+          food: nextDetails[key]?.food || null,
+          status: nextDetails[key]?.food ? "loaded" : "loading",
+        };
+      });
+
+      return nextDetails;
+    });
+
+    targets.forEach(async (food) => {
+      const key = getFatSecretFoodKey(food);
+
+      try {
+        const detailedFood = await fetchFatSecretFoodDetails(key);
+
+        if (fatSecretHydrationRunRef.current !== hydrationRun) {
+          return;
+        }
+
+        setFatSecretDetailsById((current) => ({
+          ...current,
+          [key]: {
+            food: detailedFood || food,
+            status: detailedFood ? "loaded" : "error",
+          },
+        }));
+      } catch (error) {
+        console.error("FatSecret search result hydration failed:", error);
+
+        if (fatSecretHydrationRunRef.current !== hydrationRun) {
+          return;
+        }
+
+        setFatSecretDetailsById((current) => ({
+          ...current,
+          [key]: {
+            error: error.message,
+            food: null,
+            status: "error",
+          },
+        }));
+      }
+    });
+  }
+
+  async function selectFoodResult(food) {
+    let selectedResult = food;
+
+    if (food.source === "fatsecret" && food.fatsecretFoodId) {
+      const hydratedFood = fatSecretDetailsById[getFatSecretFoodKey(food)]?.food;
+
+      if (hydratedFood) {
+        selectedResult = hydratedFood;
+      } else {
+        setFoodSearchLoading(true);
+        setFoodSearchStatus("Loading FatSecret serving details...");
+
+        try {
+          selectedResult =
+            (await fetchFatSecretFoodDetails(food.fatsecretFoodId)) || food;
+        } catch (error) {
+          console.error("FatSecret detail lookup failed:", error);
+          setFoodSearchStatus(error.message);
+          setFoodSearchLoading(false);
+          return;
+        } finally {
+          setFoodSearchLoading(false);
+        }
+      }
+    }
+
+    const macros =
+      selectedResult.source === "fatsecret"
+        ? getFoodMacros(selectedResult)
+        : getFoodServingMacros(selectedResult);
     const servingDescription = getServingDescription(food);
-    const portionOptions = getPortionOptions(food);
+    const portionOptions =
+      selectedResult.source === "fatsecret"
+        ? getFatSecretPortionOptions(selectedResult)
+        : getPortionOptions(selectedResult);
+    const selectedOption = portionOptions[0] || null;
+    const baseMacros = selectedOption?.baseMacros || macros;
     const nextSelectedFood = {
-      baseMacros: macros,
-      fdcId: food.fdcId,
+      baseMacros,
+      fdcId: selectedResult.fdcId,
       portionOptions,
-      servingDescription,
+      servingDescription:
+        selectedOption?.label ||
+        getServingDescription(selectedResult) ||
+        servingDescription,
+      source: selectedResult.source || "fdc",
     };
-    const scaledMacros = scaleMacros(macros, "1");
+    const scaledMacros = scaleMacros(baseMacros, "1");
 
     setSelectedFood(nextSelectedFood);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
-    setServingUnit(portionOptions[0]?.key || "serving");
+    setServingUnit(selectedOption?.key || "serving");
     setEntryDraft({
       calories: formatDraftMacro(scaledMacros.calories),
       carbs: formatDraftMacro(scaledMacros.carbs),
       fat: formatDraftMacro(scaledMacros.fat),
-      name: food.brandName
-        ? `${food.description} (${food.brandName})`
-        : food.description || "",
+      name: selectedResult.brandName
+        ? `${selectedResult.description} (${selectedResult.brandName})`
+        : selectedResult.description || "",
       protein: formatDraftMacro(scaledMacros.protein),
     });
     window.requestAnimationFrame(() => {
@@ -1356,7 +1638,7 @@ export default function NutritionView({ session = null }) {
     }
 
     const scaledMacros = scaleMacros(
-      selectedFood.baseMacros,
+      getSelectedPortionBaseMacros(servingUnit),
       getSelectedPortionMultiplier(value, servingUnit)
     );
 
@@ -1377,6 +1659,19 @@ export default function NutritionView({ session = null }) {
     return parseMacroValue(amount) * (selectedOption?.servingMultiplier || 1);
   }
 
+  function getSelectedPortionBaseMacros(unit) {
+    const selectedOption = selectedFood?.portionOptions.find(
+      (option) => option.key === unit
+    );
+
+    return selectedOption?.baseMacros || selectedFood?.baseMacros || {
+      calories: 0,
+      carbs: 0,
+      fat: 0,
+      protein: 0,
+    };
+  }
+
   function getSelectedServingDescription(amount, unit) {
     const selectedOption = selectedFood?.portionOptions.find(
       (option) => option.key === unit
@@ -1385,6 +1680,10 @@ export default function NutritionView({ session = null }) {
 
     if (!selectedOption) {
       return selectedFood?.servingDescription || null;
+    }
+
+    if (selectedOption.baseMacros && selectedOption.label) {
+      return `${parsedAmount || 0} x ${selectedOption.label}`;
     }
 
     return `${parsedAmount || 0} ${getPortionUnitLabel(
@@ -1401,7 +1700,7 @@ export default function NutritionView({ session = null }) {
     }
 
     const scaledMacros = scaleMacros(
-      selectedFood.baseMacros,
+      getSelectedPortionBaseMacros(value),
       getSelectedPortionMultiplier(servingAmount, value)
     );
 
@@ -2096,6 +2395,7 @@ export default function NutritionView({ session = null }) {
               onChange={(event) => {
                 setFoodSearchSource(event.target.value);
                 setFoodSearchResults([]);
+                setFatSecretDetailsById({});
                 setLibrarySearchResults([]);
                 setRecipeSearchResults([]);
                 setFoodSearchStatus("");
@@ -2109,6 +2409,7 @@ export default function NutritionView({ session = null }) {
               }}
             >
               <option value="usda">USDA FoodData Central</option>
+              <option value="fatsecret">FatSecret</option>
               <option value="app">App library</option>
             </select>
             <div
@@ -2116,7 +2417,7 @@ export default function NutritionView({ session = null }) {
                 display: "grid",
                 gap: "8px",
                 gridTemplateColumns:
-                  foodSearchSource === "usda"
+                  foodSearchSource === "usda" || foodSearchSource === "fatsecret"
                     ? "minmax(0, 1fr) auto auto auto"
                     : "minmax(0, 1fr) auto auto",
               }}
@@ -2126,6 +2427,8 @@ export default function NutritionView({ session = null }) {
                 placeholder={
                   foodSearchSource === "usda"
                     ? "Chicken breast, Greek yogurt, cereal..."
+                    : foodSearchSource === "fatsecret"
+                      ? "Restaurant foods, brands, meals..."
                     : "Search foods or recipes..."
                 }
                 value={foodSearchQuery}
@@ -2182,7 +2485,7 @@ export default function NutritionView({ session = null }) {
                   Search
                 </span>
               </button>
-              {foodSearchSource === "usda" && (
+              {(foodSearchSource === "usda" || foodSearchSource === "fatsecret") && (
                 <button
                   aria-label="Scan barcode"
                   onClick={() => {
@@ -2312,7 +2615,57 @@ export default function NutritionView({ session = null }) {
                   }}
                 >
                   {foodSearchResults.map((food) => {
-                    const macros = getFoodServingMacros(food);
+                    const isFatSecretResult = food.source === "fatsecret";
+                    const fatSecretDetails =
+                      fatSecretDetailsById[getFatSecretFoodKey(food)];
+                    const hydratedFood = fatSecretDetails?.food || null;
+                    const fatSecretPortionOptions = hydratedFood
+                      ? getFatSecretPortionOptions(hydratedFood)
+                      : [];
+                    const fatSecretPrimaryOption =
+                      fatSecretPortionOptions[0] || null;
+                    const macros = isFatSecretResult
+                      ? fatSecretPrimaryOption?.baseMacros || null
+                      : getFoodServingMacros(food);
+                    const servingDescription = hydratedFood
+                      ? fatSecretPrimaryOption?.label ||
+                        getServingDescription(hydratedFood)
+                      : getServingDescription(food);
+                    const sourceLabel = [
+                      food.brandName,
+                      formatFoodDataType(food.dataType),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    const isHydratingFatSecret =
+                      fatSecretDetails?.status === "loading";
+                    const hasHydratedFatSecret =
+                      isFatSecretResult && fatSecretDetails?.status === "loaded";
+                    const hasFatSecretHydrationError =
+                      isFatSecretResult && fatSecretDetails?.status === "error";
+                    const isFatSecretHydrationSkipped =
+                      isFatSecretResult && !fatSecretDetails;
+                    const macroSummary = macros
+                      ? `Per serving: ${formatMacro(
+                          macros.calories,
+                          "cal"
+                        )} cal · ${formatMacro(
+                          macros.protein
+                        )} protein · ${formatMacro(
+                          macros.carbs
+                        )} carbs · ${formatMacro(macros.fat)} fat`
+                      : "";
+                    const summaryText = isFatSecretResult
+                      ? hasHydratedFatSecret
+                        ? macroSummary
+                        : isHydratingFatSecret
+                          ? "Loading detailed nutrition..."
+                          : hasFatSecretHydrationError
+                            ? "Detailed nutrition was not loaded. Tap Use to retry."
+                            : isFatSecretHydrationSkipped
+                              ? "Tap Use to load serving and nutrition details."
+                              : "Serving and nutrition details load when you tap Use."
+                      : macroSummary;
 
                     return (
                       <div
@@ -2357,10 +2710,8 @@ export default function NutritionView({ session = null }) {
                                 marginTop: "3px",
                               }}
                             >
-                              {[food.brandName, formatFoodDataType(food.dataType)]
-                                .filter(Boolean)
-                                .join(" · ")}{" "}
-                              · {getServingDescription(food)}
+                              {sourceLabel ? `${sourceLabel} · ` : ""}
+                              {servingDescription}
                             </span>
                           </div>
                           <button
@@ -2380,10 +2731,7 @@ export default function NutritionView({ session = null }) {
                             fontSize: "12px",
                           }}
                         >
-                          Per serving: {formatMacro(macros.calories, "cal")} cal ·{" "}
-                          {formatMacro(macros.protein)} protein ·{" "}
-                          {formatMacro(macros.carbs)} carbs ·{" "}
-                          {formatMacro(macros.fat)} fat
+                          {summaryText}
                         </div>
                       </div>
                     );
@@ -2654,7 +3002,10 @@ export default function NutritionView({ session = null }) {
                       marginTop: "3px",
                     }}
                   >
-                    Scan a UPC, then search USDA branded foods
+                    Scan a UPC/EAN barcode, then search{" "}
+                    {foodSearchSource === "fatsecret"
+                      ? "FatSecret foods"
+                      : "USDA branded foods"}
                   </div>
                 </div>
                 <button
@@ -2714,7 +3065,7 @@ export default function NutritionView({ session = null }) {
                     gap: "5px",
                   }}
                 >
-                  UPC
+                  UPC/EAN
                   <div
                     style={{
                       display: "grid",
@@ -2725,7 +3076,7 @@ export default function NutritionView({ session = null }) {
                     <input
                       aria-label="UPC"
                       inputMode="numeric"
-                      placeholder="Enter UPC manually"
+                      placeholder="Enter barcode manually"
                       value={barcodeDraft}
                       onChange={(event) => setBarcodeDraft(event.target.value)}
                       style={{

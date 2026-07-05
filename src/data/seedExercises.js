@@ -9,6 +9,18 @@ export const seedExercises = [
     muscles: ["Front Delts", "Side Delts", "Traps"],
     imageUrl: "exercise-media/history-csv-2026-06-07-arnold-press-dumbbells.gif",
     imageAlt: "Arnold Press Dumbbells exercise demonstration",
+    instructionSteps: [
+      "Set a bench upright or stand tall, then hold the dumbbells at shoulder height with palms facing inward.",
+      "Keep your elbows slightly forward and the dumbbells close to your shoulders.",
+      "Brace your core and keep your shoulders pulled back before pressing.",
+      "Press overhead while rotating your wrists outward until your palms face forward at the top.",
+      "Finish with your arms extended overhead in a standard shoulder-press position.",
+      "Lower the dumbbells under control while rotating your palms back toward your body.",
+      "End the rep with palms facing inward and elbows in front of your torso.",
+      "Keep the rotation smooth through the full movement instead of snapping at either end.",
+    ],
+    instructionSource: "Lift Manual",
+    instructionSourceUrl: "https://liftmanual.com/dumbbell-arnold-press/",
     builtin: true,
   },
   {

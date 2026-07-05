@@ -172,6 +172,9 @@ create table if not exists public.exercises (
   user_id uuid references auth.users (id) on delete cascade,
   name text not null,
   description text,
+  instruction_steps text[] not null default '{}',
+  instruction_source text,
+  instruction_source_url text,
   image_url text,
   image_storage_path text,
   image_alt text,
@@ -203,6 +206,15 @@ add column if not exists image_storage_path text;
 
 alter table public.exercises
 add column if not exists image_alt text;
+
+alter table public.exercises
+add column if not exists instruction_steps text[] not null default '{}';
+
+alter table public.exercises
+add column if not exists instruction_source text;
+
+alter table public.exercises
+add column if not exists instruction_source_url text;
 
 drop trigger if exists exercises_set_updated_at on public.exercises;
 create trigger exercises_set_updated_at
@@ -400,6 +412,9 @@ begin
     user_id,
     name,
     description,
+    instruction_steps,
+    instruction_source,
+    instruction_source_url,
     image_url,
     image_storage_path,
     image_alt,
@@ -415,6 +430,14 @@ begin
     null,
     trim(exercise_payload->>'name'),
     nullif(exercise_payload->>'description', ''),
+    coalesce(
+      array(
+        select jsonb_array_elements_text(exercise_payload->'instruction_steps')
+      ),
+      '{}'::text[]
+    ),
+    nullif(exercise_payload->>'instruction_source', ''),
+    nullif(exercise_payload->>'instruction_source_url', ''),
     nullif(exercise_payload->>'image_url', ''),
     nullif(exercise_payload->>'image_storage_path', ''),
     nullif(exercise_payload->>'image_alt', ''),
@@ -439,6 +462,9 @@ begin
   do update set
     name = excluded.name,
     description = excluded.description,
+    instruction_steps = excluded.instruction_steps,
+    instruction_source = excluded.instruction_source,
+    instruction_source_url = excluded.instruction_source_url,
     image_url = excluded.image_url,
     image_storage_path = excluded.image_storage_path,
     image_alt = excluded.image_alt,
@@ -489,6 +515,23 @@ begin
   set
     name = trim(exercise_payload->>'name'),
     description = nullif(exercise_payload->>'description', ''),
+    instruction_steps = case
+      when exercise_payload ? 'instruction_steps' then coalesce(
+        array(
+          select jsonb_array_elements_text(exercise_payload->'instruction_steps')
+        ),
+        '{}'::text[]
+      )
+      else instruction_steps
+    end,
+    instruction_source = case
+      when exercise_payload ? 'instruction_source' then nullif(exercise_payload->>'instruction_source', '')
+      else instruction_source
+    end,
+    instruction_source_url = case
+      when exercise_payload ? 'instruction_source_url' then nullif(exercise_payload->>'instruction_source_url', '')
+      else instruction_source_url
+    end,
     image_url = nullif(exercise_payload->>'image_url', ''),
     image_storage_path = nullif(exercise_payload->>'image_storage_path', ''),
     image_alt = nullif(exercise_payload->>'image_alt', ''),
@@ -515,6 +558,25 @@ begin
   return updated_exercise_id;
 end;
 $$;
+
+update public.exercises
+set
+  instruction_steps = array[
+    'Set a bench upright or stand tall, then hold the dumbbells at shoulder height with palms facing inward.',
+    'Keep your elbows slightly forward and the dumbbells close to your shoulders.',
+    'Brace your core and keep your shoulders pulled back before pressing.',
+    'Press overhead while rotating your wrists outward until your palms face forward at the top.',
+    'Finish with your arms extended overhead in a standard shoulder-press position.',
+    'Lower the dumbbells under control while rotating your palms back toward your body.',
+    'End the rep with palms facing inward and elbows in front of your torso.',
+    'Keep the rotation smooth through the full movement instead of snapping at either end.'
+  ],
+  instruction_source = 'Lift Manual',
+  instruction_source_url = 'https://liftmanual.com/dumbbell-arnold-press/'
+where user_id is null
+  and is_builtin = true
+  and lower(name) = 'arnold press'
+  and lower(coalesce(equipment, '')) in ('dumbbells', 'dumbbell');
 
 create or replace function public.create_trainer_plan_for_user(
   target_user_id uuid,

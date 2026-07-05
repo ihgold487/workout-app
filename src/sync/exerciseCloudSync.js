@@ -34,6 +34,13 @@ function cloudExerciseFromLocal(exercise, userId) {
     image_storage_path:
       exercise.imageStoragePath || exercise.image_storage_path || null,
     image_url: exercise.imageUrl || exercise.image_url || null,
+    instruction_source:
+      exercise.instructionSource || exercise.instruction_source || null,
+    instruction_source_url:
+      exercise.instructionSourceUrl || exercise.instruction_source_url || null,
+    instruction_steps: Array.isArray(exercise.instructionSteps)
+      ? exercise.instructionSteps
+      : exercise.instruction_steps || [],
     is_builtin: false,
     name: exercise.name,
     primary_muscle: muscles[0] || null,
@@ -60,6 +67,13 @@ function cloudBuiltinExerciseFromLocal(exercise, userId) {
     image_storage_path:
       exercise.imageStoragePath || exercise.image_storage_path || null,
     image_url: exercise.imageUrl || exercise.image_url || null,
+    instruction_source:
+      exercise.instructionSource || exercise.instruction_source || null,
+    instruction_source_url:
+      exercise.instructionSourceUrl || exercise.instruction_source_url || null,
+    instruction_steps: Array.isArray(exercise.instructionSteps)
+      ? exercise.instructionSteps
+      : exercise.instruction_steps || [],
     name: exercise.name,
     primary_muscle: muscles[0] || null,
     secondary_muscles: remainingArrayValues(muscles),
@@ -299,6 +313,9 @@ function cloudExerciseToLocal(exercise) {
     imageAlt: exercise.image_alt || "",
     imageStoragePath: exercise.image_storage_path || "",
     imageUrl: exercise.image_url || "",
+    instructionSource: exercise.instruction_source || "",
+    instructionSourceUrl: exercise.instruction_source_url || "",
+    instructionSteps: exercise.instruction_steps || [],
     muscles: [
       exercise.primary_muscle,
       ...(exercise.secondary_muscles || []),
@@ -324,6 +341,14 @@ function applyCloudExerciseMetadata(localExercise, cloudExercise) {
     imageStoragePath:
       cloudExercise.image_storage_path || localExercise.imageStoragePath || "",
     imageUrl: cloudExercise.image_url || localExercise.imageUrl || "",
+    instructionSource:
+      cloudExercise.instruction_source || localExercise.instructionSource || "",
+    instructionSourceUrl:
+      cloudExercise.instruction_source_url ||
+      localExercise.instructionSourceUrl ||
+      "",
+    instructionSteps:
+      cloudExercise.instruction_steps || localExercise.instructionSteps || [],
     muscles: [
       cloudExercise.primary_muscle,
       ...(cloudExercise.secondary_muscles || []),
@@ -393,7 +418,7 @@ export async function downloadExerciseLibraryWithPreferences(
   const { data: cloudExercises, error: exerciseError } = await supabase
     .from(EXERCISES_TABLE)
     .select(
-      "id,user_id,name,description,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,is_builtin,source,source_key"
+      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,is_builtin,source,source_key"
     )
     .or(`user_id.eq.${userId},user_id.is.null`)
     .is("deleted_at", null);

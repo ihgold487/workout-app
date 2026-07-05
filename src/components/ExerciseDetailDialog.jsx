@@ -27,6 +27,14 @@ function getSecondaryMuscles(exercise) {
   return list.length > 0 ? list.join(", ") : "n/a";
 }
 
+function getInstructionSteps(exercise) {
+  const value = exercise?.instructionSteps || exercise?.instruction_steps || [];
+
+  return Array.isArray(value)
+    ? value.map((step) => String(step || "").trim()).filter(Boolean)
+    : [];
+}
+
 function matchesExercise(historyExercise, exercise) {
   const libraryId = exercise.exerciseId || exercise.id;
   const historyExerciseId = historyExercise.exerciseId || historyExercise.id;
@@ -256,6 +264,7 @@ export default function ExerciseDetailDialog({
     () => buildExerciseHistory(exercise, history),
     [exercise, history]
   );
+  const instructionSteps = getInstructionSteps(exercise);
 
   if (!exercise) {
     return null;
@@ -439,6 +448,61 @@ export default function ExerciseDetailDialog({
                 </div>
               ) : null}
             </div>
+
+            {instructionSteps.length > 0 && (
+              <div
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  display: "grid",
+                  gap: "8px",
+                  padding: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <strong>Instructions</strong>
+                  {exercise.instructionSourceUrl ||
+                  exercise.instruction_source_url ? (
+                    <a
+                      href={
+                        exercise.instructionSourceUrl ||
+                        exercise.instruction_source_url
+                      }
+                      rel="noreferrer"
+                      target="_blank"
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {exercise.instructionSource ||
+                        exercise.instruction_source ||
+                        "Source"}
+                    </a>
+                  ) : null}
+                </div>
+                <ol
+                  style={{
+                    color: "var(--text-muted)",
+                    display: "grid",
+                    fontSize: "13px",
+                    gap: "6px",
+                    margin: 0,
+                    paddingLeft: "20px",
+                  }}
+                >
+                  {instructionSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
         ) : (
           <div

@@ -8,7 +8,7 @@ import App from "./App.jsx";
 
 const BUILD_TIME = __BUILD_TIME__;
 const PENDING_UPDATE_KEY = "pendingPwaUpdate";
-const UPDATE_CHECK_TIMEOUT = 5000;
+const UPDATE_CHECK_TIMEOUT = 15000;
 
 function safeSetLocalStorage(key, value) {
   try {
@@ -24,7 +24,7 @@ function emitPwaUpdateStatus(status) {
       detail: {
         status,
       },
-    }),
+    })
   );
 }
 
@@ -34,7 +34,7 @@ function rememberPendingUpdate() {
     JSON.stringify({
       buildTime: BUILD_TIME,
       checkedAt: Date.now(),
-    }),
+    })
   );
 }
 
@@ -152,5 +152,5 @@ const updateSW = registerSW({
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <App />
-  </StrictMode>,
+  </StrictMode>
 );
