@@ -7,6 +7,8 @@ const corsHeaders = {
 const FATSECRET_API_URL = "https://platform.fatsecret.com/rest/server.api";
 const FATSECRET_BARCODE_API_URL =
   "https://platform.fatsecret.com/rest/food/barcode/find-by-id/v1";
+const FATSECRET_AUTOCOMPLETE_API_URL =
+  "https://platform.fatsecret.com/rest/food/autocomplete/v2";
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -173,6 +175,18 @@ function getTotalResults(payload: Record<string, unknown>, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function extractSuggestions(payload: Record<string, unknown>) {
+  const suggestions = payload.suggestions as Record<string, unknown> | undefined;
+  const rawSuggestion =
+    suggestions && typeof suggestions === "object"
+      ? suggestions.suggestion
+      : payload.suggestion;
+
+  return (Array.isArray(rawSuggestion) ? rawSuggestion : rawSuggestion ? [rawSuggestion] : [])
+    .map((suggestion) => String(suggestion || "").trim())
+    .filter(Boolean);
+}
+
 function getFatSecretPayloadError(payload: Record<string, unknown>) {
   const error = payload.error;
 
@@ -309,6 +323,17 @@ function buildOAuth1BarcodeUrl(barcode: string) {
   );
 }
 
+function buildOAuth1AutocompleteUrl(expression: string, maxResults: number) {
+  return buildOAuth1Url(
+    {
+      expression,
+      format: "json",
+      max_results: String(Math.min(Math.max(maxResults || 6, 1), 10)),
+    },
+    FATSECRET_AUTOCOMPLETE_API_URL
+  );
+}
+
 function normalizeBarcodeToGtin13(value: unknown) {
   const digits = String(value || "").replace(/\D/g, "");
 
@@ -381,6 +406,40 @@ Deno.serve(async (request) => {
 
       return jsonResponse({
         food: normalizeDetailedFood(payload.food || payload),
+      });
+    }
+
+    if (action === "autocomplete") {
+      const expression = String(query || "").trim();
+
+      if (!expression) {
+        return jsonResponse({ suggestions: [] });
+      }
+
+      const response = await fetch(
+        await buildOAuth1AutocompleteUrl(expression, Number(maxResults) || 6),
+        {
+          method: "GET",
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        throw new Error(
+          `FatSecret autocomplete failed (${response.status}): ${errorText.slice(0, 240)}`
+        );
+      }
+
+      const payload = await response.json();
+      const payloadError = getFatSecretPayloadError(payload);
+
+      if (payloadError) {
+        throw createFatSecretError("FatSecret autocomplete returned an error", payloadError);
+      }
+
+      return jsonResponse({
+        suggestions: extractSuggestions(payload),
       });
     }
 

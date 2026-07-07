@@ -4,7 +4,18 @@ import {
   BrowserMultiFormatReader,
 } from "@zxing/browser";
 import { DecodeHintType } from "@zxing/library";
-import { Plus, ScanBarcode, Scale, Search, Trash2, Utensils, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  ScanBarcode,
+  Scale,
+  Search,
+  Target,
+  Trash2,
+  Utensils,
+  X,
+} from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import {
@@ -17,10 +28,13 @@ import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
+const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
 const FDC_API_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 const FDC_API_KEY = import.meta.env.VITE_USDA_FDC_API_KEY || "";
 const SUPPLEMENTAL_FOOD_SOURCE = "supplemental_library";
 const SUPPLEMENTAL_RECIPE_SOURCE = "supplemental_recipe_library";
+const FATSECRET_BADGE_URL =
+  "https://platform.fatsecret.com/api/static/images/powered_by_fatsecret.svg";
 const GRAMS_PER_OUNCE = 28.349523125;
 const ML_PER_TEASPOON = 4.92892159375;
 const ML_PER_TABLESPOON = 14.78676478125;
@@ -111,6 +125,38 @@ function readBodyWeightEntries() {
 
 function saveBodyWeightEntries(entries) {
   localStorage.setItem(BODY_WEIGHT_LOG_KEY, JSON.stringify(entries));
+}
+
+function readDailyCalorieGoal() {
+  try {
+    const parsed = Number(localStorage.getItem(DAILY_CALORIE_GOAL_KEY));
+
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : "";
+  } catch (error) {
+    console.error("Failed to load daily calorie goal:", error);
+
+    return "";
+  }
+}
+
+function saveDailyCalorieGoal(goal) {
+  if (!goal) {
+    localStorage.removeItem(DAILY_CALORIE_GOAL_KEY);
+    return;
+  }
+
+  localStorage.setItem(DAILY_CALORIE_GOAL_KEY, String(goal));
+}
+
+function normalizeBarcodeSearchQuery(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const text = String(value || "").trim();
+
+  if (digits.length !== text.length) {
+    return "";
+  }
+
+  return [8, 12, 13, 14].includes(digits.length) ? digits : "";
 }
 
 function parseMacroValue(value) {
@@ -507,6 +553,30 @@ async function searchFatSecretFoods(query) {
   };
 }
 
+async function autocompleteFatSecretFoods(query) {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.functions.invoke("fatsecret-search-foods", {
+    body: {
+      action: "autocomplete",
+      maxResults: 6,
+      query,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return Array.isArray(data?.suggestions) ? data.suggestions : [];
+}
+
 async function fetchFatSecretFoodDetails(foodId) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
@@ -573,20 +643,164 @@ function getFatSecretPortionOptions(food) {
     ? food.fatsecretServings
     : [];
 
-  return servings.length > 0
-    ? servings.map((serving) => ({
-        baseMacros: serving.sourceServing || {
-          calories: 0,
-          carbs: 0,
-          fat: 0,
-          protein: 0,
-        },
-        key: serving.key,
-        label: serving.label || "serving",
-        servingId: serving.servingId || "",
-        servingMultiplier: 1,
-      }))
-    : getPortionOptions(food);
+  if (servings.length === 0) {
+    return getPortionOptions(food);
+  }
+
+  const options = servings.map((serving) => ({
+    baseMacros: serving.sourceServing || {
+      calories: 0,
+      carbs: 0,
+      fat: 0,
+      protein: 0,
+    },
+    key: serving.key,
+    label: serving.label || "serving",
+    servingId: serving.servingId || "",
+    servingMultiplier: 1,
+  }));
+  const defaultServing =
+    servings.find((serving) => serving.isDefault) || servings[0];
+  const baseMacros = defaultServing.sourceServing || {
+    calories: 0,
+    carbs: 0,
+    fat: 0,
+    protein: 0,
+  };
+  const metricAmount = parseMacroValue(defaultServing.metricAmount);
+  const metricUnit = String(defaultServing.metricUnit || "").toLowerCase();
+  const optionKeys = new Set(options.map((option) => option.key));
+
+  function addDerivedOption(key, label, servingMultiplier) {
+    if (!metricAmount || optionKeys.has(key)) {
+      return;
+    }
+
+    optionKeys.add(key);
+    options.push({
+      baseMacros,
+      key,
+      label,
+      servingMultiplier,
+    });
+  }
+
+  if (metricUnit === "g") {
+    addDerivedOption("fatsecret:g", "grams", 1 / metricAmount);
+    addDerivedOption("fatsecret:oz", "ounces", GRAMS_PER_OUNCE / metricAmount);
+  }
+
+  if (metricUnit === "oz") {
+    addDerivedOption("fatsecret:oz", "ounces", 1 / metricAmount);
+    addDerivedOption(
+      "fatsecret:g",
+      "grams",
+      1 / (metricAmount * GRAMS_PER_OUNCE)
+    );
+  }
+
+  if (metricUnit === "ml") {
+    addDerivedOption("fatsecret:ml", "mL", 1 / metricAmount);
+    addDerivedOption(
+      "fatsecret:fl-oz",
+      "fl oz",
+      ML_PER_FLUID_OUNCE / metricAmount
+    );
+    addDerivedOption("fatsecret:tsp", "tsp", ML_PER_TEASPOON / metricAmount);
+    addDerivedOption("fatsecret:tbsp", "tbsp", ML_PER_TABLESPOON / metricAmount);
+    addDerivedOption("fatsecret:cup", "cups", ML_PER_CUP / metricAmount);
+  }
+
+  return options;
+}
+
+function FatSecretAttribution({ justify = "start" }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: justify,
+      }}
+    >
+      <a
+        href="https://www.fatsecret.com"
+        rel="noreferrer"
+        target="_blank"
+      >
+        <img
+          alt="Powered by fatsecret"
+          src={FATSECRET_BADGE_URL}
+          style={{
+            border: 0,
+            display: "block",
+            height: "24px",
+            width: "auto",
+          }}
+        />
+      </a>
+    </div>
+  );
+}
+
+function MacroDonutChart({ segments, totalCalories }) {
+  const visibleSegments = segments.filter((segment) => segment.calories > 0);
+  let cursor = 0;
+  const gradientStops =
+    visibleSegments.length > 0
+      ? visibleSegments
+          .map((segment) => {
+            const start = cursor;
+            const size = (segment.calories / totalCalories) * 100;
+            const end = start + size;
+            cursor = end;
+
+            return `${segment.color} ${start}% ${end}%`;
+          })
+          .join(", ")
+      : "var(--surface-muted) 0% 100%";
+
+  return (
+    <div
+      aria-label="Macro calorie distribution"
+      role="img"
+      style={{
+        alignItems: "center",
+        background: `conic-gradient(${gradientStops})`,
+        borderRadius: "999px",
+        display: "inline-flex",
+        height: "112px",
+        justifyContent: "center",
+        position: "relative",
+        width: "112px",
+      }}
+      title={visibleSegments
+        .map((segment) => `${segment.label}: ${Math.round(segment.percent)}%`)
+        .join(", ")}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          background: "var(--surface)",
+          borderRadius: "999px",
+          display: "grid",
+          height: "68px",
+          justifyItems: "center",
+          width: "68px",
+        }}
+      >
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "11px",
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
+        >
+          macros
+        </span>
+      </div>
+    </div>
+  );
 }
 
 async function searchFoodDataCentralByBarcode(barcode) {
@@ -1037,15 +1251,19 @@ export default function NutritionView({ session = null }) {
   const [bodyWeightEntries, setBodyWeightEntries] = useState(
     readBodyWeightEntries
   );
+  const [dailyCalorieGoal, setDailyCalorieGoal] = useState(readDailyCalorieGoal);
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
+  const [dayPanelOpen, setDayPanelOpen] = useState(true);
+  const [calorieGoalPickerOpen, setCalorieGoalPickerOpen] = useState(false);
   const [weightSheetInitialAdding, setWeightSheetInitialAdding] =
     useState(false);
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
-  const [foodSearchSource, setFoodSearchSource] = useState("usda");
+  const [foodSearchSource, setFoodSearchSource] = useState("fatsecret");
+  const [foodAutocompleteSuggestions, setFoodAutocompleteSuggestions] = useState([]);
   const [foodSearchResults, setFoodSearchResults] = useState([]);
   const [fatSecretDetailsById, setFatSecretDetailsById] = useState({});
   const [librarySearchResults, setLibrarySearchResults] = useState([]);
@@ -1101,6 +1319,51 @@ export default function NutritionView({ session = null }) {
     [bodyWeightEntries]
   );
   const totals = useMemo(() => totalEntries(dayEntries), [dayEntries]);
+  const calorieGoalValue = parseMacroValue(dailyCalorieGoal);
+  const caloriesRemaining = calorieGoalValue - totals.calories;
+  const calorieGoalProgress = calorieGoalValue
+    ? Math.min((totals.calories / calorieGoalValue) * 100, 100)
+    : 0;
+  const macroCalories = {
+    carbs: totals.carbs * 4,
+    fat: totals.fat * 9,
+    protein: totals.protein * 4,
+  };
+  const totalMacroCalories =
+    macroCalories.protein + macroCalories.carbs + macroCalories.fat;
+  const macroSegments = [
+    {
+      calories: macroCalories.protein,
+      color: "#137333",
+      label: "Protein",
+      percent: totalMacroCalories
+        ? (macroCalories.protein / totalMacroCalories) * 100
+        : 0,
+      value: formatMacro(totals.protein),
+    },
+    {
+      calories: macroCalories.carbs,
+      color: "#b06000",
+      label: "Carbs",
+      percent: totalMacroCalories
+        ? (macroCalories.carbs / totalMacroCalories) * 100
+        : 0,
+      value: formatMacro(totals.carbs),
+    },
+    {
+      calories: macroCalories.fat,
+      color: "#7b3fc7",
+      label: "Fat",
+      percent: totalMacroCalories
+        ? (macroCalories.fat / totalMacroCalories) * 100
+        : 0,
+      value: formatMacro(totals.fat),
+    },
+  ];
+  const calorieGoalOptions = useMemo(
+    () => Array.from({ length: 57 }, (_, index) => 1200 + index * 50),
+    []
+  );
   const recipeTotals = useMemo(
     () => totalEntries(recipeIngredients),
     [recipeIngredients]
@@ -1109,6 +1372,9 @@ export default function NutritionView({ session = null }) {
     foodSearchResults.length > 0 ||
     librarySearchResults.length > 0 ||
     recipeSearchResults.length > 0;
+  const hasFatSecretSearchResults = foodSearchResults.some(
+    (food) => food.source === "fatsecret"
+  );
 
   useEffect(() => {
     if (!session?.user?.id || !isSupabaseConfigured) {
@@ -1218,6 +1484,46 @@ export default function NutritionView({ session = null }) {
     };
   }, [showBarcodeScanner]);
 
+  useEffect(() => {
+    if (foodSearchSource !== "fatsecret") {
+      setFoodAutocompleteSuggestions([]);
+      return undefined;
+    }
+
+    const query = foodSearchQuery.trim();
+
+    if (query.length < 2) {
+      setFoodAutocompleteSuggestions([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const suggestions = await autocompleteFatSecretFoods(query);
+
+        if (!cancelled) {
+          setFoodAutocompleteSuggestions(
+            suggestions.filter(
+              (suggestion) => suggestion.toLowerCase() !== query.toLowerCase()
+            )
+          );
+        }
+      } catch (error) {
+        console.error("FatSecret autocomplete failed:", error);
+
+        if (!cancelled) {
+          setFoodAutocompleteSuggestions([]);
+        }
+      }
+    }, 275);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [foodSearchQuery, foodSearchSource]);
+
   function updateEntries(nextEntries) {
     setEntries(nextEntries);
     saveNutritionEntries(nextEntries);
@@ -1266,6 +1572,7 @@ export default function NutritionView({ session = null }) {
 
   function clearFoodSearch() {
     setFoodSearchQuery("");
+    setFoodAutocompleteSuggestions([]);
     setFoodSearchResults([]);
     setFatSecretDetailsById({});
     setLibrarySearchResults([]);
@@ -1276,16 +1583,24 @@ export default function NutritionView({ session = null }) {
     setBarcodeStatus("");
   }
 
-  async function searchFoods(event) {
-    event?.preventDefault();
-
-    const query = foodSearchQuery.trim();
+  async function runFoodSearch(queryValue) {
+    const query = String(queryValue || "").trim();
+    const barcode = normalizeBarcodeSearchQuery(query);
 
     if (!query) {
       return;
     }
 
+    if (
+      barcode &&
+      (foodSearchSource === "fatsecret" || foodSearchSource === "usda")
+    ) {
+      await searchFoodsByBarcode(barcode);
+      return;
+    }
+
     setFoodSearchLoading(true);
+    setFoodAutocompleteSuggestions([]);
     setFoodSearchResults([]);
     setFatSecretDetailsById({});
     setLibrarySearchResults([]);
@@ -1351,6 +1666,11 @@ export default function NutritionView({ session = null }) {
     } finally {
       setFoodSearchLoading(false);
     }
+  }
+
+  async function searchFoods(event) {
+    event?.preventDefault();
+    await runFoodSearch(foodSearchQuery);
   }
 
   async function searchFoodsByBarcode(barcodeValue) {
@@ -2107,6 +2427,17 @@ export default function NutritionView({ session = null }) {
     }
   }
 
+  function updateDailyCalorieGoal(value) {
+    const goal = Math.round(parseMacroValue(value));
+
+    if (!goal) {
+      return;
+    }
+
+    setDailyCalorieGoal(goal);
+    saveDailyCalorieGoal(goal);
+  }
+
   const macroCards = [
     [
       "Calories",
@@ -2253,6 +2584,63 @@ export default function NutritionView({ session = null }) {
         </button>
       </section>
 
+      <section
+        aria-label="Daily calorie goal"
+        onClick={() => setCalorieGoalPickerOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setCalorieGoalPickerOpen(true);
+          }
+        }}
+        role="button"
+        style={{
+          alignItems: "center",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          cursor: "pointer",
+          display: "grid",
+          gap: "10px",
+          gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
+          marginBottom: "14px",
+          padding: "10px 12px",
+        }}
+        tabIndex={0}
+      >
+        <Target size={20} color="#1769aa" />
+        <strong>Daily goal</strong>
+        <span
+          style={{
+            color: calorieGoalValue ? "var(--text-h)" : "var(--text-muted)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {calorieGoalValue
+            ? `${formatMacro(calorieGoalValue, "cal")} calories`
+            : "No calorie goal set"}
+        </span>
+        <button
+          aria-label="Set daily calorie goal"
+          onClick={(event) => {
+            event.stopPropagation();
+            setCalorieGoalPickerOpen(true);
+          }}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            justifyContent: "center",
+            minHeight: "34px",
+            minWidth: "34px",
+            padding: 0,
+          }}
+          type="button"
+        >
+          <Plus size={18} />
+        </button>
+      </section>
+
       {weightSyncStatus && (
         <div
           style={{
@@ -2291,76 +2679,246 @@ export default function NutritionView({ session = null }) {
         value={latestBodyWeight?.weight || ""}
       />
 
-      <label
-        style={{
-          display: "grid",
-          gap: "5px",
-          marginBottom: "14px",
-        }}
-      >
-        Day
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(event) => setSelectedDate(event.target.value)}
-          style={{
-            boxSizing: "border-box",
-            font: "inherit",
-            minHeight: "42px",
-            padding: "7px 10px",
-            width: "100%",
-          }}
-        />
-      </label>
+      <WeightPickerModal
+        increment={50}
+        isOpen={calorieGoalPickerOpen}
+        onClose={() => setCalorieGoalPickerOpen(false)}
+        onSelect={updateDailyCalorieGoal}
+        title="Select daily calorie goal"
+        value={calorieGoalValue || 2000}
+        values={calorieGoalOptions}
+      />
 
       <section
-        aria-label="Daily macro totals"
+        aria-label="Current day"
         style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
           display: "grid",
-          gap: "8px",
-          gridTemplateColumns: "1fr 1fr",
+          gap: dayPanelOpen ? "12px" : 0,
           marginBottom: "16px",
+          overflow: "hidden",
         }}
       >
-        {macroCards.map(([label, value, color, background]) => (
-          <div
-            key={label}
+        <button
+          aria-expanded={dayPanelOpen}
+          onClick={() => setDayPanelOpen((open) => !open)}
+          style={{
+            alignItems: "center",
+            background: "transparent",
+            border: 0,
+            borderRadius: 0,
+            display: "grid",
+            gap: "10px",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            padding: "12px",
+            textAlign: "left",
+          }}
+          type="button"
+        >
+          <span
             style={{
-              background,
-              borderRadius: "8px",
-              color,
-              padding: "10px",
+              display: "grid",
+              gap: "8px",
+              minWidth: 0,
             }}
           >
-            <div
+            <span
               style={{
-                fontSize: "12px",
-                fontWeight: "bold",
+                alignItems: "baseline",
+                display: "flex",
+                gap: "8px",
+                justifyContent: "space-between",
               }}
             >
-              {label}
-            </div>
-            <div
+              <strong>Day</strong>
+              <span
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {selectedDate}
+              </span>
+            </span>
+            <span
               style={{
-                color: "var(--text-h)",
-                fontSize: "24px",
-                fontWeight: "bold",
-                lineHeight: 1.1,
-                marginTop: "4px",
+                color: "var(--text-muted)",
+                fontSize: "13px",
               }}
             >
-              {value}
-            </div>
-          </div>
-        ))}
-      </section>
+              {formatMacro(totals.calories, "cal")} /{" "}
+              {calorieGoalValue ? formatMacro(calorieGoalValue, "cal") : "--"} cal
+              {calorieGoalValue
+                ? caloriesRemaining >= 0
+                  ? ` · ${formatMacro(caloriesRemaining, "cal")} left`
+                  : ` · ${formatMacro(Math.abs(caloriesRemaining), "cal")} over`
+                : " · set a goal to track remaining"}
+            </span>
+            <span
+              aria-hidden="true"
+              style={{
+                background: "var(--surface-muted)",
+                borderRadius: "999px",
+                display: "block",
+                height: "8px",
+                overflow: "hidden",
+              }}
+            >
+              <span
+                style={{
+                  background: caloriesRemaining < 0 ? "#c62828" : "#1769aa",
+                  display: "block",
+                  height: "100%",
+                  width: `${calorieGoalProgress}%`,
+                }}
+              />
+            </span>
+          </span>
+          {dayPanelOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
 
-      <section
-        style={{
-          borderTop: "1px solid var(--border)",
-          paddingTop: "14px",
-        }}
-      >
+        {dayPanelOpen && (
+          <div
+            style={{
+              display: "grid",
+              gap: "14px",
+              padding: "0 12px 12px",
+            }}
+          >
+            <label
+              style={{
+                display: "grid",
+                gap: "5px",
+              }}
+            >
+              Date
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                style={{
+                  boxSizing: "border-box",
+                  font: "inherit",
+                  minHeight: "42px",
+                  padding: "7px 10px",
+                  width: "100%",
+                }}
+              />
+            </label>
+
+            <section
+              aria-label="Daily macro totals"
+              style={{
+                alignItems: "center",
+                display: "grid",
+                gap: "12px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gap: "6px",
+                  gridTemplateColumns: "1fr 1fr",
+                }}
+              >
+                {macroCards.map(([label, value, color, background]) => (
+                  <div
+                    key={label}
+                    style={{
+                      background,
+                      borderRadius: "8px",
+                      color,
+                      padding: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {label}
+                    </div>
+                    <div
+                      style={{
+                        color: "var(--text-h)",
+                        fontSize: "17px",
+                        fontWeight: "bold",
+                        lineHeight: 1.1,
+                        marginTop: "3px",
+                      }}
+                    >
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "6px",
+                  justifyItems: "center",
+                }}
+              >
+                <MacroDonutChart
+                  segments={macroSegments}
+                  totalCalories={totalMacroCalories}
+                />
+                <div
+                  style={{
+                    display: "grid",
+                    fontSize: "11px",
+                    gap: "3px",
+                    width: "112px",
+                  }}
+                >
+                  {macroSegments.map((segment) => (
+                    <span
+                      key={segment.label}
+                      style={{
+                        alignItems: "center",
+                        color: "var(--text-muted)",
+                        display: "flex",
+                        gap: "5px",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <span
+                        style={{
+                          alignItems: "center",
+                          display: "inline-flex",
+                          gap: "4px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: segment.color,
+                            borderRadius: "999px",
+                            display: "inline-block",
+                            height: "8px",
+                            width: "8px",
+                          }}
+                        />
+                        {segment.label}
+                      </span>
+                      <strong style={{ color: "var(--text-h)" }}>
+                        {Math.round(segment.percent)}%
+                      </strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section
+              style={{
+                borderTop: "1px solid var(--border)",
+                paddingTop: "14px",
+              }}
+            >
         <h2
           style={{
             fontSize: "18px",
@@ -2394,6 +2952,7 @@ export default function NutritionView({ session = null }) {
               value={foodSearchSource}
               onChange={(event) => {
                 setFoodSearchSource(event.target.value);
+                setFoodAutocompleteSuggestions([]);
                 setFoodSearchResults([]);
                 setFatSecretDetailsById({});
                 setLibrarySearchResults([]);
@@ -2408,8 +2967,8 @@ export default function NutritionView({ session = null }) {
                 width: "100%",
               }}
             >
-              <option value="usda">USDA FoodData Central</option>
               <option value="fatsecret">FatSecret</option>
+              <option value="usda">USDA FoodData Central</option>
               <option value="app">App library</option>
             </select>
             <div
@@ -2422,26 +2981,76 @@ export default function NutritionView({ session = null }) {
                     : "minmax(0, 1fr) auto auto",
               }}
             >
-              <input
-                aria-label="Search foods"
-                placeholder={
-                  foodSearchSource === "usda"
-                    ? "Chicken breast, Greek yogurt, cereal..."
-                    : foodSearchSource === "fatsecret"
-                      ? "Restaurant foods, brands, meals..."
-                    : "Search foods or recipes..."
-                }
-                value={foodSearchQuery}
-                onChange={(event) => setFoodSearchQuery(event.target.value)}
+              <div
                 style={{
-                  boxSizing: "border-box",
-                  font: "inherit",
-                  minHeight: "42px",
                   minWidth: 0,
-                  padding: "7px 10px",
-                  width: "100%",
+                  position: "relative",
                 }}
-              />
+              >
+                <input
+                  aria-label="Search foods"
+                  autoComplete="off"
+                  placeholder={
+                    foodSearchSource === "usda"
+                      ? "Chicken breast, Greek yogurt, cereal..."
+                      : foodSearchSource === "fatsecret"
+                        ? "Restaurant foods, brands, meals..."
+                      : "Search foods or recipes..."
+                  }
+                  value={foodSearchQuery}
+                  onChange={(event) => setFoodSearchQuery(event.target.value)}
+                  style={{
+                    boxSizing: "border-box",
+                    font: "inherit",
+                    minHeight: "42px",
+                    minWidth: 0,
+                    padding: "7px 10px",
+                    width: "100%",
+                  }}
+                />
+                {foodSearchSource === "fatsecret" &&
+                  foodAutocompleteSuggestions.length > 0 && (
+                    <div
+                      style={{
+                        background: "var(--surface-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        boxShadow: "0 8px 18px rgba(0,0,0,.16)",
+                        display: "grid",
+                        left: 0,
+                        overflow: "hidden",
+                        position: "absolute",
+                        right: 0,
+                        top: "calc(100% + 4px)",
+                        zIndex: 5,
+                      }}
+                    >
+                      {foodAutocompleteSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => {
+                            setFoodSearchQuery(suggestion);
+                            setFoodAutocompleteSuggestions([]);
+                            runFoodSearch(suggestion);
+                          }}
+                          type="button"
+                          style={{
+                            background: "transparent",
+                            border: 0,
+                            borderBottom: "1px solid var(--border)",
+                            borderRadius: 0,
+                            justifyContent: "flex-start",
+                            minHeight: "38px",
+                            padding: "8px 10px",
+                            textAlign: "left",
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+              </div>
               <button
                 aria-label="Clear food search"
                 disabled={
@@ -2506,6 +3115,8 @@ export default function NutritionView({ session = null }) {
               )}
             </div>
           </label>
+
+          {foodSearchSource === "fatsecret" && <FatSecretAttribution />}
 
           {foodSearchStatus && (
             <div
@@ -2606,6 +3217,10 @@ export default function NutritionView({ session = null }) {
                   <X size={18} />
                 </button>
               </div>
+
+              {hasFatSecretSearchResults && (
+                <FatSecretAttribution justify="end" />
+              )}
 
               {foodSearchResults.length > 0 && (
                 <div
@@ -3393,6 +4008,10 @@ export default function NutritionView({ session = null }) {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
           </div>
         )}
       </section>
