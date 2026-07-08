@@ -63,6 +63,26 @@ const FOOD_BARCODE_FORMATS = [
   BarcodeFormat.UPC_A,
   BarcodeFormat.UPC_E,
 ];
+const NATIVE_BARCODE_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e"];
+const BARCODE_VIDEO_CONSTRAINTS = {
+  audio: false,
+  video: {
+    advanced: [
+      {
+        focusMode: "continuous",
+      },
+    ],
+    facingMode: {
+      ideal: "environment",
+    },
+    height: {
+      ideal: 1080,
+    },
+    width: {
+      ideal: 1920,
+    },
+  },
+};
 
 const emptyEntry = {
   calories: "",
@@ -157,6 +177,33 @@ function normalizeBarcodeSearchQuery(value) {
   }
 
   return [8, 12, 13, 14].includes(digits.length) ? digits : "";
+}
+
+async function createNativeBarcodeDetector() {
+  if (typeof window === "undefined" || !("BarcodeDetector" in window)) {
+    return null;
+  }
+
+  try {
+    const BarcodeDetectorConstructor = window.BarcodeDetector;
+    const supportedFormats =
+      typeof BarcodeDetectorConstructor.getSupportedFormats === "function"
+        ? await BarcodeDetectorConstructor.getSupportedFormats()
+        : NATIVE_BARCODE_FORMATS;
+    const formats = NATIVE_BARCODE_FORMATS.filter((format) =>
+      supportedFormats.includes(format)
+    );
+
+    if (formats.length === 0) {
+      return null;
+    }
+
+    return new BarcodeDetectorConstructor({ formats });
+  } catch (error) {
+    console.warn("Native barcode detector is unavailable:", error);
+
+    return null;
+  }
 }
 
 function parseMacroValue(value) {
@@ -1143,6 +1190,37 @@ function createRecipeIngredientFromFdcFood(food) {
   };
 }
 
+function createRecipeIngredientFromFatSecretFood(food) {
+  const portionOptions = getFatSecretPortionOptions(food);
+  const selectedOption = portionOptions[0] || null;
+  const macros =
+    selectedOption?.baseMacros ||
+    (food.source === "fatsecret" ? getFoodMacros(food) : getFoodServingMacros(food));
+  const unit = selectedOption?.key || "serving";
+
+  return {
+    amount: "1",
+    baseMacros: macros,
+    brand: food.brandName || "",
+    calories: macros.calories,
+    carbs: macros.carbs,
+    externalId: food.fatsecretFoodId || food.fdcId || "",
+    externalSource: "fatsecret",
+    fat: macros.fat,
+    foodId: null,
+    id: `ingredient-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: food.brandName
+      ? `${food.description} (${food.brandName})`
+      : food.description || "",
+    portionOptions,
+    protein: macros.protein,
+    servingDescription:
+      selectedOption?.label || getServingDescription(food) || "serving",
+    sourceLabel: "FatSecret",
+    unit,
+  };
+}
+
 function createRecipeIngredientFromLibraryFood(food) {
   const macros = getSupplementalFoodMacros(food);
   const portionOptions = getSupplementalPortionOptions(food);
@@ -1246,6 +1324,40 @@ function totalEntries(entries) {
   );
 }
 
+function getEditableServingLabel(entry) {
+  const description = String(entry?.servingDescription || "").trim();
+  const amount = parseMacroValue(entry?.servingAmount);
+
+  if (!description) {
+    return "serving";
+  }
+
+  const multiplierMatch = description.match(/^\d+(?:\.\d+)?\s*x\s*(.+)$/i);
+
+  if (multiplierMatch?.[1]) {
+    return multiplierMatch[1].trim();
+  }
+
+  const parts = description.split(/\s+/);
+
+  if (Number(parts[0]) === amount && parts.length > 1) {
+    return parts.slice(1).join(" ");
+  }
+
+  return description;
+}
+
+function formatEditableServingDescription(amount, basis) {
+  const parsedAmount = parseMacroValue(amount);
+  const label = String(basis?.label || "serving").trim();
+
+  if (/^\d/.test(label)) {
+    return `${parsedAmount || 0} x ${label}`;
+  }
+
+  return `${parsedAmount || 0} ${label}`;
+}
+
 export default function NutritionView({ session = null }) {
   const [entries, setEntries] = useState(readNutritionEntries);
   const [bodyWeightEntries, setBodyWeightEntries] = useState(
@@ -1253,6 +1365,7 @@ export default function NutritionView({ session = null }) {
   );
   const [dailyCalorieGoal, setDailyCalorieGoal] = useState(readDailyCalorieGoal);
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
+  const [editingEntryId, setEditingEntryId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [dayPanelOpen, setDayPanelOpen] = useState(true);
   const [calorieGoalPickerOpen, setCalorieGoalPickerOpen] = useState(false);
@@ -1272,9 +1385,11 @@ export default function NutritionView({ session = null }) {
   const [foodSearchLoading, setFoodSearchLoading] = useState(false);
   const [foodResultsSheetOpen, setFoodResultsSheetOpen] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [barcodeScannerMode, setBarcodeScannerMode] = useState("food");
   const [barcodeDraft, setBarcodeDraft] = useState("");
   const [barcodeStatus, setBarcodeStatus] = useState("");
   const [selectedFood, setSelectedFood] = useState(emptySelectedFood);
+  const [editingServingBasis, setEditingServingBasis] = useState(null);
   const [servingAmount, setServingAmount] = useState("1");
   const [servingUnit, setServingUnit] = useState("serving");
   const [libraryDraft, setLibraryDraft] = useState(emptyLibraryDraft);
@@ -1292,8 +1407,14 @@ export default function NutritionView({ session = null }) {
   const [recipeSheetOpen, setRecipeSheetOpen] = useState(false);
   const [recipeDraft, setRecipeDraft] = useState(emptyRecipeDraft);
   const [recipeIngredients, setRecipeIngredients] = useState([]);
+  const [recipeIngredientSearchSource, setRecipeIngredientSearchSource] =
+    useState("fatsecret");
   const [selectedLibraryRecipeId, setSelectedLibraryRecipeId] = useState(null);
   const [recipeIngredientQuery, setRecipeIngredientQuery] = useState("");
+  const [
+    recipeIngredientAutocompleteSuggestions,
+    setRecipeIngredientAutocompleteSuggestions,
+  ] = useState([]);
   const [recipeIngredientResults, setRecipeIngredientResults] = useState([]);
   const [recipeLibraryIngredientResults, setRecipeLibraryIngredientResults] =
     useState([]);
@@ -1431,6 +1552,91 @@ export default function NutritionView({ session = null }) {
     barcodeHints.set(DecodeHintType.POSSIBLE_FORMATS, FOOD_BARCODE_FORMATS);
 
     const codeReader = new BrowserMultiFormatReader(barcodeHints);
+    const handleBarcodeResult = (barcode, formatLabel = "barcode") => {
+      if (!barcode || cancelled) {
+        return;
+      }
+
+      barcodeControlsRef.current?.stop?.();
+      barcodeControlsRef.current = null;
+      setBarcodeDraft(barcode);
+      setBarcodeStatus(`Scanned ${formatLabel} ${barcode}.`);
+      barcodeSearchHandlerRef.current?.(barcode);
+    };
+
+    async function startNativeBarcodeScanner(detector) {
+      const video = barcodeVideoRef.current;
+
+      if (!video) {
+        return false;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(
+          BARCODE_VIDEO_CONSTRAINTS
+        );
+        let animationFrameId = 0;
+        let detecting = false;
+        let stopped = false;
+
+        video.srcObject = stream;
+        await video.play();
+
+        barcodeControlsRef.current = {
+          stop() {
+            stopped = true;
+            window.cancelAnimationFrame(animationFrameId);
+            stream.getTracks().forEach((track) => track.stop());
+            if (video.srcObject === stream) {
+              video.srcObject = null;
+            }
+          },
+        };
+
+        setBarcodeStatus(
+          "Point the barcode inside the guide. Move back until it is sharp."
+        );
+
+        const detectFrame = async () => {
+          if (cancelled || stopped) {
+            return;
+          }
+
+          if (!detecting && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            detecting = true;
+
+            try {
+              const barcodes = await detector.detect(video);
+              const barcode = barcodes.find((candidate) =>
+                normalizeBarcodeSearchQuery(candidate.rawValue)
+              );
+
+              if (barcode) {
+                handleBarcodeResult(
+                  normalizeBarcodeSearchQuery(barcode.rawValue),
+                  barcode.format || "barcode"
+                );
+                return;
+              }
+            } catch (error) {
+              console.warn("Native barcode detection failed:", error);
+            } finally {
+              detecting = false;
+            }
+          }
+
+          animationFrameId = window.requestAnimationFrame(detectFrame);
+        };
+
+        animationFrameId = window.requestAnimationFrame(detectFrame);
+
+        return true;
+      } catch (error) {
+        console.warn("Native barcode scanner startup failed:", error);
+
+        return false;
+      }
+    }
 
     async function startBarcodeScanner() {
       if (!barcodeVideoRef.current) {
@@ -1440,8 +1646,18 @@ export default function NutritionView({ session = null }) {
       setBarcodeStatus("Point the camera at a UPC/EAN barcode.");
 
       try {
-        const controls = await codeReader.decodeFromVideoDevice(
-          undefined,
+        const detector = await createNativeBarcodeDetector();
+
+        if (detector && (await startNativeBarcodeScanner(detector))) {
+          return;
+        }
+
+        setBarcodeStatus(
+          "Point the barcode inside the guide. Move back until it is sharp."
+        );
+
+        const controls = await codeReader.decodeFromConstraints(
+          BARCODE_VIDEO_CONSTRAINTS,
           barcodeVideoRef.current,
           (result) => {
             if (!result || cancelled) {
@@ -1451,13 +1667,10 @@ export default function NutritionView({ session = null }) {
             const barcode = result.getText();
             const barcodeFormat = result.getBarcodeFormat?.();
 
-            barcodeControlsRef.current?.stop?.();
-            barcodeControlsRef.current = null;
-            setBarcodeDraft(barcode);
-            setBarcodeStatus(
-              `Scanned ${BarcodeFormat[barcodeFormat] || "barcode"} ${barcode}.`
+            handleBarcodeResult(
+              barcode,
+              BarcodeFormat[barcodeFormat] || "barcode"
             );
-            barcodeSearchHandlerRef.current?.(barcode);
           }
         );
 
@@ -1524,6 +1737,46 @@ export default function NutritionView({ session = null }) {
     };
   }, [foodSearchQuery, foodSearchSource]);
 
+  useEffect(() => {
+    if (recipeIngredientSearchSource !== "fatsecret") {
+      setRecipeIngredientAutocompleteSuggestions([]);
+      return undefined;
+    }
+
+    const query = recipeIngredientQuery.trim();
+
+    if (query.length < 2 || normalizeBarcodeSearchQuery(query)) {
+      setRecipeIngredientAutocompleteSuggestions([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const suggestions = await autocompleteFatSecretFoods(query);
+
+        if (!cancelled) {
+          setRecipeIngredientAutocompleteSuggestions(
+            suggestions.filter(
+              (suggestion) => suggestion.toLowerCase() !== query.toLowerCase()
+            )
+          );
+        }
+      } catch (error) {
+        console.error("FatSecret recipe ingredient autocomplete failed:", error);
+
+        if (!cancelled) {
+          setRecipeIngredientAutocompleteSuggestions([]);
+        }
+      }
+    }, 275);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [recipeIngredientQuery, recipeIngredientSearchSource]);
+
   function updateEntries(nextEntries) {
     setEntries(nextEntries);
     saveNutritionEntries(nextEntries);
@@ -1534,40 +1787,73 @@ export default function NutritionView({ session = null }) {
     saveBodyWeightEntries(nextEntries);
   }
 
-  function addEntry() {
+  function buildEntryPayload(entryId = Date.now()) {
     const name = entryDraft.name.trim();
+    const existingEntry = entries.find((entry) => entry.id === entryId);
 
     if (!name) {
-      return;
+      return null;
     }
 
-    updateEntries([
-      ...entries,
-      {
-        ...entryDraft,
-        calories: parseMacroValue(entryDraft.calories),
-        carbs: parseMacroValue(entryDraft.carbs),
-        date: selectedDate,
-        fat: parseMacroValue(entryDraft.fat),
-        id: Date.now(),
-        name,
-        protein: parseMacroValue(entryDraft.protein),
-        servingAmount: selectedFood ? parseMacroValue(servingAmount) : null,
-        servingDescription: selectedFood
-          ? getSelectedServingDescription(servingAmount, servingUnit)
-          : null,
-        source: selectedFood?.source || (selectedFood ? "fdc" : "manual"),
-        sourceKey: selectedFood?.fdcId ? String(selectedFood.fdcId) : null,
-        recipeId: selectedFood?.recipeId || null,
-      },
-    ]);
+    return {
+      ...entryDraft,
+      calories: parseMacroValue(entryDraft.calories),
+      carbs: parseMacroValue(entryDraft.carbs),
+      date: selectedDate,
+      fat: parseMacroValue(entryDraft.fat),
+      id: entryId,
+      name,
+      protein: parseMacroValue(entryDraft.protein),
+      servingAmount: selectedFood
+        ? parseMacroValue(servingAmount)
+        : editingServingBasis
+          ? parseMacroValue(servingAmount)
+          : existingEntry?.servingAmount || null,
+      servingDescription: selectedFood
+        ? getSelectedServingDescription(servingAmount, servingUnit)
+        : editingServingBasis
+          ? formatEditableServingDescription(servingAmount, editingServingBasis)
+          : existingEntry?.servingDescription || null,
+      source:
+        selectedFood?.source ||
+        (selectedFood ? "fdc" : existingEntry?.source || "manual"),
+      sourceKey: selectedFood?.fdcId
+        ? String(selectedFood.fdcId)
+        : existingEntry?.sourceKey || null,
+      recipeId: selectedFood?.recipeId || existingEntry?.recipeId || null,
+    };
+  }
+
+  function resetEntryForm() {
     setEntryDraft(emptyEntry);
+    setEditingEntryId(null);
     setSelectedFood(emptySelectedFood);
+    setEditingServingBasis(null);
     setServingAmount("1");
     setServingUnit("serving");
     setLibraryDraft(emptyLibraryDraft);
     setLibraryStatus("");
     clearFoodSearch();
+  }
+
+  function addOrUpdateEntry() {
+    const entry = buildEntryPayload(editingEntryId || Date.now());
+
+    if (!entry) {
+      return;
+    }
+
+    if (editingEntryId) {
+      updateEntries(
+        entries.map((currentEntry) =>
+          currentEntry.id === editingEntryId ? entry : currentEntry
+        )
+      );
+    } else {
+      updateEntries([...entries, entry]);
+    }
+
+    resetEntryForm();
   }
 
   function clearFoodSearch() {
@@ -1746,7 +2032,28 @@ export default function NutritionView({ session = null }) {
     }
   }
 
-  barcodeSearchHandlerRef.current = searchFoodsByBarcode;
+  async function searchRecipeIngredientsByBarcode(barcodeValue) {
+    const barcode = normalizeBarcodeSearchQuery(barcodeValue);
+
+    if (!barcode) {
+      return;
+    }
+
+    setRecipeIngredientQuery(barcode);
+    setBarcodeStatus(
+      `Searching ${
+        recipeIngredientSearchSource === "fatsecret" ? "FatSecret" : "UPC"
+      } ${barcode}...`
+    );
+
+    await runRecipeIngredientSearch(barcode);
+    setShowBarcodeScanner(false);
+  }
+
+  barcodeSearchHandlerRef.current =
+    barcodeScannerMode === "recipe"
+      ? searchRecipeIngredientsByBarcode
+      : searchFoodsByBarcode;
 
   function hydrateFatSecretSearchResults(foods) {
     const targets = foods
@@ -1862,6 +2169,8 @@ export default function NutritionView({ session = null }) {
     };
     const scaledMacros = scaleMacros(baseMacros, "1");
 
+    setEditingEntryId(null);
+    setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
@@ -1896,6 +2205,8 @@ export default function NutritionView({ session = null }) {
       source: "library",
     };
 
+    setEditingEntryId(null);
+    setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
     setFoodResultsSheetOpen(false);
     setServingAmount(String(food.serving_size || 1));
@@ -1930,6 +2241,8 @@ export default function NutritionView({ session = null }) {
     };
     const scaledMacros = scaleMacros(macros, "1");
 
+    setEditingEntryId(null);
+    setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
@@ -1953,14 +2266,16 @@ export default function NutritionView({ session = null }) {
   function updateServingAmount(value) {
     setServingAmount(value);
 
-    if (!selectedFood) {
+    if (!selectedFood && !editingServingBasis) {
       return;
     }
 
-    const scaledMacros = scaleMacros(
-      getSelectedPortionBaseMacros(servingUnit),
-      getSelectedPortionMultiplier(value, servingUnit)
-    );
+    const scaledMacros = editingServingBasis
+      ? scaleMacros(editingServingBasis.baseMacros, value)
+      : scaleMacros(
+          getSelectedPortionBaseMacros(servingUnit),
+          getSelectedPortionMultiplier(value, servingUnit)
+        );
 
     setEntryDraft((current) => ({
       ...current,
@@ -2220,7 +2535,9 @@ export default function NutritionView({ session = null }) {
     setSelectedLibraryRecipeId(null);
     setRecipeDraft(emptyRecipeDraft);
     setRecipeIngredients([]);
+    setRecipeIngredientSearchSource("fatsecret");
     setRecipeIngredientQuery("");
+    setRecipeIngredientAutocompleteSuggestions([]);
     setRecipeIngredientResults([]);
     setRecipeLibraryIngredientResults([]);
     setRecipeSearchStatus("");
@@ -2235,43 +2552,148 @@ export default function NutritionView({ session = null }) {
 
   async function searchRecipeIngredients(event) {
     event?.preventDefault();
+    await runRecipeIngredientSearch(recipeIngredientQuery);
+  }
 
-    const query = recipeIngredientQuery.trim();
+  async function runRecipeIngredientSearch(queryValue) {
+    const query = String(queryValue || "").trim();
+    const barcode = normalizeBarcodeSearchQuery(query);
 
     if (!query) {
       return;
     }
 
     setRecipeSearchLoading(true);
-    setRecipeSearchStatus("Searching ingredients...");
+    setRecipeIngredientAutocompleteSuggestions([]);
+    setRecipeIngredientResults([]);
+    setRecipeLibraryIngredientResults([]);
+
+    const sourceSearchLabel =
+      recipeIngredientSearchSource === "usda"
+        ? "USDA"
+        : recipeIngredientSearchSource === "fatsecret"
+          ? "FatSecret"
+          : "app library";
+
+    setRecipeSearchStatus(`Searching ${sourceSearchLabel} ingredients...`);
 
     try {
-      const [fdcResult, libraryFoods] = await Promise.all([
-        FDC_API_KEY ? searchFoodDataCentral(query) : Promise.resolve({ foods: [] }),
-        searchSupplementalFoodLibrary(query),
-      ]);
-      const foods = Array.isArray(fdcResult.foods) ? fdcResult.foods : [];
+      if (recipeIngredientSearchSource === "fatsecret") {
+        if (barcode) {
+          const food = await searchFatSecretFoodByBarcode(barcode);
+          const foods = food ? [food] : [];
+          const hydratedDetails = food ? storeHydratedFatSecretFood(food) : null;
 
-      setRecipeIngredientResults(foods);
+          setRecipeIngredientResults(foods);
+          setFatSecretDetailsById((current) => ({
+            ...current,
+            ...(hydratedDetails || {}),
+          }));
+          setRecipeSearchStatus(
+            foods.length
+              ? `Found 1 FatSecret ingredient for barcode ${barcode}`
+              : "No FatSecret ingredient found for that barcode"
+          );
+          return;
+        }
+
+        const searchResult = await searchFatSecretFoods(query);
+        const foods = Array.isArray(searchResult.foods) ? searchResult.foods : [];
+
+        setRecipeIngredientResults(foods);
+        hydrateFatSecretSearchResults(foods);
+        setRecipeSearchStatus(
+          foods.length
+            ? `${foods.length} FatSecret ingredients found`
+            : "No FatSecret ingredients found"
+        );
+        return;
+      }
+
+      if (recipeIngredientSearchSource === "usda") {
+        if (!FDC_API_KEY) {
+          setRecipeSearchStatus(
+            "Add VITE_USDA_FDC_API_KEY to your local environment to search FoodData Central."
+          );
+          return;
+        }
+
+        const fdcResult = barcode
+          ? await searchFoodDataCentralByBarcode(barcode)
+          : await searchFoodDataCentral(query);
+        const foods = Array.isArray(fdcResult.foods) ? fdcResult.foods : [];
+
+        setRecipeIngredientResults(foods);
+        setRecipeSearchStatus(
+          foods.length
+            ? `${foods.length} USDA ingredients found`
+            : "No USDA ingredients found"
+        );
+        return;
+      }
+
+      const libraryFoods = await searchSupplementalFoodLibrary(query);
+
+      setRecipeIngredientResults([]);
       setRecipeLibraryIngredientResults(libraryFoods);
       setRecipeSearchStatus(
-        foods.length || libraryFoods.length
-          ? `${foods.length} USDA foods and ${libraryFoods.length} library foods found`
-          : "No ingredients found"
+        libraryFoods.length
+          ? `${libraryFoods.length} library ingredients found`
+          : "No app library ingredients found"
       );
     } catch (error) {
       console.error("Recipe ingredient search failed:", error);
       setRecipeSearchStatus(error.message);
       setRecipeIngredientResults([]);
       setRecipeLibraryIngredientResults([]);
+      setFatSecretDetailsById({});
     } finally {
       setRecipeSearchLoading(false);
     }
   }
 
+  function clearRecipeIngredientSearch() {
+    setRecipeIngredientQuery("");
+    setRecipeIngredientAutocompleteSuggestions([]);
+    setRecipeIngredientResults([]);
+    setRecipeLibraryIngredientResults([]);
+    setRecipeSearchStatus("");
+  }
+
   function addRecipeIngredient(ingredient) {
     setRecipeIngredients((current) => [...current, ingredient]);
     setRecipeStatus("");
+  }
+
+  async function addRecipeIngredientFromSearchFood(food) {
+    if (food.source !== "fatsecret") {
+      addRecipeIngredient(createRecipeIngredientFromFdcFood(food));
+      return;
+    }
+
+    let selectedResult = fatSecretDetailsById[getFatSecretFoodKey(food)]?.food;
+
+    if (!selectedResult && food.fatsecretFoodId) {
+      setRecipeSearchLoading(true);
+      setRecipeSearchStatus("Loading FatSecret serving details...");
+
+      try {
+        selectedResult = await fetchFatSecretFoodDetails(food.fatsecretFoodId);
+        setFatSecretDetailsById((current) => ({
+          ...current,
+          ...storeHydratedFatSecretFood(selectedResult),
+        }));
+      } catch (error) {
+        console.error("FatSecret recipe ingredient detail lookup failed:", error);
+        setRecipeSearchStatus(error.message);
+        return;
+      } finally {
+        setRecipeSearchLoading(false);
+      }
+    }
+
+    addRecipeIngredient(createRecipeIngredientFromFatSecretFood(selectedResult || food));
+    setRecipeSearchStatus("");
   }
 
   function removeRecipeIngredient(ingredientId) {
@@ -2369,6 +2791,52 @@ export default function NutritionView({ session = null }) {
 
   function removeEntry(entryId) {
     updateEntries(entries.filter((entry) => entry.id !== entryId));
+
+    if (editingEntryId === entryId) {
+      resetEntryForm();
+    }
+  }
+
+  function editEntry(entry) {
+    const savedServingAmount = parseMacroValue(entry.servingAmount);
+    const hasSavedServing =
+      savedServingAmount > 0 && Boolean(entry.servingDescription);
+
+    setEditingEntryId(entry.id);
+    setEntryDraft({
+      calories: formatDraftMacro(entry.calories),
+      carbs: formatDraftMacro(entry.carbs),
+      fat: formatDraftMacro(entry.fat),
+      name: entry.name || "",
+      protein: formatDraftMacro(entry.protein),
+    });
+    setSelectedFood(emptySelectedFood);
+    setEditingServingBasis(
+      hasSavedServing
+        ? {
+            baseMacros: scaleMacros(
+              {
+                calories: parseMacroValue(entry.calories),
+                carbs: parseMacroValue(entry.carbs),
+                fat: parseMacroValue(entry.fat),
+                protein: parseMacroValue(entry.protein),
+              },
+              1 / savedServingAmount
+            ),
+            label: getEditableServingLabel(entry),
+          }
+        : null
+    );
+    setServingAmount(String(savedServingAmount || 1));
+    setServingUnit("serving");
+    clearFoodSearch();
+    window.requestAnimationFrame(() => {
+      entryFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      foodNameInputRef.current?.focus();
+    });
   }
 
   async function saveBodyWeight(entryDate, weightValue) {
@@ -3098,6 +3566,7 @@ export default function NutritionView({ session = null }) {
                 <button
                   aria-label="Scan barcode"
                   onClick={() => {
+                    setBarcodeScannerMode("food");
                     setBarcodeStatus("");
                     setShowBarcodeScanner(true);
                   }}
@@ -3574,7 +4043,7 @@ export default function NutritionView({ session = null }) {
               inset: 0,
               justifyContent: "center",
               position: "fixed",
-              zIndex: 2200,
+              zIndex: 2700,
             }}
           >
             <div
@@ -3618,9 +4087,13 @@ export default function NutritionView({ session = null }) {
                     }}
                   >
                     Scan a UPC/EAN barcode, then search{" "}
-                    {foodSearchSource === "fatsecret"
-                      ? "FatSecret foods"
-                      : "USDA branded foods"}
+                    {barcodeScannerMode === "recipe"
+                      ? recipeIngredientSearchSource === "fatsecret"
+                        ? "FatSecret ingredients"
+                        : "USDA ingredients"
+                      : foodSearchSource === "fatsecret"
+                        ? "FatSecret foods"
+                        : "USDA branded foods"}
                   </div>
                 </div>
                 <button
@@ -3639,19 +4112,52 @@ export default function NutritionView({ session = null }) {
                 </button>
               </div>
 
-              <video
-                ref={barcodeVideoRef}
-                muted
-                playsInline
+              <div
                 style={{
                   aspectRatio: "4 / 3",
                   background: "var(--surface-muted)",
                   border: "1px solid var(--border)",
                   borderRadius: "10px",
-                  objectFit: "cover",
+                  overflow: "hidden",
+                  position: "relative",
                   width: "100%",
                 }}
-              />
+              >
+                <video
+                  ref={barcodeVideoRef}
+                  muted
+                  playsInline
+                  style={{
+                    height: "100%",
+                    objectFit: "cover",
+                    width: "100%",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    border: "2px solid rgba(255,255,255,.92)",
+                    borderRadius: "10px",
+                    boxShadow: "0 0 0 999px rgba(0,0,0,.22)",
+                    height: "34%",
+                    left: "10%",
+                    position: "absolute",
+                    right: "10%",
+                    top: "33%",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    background: "rgba(255,255,255,.88)",
+                    height: "2px",
+                    left: "14%",
+                    position: "absolute",
+                    right: "14%",
+                    top: "50%",
+                  }}
+                />
+              </div>
 
               {barcodeStatus && (
                 <div
@@ -3753,7 +4259,7 @@ export default function NutritionView({ session = null }) {
             />
           </label>
 
-          {selectedFood && (
+          {(selectedFood || editingServingBasis) && (
             <div
               style={{
                 background: "var(--surface-muted)",
@@ -3775,7 +4281,9 @@ export default function NutritionView({ session = null }) {
                   style={{
                     display: "grid",
                     gap: "8px",
-                    gridTemplateColumns: "minmax(0, 1fr) minmax(120px, auto)",
+                    gridTemplateColumns: selectedFood
+                      ? "minmax(0, 1fr) minmax(120px, auto)"
+                      : "minmax(0, 1fr)",
                   }}
                 >
                   <input
@@ -3792,25 +4300,27 @@ export default function NutritionView({ session = null }) {
                       width: "100%",
                     }}
                   />
-                  <select
-                    aria-label="Serving unit"
-                    value={servingUnit}
-                    onChange={(event) => updateServingUnit(event.target.value)}
-                    style={{
-                      boxSizing: "border-box",
-                      font: "inherit",
-                      minHeight: "42px",
-                      minWidth: 0,
-                      padding: "7px 10px",
-                      width: "100%",
-                    }}
-                  >
-                    {selectedFood.portionOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  {selectedFood && (
+                    <select
+                      aria-label="Serving unit"
+                      value={servingUnit}
+                      onChange={(event) => updateServingUnit(event.target.value)}
+                      style={{
+                        boxSizing: "border-box",
+                        font: "inherit",
+                        minHeight: "42px",
+                        minWidth: 0,
+                        padding: "7px 10px",
+                        width: "100%",
+                      }}
+                    >
+                      {selectedFood.portionOptions.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </label>
               <div
@@ -3819,7 +4329,11 @@ export default function NutritionView({ session = null }) {
                   fontSize: "12px",
                 }}
               >
-                Serving basis: 1 serving = {selectedFood.servingDescription}.
+                Serving basis:{" "}
+                {selectedFood
+                  ? `1 serving = ${selectedFood.servingDescription}`
+                  : editingServingBasis.label}
+                .
                 Values below update as the amount or unit changes.
               </div>
             </div>
@@ -3873,7 +4387,7 @@ export default function NutritionView({ session = null }) {
 
           <button
             disabled={!entryDraft.name.trim()}
-            onClick={addEntry}
+            onClick={addOrUpdateEntry}
             style={{
               alignItems: "center",
               display: "inline-flex",
@@ -3882,8 +4396,8 @@ export default function NutritionView({ session = null }) {
               minHeight: "42px",
             }}
           >
-            <Plus size={18} />
-            Add Food
+            {!editingEntryId && <Plus size={18} />}
+            {editingEntryId ? "Update Food" : "Add Food"}
           </button>
 
           <button
@@ -3956,14 +4470,24 @@ export default function NutritionView({ session = null }) {
             {dayEntries.map((entry) => (
               <div
                 key={entry.id}
+                onClick={() => editEntry(entry)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    editEntry(entry);
+                  }
+                }}
+                role="button"
                 style={{
                   alignItems: "center",
                   borderBottom: "1px solid var(--border)",
+                  cursor: "pointer",
                   display: "grid",
                   gap: "8px",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
                   padding: "8px 0",
                 }}
+                tabIndex={0}
               >
                 <div
                   style={{
@@ -3994,7 +4518,10 @@ export default function NutritionView({ session = null }) {
 
                 <button
                   aria-label={`Remove ${entry.name}`}
-                  onClick={() => removeEntry(entry.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeEntry(entry.id);
+                  }}
                   style={{
                     alignItems: "center",
                     display: "inline-flex",
@@ -4876,27 +5403,141 @@ export default function NutritionView({ session = null }) {
                   gap: "5px",
                 }}
               >
+                Search source
+                <select
+                  aria-label="Recipe ingredient search source"
+                  value={recipeIngredientSearchSource}
+                  onChange={(event) => {
+                    setRecipeIngredientSearchSource(event.target.value);
+                    setRecipeIngredientAutocompleteSuggestions([]);
+                    setRecipeIngredientResults([]);
+                    setRecipeLibraryIngredientResults([]);
+                    setRecipeSearchStatus("");
+                  }}
+                  style={{
+                    boxSizing: "border-box",
+                    font: "inherit",
+                    minHeight: "42px",
+                    padding: "7px 10px",
+                    width: "100%",
+                  }}
+                >
+                  <option value="fatsecret">FatSecret</option>
+                  <option value="usda">USDA FoodData Central</option>
+                  <option value="app">App library</option>
+                </select>
+              </label>
+
+              <label
+                style={{
+                  display: "grid",
+                  gap: "5px",
+                }}
+              >
                 Find ingredient
                 <div
                   style={{
                     display: "grid",
                     gap: "8px",
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    gridTemplateColumns:
+                      recipeIngredientSearchSource === "fatsecret" ||
+                      recipeIngredientSearchSource === "usda"
+                        ? "minmax(0, 1fr) auto auto auto"
+                        : "minmax(0, 1fr) auto auto",
                   }}
                 >
-                  <input
-                    placeholder="Search foods..."
-                    value={recipeIngredientQuery}
-                    onChange={(event) => setRecipeIngredientQuery(event.target.value)}
+                  <div
                     style={{
-                      boxSizing: "border-box",
-                      font: "inherit",
-                      minHeight: "42px",
                       minWidth: 0,
-                      padding: "7px 10px",
-                      width: "100%",
+                      position: "relative",
                     }}
-                  />
+                  >
+                    <input
+                      autoComplete="off"
+                      placeholder={
+                        recipeIngredientSearchSource === "fatsecret"
+                          ? "Search foods or enter UPC..."
+                          : recipeIngredientSearchSource === "usda"
+                            ? "Search USDA or enter UPC..."
+                            : "Search library foods..."
+                      }
+                      value={recipeIngredientQuery}
+                      onChange={(event) =>
+                        setRecipeIngredientQuery(event.target.value)
+                      }
+                      style={{
+                        boxSizing: "border-box",
+                        font: "inherit",
+                        minHeight: "42px",
+                        minWidth: 0,
+                        padding: "7px 10px",
+                        width: "100%",
+                      }}
+                    />
+                    {recipeIngredientSearchSource === "fatsecret" &&
+                      recipeIngredientAutocompleteSuggestions.length > 0 && (
+                        <div
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            boxShadow: "0 8px 18px rgba(0,0,0,.16)",
+                            display: "grid",
+                            left: 0,
+                            overflow: "hidden",
+                            position: "absolute",
+                            right: 0,
+                            top: "calc(100% + 4px)",
+                            zIndex: 5,
+                          }}
+                        >
+                          {recipeIngredientAutocompleteSuggestions.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              onClick={() => {
+                                setRecipeIngredientQuery(suggestion);
+                                setRecipeIngredientAutocompleteSuggestions([]);
+                                runRecipeIngredientSearch(suggestion);
+                              }}
+                              type="button"
+                              style={{
+                                background: "transparent",
+                                border: 0,
+                                borderBottom: "1px solid var(--border)",
+                                borderRadius: 0,
+                                justifyContent: "flex-start",
+                                minHeight: "38px",
+                                padding: "8px 10px",
+                                textAlign: "left",
+                              }}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                  <button
+                    aria-label="Clear ingredient search"
+                    disabled={
+                      !recipeIngredientQuery &&
+                      recipeIngredientResults.length === 0 &&
+                      recipeLibraryIngredientResults.length === 0 &&
+                      !recipeSearchStatus
+                    }
+                    onClick={clearRecipeIngredientSearch}
+                    type="button"
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      justifyContent: "center",
+                      minHeight: "42px",
+                      minWidth: "42px",
+                      padding: 0,
+                    }}
+                  >
+                    <X size={17} />
+                  </button>
                   <button
                     disabled={recipeSearchLoading || !recipeIngredientQuery.trim()}
                     type="submit"
@@ -4912,8 +5553,34 @@ export default function NutritionView({ session = null }) {
                     <Search size={17} />
                     Search
                   </button>
+                  {(recipeIngredientSearchSource === "fatsecret" ||
+                    recipeIngredientSearchSource === "usda") && (
+                    <button
+                      aria-label="Scan ingredient barcode"
+                      onClick={() => {
+                        setBarcodeScannerMode("recipe");
+                        setBarcodeStatus("");
+                        setShowBarcodeScanner(true);
+                      }}
+                      type="button"
+                      style={{
+                        alignItems: "center",
+                        display: "inline-flex",
+                        justifyContent: "center",
+                        minHeight: "42px",
+                        minWidth: "42px",
+                        padding: 0,
+                      }}
+                    >
+                      <ScanBarcode size={18} />
+                    </button>
+                  )}
                 </div>
               </label>
+
+              {recipeIngredientSearchSource === "fatsecret" && (
+                <FatSecretAttribution />
+              )}
 
               {recipeSearchStatus && (
                 <div
@@ -4937,11 +5604,66 @@ export default function NutritionView({ session = null }) {
                   }}
                 >
                   {recipeIngredientResults.map((food) => {
-                    const macros = getFoodServingMacros(food);
+                    const isFatSecretResult = food.source === "fatsecret";
+                    const fatSecretDetails =
+                      fatSecretDetailsById[getFatSecretFoodKey(food)];
+                    const hydratedFood = fatSecretDetails?.food || null;
+                    const fatSecretPortionOptions = hydratedFood
+                      ? getFatSecretPortionOptions(hydratedFood)
+                      : [];
+                    const fatSecretPrimaryOption =
+                      fatSecretPortionOptions[0] || null;
+                    const macros = isFatSecretResult
+                      ? fatSecretPrimaryOption?.baseMacros || null
+                      : getFoodServingMacros(food);
+                    const servingDescription = hydratedFood
+                      ? fatSecretPrimaryOption?.label ||
+                        getServingDescription(hydratedFood)
+                      : getServingDescription(food);
+                    const sourceLabel = isFatSecretResult
+                      ? [
+                          food.brandName,
+                          "FatSecret",
+                          servingDescription,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : [food.brandName, "USDA", servingDescription]
+                          .filter(Boolean)
+                          .join(" · ");
+                    const isHydratingFatSecret =
+                      fatSecretDetails?.status === "loading";
+                    const hasHydratedFatSecret =
+                      isFatSecretResult && fatSecretDetails?.status === "loaded";
+                    const hasFatSecretHydrationError =
+                      isFatSecretResult && fatSecretDetails?.status === "error";
+                    const isFatSecretHydrationSkipped =
+                      isFatSecretResult && !fatSecretDetails;
+                    const macroSummary = macros
+                      ? `Per serving: ${formatMacro(
+                          macros.calories,
+                          "cal"
+                        )} cal · ${formatMacro(
+                          macros.protein
+                        )} protein · ${formatMacro(
+                          macros.carbs
+                        )} carbs · ${formatMacro(macros.fat)} fat`
+                      : "";
+                    const summaryText = isFatSecretResult
+                      ? hasHydratedFatSecret
+                        ? macroSummary
+                        : isHydratingFatSecret
+                          ? "Loading detailed nutrition..."
+                          : hasFatSecretHydrationError
+                            ? "Detailed nutrition was not loaded. Tap Add to retry."
+                            : isFatSecretHydrationSkipped
+                              ? "Tap Add to load serving and nutrition details."
+                              : "Serving and nutrition details load when you tap Add."
+                      : macroSummary;
 
                     return (
                       <div
-                        key={`recipe-fdc-${food.fdcId}`}
+                        key={`recipe-${food.source || "fdc"}-${food.fdcId}`}
                         style={{
                           background: "var(--surface-raised)",
                           border: "1px solid var(--border)",
@@ -4982,16 +5704,12 @@ export default function NutritionView({ session = null }) {
                                 marginTop: "3px",
                               }}
                             >
-                              {[food.brandName, "USDA", getServingDescription(food)]
-                                .filter(Boolean)
-                                .join(" · ")}
+                              {sourceLabel}
                             </span>
                           </div>
                           <button
                             onClick={() =>
-                              addRecipeIngredient(
-                                createRecipeIngredientFromFdcFood(food)
-                              )
+                              addRecipeIngredientFromSearchFood(food)
                             }
                             type="button"
                           >
@@ -5004,10 +5722,7 @@ export default function NutritionView({ session = null }) {
                             fontSize: "12px",
                           }}
                         >
-                          Per serving: {formatMacro(macros.calories, "cal")} cal ·{" "}
-                          {formatMacro(macros.protein)} protein ·{" "}
-                          {formatMacro(macros.carbs)} carbs ·{" "}
-                          {formatMacro(macros.fat)} fat
+                          {summaryText}
                         </div>
                       </div>
                     );

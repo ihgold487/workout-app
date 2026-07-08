@@ -26,6 +26,23 @@ function formatMacro(value, unit = "g") {
   return unit === "cal" ? String(Math.round(parsed)) : `${Math.round(parsed)}${unit}`;
 }
 
+function totalFoods(foods) {
+  return foods.reduce(
+    (totals, food) => ({
+      calories: totals.calories + (Number(food.calories) || 0),
+      carbs: totals.carbs + (Number(food.carbs) || 0),
+      fat: totals.fat + (Number(food.fat) || 0),
+      protein: totals.protein + (Number(food.protein) || 0),
+    }),
+    {
+      calories: 0,
+      carbs: 0,
+      fat: 0,
+      protein: 0,
+    }
+  );
+}
+
 function firstPresentValue(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
@@ -740,6 +757,7 @@ export default function WorkoutCalendar({
     useState(bodyWeightEntries);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedFood, setSelectedFood] = useState(null);
+  const [selectedFoods, setSelectedFoods] = useState(null);
   const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
@@ -868,6 +886,7 @@ export default function WorkoutCalendar({
     return {
       bodyWeight,
       foods,
+      foodTotals: totalFoods(foods),
       hasActivity: workouts.length > 0 || foods.length > 0 || Boolean(bodyWeight),
       workouts,
     };
@@ -929,6 +948,7 @@ export default function WorkoutCalendar({
           if (current) {
             setSelectedDate(null);
             setSelectedFood(null);
+            setSelectedFoods(null);
             setSelectedWeight(null);
             setSelectedWorkout(null);
             setSelectedWorkoutExerciseDetail(null);
@@ -1127,6 +1147,12 @@ export default function WorkoutCalendar({
                         e.stopPropagation();
 
                         if (date && summary.hasActivity) {
+                          setSelectedFood(null);
+                          setSelectedFoods(null);
+                          setSelectedWeight(null);
+                          setSelectedWorkout(null);
+                          setSelectedWorkoutExerciseDetail(null);
+                          setSelectedWorkoutExercise(null);
                           setSelectedDate(
                             selectedDate &&
                               selectedDate.toDateString() === date.toDateString()
@@ -1309,34 +1335,34 @@ export default function WorkoutCalendar({
                               <Utensils size={15} color="#fbc02d" />
                               Food
                             </div>
-                            {summary.foods.map((food) => (
-                              <button
-                                key={food.id}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedFood(food);
-                                }}
-                                style={{
-                                  background: "var(--surface-muted)",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: "8px",
-                                  color: "var(--text-muted)",
-                                  display: "block",
-                                  fontSize: "13px",
-                                  font: "inherit",
-                                  marginBottom: "4px",
-                                  padding: "8px",
-                                  textAlign: "left",
-                                  width: "100%",
-                                }}
-                                type="button"
-                              >
-                                {food.name} · {formatMacro(food.calories, "cal")} cal
-                                {food.servingDescription
-                                  ? ` · ${food.servingDescription}`
-                                  : ""}
-                              </button>
-                            ))}
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedFoods({
+                                  date: getLocalDateKey(selectedDate),
+                                  foods: summary.foods,
+                                  totals: summary.foodTotals,
+                                });
+                              }}
+                              style={{
+                                background: "var(--surface-muted)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "8px",
+                                color: "var(--text-muted)",
+                                display: "block",
+                                fontSize: "13px",
+                                font: "inherit",
+                                padding: "8px",
+                                textAlign: "left",
+                                width: "100%",
+                              }}
+                              type="button"
+                            >
+                              {formatMacro(summary.foodTotals.calories, "cal")} cal ·{" "}
+                              {formatMacro(summary.foodTotals.protein)} protein ·{" "}
+                              {formatMacro(summary.foodTotals.carbs)} carbs ·{" "}
+                              {formatMacro(summary.foodTotals.fat)} fat
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1356,6 +1382,169 @@ export default function WorkoutCalendar({
           onDelete={removeBodyWeight}
           onSave={saveBodyWeight}
         />
+      )}
+
+      {selectedFoods && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Food list"
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedFoods(null);
+          }}
+          style={{
+            alignItems: "flex-end",
+            background: "rgba(0,0,0,.45)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            position: "fixed",
+            zIndex: 2200,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              borderRadius: "18px 18px 0 0",
+              boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxHeight: "76vh",
+              maxWidth: "560px",
+              overflowY: "auto",
+              padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: "18px",
+                    gap: "8px",
+                    lineHeight: 1.15,
+                    margin: 0,
+                  }}
+                >
+                  <Utensils size={18} color="#fbc02d" />
+                  Food
+                </h2>
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "3px",
+                  }}
+                >
+                  {selectedFoods.date} · {selectedFoods.foods.length}{" "}
+                  {selectedFoods.foods.length === 1 ? "item" : "items"}
+                </div>
+              </div>
+              <button
+                aria-label="Close food list"
+                onClick={() => setSelectedFoods(null)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "36px",
+                  minWidth: "36px",
+                  padding: 0,
+                }}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                display: "grid",
+                gap: "3px",
+                padding: "10px",
+              }}
+            >
+              <strong>{formatMacro(selectedFoods.totals.calories, "cal")} cal</strong>
+              <span
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {formatMacro(selectedFoods.totals.protein)} protein ·{" "}
+                {formatMacro(selectedFoods.totals.carbs)} carbs ·{" "}
+                {formatMacro(selectedFoods.totals.fat)} fat
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              {selectedFoods.foods.map((food) => (
+                <button
+                  key={food.id}
+                  onClick={() => {
+                    setSelectedFoods(null);
+                    setSelectedFood(food);
+                  }}
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text-muted)",
+                    display: "grid",
+                    font: "inherit",
+                    gap: "3px",
+                    padding: "10px",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                  type="button"
+                >
+                  <strong
+                    style={{
+                      color: "var(--text-h)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {food.name}
+                  </strong>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                    }}
+                  >
+                    {formatMacro(food.calories, "cal")} cal ·{" "}
+                    {formatMacro(food.protein)} protein ·{" "}
+                    {formatMacro(food.carbs)} carbs · {formatMacro(food.fat)} fat
+                    {food.servingDescription
+                      ? ` · ${food.servingDescription}`
+                      : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedFood && (
