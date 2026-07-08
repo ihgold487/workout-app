@@ -7,10 +7,14 @@ import { DecodeHintType } from "@zxing/library";
 import {
   ChevronDown,
   ChevronUp,
+  Coffee,
   Plus,
   ScanBarcode,
   Scale,
   Search,
+  Sun,
+  Sunrise,
+  Sunset,
   Target,
   Trash2,
   Utensils,
@@ -83,11 +87,32 @@ const BARCODE_VIDEO_CONSTRAINTS = {
     },
   },
 };
+const BASE_MEAL_OPTIONS = [
+  ["breakfast", "Breakfast"],
+  ["lunch", "Lunch"],
+  ["dinner", "Dinner"],
+];
+const ADD_SNACK_VALUE = "__add_snack__";
+const DEFAULT_SNACK_MEAL = "snack-1";
+const ALWAYS_VISIBLE_MEALS = new Set([
+  "breakfast",
+  "lunch",
+  "dinner",
+  DEFAULT_SNACK_MEAL,
+]);
+const DEFAULT_MEAL = "breakfast";
+const MACRO_COLORS = {
+  calories: "#1769aa",
+  carbs: "#b06000",
+  fat: "#7b3fc7",
+  protein: "#137333",
+};
 
 const emptyEntry = {
   calories: "",
   carbs: "",
   fat: "",
+  meal: DEFAULT_MEAL,
   name: "",
   protein: "",
 };
@@ -1324,6 +1349,136 @@ function totalEntries(entries) {
   );
 }
 
+function normalizeMeal(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+  const legacyMealAliases = {
+    snack: DEFAULT_SNACK_MEAL,
+  };
+  const meal = legacyMealAliases[normalized] || normalized;
+
+  if (BASE_MEAL_OPTIONS.some(([option]) => option === meal)) {
+    return meal;
+  }
+
+  if (/^snack-[1-9]\d*$/.test(meal)) {
+    return meal;
+  }
+
+  return DEFAULT_MEAL;
+}
+
+function getSnackIndex(meal) {
+  const match = normalizeMeal(meal).match(/^snack-(\d+)$/);
+
+  return match ? Number(match[1]) : 0;
+}
+
+function getMealLabel(meal) {
+  const normalized = normalizeMeal(meal);
+  const baseLabel = BASE_MEAL_OPTIONS.find(([option]) => option === normalized)?.[1];
+  const snackIndex = getSnackIndex(normalized);
+
+  if (baseLabel) {
+    return baseLabel;
+  }
+
+  if (snackIndex === 1) {
+    return "Snack";
+  }
+
+  return `Snack ${snackIndex}`;
+}
+
+function getNextSnackMeal(entries) {
+  const highestSnackIndex = entries.reduce(
+    (highest, entry) => Math.max(highest, getSnackIndex(entry.meal)),
+    0
+  );
+
+  return `snack-${highestSnackIndex + 1}`;
+}
+
+function getSnackMealOptions(entries, currentMeal = DEFAULT_SNACK_MEAL) {
+  const snackIndexes = new Set([1]);
+  const currentSnackIndex = getSnackIndex(currentMeal);
+
+  if (currentSnackIndex) {
+    snackIndexes.add(currentSnackIndex);
+  }
+
+  entries.forEach((entry) => {
+    const snackIndex = getSnackIndex(entry.meal);
+
+    if (snackIndex) {
+      snackIndexes.add(snackIndex);
+    }
+  });
+
+  return [...snackIndexes]
+    .sort((a, b) => a - b)
+    .map((snackIndex) => [`snack-${snackIndex}`, getMealLabel(`snack-${snackIndex}`)]);
+}
+
+function getMealSelectOptions(entries, currentMeal) {
+  return [
+    ...BASE_MEAL_OPTIONS,
+    ...getSnackMealOptions(entries, currentMeal),
+    [ADD_SNACK_VALUE, "+ Snack"],
+  ];
+}
+
+function getMealGroups(entries, expandedMeals) {
+  const snackMeals = getSnackMealOptions(entries);
+  const mealOptions = [...BASE_MEAL_OPTIONS, ...snackMeals];
+
+  return mealOptions.map(([meal, label]) => {
+    const mealEntries = entries.filter(
+      (entry) => normalizeMeal(entry.meal) === meal
+    );
+
+    return {
+      entries: mealEntries,
+      expanded: Boolean(expandedMeals[meal]),
+      label,
+      meal,
+      totals: totalEntries(mealEntries),
+    };
+  });
+}
+
+function MealIcon({ meal, size = 16 }) {
+  const normalizedMeal = normalizeMeal(meal);
+
+  if (normalizedMeal === "breakfast") {
+    return <Sunrise size={size} color="#d97706" />;
+  }
+
+  if (normalizedMeal === "lunch") {
+    return <Sun size={size} color="#ca8a04" />;
+  }
+
+  if (normalizedMeal === "dinner") {
+    return <Sunset size={size} color="#c2410c" />;
+  }
+
+  return <Coffee size={size} color="#7c3f18" />;
+}
+
+function MealMacroSummary({ totals }) {
+  return (
+    <>
+      {formatMacro(totals.calories, "cal")}{" "}
+      <span style={{ color: MACRO_COLORS.calories }}>cal</span> ·{" "}
+      {formatMacro(totals.protein)}{" "}
+      <span style={{ color: MACRO_COLORS.protein }}>protein</span> ·{" "}
+      {formatMacro(totals.carbs)}{" "}
+      <span style={{ color: MACRO_COLORS.carbs }}>carbs</span> ·{" "}
+      {formatMacro(totals.fat)}{" "}
+      <span style={{ color: MACRO_COLORS.fat }}>fat</span>
+    </>
+  );
+}
+
 function getEditableServingLabel(entry) {
   const description = String(entry?.servingDescription || "").trim();
   const amount = parseMacroValue(entry?.servingAmount);
@@ -1366,6 +1521,7 @@ export default function NutritionView({ session = null }) {
   const [dailyCalorieGoal, setDailyCalorieGoal] = useState(readDailyCalorieGoal);
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [editingEntryId, setEditingEntryId] = useState(null);
+  const [expandedMealGroups, setExpandedMealGroups] = useState({});
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [dayPanelOpen, setDayPanelOpen] = useState(true);
   const [calorieGoalPickerOpen, setCalorieGoalPickerOpen] = useState(false);
@@ -1440,6 +1596,21 @@ export default function NutritionView({ session = null }) {
     [bodyWeightEntries]
   );
   const totals = useMemo(() => totalEntries(dayEntries), [dayEntries]);
+  const mealGroups = useMemo(
+    () => getMealGroups(dayEntries, expandedMealGroups),
+    [dayEntries, expandedMealGroups]
+  );
+  const visibleMealGroups = useMemo(
+    () =>
+      mealGroups.filter(
+        (group) => group.entries.length > 0 || ALWAYS_VISIBLE_MEALS.has(group.meal)
+      ),
+    [mealGroups]
+  );
+  const mealSelectOptions = useMemo(
+    () => getMealSelectOptions(dayEntries, entryDraft.meal),
+    [dayEntries, entryDraft.meal]
+  );
   const calorieGoalValue = parseMacroValue(dailyCalorieGoal);
   const caloriesRemaining = calorieGoalValue - totals.calories;
   const calorieGoalProgress = calorieGoalValue
@@ -1453,27 +1624,27 @@ export default function NutritionView({ session = null }) {
   const totalMacroCalories =
     macroCalories.protein + macroCalories.carbs + macroCalories.fat;
   const macroSegments = [
-    {
-      calories: macroCalories.protein,
-      color: "#137333",
+	      {
+	        calories: macroCalories.protein,
+	        color: MACRO_COLORS.protein,
       label: "Protein",
       percent: totalMacroCalories
         ? (macroCalories.protein / totalMacroCalories) * 100
         : 0,
       value: formatMacro(totals.protein),
     },
-    {
-      calories: macroCalories.carbs,
-      color: "#b06000",
+	      {
+	        calories: macroCalories.carbs,
+	        color: MACRO_COLORS.carbs,
       label: "Carbs",
       percent: totalMacroCalories
         ? (macroCalories.carbs / totalMacroCalories) * 100
         : 0,
       value: formatMacro(totals.carbs),
     },
-    {
-      calories: macroCalories.fat,
-      color: "#7b3fc7",
+	      {
+	        calories: macroCalories.fat,
+	        color: MACRO_COLORS.fat,
       label: "Fat",
       percent: totalMacroCalories
         ? (macroCalories.fat / totalMacroCalories) * 100
@@ -1697,8 +1868,8 @@ export default function NutritionView({ session = null }) {
     };
   }, [showBarcodeScanner]);
 
-  useEffect(() => {
-    if (foodSearchSource !== "fatsecret") {
+	  useEffect(() => {
+    if (foodResultsSheetOpen || foodSearchSource !== "fatsecret") {
       setFoodAutocompleteSuggestions([]);
       return undefined;
     }
@@ -1735,7 +1906,14 @@ export default function NutritionView({ session = null }) {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [foodSearchQuery, foodSearchSource]);
+  }, [foodResultsSheetOpen, foodSearchQuery, foodSearchSource]);
+
+  useEffect(() => {
+    if (foodResultsSheetOpen) {
+      setFoodAutocompleteSuggestions([]);
+      document.activeElement?.blur?.();
+    }
+  }, [foodResultsSheetOpen]);
 
   useEffect(() => {
     if (recipeIngredientSearchSource !== "fatsecret") {
@@ -1802,6 +1980,7 @@ export default function NutritionView({ session = null }) {
       date: selectedDate,
       fat: parseMacroValue(entryDraft.fat),
       id: entryId,
+      meal: normalizeMeal(entryDraft.meal),
       name,
       protein: parseMacroValue(entryDraft.protein),
       servingAmount: selectedFood
@@ -2172,18 +2351,20 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
     setServingUnit(selectedOption?.key || "serving");
-    setEntryDraft({
+    setEntryDraft((current) => ({
       calories: formatDraftMacro(scaledMacros.calories),
       carbs: formatDraftMacro(scaledMacros.carbs),
       fat: formatDraftMacro(scaledMacros.fat),
+      meal: normalizeMeal(current.meal),
       name: selectedResult.brandName
         ? `${selectedResult.description} (${selectedResult.brandName})`
         : selectedResult.description || "",
       protein: formatDraftMacro(scaledMacros.protein),
-    });
+    }));
     window.requestAnimationFrame(() => {
       entryFormRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -2208,16 +2389,18 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount(String(food.serving_size || 1));
     setServingUnit(food.serving_unit || "serving");
-    setEntryDraft({
+    setEntryDraft((current) => ({
       calories: formatDraftMacro(macros.calories),
       carbs: formatDraftMacro(macros.carbs),
       fat: formatDraftMacro(macros.fat),
+      meal: normalizeMeal(current.meal),
       name: food.brand ? `${food.name} (${food.brand})` : food.name || "",
       protein: formatDraftMacro(macros.protein),
-    });
+    }));
     window.requestAnimationFrame(() => {
       entryFormRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -2244,16 +2427,18 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
     setServingUnit("serving");
-    setEntryDraft({
+    setEntryDraft((current) => ({
       calories: formatDraftMacro(scaledMacros.calories),
       carbs: formatDraftMacro(scaledMacros.carbs),
       fat: formatDraftMacro(scaledMacros.fat),
+      meal: normalizeMeal(current.meal),
       name: recipe.name || "",
       protein: formatDraftMacro(scaledMacros.protein),
-    });
+    }));
     window.requestAnimationFrame(() => {
       entryFormRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -2797,6 +2982,39 @@ export default function NutritionView({ session = null }) {
     }
   }
 
+  function updateEntryMeal(entryId, meal) {
+    const normalizedMeal =
+      meal === ADD_SNACK_VALUE ? getNextSnackMeal(dayEntries) : normalizeMeal(meal);
+
+    updateEntries(
+      entries.map((entry) =>
+        entry.id === entryId
+          ? {
+              ...entry,
+              meal: normalizedMeal,
+            }
+          : entry
+      )
+    );
+
+    if (editingEntryId === entryId) {
+      setEntryDraft((current) => ({
+        ...current,
+        meal: normalizedMeal,
+      }));
+    }
+  }
+
+  function updateEntryDraftMeal(meal) {
+    const normalizedMeal =
+      meal === ADD_SNACK_VALUE ? getNextSnackMeal(dayEntries) : normalizeMeal(meal);
+
+    setEntryDraft((current) => ({
+      ...current,
+      meal: normalizedMeal,
+    }));
+  }
+
   function editEntry(entry) {
     const savedServingAmount = parseMacroValue(entry.servingAmount);
     const hasSavedServing =
@@ -2807,6 +3025,7 @@ export default function NutritionView({ session = null }) {
       calories: formatDraftMacro(entry.calories),
       carbs: formatDraftMacro(entry.carbs),
       fat: formatDraftMacro(entry.fat),
+      meal: normalizeMeal(entry.meal),
       name: entry.name || "",
       protein: formatDraftMacro(entry.protein),
     });
@@ -2908,28 +3127,28 @@ export default function NutritionView({ session = null }) {
 
   const macroCards = [
     [
-      "Calories",
-      formatMacro(totals.calories, "cal"),
-      "#1769aa",
-      "color-mix(in srgb, #1769aa 14%, var(--surface))",
+	      "Calories",
+	      formatMacro(totals.calories, "cal"),
+	      MACRO_COLORS.calories,
+	      `color-mix(in srgb, ${MACRO_COLORS.calories} 14%, var(--surface))`,
     ],
     [
-      "Protein",
-      formatMacro(totals.protein),
-      "#137333",
-      "color-mix(in srgb, #137333 16%, var(--surface))",
+	      "Protein",
+	      formatMacro(totals.protein),
+	      MACRO_COLORS.protein,
+	      `color-mix(in srgb, ${MACRO_COLORS.protein} 16%, var(--surface))`,
     ],
     [
-      "Carbs",
-      formatMacro(totals.carbs),
-      "#b06000",
-      "color-mix(in srgb, #b06000 16%, var(--surface))",
+	      "Carbs",
+	      formatMacro(totals.carbs),
+	      MACRO_COLORS.carbs,
+	      `color-mix(in srgb, ${MACRO_COLORS.carbs} 16%, var(--surface))`,
     ],
     [
-      "Fat",
-      formatMacro(totals.fat),
-      "#7b3fc7",
-      "color-mix(in srgb, #7b3fc7 16%, var(--surface))",
+	      "Fat",
+	      formatMacro(totals.fat),
+	      MACRO_COLORS.fat,
+	      `color-mix(in srgb, ${MACRO_COLORS.fat} 16%, var(--surface))`,
     ],
   ];
 
@@ -3477,6 +3696,7 @@ export default function NutritionView({ session = null }) {
                   }}
                 />
                 {foodSearchSource === "fatsecret" &&
+                  !foodResultsSheetOpen &&
                   foodAutocompleteSuggestions.length > 0 && (
                     <div
                       style={{
@@ -3624,7 +3844,7 @@ export default function NutritionView({ session = null }) {
               inset: 0,
               justifyContent: "center",
               position: "fixed",
-              zIndex: 2200,
+              zIndex: 2800,
             }}
           >
             <div
@@ -4259,6 +4479,33 @@ export default function NutritionView({ session = null }) {
             />
           </label>
 
+          <label
+            style={{
+              display: "grid",
+              gap: "5px",
+            }}
+          >
+            Meal
+            <select
+              aria-label="Meal"
+              value={normalizeMeal(entryDraft.meal)}
+              onChange={(event) => updateEntryDraftMeal(event.target.value)}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                minHeight: "42px",
+                padding: "7px 10px",
+                width: "100%",
+              }}
+            >
+              {mealSelectOptions.map(([meal, label]) => (
+                <option key={meal} value={meal}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           {(selectedFood || editingServingBasis) && (
             <div
               style={{
@@ -4460,83 +4707,207 @@ export default function NutritionView({ session = null }) {
           >
             No foods logged for this day.
           </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gap: "8px",
-            }}
-          >
-            {dayEntries.map((entry) => (
-              <div
-                key={entry.id}
-                onClick={() => editEntry(entry)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    editEntry(entry);
-                  }
-                }}
-                role="button"
-                style={{
-                  alignItems: "center",
-                  borderBottom: "1px solid var(--border)",
-                  cursor: "pointer",
-                  display: "grid",
-                  gap: "8px",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
-                  padding: "8px 0",
-                }}
-                tabIndex={0}
-              >
-                <div
-                  style={{
-                    minWidth: 0,
-                  }}
-                >
-                  <strong
-                    style={{
-                      display: "block",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {entry.name}
-                  </strong>
-                  <span
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {formatMacro(entry.calories, "cal")} cal ·{" "}
-                    {formatMacro(entry.protein)} protein ·{" "}
-                    {formatMacro(entry.carbs)} carbs · {formatMacro(entry.fat)} fat
-                  </span>
-                </div>
+	        ) : (
+	          <div
+	            style={{
+	              display: "grid",
+	              gap: "10px",
+	            }}
+	          >
+		            {visibleMealGroups.map((group) => {
+	              const hasEntries = group.entries.length > 0;
 
-                <button
-                  aria-label={`Remove ${entry.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    removeEntry(entry.id);
-                  }}
-                  style={{
-                    alignItems: "center",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    minHeight: "34px",
-                    minWidth: "38px",
-                    padding: "4px 8px",
-                  }}
-                >
-                  <Trash2 size={17} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+	              return (
+	                <section
+	                  key={group.meal}
+	                  aria-label={`${group.label} foods`}
+	                  style={{
+	                    border: "1px solid var(--border)",
+	                    borderRadius: "8px",
+	                    overflow: "hidden",
+	                  }}
+	                >
+	                  <button
+	                    aria-expanded={group.expanded}
+	                    disabled={!hasEntries}
+	                    onClick={() =>
+	                      setExpandedMealGroups((current) => ({
+	                        ...current,
+	                        [group.meal]: !current[group.meal],
+	                      }))
+	                    }
+	                    style={{
+	                      alignItems: "center",
+	                      background: "var(--surface-muted)",
+	                      border: 0,
+	                      borderRadius: 0,
+	                      color: hasEntries ? "var(--text-h)" : "var(--text-muted)",
+	                      cursor: hasEntries ? "pointer" : "default",
+	                      display: "grid",
+	                      gap: "8px",
+	                      gridTemplateColumns: "minmax(0, 1fr) auto",
+	                      minHeight: "54px",
+	                      padding: "10px",
+	                      textAlign: "left",
+	                      width: "100%",
+	                    }}
+	                    type="button"
+	                  >
+	                    <span
+	                      style={{
+	                        display: "grid",
+	                        gap: "3px",
+	                        minWidth: 0,
+	                      }}
+	                    >
+		                      <strong
+		                        style={{
+		                          alignItems: "center",
+		                          display: "inline-flex",
+		                          gap: "6px",
+		                        }}
+		                      >
+		                        <MealIcon meal={group.meal} />
+		                        {group.label}
+		                      </strong>
+	                      <span
+	                        style={{
+	                          color: "var(--text-muted)",
+	                          fontSize: "12px",
+	                          overflow: "hidden",
+	                          textOverflow: "ellipsis",
+	                          whiteSpace: "nowrap",
+	                        }}
+	                      >
+		                        {hasEntries ? (
+		                          <MealMacroSummary totals={group.totals} />
+		                        ) : (
+		                          "No foods logged"
+		                        )}
+		                      </span>
+	                    </span>
+	                    {hasEntries ? (
+	                      group.expanded ? (
+	                        <ChevronUp size={18} />
+	                      ) : (
+	                        <ChevronDown size={18} />
+	                      )
+	                    ) : null}
+	                  </button>
+
+	                  {hasEntries && group.expanded && (
+	                    <div
+	                      style={{
+	                        display: "grid",
+	                        padding: "0 10px",
+	                      }}
+	                    >
+	                      {group.entries.map((entry) => (
+	                        <div
+	                          key={entry.id}
+	                          onClick={() => editEntry(entry)}
+	                          onKeyDown={(event) => {
+	                            if (event.key === "Enter" || event.key === " ") {
+	                              event.preventDefault();
+	                              editEntry(entry);
+	                            }
+	                          }}
+	                          role="button"
+	                          style={{
+	                            alignItems: "center",
+	                            borderTop: "1px solid var(--border)",
+	                            cursor: "pointer",
+		                            display: "grid",
+		                            gap: "8px",
+		                            gridTemplateColumns:
+		                              "minmax(0, 1fr) minmax(108px, auto) auto",
+		                            padding: "9px 0",
+		                          }}
+		                          tabIndex={0}
+		                        >
+	                          <div
+	                            style={{
+	                              minWidth: 0,
+	                            }}
+	                          >
+	                            <strong
+	                              style={{
+	                                display: "block",
+	                                overflow: "hidden",
+	                                textOverflow: "ellipsis",
+	                                whiteSpace: "nowrap",
+	                              }}
+	                            >
+	                              {entry.name}
+	                            </strong>
+	                            <span
+	                              style={{
+	                                color: "var(--text-muted)",
+	                                fontSize: "12px",
+	                              }}
+	                            >
+	                              {formatMacro(entry.calories, "cal")} cal ·{" "}
+	                              {formatMacro(entry.protein)} protein ·{" "}
+	                              {formatMacro(entry.carbs)} carbs ·{" "}
+	                              {formatMacro(entry.fat)} fat
+	                              {entry.servingDescription
+	                                ? ` · ${entry.servingDescription}`
+	                                : ""}
+		                            </span>
+		                          </div>
+
+		                          <select
+		                            aria-label={`Move ${entry.name} to meal`}
+		                            onClick={(event) => event.stopPropagation()}
+		                            onChange={(event) => {
+		                              event.stopPropagation();
+		                              updateEntryMeal(entry.id, event.target.value);
+		                            }}
+		                            onKeyDown={(event) => event.stopPropagation()}
+		                            value={normalizeMeal(entry.meal)}
+		                            style={{
+		                              boxSizing: "border-box",
+		                              font: "inherit",
+		                              minHeight: "34px",
+		                              minWidth: 0,
+		                              padding: "4px 8px",
+		                              width: "100%",
+		                            }}
+		                          >
+		                            {getMealSelectOptions(dayEntries, entry.meal).map(([meal, label]) => (
+		                              <option key={meal} value={meal}>
+		                                {label}
+		                              </option>
+		                            ))}
+		                          </select>
+	
+		                          <button
+	                            aria-label={`Remove ${entry.name}`}
+	                            onClick={(event) => {
+	                              event.stopPropagation();
+	                              removeEntry(entry.id);
+	                            }}
+	                            style={{
+	                              alignItems: "center",
+	                              display: "inline-flex",
+	                              justifyContent: "center",
+	                              minHeight: "34px",
+	                              minWidth: "38px",
+	                              padding: "4px 8px",
+	                            }}
+	                            type="button"
+	                          >
+	                            <Trash2 size={17} />
+	                          </button>
+	                        </div>
+	                      ))}
+	                    </div>
+	                  )}
+	                </section>
+	              );
+	            })}
+	          </div>
+	        )}
       </section>
 
           </div>
