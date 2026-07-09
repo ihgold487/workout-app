@@ -66,7 +66,11 @@ function getDateKey(value) {
     return "";
   }
 
-  return parsed.toISOString().slice(0, 10);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function daysBetween(startDate, endDate) {

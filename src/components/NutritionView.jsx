@@ -28,11 +28,22 @@ import {
   uploadBodyWeightEntries,
   upsertBodyWeightEntry,
 } from "../sync/bodyMeasurementCloudSync";
+import {
+  deleteNutritionEntry,
+  downloadNutritionEntries,
+  uploadNutritionEntries,
+} from "../sync/nutritionCloudSync";
+import {
+  downloadNutritionTargets,
+  uploadNutritionTargets,
+  upsertNutritionTarget,
+} from "../sync/nutritionTargetCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
+const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
 const FDC_API_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 const FDC_API_KEY = import.meta.env.VITE_USDA_FDC_API_KEY || "";
 const SUPPLEMENTAL_FOOD_SOURCE = "supplemental_library";
@@ -137,12 +148,31 @@ const emptyRecipeDraft = {
 };
 
 function getTodayKey() {
-  return new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
-function readNutritionEntries() {
+function getNutritionLogStorageKey(userId) {
+  return userId ? `${NUTRITION_LOG_KEY}:${userId}` : NUTRITION_LOG_KEY;
+}
+
+function getDailyCalorieGoalStorageKey(userId) {
+  return userId ? `${DAILY_CALORIE_GOAL_KEY}:${userId}` : DAILY_CALORIE_GOAL_KEY;
+}
+
+function getDailyCalorieGoalHistoryStorageKey(userId) {
+  return userId
+    ? `${DAILY_CALORIE_GOAL_HISTORY_KEY}:${userId}`
+    : DAILY_CALORIE_GOAL_HISTORY_KEY;
+}
+
+function readNutritionEntries(storageKey = NUTRITION_LOG_KEY) {
   try {
-    const entries = JSON.parse(localStorage.getItem(NUTRITION_LOG_KEY) || "[]");
+    const entries = JSON.parse(localStorage.getItem(storageKey) || "[]");
 
     return Array.isArray(entries) ? entries : [];
   } catch (error) {
@@ -152,8 +182,75 @@ function readNutritionEntries() {
   }
 }
 
-function saveNutritionEntries(entries) {
-  localStorage.setItem(NUTRITION_LOG_KEY, JSON.stringify(entries));
+function saveNutritionEntries(entries, storageKey = NUTRITION_LOG_KEY) {
+  localStorage.setItem(storageKey, JSON.stringify(entries));
+}
+
+function normalizeNutritionEntryForSync(entry) {
+  if (!entry?.id) {
+    return null;
+  }
+
+  return {
+    ...entry,
+    meal: normalizeMeal(entry.meal),
+  };
+}
+
+function getNutritionEntryTimestamp(entry) {
+  const updatedTime = Date.parse(entry?.updatedAt || "");
+  const createdTime = Date.parse(entry?.createdAt || "");
+
+  if (Number.isFinite(updatedTime)) {
+    return updatedTime;
+  }
+
+  if (Number.isFinite(createdTime)) {
+    return createdTime;
+  }
+
+  return 0;
+}
+
+function mergeNutritionEntries(localEntries, cloudEntries) {
+  const entriesById = new Map();
+
+  [...(localEntries || []), ...(cloudEntries || [])].forEach((entry) => {
+    const normalizedEntry = normalizeNutritionEntryForSync(entry);
+
+    if (!normalizedEntry) {
+      return;
+    }
+
+    const entryKey = String(normalizedEntry.id);
+    const existingEntry = entriesById.get(entryKey);
+
+    if (
+      !existingEntry ||
+      getNutritionEntryTimestamp(normalizedEntry) >=
+        getNutritionEntryTimestamp(existingEntry)
+    ) {
+      entriesById.set(entryKey, normalizedEntry);
+    }
+  });
+
+  return [...entriesById.values()].sort((a, b) => {
+    const dateComparison = String(a.date || "").localeCompare(String(b.date || ""));
+
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+
+    return String(a.id).localeCompare(String(b.id), undefined, {
+      numeric: true,
+    });
+  });
+}
+
+function formatNutritionSyncFailure(error) {
+  const message = error?.message || "Unknown error";
+
+  return `Nutrition sync failed: ${message}. Local changes were kept.`;
 }
 
 function readBodyWeightEntries() {
@@ -172,9 +269,9 @@ function saveBodyWeightEntries(entries) {
   localStorage.setItem(BODY_WEIGHT_LOG_KEY, JSON.stringify(entries));
 }
 
-function readDailyCalorieGoal() {
+function readDailyCalorieGoal(storageKey = DAILY_CALORIE_GOAL_KEY) {
   try {
-    const parsed = Number(localStorage.getItem(DAILY_CALORIE_GOAL_KEY));
+    const parsed = Number(localStorage.getItem(storageKey));
 
     return Number.isFinite(parsed) && parsed > 0 ? parsed : "";
   } catch (error) {
@@ -184,13 +281,102 @@ function readDailyCalorieGoal() {
   }
 }
 
-function saveDailyCalorieGoal(goal) {
+function saveDailyCalorieGoal(goal, storageKey = DAILY_CALORIE_GOAL_KEY) {
   if (!goal) {
-    localStorage.removeItem(DAILY_CALORIE_GOAL_KEY);
+    localStorage.removeItem(storageKey);
     return;
   }
 
-  localStorage.setItem(DAILY_CALORIE_GOAL_KEY, String(goal));
+  localStorage.setItem(storageKey, String(goal));
+}
+
+function readDailyCalorieGoalHistory(
+  fallbackGoal = "",
+  storageKey = DAILY_CALORIE_GOAL_HISTORY_KEY
+) {
+  try {
+    const entries = JSON.parse(
+      localStorage.getItem(storageKey) || "[]"
+    );
+
+    if (Array.isArray(entries) && entries.length > 0) {
+      return entries
+        .map((entry) => ({
+          date: String(entry.date || "").slice(0, 10),
+          goal: Math.round(parseMacroValue(entry.goal)),
+          updatedAt: entry.updatedAt || null,
+        }))
+        .filter((entry) => entry.date && entry.goal > 0)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+  } catch (error) {
+    console.error("Failed to load daily calorie goal history:", error);
+  }
+
+  const goal = Math.round(parseMacroValue(fallbackGoal));
+
+  return goal > 0
+    ? [
+        {
+          date: getTodayKey(),
+          goal,
+        },
+      ]
+    : [];
+}
+
+function saveDailyCalorieGoalHistory(
+  history,
+  storageKey = DAILY_CALORIE_GOAL_HISTORY_KEY
+) {
+  localStorage.setItem(storageKey, JSON.stringify(history));
+}
+
+function upsertDailyCalorieGoalHistory(history, date, goal) {
+  const normalizedGoal = Math.round(parseMacroValue(goal));
+
+  if (!date || !normalizedGoal) {
+    return history;
+  }
+
+  return [
+    ...history.filter((entry) => entry.date !== date),
+    {
+      date,
+      goal: normalizedGoal,
+      updatedAt: new Date().toISOString(),
+    },
+  ].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function getCalorieGoalHistoryTimestamp(entry) {
+  const parsed = Date.parse(entry?.updatedAt || "");
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeCalorieGoalHistory(localHistory, cloudHistory) {
+  const targetsByDate = new Map();
+
+  [...(localHistory || []), ...(cloudHistory || [])].forEach((target) => {
+    if (!target?.date || !target.goal) {
+      return;
+    }
+
+    const existingTarget = targetsByDate.get(target.date);
+
+    if (
+      !existingTarget ||
+      getCalorieGoalHistoryTimestamp(target) >=
+        getCalorieGoalHistoryTimestamp(existingTarget)
+    ) {
+      targetsByDate.set(target.date, target);
+    }
+  });
+
+  return [...targetsByDate.values()].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
 }
 
 function normalizeBarcodeSearchQuery(value) {
@@ -1349,6 +1535,501 @@ function totalEntries(entries) {
   );
 }
 
+function getGoalForDate(goalHistory, date, fallbackGoal = "") {
+  const fallback = Math.round(parseMacroValue(fallbackGoal));
+  const candidates = goalHistory
+    .filter((entry) => entry.date <= date)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return candidates[0]?.goal || fallback || 0;
+}
+
+function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
+  const rowsByDate = new Map();
+
+  entries.forEach((entry) => {
+    if (!entry.date) {
+      return;
+    }
+
+    const current = rowsByDate.get(entry.date) || {
+      calories: 0,
+      carbs: 0,
+      date: entry.date,
+      fat: 0,
+      protein: 0,
+    };
+
+    rowsByDate.set(entry.date, {
+      ...current,
+      calories: current.calories + parseMacroValue(entry.calories),
+      carbs: current.carbs + parseMacroValue(entry.carbs),
+      fat: current.fat + parseMacroValue(entry.fat),
+      protein: current.protein + parseMacroValue(entry.protein),
+    });
+  });
+
+  const today = getTodayKey();
+
+  if (!rowsByDate.has(today)) {
+    rowsByDate.set(today, {
+      calories: 0,
+      carbs: 0,
+      date: today,
+      fat: 0,
+      protein: 0,
+    });
+  }
+
+  return [...rowsByDate.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({
+      ...row,
+      goal: getGoalForDate(goalHistory, row.date, fallbackGoal),
+    }));
+}
+
+function CalorieHistoryChart({ rows }) {
+  const [selectedDate, setSelectedDate] = useState(null);
+  const points = rows.filter((row) => row.date);
+
+  if (points.length === 0) {
+    return (
+      <div
+        style={{
+          alignItems: "center",
+          background: "var(--surface-muted)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          color: "var(--text-muted)",
+          display: "flex",
+          justifyContent: "center",
+          minHeight: "150px",
+          padding: "12px",
+        }}
+      >
+        No calorie history yet
+      </div>
+    );
+  }
+
+  const width = 360;
+  const height = 240;
+  const paddingLeft = 42;
+  const paddingRight = 16;
+  const paddingTop = 22;
+  const paddingBottom = 32;
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const maxValue = Math.max(
+    100,
+    ...points.map((row) => Math.max(row.calories, row.goal || 0))
+  );
+  const barGap = points.length > 16 ? 2 : 5;
+  const barWidth = Math.max(4, plotWidth / points.length - barGap);
+  const firstDate = points[0].date;
+  const lastDate = points[points.length - 1].date;
+  const selectedPoint =
+    points.find((point) => point.date === selectedDate) || points[points.length - 1];
+  const selectedIndex = points.findIndex((point) => point.date === selectedPoint.date);
+  const selectedX =
+    paddingLeft +
+    selectedIndex * (plotWidth / points.length) +
+    (plotWidth / points.length) / 2;
+  const selectedY =
+    height -
+    paddingBottom -
+    (Math.max(selectedPoint.calories, selectedPoint.goal || 0) / maxValue) *
+      plotHeight;
+  const targetPoints = points.map((row, index) => {
+    const x =
+      paddingLeft +
+      index * (plotWidth / points.length) +
+      (plotWidth / points.length) / 2;
+    const y =
+      height - paddingBottom - ((row.goal || 0) / maxValue) * plotHeight;
+
+    return `${x},${y}`;
+  });
+  const selectedMacroCalories = {
+    carbs: selectedPoint.carbs * 4,
+    fat: selectedPoint.fat * 9,
+    protein: selectedPoint.protein * 4,
+  };
+  const selectedTotalMacroCalories =
+    selectedMacroCalories.protein +
+    selectedMacroCalories.carbs +
+    selectedMacroCalories.fat;
+  const selectedMacroSegments = [
+    {
+      calories: selectedMacroCalories.protein,
+      color: MACRO_COLORS.protein,
+      label: "Protein",
+      percent: selectedTotalMacroCalories
+        ? (selectedMacroCalories.protein / selectedTotalMacroCalories) * 100
+        : 0,
+      value: formatMacro(selectedPoint.protein),
+    },
+    {
+      calories: selectedMacroCalories.carbs,
+      color: MACRO_COLORS.carbs,
+      label: "Carbs",
+      percent: selectedTotalMacroCalories
+        ? (selectedMacroCalories.carbs / selectedTotalMacroCalories) * 100
+        : 0,
+      value: formatMacro(selectedPoint.carbs),
+    },
+    {
+      calories: selectedMacroCalories.fat,
+      color: MACRO_COLORS.fat,
+      label: "Fat",
+      percent: selectedTotalMacroCalories
+        ? (selectedMacroCalories.fat / selectedTotalMacroCalories) * 100
+        : 0,
+      value: formatMacro(selectedPoint.fat),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        background: "var(--surface-muted)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        display: "grid",
+        gap: "10px",
+        padding: "8px",
+      }}
+    >
+      <svg
+        aria-label="Daily calorie chart"
+        onClick={() => setSelectedDate(null)}
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+        style={{
+          aspectRatio: "3 / 2",
+          display: "block",
+          width: "100%",
+        }}
+      >
+        <rect x="0" y="0" width={width} height={height} fill="transparent" />
+        <line
+          x1={paddingLeft}
+          x2={width - paddingRight}
+          y1={height - paddingBottom}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <line
+          x1={paddingLeft}
+          x2={paddingLeft}
+          y1={paddingTop}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <text
+          x={paddingLeft - 8}
+          y={paddingTop + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {formatMacro(maxValue, "cal")}
+        </text>
+        <text
+          x={paddingLeft - 8}
+          y={height - paddingBottom + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          0
+        </text>
+        {points.map((row, index) => {
+          const slotWidth = plotWidth / points.length;
+          const x = paddingLeft + index * slotWidth + (slotWidth - barWidth) / 2;
+          const barHeight = (row.calories / maxValue) * plotHeight;
+          const y = height - paddingBottom - barHeight;
+          const overGoal = row.goal && row.calories > row.goal;
+
+          return (
+            <rect
+              key={row.date}
+              aria-label={`${row.date}: ${formatMacro(row.calories, "cal")} calories`}
+              fill={overGoal ? "#c62828" : MACRO_COLORS.calories}
+              height={Math.max(1, barHeight)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedDate(row.date);
+              }}
+              opacity={selectedDate && selectedDate !== row.date ? 0.42 : 0.9}
+              role="button"
+              rx="2"
+              style={{ cursor: "pointer" }}
+              width={barWidth}
+              x={x}
+              y={y}
+            />
+          );
+        })}
+        {points.some((row) => row.goal > 0) && (
+          <polyline
+            fill="none"
+            points={targetPoints.join(" ")}
+            stroke="#111827"
+            strokeDasharray="5 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+        )}
+        {selectedPoint && (
+          <g pointerEvents="none">
+            <line
+              x1={selectedX}
+              x2={selectedX}
+              y1={paddingTop}
+              y2={height - paddingBottom}
+              stroke="color-mix(in srgb, #1769aa 45%, var(--border))"
+              strokeDasharray="4 4"
+            />
+            <circle cx={selectedX} cy={selectedY} fill={MACRO_COLORS.calories} r="3.5" />
+          </g>
+        )}
+        <text x={paddingLeft} y={height - 7} fill="var(--text-muted)" fontSize="10">
+          {firstDate}
+        </text>
+        <text
+          x={width - paddingRight}
+          y={height - 7}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {lastDate}
+        </text>
+      </svg>
+
+      <div
+        style={{
+          alignItems: "center",
+          background: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "10px",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          padding: "10px",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            minWidth: 0,
+          }}
+        >
+          <div>
+            <strong>{selectedPoint.date}</strong>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "2px",
+              }}
+            >
+              {formatMacro(selectedPoint.calories, "cal")} cal · Goal{" "}
+              {selectedPoint.goal ? formatMacro(selectedPoint.goal, "cal") : "--"} cal
+            </div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: "5px",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            }}
+          >
+            {[
+              ["Protein", selectedPoint.protein, MACRO_COLORS.protein],
+              ["Carbs", selectedPoint.carbs, MACRO_COLORS.carbs],
+              ["Fat", selectedPoint.fat, MACRO_COLORS.fat],
+            ].map(([label, value, color]) => (
+              <div
+                key={label}
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "11px",
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ color }}>{label}</span>
+                <strong
+                  style={{
+                    color: "var(--text-h)",
+                    display: "block",
+                    fontSize: "14px",
+                    marginTop: "2px",
+                  }}
+                >
+                  {formatMacro(value)}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </div>
+        <MacroDonutChart
+          segments={selectedMacroSegments}
+          totalCalories={selectedTotalMacroCalories}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CalorieHistorySheet({ calorieGoal, entries, goalHistory, onClose }) {
+  const rows = useMemo(
+    () => buildDailyCalorieRows(entries, goalHistory, calorieGoal),
+    [calorieGoal, entries, goalHistory]
+  );
+  const sortedRows = useMemo(
+    () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
+    [rows]
+  );
+
+  return (
+    <div
+      aria-label="Calorie history"
+      aria-modal="true"
+      onClick={onClose}
+      role="dialog"
+      style={{
+        alignItems: "flex-end",
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        position: "fixed",
+        zIndex: 2200,
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "var(--surface-raised)",
+          borderRadius: "18px 18px 0 0",
+          boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+          boxSizing: "border-box",
+          display: "grid",
+          gap: "14px",
+          maxHeight: "86vh",
+          maxWidth: "620px",
+          overflowY: "auto",
+          padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+          width: "100%",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <h2
+            style={{
+              alignItems: "center",
+              display: "flex",
+              fontSize: "18px",
+              gap: "8px",
+              lineHeight: 1.15,
+              margin: 0,
+            }}
+          >
+            <Target size={18} color={MACRO_COLORS.calories} />
+            Calories
+          </h2>
+          <button
+            aria-label="Close calorie history"
+            onClick={onClose}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
+              minHeight: "36px",
+              minWidth: "36px",
+              padding: 0,
+            }}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <CalorieHistoryChart rows={rows} />
+
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+          }}
+        >
+          Bars show calories consumed. The dashed line shows the daily target.
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          {sortedRows.map((row) => {
+            const remaining = row.goal ? row.goal - row.calories : 0;
+
+            return (
+              <div
+                key={row.date}
+                style={{
+                  alignItems: "center",
+                  borderBottom: "1px solid var(--border)",
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  padding: "9px 0",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <strong>{row.date}</strong>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "2px",
+                    }}
+                  >
+                    Goal {row.goal ? formatMacro(row.goal, "cal") : "--"} cal
+                    {row.goal
+                      ? remaining >= 0
+                        ? ` · ${formatMacro(remaining, "cal")} left`
+                        : ` · ${formatMacro(Math.abs(remaining), "cal")} over`
+                      : ""}
+                  </div>
+                </div>
+                <strong
+                  style={{
+                    color: row.goal && row.calories > row.goal ? "#c62828" : "var(--text-h)",
+                  }}
+                >
+                  {formatMacro(row.calories, "cal")} cal
+                </strong>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function normalizeMeal(value) {
   const normalized = String(value || "").toLowerCase().trim();
   const legacyMealAliases = {
@@ -1514,25 +2195,61 @@ function formatEditableServingDescription(amount, basis) {
 }
 
 export default function NutritionView({ session = null }) {
-  const [entries, setEntries] = useState(readNutritionEntries);
+  const signedInUserId = session?.user?.id || null;
+  const nutritionStorageKey = useMemo(
+    () => getNutritionLogStorageKey(signedInUserId),
+    [signedInUserId]
+  );
+  const dailyCalorieGoalStorageKey = useMemo(
+    () => getDailyCalorieGoalStorageKey(signedInUserId),
+    [signedInUserId]
+  );
+  const dailyCalorieGoalHistoryStorageKey = useMemo(
+    () => getDailyCalorieGoalHistoryStorageKey(signedInUserId),
+    [signedInUserId]
+  );
+  const nutritionStorageKeyRef = useRef(nutritionStorageKey);
+  const dailyCalorieGoalStorageKeyRef = useRef(dailyCalorieGoalStorageKey);
+  const dailyCalorieGoalHistoryStorageKeyRef = useRef(
+    dailyCalorieGoalHistoryStorageKey
+  );
+  const [entries, setEntries] = useState(() =>
+    readNutritionEntries(nutritionStorageKey)
+  );
   const [bodyWeightEntries, setBodyWeightEntries] = useState(
     readBodyWeightEntries
   );
-  const [dailyCalorieGoal, setDailyCalorieGoal] = useState(readDailyCalorieGoal);
+  const [dailyCalorieGoal, setDailyCalorieGoal] = useState(() =>
+    readDailyCalorieGoal(dailyCalorieGoalStorageKey)
+  );
+  const [dailyCalorieGoalHistory, setDailyCalorieGoalHistory] = useState(() =>
+    readDailyCalorieGoalHistory(
+      readDailyCalorieGoal(dailyCalorieGoalStorageKey),
+      dailyCalorieGoalHistoryStorageKey
+    )
+  );
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [expandedMealGroups, setExpandedMealGroups] = useState({});
+  const [copyFoodSheetOpen, setCopyFoodSheetOpen] = useState(false);
+  const [copyFoodSourceDate, setCopyFoodSourceDate] = useState("");
+  const [copyFoodStatus, setCopyFoodStatus] = useState("");
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [dayPanelOpen, setDayPanelOpen] = useState(true);
+  const [calorieHistorySheetOpen, setCalorieHistorySheetOpen] = useState(false);
   const [calorieGoalPickerOpen, setCalorieGoalPickerOpen] = useState(false);
+  const [calorieTargetSyncStatus, setCalorieTargetSyncStatus] = useState("");
   const [weightSheetInitialAdding, setWeightSheetInitialAdding] =
     useState(false);
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
+  const [nutritionSyncStatus, setNutritionSyncStatus] = useState("");
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState("fatsecret");
   const [foodAutocompleteSuggestions, setFoodAutocompleteSuggestions] = useState([]);
+  const [foodAutocompleteSuppressed, setFoodAutocompleteSuppressed] =
+    useState(false);
   const [foodSearchResults, setFoodSearchResults] = useState([]);
   const [fatSecretDetailsById, setFatSecretDetailsById] = useState({});
   const [librarySearchResults, setLibrarySearchResults] = useState([]);
@@ -1584,6 +2301,34 @@ export default function NutritionView({ session = null }) {
   const barcodeControlsRef = useRef(null);
   const barcodeSearchHandlerRef = useRef(null);
   const fatSecretHydrationRunRef = useRef(0);
+  const latestNutritionEntriesRef = useRef(entries);
+  const latestDailyCalorieGoalRef = useRef(dailyCalorieGoal);
+  const latestDailyCalorieGoalHistoryRef = useRef(dailyCalorieGoalHistory);
+
+  useEffect(() => {
+    nutritionStorageKeyRef.current = nutritionStorageKey;
+  }, [nutritionStorageKey]);
+
+  useEffect(() => {
+    dailyCalorieGoalStorageKeyRef.current = dailyCalorieGoalStorageKey;
+  }, [dailyCalorieGoalStorageKey]);
+
+  useEffect(() => {
+    dailyCalorieGoalHistoryStorageKeyRef.current =
+      dailyCalorieGoalHistoryStorageKey;
+  }, [dailyCalorieGoalHistoryStorageKey]);
+
+  useEffect(() => {
+    latestNutritionEntriesRef.current = entries;
+  }, [entries]);
+
+  useEffect(() => {
+    latestDailyCalorieGoalRef.current = dailyCalorieGoal;
+  }, [dailyCalorieGoal]);
+
+  useEffect(() => {
+    latestDailyCalorieGoalHistoryRef.current = dailyCalorieGoalHistory;
+  }, [dailyCalorieGoalHistory]);
 
   const dayEntries = useMemo(
     () => entries.filter((entry) => entry.date === selectedDate),
@@ -1606,6 +2351,24 @@ export default function NutritionView({ session = null }) {
         (group) => group.entries.length > 0 || ALWAYS_VISIBLE_MEALS.has(group.meal)
       ),
     [mealGroups]
+  );
+  const copyFoodSourceDates = useMemo(
+    () =>
+      [...new Set(entries.map((entry) => entry.date).filter(Boolean))]
+        .filter((date) => date !== selectedDate)
+        .sort((a, b) => b.localeCompare(a)),
+    [entries, selectedDate]
+  );
+  const copyFoodSourceEntries = useMemo(
+    () => entries.filter((entry) => entry.date === copyFoodSourceDate),
+    [copyFoodSourceDate, entries]
+  );
+  const copyFoodMealGroups = useMemo(
+    () =>
+      getMealGroups(copyFoodSourceEntries, {}).filter(
+        (group) => group.entries.length > 0
+      ),
+    [copyFoodSourceEntries]
   );
   const mealSelectOptions = useMemo(
     () => getMealSelectOptions(dayEntries, entryDraft.meal),
@@ -1667,6 +2430,182 @@ export default function NutritionView({ session = null }) {
   const hasFatSecretSearchResults = foodSearchResults.some(
     (food) => food.source === "fatsecret"
   );
+
+  useEffect(() => {
+    const scopedLocalEntries = readNutritionEntries(nutritionStorageKey);
+    const legacyLocalEntries =
+      signedInUserId && scopedLocalEntries.length === 0
+        ? readNutritionEntries(NUTRITION_LOG_KEY)
+        : [];
+    const seededLocalEntries =
+      scopedLocalEntries.length > 0 ? scopedLocalEntries : legacyLocalEntries;
+
+    latestNutritionEntriesRef.current = seededLocalEntries;
+    setEntries(seededLocalEntries);
+    saveNutritionEntries(seededLocalEntries, nutritionStorageKey);
+
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      setNutritionSyncStatus("");
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncNutritionLogs() {
+      setNutritionSyncStatus("Syncing nutrition...");
+
+      try {
+        if (seededLocalEntries.length > 0) {
+          await uploadNutritionEntries(seededLocalEntries, session);
+        }
+
+        const cloudEntries = await downloadNutritionEntries(session);
+        const currentLocalEntries = latestNutritionEntriesRef.current;
+        const mergedEntries = mergeNutritionEntries(
+          mergeNutritionEntries(seededLocalEntries, currentLocalEntries),
+          cloudEntries
+        );
+
+        if (mergedEntries.length > 0) {
+          await uploadNutritionEntries(mergedEntries, session);
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        latestNutritionEntriesRef.current = mergedEntries;
+        setEntries(mergedEntries);
+        saveNutritionEntries(mergedEntries, nutritionStorageKey);
+        setNutritionSyncStatus("");
+      } catch (error) {
+        console.error("Failed to sync nutrition entries:", error);
+
+        if (!cancelled) {
+          setNutritionSyncStatus(formatNutritionSyncFailure(error));
+        }
+      }
+    }
+
+    syncNutritionLogs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nutritionStorageKey, session, signedInUserId]);
+
+  useEffect(() => {
+    const scopedGoal = readDailyCalorieGoal(dailyCalorieGoalStorageKey);
+    const scopedHistory = readDailyCalorieGoalHistory(
+      scopedGoal,
+      dailyCalorieGoalHistoryStorageKey
+    );
+    const legacyGoal =
+      signedInUserId && !scopedGoal
+        ? readDailyCalorieGoal(DAILY_CALORIE_GOAL_KEY)
+        : "";
+    const legacyHistory =
+      signedInUserId && scopedHistory.length === 0
+        ? readDailyCalorieGoalHistory(
+            legacyGoal,
+            DAILY_CALORIE_GOAL_HISTORY_KEY
+          )
+        : [];
+    const stateGoal = Math.round(
+      parseMacroValue(latestDailyCalorieGoalRef.current)
+    );
+    const stateHistory = latestDailyCalorieGoalHistoryRef.current || [];
+    const seededGoal = scopedGoal || legacyGoal || stateGoal || "";
+    const seededHistory =
+      scopedHistory.length > 0
+        ? scopedHistory
+        : legacyHistory.length > 0
+          ? legacyHistory
+          : stateHistory;
+    const effectiveSeededHistory =
+      seededHistory.length > 0
+        ? seededHistory
+        : readDailyCalorieGoalHistory(seededGoal);
+    const currentGoal = getGoalForDate(
+      effectiveSeededHistory,
+      selectedDate || getTodayKey(),
+      seededGoal
+    );
+
+    setDailyCalorieGoal(currentGoal || seededGoal || "");
+    saveDailyCalorieGoal(
+      currentGoal || seededGoal || "",
+      dailyCalorieGoalStorageKey
+    );
+    setDailyCalorieGoalHistory(effectiveSeededHistory);
+    saveDailyCalorieGoalHistory(
+      effectiveSeededHistory,
+      dailyCalorieGoalHistoryStorageKey
+    );
+
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      setCalorieTargetSyncStatus("");
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncDailyCalorieTargets() {
+      setCalorieTargetSyncStatus("Syncing calorie goal...");
+
+      try {
+        if (effectiveSeededHistory.length > 0) {
+          await uploadNutritionTargets(effectiveSeededHistory, session);
+        }
+
+        const cloudHistory = await downloadNutritionTargets(session);
+        const mergedHistory = mergeCalorieGoalHistory(
+          effectiveSeededHistory,
+          cloudHistory
+        );
+        const mergedGoal = getGoalForDate(
+          mergedHistory,
+          selectedDate || getTodayKey(),
+          currentGoal || seededGoal
+        );
+
+        if (mergedHistory.length > 0) {
+          await uploadNutritionTargets(mergedHistory, session);
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setDailyCalorieGoal(mergedGoal || "");
+        saveDailyCalorieGoal(mergedGoal || "", dailyCalorieGoalStorageKey);
+        setDailyCalorieGoalHistory(mergedHistory);
+        saveDailyCalorieGoalHistory(
+          mergedHistory,
+          dailyCalorieGoalHistoryStorageKey
+        );
+        setCalorieTargetSyncStatus("Calorie goal synced.");
+      } catch (error) {
+        console.error("Failed to sync daily calorie targets:", error);
+
+        if (!cancelled) {
+          setCalorieTargetSyncStatus(formatNutritionSyncFailure(error));
+        }
+      }
+    }
+
+    syncDailyCalorieTargets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dailyCalorieGoalHistoryStorageKey,
+    dailyCalorieGoalStorageKey,
+    selectedDate,
+    session,
+    signedInUserId,
+  ]);
 
   useEffect(() => {
     if (!session?.user?.id || !isSupabaseConfigured) {
@@ -1869,7 +2808,11 @@ export default function NutritionView({ session = null }) {
   }, [showBarcodeScanner]);
 
 	  useEffect(() => {
-    if (foodResultsSheetOpen || foodSearchSource !== "fatsecret") {
+    if (
+      foodAutocompleteSuppressed ||
+      foodResultsSheetOpen ||
+      foodSearchSource !== "fatsecret"
+    ) {
       setFoodAutocompleteSuggestions([]);
       return undefined;
     }
@@ -1906,7 +2849,12 @@ export default function NutritionView({ session = null }) {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [foodResultsSheetOpen, foodSearchQuery, foodSearchSource]);
+  }, [
+    foodAutocompleteSuppressed,
+    foodResultsSheetOpen,
+    foodSearchQuery,
+    foodSearchSource,
+  ]);
 
   useEffect(() => {
     if (foodResultsSheetOpen) {
@@ -1955,9 +2903,88 @@ export default function NutritionView({ session = null }) {
     };
   }, [recipeIngredientQuery, recipeIngredientSearchSource]);
 
-  function updateEntries(nextEntries) {
+  function syncNutritionEntriesToCloud(entriesToSync) {
+    if (!session?.user?.id || !isSupabaseConfigured || entriesToSync.length === 0) {
+      return;
+    }
+
+    uploadNutritionEntries(entriesToSync, session)
+      .then(() => {
+        setNutritionSyncStatus("");
+      })
+      .catch((error) => {
+        console.error("Failed to upload nutrition entries:", error);
+        setNutritionSyncStatus(formatNutritionSyncFailure(error));
+      });
+  }
+
+  function syncNutritionDeleteToCloud(entryId) {
+    if (!session?.user?.id || !isSupabaseConfigured) {
+      return;
+    }
+
+    deleteNutritionEntry(entryId, session)
+      .then(() => {
+        setNutritionSyncStatus("");
+      })
+      .catch((error) => {
+        console.error("Failed to delete nutrition entry from cloud:", error);
+        setNutritionSyncStatus(formatNutritionSyncFailure(error));
+      });
+  }
+
+  function updateEntries(nextEntries, entriesToSync = nextEntries) {
+    latestNutritionEntriesRef.current = nextEntries;
     setEntries(nextEntries);
-    saveNutritionEntries(nextEntries);
+    saveNutritionEntries(nextEntries, nutritionStorageKeyRef.current);
+    syncNutritionEntriesToCloud(entriesToSync);
+  }
+
+  function openCopyFoodSheet() {
+    const [firstSourceDate] = copyFoodSourceDates;
+
+    setCopyFoodSourceDate(firstSourceDate || "");
+    setCopyFoodStatus("");
+    setCopyFoodSheetOpen(true);
+  }
+
+  function closeCopyFoodSheet() {
+    setCopyFoodSheetOpen(false);
+    setCopyFoodStatus("");
+  }
+
+  function cloneEntriesForSelectedDate(sourceEntries) {
+    const timestamp = Date.now();
+
+    return sourceEntries.map((entry, index) => ({
+      ...entry,
+      createdAt: new Date(timestamp + index).toISOString(),
+      date: selectedDate,
+      id: timestamp + index,
+      meal: normalizeMeal(entry.meal),
+      updatedAt: new Date(timestamp + index).toISOString(),
+    }));
+  }
+
+  function copyEntriesFromAnotherDay(sourceEntries) {
+    if (!sourceEntries.length) {
+      return;
+    }
+
+    const copiedEntries = cloneEntriesForSelectedDate(sourceEntries);
+    updateEntries([...entries, ...copiedEntries], copiedEntries);
+    setExpandedMealGroups((current) => {
+      const next = { ...current };
+
+      copiedEntries.forEach((entry) => {
+        next[normalizeMeal(entry.meal)] = true;
+      });
+
+      return next;
+    });
+    setCopyFoodStatus(
+      `${copiedEntries.length} ${copiedEntries.length === 1 ? "food" : "foods"} added to ${selectedDate}.`
+    );
   }
 
   function updateBodyWeightEntries(nextEntries) {
@@ -1968,6 +2995,7 @@ export default function NutritionView({ session = null }) {
   function buildEntryPayload(entryId = Date.now()) {
     const name = entryDraft.name.trim();
     const existingEntry = entries.find((entry) => entry.id === entryId);
+    const now = new Date().toISOString();
 
     if (!name) {
       return null;
@@ -1976,6 +3004,7 @@ export default function NutritionView({ session = null }) {
     return {
       ...entryDraft,
       calories: parseMacroValue(entryDraft.calories),
+      createdAt: existingEntry?.createdAt || now,
       carbs: parseMacroValue(entryDraft.carbs),
       date: selectedDate,
       fat: parseMacroValue(entryDraft.fat),
@@ -2000,6 +3029,7 @@ export default function NutritionView({ session = null }) {
         ? String(selectedFood.fdcId)
         : existingEntry?.sourceKey || null,
       recipeId: selectedFood?.recipeId || existingEntry?.recipeId || null,
+      updatedAt: now,
     };
   }
 
@@ -2026,10 +3056,11 @@ export default function NutritionView({ session = null }) {
       updateEntries(
         entries.map((currentEntry) =>
           currentEntry.id === editingEntryId ? entry : currentEntry
-        )
+        ),
+        [entry]
       );
     } else {
-      updateEntries([...entries, entry]);
+      updateEntries([...entries, entry], [entry]);
     }
 
     resetEntryForm();
@@ -2037,6 +3068,7 @@ export default function NutritionView({ session = null }) {
 
   function clearFoodSearch() {
     setFoodSearchQuery("");
+    setFoodAutocompleteSuppressed(false);
     setFoodAutocompleteSuggestions([]);
     setFoodSearchResults([]);
     setFatSecretDetailsById({});
@@ -2064,6 +3096,7 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
+    setFoodAutocompleteSuppressed(false);
     setFoodSearchLoading(true);
     setFoodAutocompleteSuggestions([]);
     setFoodSearchResults([]);
@@ -2153,6 +3186,7 @@ export default function NutritionView({ session = null }) {
     }
 
     setFoodSearchQuery(barcode);
+    setFoodAutocompleteSuppressed(false);
     setFoodSearchLoading(true);
     setFoodSearchStatus(`Searching ${foodSearchSource === "fatsecret" ? "FatSecret" : "UPC"} ${barcode}...`);
     setBarcodeStatus(`Searching ${foodSearchSource === "fatsecret" ? "FatSecret" : "UPC"} ${barcode}...`);
@@ -2351,6 +3385,7 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuppressed(true);
     setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
@@ -2389,6 +3424,7 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuppressed(true);
     setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount(String(food.serving_size || 1));
@@ -2427,6 +3463,7 @@ export default function NutritionView({ session = null }) {
     setEditingEntryId(null);
     setEditingServingBasis(null);
     setSelectedFood(nextSelectedFood);
+    setFoodAutocompleteSuppressed(true);
     setFoodAutocompleteSuggestions([]);
     setFoodResultsSheetOpen(false);
     setServingAmount("1");
@@ -2975,7 +4012,8 @@ export default function NutritionView({ session = null }) {
   }
 
   function removeEntry(entryId) {
-    updateEntries(entries.filter((entry) => entry.id !== entryId));
+    updateEntries(entries.filter((entry) => entry.id !== entryId), []);
+    syncNutritionDeleteToCloud(entryId);
 
     if (editingEntryId === entryId) {
       resetEntryForm();
@@ -2985,16 +4023,24 @@ export default function NutritionView({ session = null }) {
   function updateEntryMeal(entryId, meal) {
     const normalizedMeal =
       meal === ADD_SNACK_VALUE ? getNextSnackMeal(dayEntries) : normalizeMeal(meal);
+    const updatedAt = new Date().toISOString();
+    let updatedEntry = null;
 
     updateEntries(
-      entries.map((entry) =>
-        entry.id === entryId
-          ? {
-              ...entry,
-              meal: normalizedMeal,
-            }
-          : entry
-      )
+      entries.map((entry) => {
+        if (entry.id !== entryId) {
+          return entry;
+        }
+
+        updatedEntry = {
+          ...entry,
+          meal: normalizedMeal,
+          updatedAt,
+        };
+
+        return updatedEntry;
+      }),
+      updatedEntry ? [updatedEntry] : []
     );
 
     if (editingEntryId === entryId) {
@@ -3121,8 +4167,43 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
+    const targetDate = selectedDate || getTodayKey();
+
     setDailyCalorieGoal(goal);
-    saveDailyCalorieGoal(goal);
+    saveDailyCalorieGoal(goal, dailyCalorieGoalStorageKeyRef.current);
+    setDailyCalorieGoalHistory((currentHistory) => {
+      const nextHistory = upsertDailyCalorieGoalHistory(
+        currentHistory,
+        targetDate,
+        goal
+      );
+
+      saveDailyCalorieGoalHistory(
+        nextHistory,
+        dailyCalorieGoalHistoryStorageKeyRef.current
+      );
+
+      return nextHistory;
+    });
+
+    if (session?.user?.id && isSupabaseConfigured) {
+      setCalorieTargetSyncStatus("Saving calorie goal...");
+      upsertNutritionTarget(
+        {
+          date: targetDate,
+          goal,
+          updatedAt: new Date().toISOString(),
+        },
+        session
+      )
+        .then(() => {
+          setCalorieTargetSyncStatus("Calorie goal synced.");
+        })
+        .catch((error) => {
+          console.error("Failed to save daily calorie target:", error);
+          setCalorieTargetSyncStatus(formatNutritionSyncFailure(error));
+        });
+    }
   }
 
   const macroCards = [
@@ -3271,15 +4352,15 @@ export default function NutritionView({ session = null }) {
         </button>
       </section>
 
-      <section
-        aria-label="Daily calorie goal"
-        onClick={() => setCalorieGoalPickerOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setCalorieGoalPickerOpen(true);
-          }
-        }}
+	      <section
+	        aria-label="Daily calorie goal"
+	        onClick={() => setCalorieHistorySheetOpen(true)}
+	        onKeyDown={(event) => {
+	          if (event.key === "Enter" || event.key === " ") {
+	            event.preventDefault();
+	            setCalorieHistorySheetOpen(true);
+	          }
+	        }}
         role="button"
         style={{
           alignItems: "center",
@@ -3326,7 +4407,21 @@ export default function NutritionView({ session = null }) {
         >
           <Plus size={18} />
         </button>
-      </section>
+	      </section>
+
+      {calorieTargetSyncStatus && (
+        <div
+          style={{
+            color: calorieTargetSyncStatus.includes("failed")
+              ? "#8a1f11"
+              : "var(--text-muted)",
+            fontSize: "12px",
+            margin: "-6px 0 12px",
+          }}
+        >
+          {calorieTargetSyncStatus}
+        </div>
+      )}
 
       {weightSyncStatus && (
         <div
@@ -3366,17 +4461,26 @@ export default function NutritionView({ session = null }) {
         value={latestBodyWeight?.weight || ""}
       />
 
-      <WeightPickerModal
-        increment={50}
-        isOpen={calorieGoalPickerOpen}
-        onClose={() => setCalorieGoalPickerOpen(false)}
-        onSelect={updateDailyCalorieGoal}
-        title="Select daily calorie goal"
-        value={calorieGoalValue || 2000}
-        values={calorieGoalOptions}
-      />
+	      <WeightPickerModal
+	        increment={50}
+	        isOpen={calorieGoalPickerOpen}
+	        onClose={() => setCalorieGoalPickerOpen(false)}
+	        onSelect={updateDailyCalorieGoal}
+	        title="Select daily calorie goal"
+	        value={calorieGoalValue || 2000}
+	        values={calorieGoalOptions}
+	      />
 
-      <section
+      {calorieHistorySheetOpen && (
+        <CalorieHistorySheet
+          calorieGoal={dailyCalorieGoal}
+          entries={entries}
+          goalHistory={dailyCalorieGoalHistory}
+          onClose={() => setCalorieHistorySheetOpen(false)}
+        />
+      )}
+
+	      <section
         aria-label="Current day"
         style={{
           border: "1px solid var(--border)",
@@ -3639,6 +4743,7 @@ export default function NutritionView({ session = null }) {
               value={foodSearchSource}
               onChange={(event) => {
                 setFoodSearchSource(event.target.value);
+                setFoodAutocompleteSuppressed(false);
                 setFoodAutocompleteSuggestions([]);
                 setFoodSearchResults([]);
                 setFatSecretDetailsById({});
@@ -3685,7 +4790,10 @@ export default function NutritionView({ session = null }) {
                       : "Search foods or recipes..."
                   }
                   value={foodSearchQuery}
-                  onChange={(event) => setFoodSearchQuery(event.target.value)}
+                  onChange={(event) => {
+                    setFoodAutocompleteSuppressed(false);
+                    setFoodSearchQuery(event.target.value);
+                  }}
                   style={{
                     boxSizing: "border-box",
                     font: "inherit",
@@ -3718,6 +4826,7 @@ export default function NutritionView({ session = null }) {
                           key={suggestion}
                           onClick={() => {
                             setFoodSearchQuery(suggestion);
+                            setFoodAutocompleteSuppressed(false);
                             setFoodAutocompleteSuggestions([]);
                             runFoodSearch(suggestion);
                           }}
@@ -4529,7 +5638,7 @@ export default function NutritionView({ session = null }) {
                     display: "grid",
                     gap: "8px",
                     gridTemplateColumns: selectedFood
-                      ? "minmax(0, 1fr) minmax(120px, auto)"
+                      ? "minmax(92px, 112px) minmax(0, 1fr)"
                       : "minmax(0, 1fr)",
                   }}
                 >
@@ -4557,7 +5666,9 @@ export default function NutritionView({ session = null }) {
                         font: "inherit",
                         minHeight: "42px",
                         minWidth: 0,
+                        overflow: "hidden",
                         padding: "7px 10px",
+                        textOverflow: "ellipsis",
                         width: "100%",
                       }}
                     >
@@ -4648,6 +5759,36 @@ export default function NutritionView({ session = null }) {
           </button>
 
           <button
+            disabled={copyFoodSourceDates.length === 0}
+            onClick={openCopyFoodSheet}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              justifyContent: "center",
+              minHeight: "42px",
+            }}
+            type="button"
+          >
+            <Plus size={18} />
+            Add Food from another day
+          </button>
+
+          {nutritionSyncStatus && (
+            <p
+              style={{
+                color: nutritionSyncStatus.includes("failed")
+                  ? "#8a1f11"
+                  : "#4b5563",
+                fontSize: "0.82rem",
+                margin: 0,
+              }}
+            >
+              {nutritionSyncStatus}
+            </p>
+          )}
+
+          <button
             disabled={!entryDraft.name.trim()}
             onClick={openLibrarySheet}
             style={{
@@ -4679,6 +5820,274 @@ export default function NutritionView({ session = null }) {
           </button>
         </div>
       </section>
+
+      {copyFoodSheetOpen && (
+        <div
+          aria-label="Add food from another day"
+          aria-modal="true"
+          onClick={closeCopyFoodSheet}
+          role="dialog"
+          style={{
+            alignItems: "flex-end",
+            background: "rgba(0,0,0,.45)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            position: "fixed",
+            zIndex: 2200,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              borderRadius: "18px 18px 0 0",
+              boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxHeight: "82vh",
+              maxWidth: "620px",
+              overflowY: "auto",
+              padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: "18px",
+                    gap: "8px",
+                    lineHeight: 1.15,
+                    margin: 0,
+                  }}
+                >
+                  <Utensils size={18} color="#fbc02d" />
+                  Add food from another day
+                </h2>
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "3px",
+                  }}
+                >
+                  Copy meals or individual foods into {selectedDate}.
+                </div>
+              </div>
+              <button
+                aria-label="Close add food from another day"
+                onClick={closeCopyFoodSheet}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "36px",
+                  minWidth: "36px",
+                  padding: 0,
+                }}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {copyFoodSourceDates.length === 0 ? (
+              <div
+                style={{
+                  background: "var(--surface-muted)",
+                  borderRadius: "8px",
+                  color: "var(--text-muted)",
+                  fontSize: "14px",
+                  padding: "12px",
+                  textAlign: "center",
+                }}
+              >
+                No other logged days are available.
+              </div>
+            ) : (
+              <>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "5px",
+                  }}
+                >
+                  Day
+                  <select
+                    value={copyFoodSourceDate}
+                    onChange={(event) => {
+                      setCopyFoodSourceDate(event.target.value);
+                      setCopyFoodStatus("");
+                    }}
+                    style={{
+                      boxSizing: "border-box",
+                      font: "inherit",
+                      minHeight: "42px",
+                      padding: "7px 10px",
+                      width: "100%",
+                    }}
+                  >
+                    {copyFoodSourceDates.map((date) => {
+                      const count = entries.filter((entry) => entry.date === date).length;
+
+                      return (
+                        <option key={date} value={date}>
+                          {date} · {count} {count === 1 ? "food" : "foods"}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  {copyFoodMealGroups.map((group) => (
+                    <section
+                      key={group.meal}
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        display: "grid",
+                        gap: "8px",
+                        padding: "10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          alignItems: "start",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: "3px",
+                            minWidth: 0,
+                          }}
+                        >
+                          <strong
+                            style={{
+                              alignItems: "center",
+                              display: "inline-flex",
+                              gap: "6px",
+                            }}
+                          >
+                            <MealIcon meal={group.meal} />
+                            {group.label}
+                          </strong>
+                          <span
+                            style={{
+                              color: "var(--text-muted)",
+                              fontSize: "12px",
+                            }}
+                          >
+                            <MealMacroSummary totals={group.totals} />
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => copyEntriesFromAnotherDay(group.entries)}
+                          type="button"
+                        >
+                          Add meal
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "6px",
+                        }}
+                      >
+                        {group.entries.map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              alignItems: "center",
+                              background: "var(--surface-raised)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "8px",
+                              display: "grid",
+                              gap: "8px",
+                              gridTemplateColumns: "minmax(0, 1fr) auto",
+                              padding: "9px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                minWidth: 0,
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  color: "var(--text-h)",
+                                  display: "block",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {entry.name}
+                              </strong>
+                              <span
+                                style={{
+                                  color: "var(--text-muted)",
+                                  fontSize: "12px",
+                                }}
+                              >
+                                {formatMacro(entry.calories, "cal")} cal ·{" "}
+                                {formatMacro(entry.protein)} protein ·{" "}
+                                {formatMacro(entry.carbs)} carbs ·{" "}
+                                {formatMacro(entry.fat)} fat
+                                {entry.servingDescription
+                                  ? ` · ${entry.servingDescription}`
+                                  : ""}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => copyEntriesFromAnotherDay([entry])}
+                              type="button"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+
+                {copyFoodStatus && (
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {copyFoodStatus}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <section
         style={{

@@ -1,5 +1,17 @@
 import { useState } from "react";
-import { ArrowUp, Dumbbell, Scale, Utensils, X } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  ChevronUp,
+  Coffee,
+  Dumbbell,
+  Scale,
+  Sun,
+  Sunrise,
+  Sunset,
+  Utensils,
+  X,
+} from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
@@ -11,6 +23,13 @@ import { isSupabaseConfigured } from "../sync/supabaseClient";
 import { calculateE1RM } from "../utils/e1rm";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
+const BASE_MEAL_OPTIONS = [
+  ["breakfast", "Breakfast"],
+  ["lunch", "Lunch"],
+  ["dinner", "Dinner"],
+];
+const DEFAULT_MEAL = "breakfast";
+const DEFAULT_SNACK_MEAL = "snack-1";
 
 function getLocalDateKey(date) {
   const year = date.getFullYear();
@@ -41,6 +60,89 @@ function totalFoods(foods) {
       protein: 0,
     }
   );
+}
+
+function normalizeMeal(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+  const meal = normalized === "snack" ? DEFAULT_SNACK_MEAL : normalized;
+
+  if (BASE_MEAL_OPTIONS.some(([option]) => option === meal)) {
+    return meal;
+  }
+
+  if (/^snack-[1-9]\d*$/.test(meal)) {
+    return meal;
+  }
+
+  return DEFAULT_MEAL;
+}
+
+function getSnackIndex(meal) {
+  const match = normalizeMeal(meal).match(/^snack-(\d+)$/);
+
+  return match ? Number(match[1]) : 0;
+}
+
+function getMealLabel(meal) {
+  const normalized = normalizeMeal(meal);
+  const baseLabel = BASE_MEAL_OPTIONS.find(([option]) => option === normalized)?.[1];
+  const snackIndex = getSnackIndex(normalized);
+
+  if (baseLabel) {
+    return baseLabel;
+  }
+
+  return snackIndex === 1 ? "Snack" : `Snack ${snackIndex}`;
+}
+
+function getMealGroups(foods) {
+  const snackIndexes = new Set();
+
+  foods.forEach((food) => {
+    const snackIndex = getSnackIndex(food.meal);
+
+    if (snackIndex) {
+      snackIndexes.add(snackIndex);
+    }
+  });
+
+  const mealOptions = [
+    ...BASE_MEAL_OPTIONS,
+    ...[...snackIndexes]
+      .sort((a, b) => a - b)
+      .map((snackIndex) => [`snack-${snackIndex}`, getMealLabel(`snack-${snackIndex}`)]),
+  ];
+
+  return mealOptions
+    .map(([meal, label]) => {
+      const entries = foods.filter((food) => normalizeMeal(food.meal) === meal);
+
+      return {
+        entries,
+        label,
+        meal,
+        totals: totalFoods(entries),
+      };
+    })
+    .filter((group) => group.entries.length > 0);
+}
+
+function MealIcon({ meal, size = 16 }) {
+  const normalizedMeal = normalizeMeal(meal);
+
+  if (normalizedMeal === "breakfast") {
+    return <Sunrise size={size} color="#d97706" />;
+  }
+
+  if (normalizedMeal === "lunch") {
+    return <Sun size={size} color="#ca8a04" />;
+  }
+
+  if (normalizedMeal === "dinner") {
+    return <Sunset size={size} color="#c2410c" />;
+  }
+
+  return <Coffee size={size} color="#7c3f18" />;
 }
 
 function firstPresentValue(...values) {
@@ -758,6 +860,7 @@ export default function WorkoutCalendar({
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedFood, setSelectedFood] = useState(null);
   const [selectedFoods, setSelectedFoods] = useState(null);
+  const [expandedFoodMeals, setExpandedFoodMeals] = useState({});
   const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
@@ -1338,6 +1441,7 @@ export default function WorkoutCalendar({
                             <button
                               onClick={(event) => {
                                 event.stopPropagation();
+                                setExpandedFoodMeals({});
                                 setSelectedFoods({
                                   date: getLocalDateKey(selectedDate),
                                   foods: summary.foods,
@@ -1391,6 +1495,7 @@ export default function WorkoutCalendar({
           aria-label="Food list"
           onClick={(event) => {
             event.stopPropagation();
+            setExpandedFoodMeals({});
             setSelectedFoods(null);
           }}
           style={{
@@ -1453,7 +1558,10 @@ export default function WorkoutCalendar({
               </div>
               <button
                 aria-label="Close food list"
-                onClick={() => setSelectedFoods(null)}
+                onClick={() => {
+                  setExpandedFoodMeals({});
+                  setSelectedFoods(null);
+                }}
                 style={{
                   alignItems: "center",
                   display: "inline-flex",
@@ -1494,53 +1602,144 @@ export default function WorkoutCalendar({
             <div
               style={{
                 display: "grid",
-                gap: "8px",
+                gap: "10px",
               }}
             >
-              {selectedFoods.foods.map((food) => (
-                <button
-                  key={food.id}
-                  onClick={() => {
-                    setSelectedFoods(null);
-                    setSelectedFood(food);
-                  }}
+              {getMealGroups(selectedFoods.foods).map((group) => (
+                <section
+                  key={group.meal}
                   style={{
                     background: "var(--surface-muted)",
                     border: "1px solid var(--border)",
                     borderRadius: "8px",
-                    color: "var(--text-muted)",
                     display: "grid",
-                    font: "inherit",
-                    gap: "3px",
+                    gap: "8px",
                     padding: "10px",
-                    textAlign: "left",
-                    width: "100%",
                   }}
-                  type="button"
                 >
-                  <strong
+                  <button
+                    aria-expanded={Boolean(expandedFoodMeals[group.meal])}
+                    onClick={() =>
+                      setExpandedFoodMeals((current) => ({
+                        ...current,
+                        [group.meal]: !current[group.meal],
+                      }))
+                    }
                     style={{
-                      color: "var(--text-h)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      alignItems: "center",
+                      background: "transparent",
+                      border: 0,
+                      color: "inherit",
+                      display: "flex",
+                      font: "inherit",
+                      gap: "8px",
+                      justifyContent: "space-between",
+                      padding: 0,
+                      textAlign: "left",
+                      width: "100%",
                     }}
+                    type="button"
                   >
-                    {food.name}
-                  </strong>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        color: "var(--text-h)",
+                        display: "flex",
+                        fontWeight: 700,
+                        gap: "7px",
+                      }}
+                    >
+                      <MealIcon meal={group.meal} />
+                      {group.label}
+                    </div>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        color: "var(--text-muted)",
+                        display: "flex",
+                        fontSize: "12px",
+                        gap: "6px",
+                      }}
+                    >
+                      <span>
+                        {group.entries.length}{" "}
+                        {group.entries.length === 1 ? "item" : "items"}
+                      </span>
+                      {expandedFoodMeals[group.meal] ? (
+                        <ChevronUp size={16} />
+                      ) : (
+                        <ChevronDown size={16} />
+                      )}
+                    </div>
+                  </button>
                   <span
                     style={{
+                      color: "var(--text-muted)",
                       fontSize: "12px",
                     }}
                   >
-                    {formatMacro(food.calories, "cal")} cal ·{" "}
-                    {formatMacro(food.protein)} protein ·{" "}
-                    {formatMacro(food.carbs)} carbs · {formatMacro(food.fat)} fat
-                    {food.servingDescription
-                      ? ` · ${food.servingDescription}`
-                      : ""}
+                    {formatMacro(group.totals.calories, "cal")} cal ·{" "}
+                    {formatMacro(group.totals.protein)} protein ·{" "}
+                    {formatMacro(group.totals.carbs)} carbs ·{" "}
+                    {formatMacro(group.totals.fat)} fat
                   </span>
-                </button>
+                  {expandedFoodMeals[group.meal] && (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "6px",
+                      }}
+                    >
+                      {group.entries.map((food) => (
+                        <button
+                          key={food.id}
+                          onClick={() => {
+                            setExpandedFoodMeals({});
+                            setSelectedFoods(null);
+                            setSelectedFood(food);
+                          }}
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            color: "var(--text-muted)",
+                            display: "grid",
+                            font: "inherit",
+                            gap: "3px",
+                            padding: "9px",
+                            textAlign: "left",
+                            width: "100%",
+                          }}
+                          type="button"
+                        >
+                          <strong
+                            style={{
+                              color: "var(--text-h)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {food.name}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                            }}
+                          >
+                            {formatMacro(food.calories, "cal")} cal ·{" "}
+                            {formatMacro(food.protein)} protein ·{" "}
+                            {formatMacro(food.carbs)} carbs ·{" "}
+                            {formatMacro(food.fat)} fat
+                            {food.servingDescription
+                              ? ` · ${food.servingDescription}`
+                              : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
               ))}
             </div>
           </div>

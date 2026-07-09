@@ -54,6 +54,10 @@ import {
   uploadWorkoutHistory,
 } from "./sync/sessionCloudSync";
 import { downloadPlans, uploadPlans } from "./sync/planCloudSync";
+import {
+  downloadNutritionEntries,
+  uploadNutritionEntries,
+} from "./sync/nutritionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 
 // STORAGE VERSION
@@ -149,6 +153,10 @@ function formatHistoryTimestamp(workout) {
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 
+function getNutritionLogStorageKey(userId) {
+  return userId ? `${NUTRITION_LOG_KEY}:${userId}` : NUTRITION_LOG_KEY;
+}
+
 function readLocalArray(key) {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -159,6 +167,57 @@ function readLocalArray(key) {
 
     return [];
   }
+}
+
+function saveLocalArray(key, entries) {
+  localStorage.setItem(key, JSON.stringify(entries));
+}
+
+function getNutritionEntryTimestamp(entry) {
+  const updatedTime = Date.parse(entry?.updatedAt || "");
+  const createdTime = Date.parse(entry?.createdAt || "");
+
+  if (Number.isFinite(updatedTime)) {
+    return updatedTime;
+  }
+
+  if (Number.isFinite(createdTime)) {
+    return createdTime;
+  }
+
+  return 0;
+}
+
+function mergeNutritionEntries(localEntries, cloudEntries) {
+  const entriesById = new Map();
+
+  [...(localEntries || []), ...(cloudEntries || [])].forEach((entry) => {
+    if (!entry?.id) {
+      return;
+    }
+
+    const entryKey = String(entry.id);
+    const existingEntry = entriesById.get(entryKey);
+
+    if (
+      !existingEntry ||
+      getNutritionEntryTimestamp(entry) >= getNutritionEntryTimestamp(existingEntry)
+    ) {
+      entriesById.set(entryKey, entry);
+    }
+  });
+
+  return [...entriesById.values()].sort((a, b) => {
+    const dateComparison = String(a.date || "").localeCompare(String(b.date || ""));
+
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+
+    return String(a.id).localeCompare(String(b.id), undefined, {
+      numeric: true,
+    });
+  });
 }
 
 function getAuditLocalSummary(data) {
@@ -649,6 +708,9 @@ export default function App() {
   const [indexedDbReady, setIndexedDbReady] = useState(false);
 
   const [authSession, setAuthSession] = useState(null);
+  const [calendarNutritionEntries, setCalendarNutritionEntries] = useState(() =>
+    readLocalArray(NUTRITION_LOG_KEY)
+  );
 
   const [authEmail, setAuthEmail] = useState("");
 
@@ -752,6 +814,74 @@ export default function App() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id || null;
+    const storageKey = getNutritionLogStorageKey(userId);
+    const scopedLocalEntries = readLocalArray(storageKey);
+    const legacyLocalEntries =
+      userId && scopedLocalEntries.length === 0
+        ? readLocalArray(NUTRITION_LOG_KEY)
+        : [];
+    const seededLocalEntries =
+      scopedLocalEntries.length > 0 ? scopedLocalEntries : legacyLocalEntries;
+
+    queueMicrotask(() => {
+      setCalendarNutritionEntries(seededLocalEntries);
+    });
+
+    if (!authSession?.user?.id || !isSupabaseConfigured) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncCalendarNutritionEntries() {
+      try {
+        if (seededLocalEntries.length > 0) {
+          await uploadNutritionEntries(seededLocalEntries, authSession);
+        }
+
+        const cloudEntries = await downloadNutritionEntries(authSession);
+        const mergedEntries = mergeNutritionEntries(
+          seededLocalEntries,
+          cloudEntries
+        );
+
+        if (mergedEntries.length > 0) {
+          await uploadNutritionEntries(mergedEntries, authSession);
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setCalendarNutritionEntries(mergedEntries);
+        saveLocalArray(storageKey, mergedEntries);
+      } catch (error) {
+        console.error("Failed to sync calendar nutrition entries:", error);
+      }
+    }
+
+    syncCalendarNutritionEntries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession]);
+
+  useEffect(() => {
+    if (showNutrition) {
+      return;
+    }
+
+    const userId = authSession?.user?.id || null;
+    const storageKey = getNutritionLogStorageKey(userId);
+
+    queueMicrotask(() => {
+      setCalendarNutritionEntries(readLocalArray(storageKey));
+    });
+  }, [authSession?.user?.id, showNutrition]);
 
   async function signInWithEmailPassword() {
     const email = authEmail.trim();
@@ -2586,6 +2716,42 @@ export default function App() {
     );
   }
 
+  function renderAuthSyncIndicator() {
+    const signedIn = Boolean(authSession?.user?.id);
+
+    return (
+      <div
+        aria-label={signedIn ? "Signed in; sync is on" : "Signed out; local only"}
+        style={{
+          alignItems: "center",
+          background: signedIn ? "#e8f5e9" : "#fff8e1",
+          border: `1px solid ${signedIn ? "#a5d6a7" : "#ffe082"}`,
+          borderRadius: "999px",
+          color: signedIn ? "#1b5e20" : "#7a4f01",
+          display: "inline-flex",
+          fontSize: "12px",
+          gap: "6px",
+          justifySelf: "center",
+          lineHeight: 1.2,
+          margin: "-6px 0 14px",
+          maxWidth: "100%",
+          padding: "5px 10px",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            background: signedIn ? "#2e7d32" : "#f9a825",
+            borderRadius: "999px",
+            height: "8px",
+            width: "8px",
+          }}
+        />
+        {signedIn ? "Signed in - sync on" : "Signed out - local only"}
+      </div>
+    );
+  }
+
   function renderSettings() {
     return (
       <div
@@ -3213,7 +3379,6 @@ export default function App() {
       return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
     });
 
-  const calendarNutritionEntries = readLocalArray(NUTRITION_LOG_KEY);
   const calendarBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
 
   return renderAppShell(
@@ -3251,6 +3416,8 @@ export default function App() {
         </h1>
         <span />
       </div>
+
+      {renderAuthSyncIndicator()}
 
       <WorkoutCalendar
         bodyWeightEntries={calendarBodyWeightEntries}
