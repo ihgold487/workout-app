@@ -1,6 +1,6 @@
 # Muscle Map Asset Attribution
 
-These SVG muscle-map assets are used for the Arnold Press muscle-map pilot.
+These SVG muscle-map assets are used for exercise detail muscle maps.
 
 Source:
 - wger muscle assets: https://github.com/wger-project/wger/tree/master/wger/core/static/images/muscles
@@ -15,5 +15,5 @@ Original author:
 - Termininja, Wikimedia Commons.
 
 Changes:
-- Vendored selected SVG files locally for a single-exercise muscle-map review.
-- Used the wger primary and secondary overlay variants for the Arnold Press pilot.
+- Vendored the front/back base SVGs and the full wger primary/secondary overlay set locally.
+- Recolored primary overlays to blue and secondary overlays to amber for clearer contrast in this app.
