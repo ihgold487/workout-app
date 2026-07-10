@@ -1,29 +1,53 @@
 import { useMemo, useState } from "react";
 import { ImagePlus, LineChart, ListChecks, X } from "lucide-react";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+import MuscleMap from "./MuscleMap";
 
 function formatEquipment(equipment) {
   return Array.isArray(equipment) ? equipment.filter(Boolean).join(", ") : equipment || "";
 }
 
+function normalizeMuscleList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+
+  return String(value || "").trim() ? [String(value).trim()] : [];
+}
+
 function getPrimaryMuscle(exercise) {
-  return (
+  const list = getPrimaryMuscleList(exercise);
+
+  return list.length > 0 ? list.join(", ") : "n/a";
+}
+
+function getPrimaryMuscleList(exercise) {
+  const primaryList = normalizeMuscleList(
+    exercise.primaryMuscles || exercise.primary_muscles
+  );
+
+  if (primaryList.length > 0) {
+    return primaryList;
+  }
+
+  return normalizeMuscleList(
     exercise.primaryMuscle ||
-    exercise.primary_muscle ||
-    exercise.muscles?.[0] ||
-    exercise.planMuscle ||
-    "n/a"
+      exercise.primary_muscle ||
+      exercise.muscles?.[0] ||
+      exercise.planMuscle
+  );
+}
+
+function getSecondaryMuscleList(exercise) {
+  return normalizeMuscleList(
+    exercise.secondaryMuscles ||
+      exercise.secondary_muscles ||
+      exercise.muscles?.slice(1)
   );
 }
 
 function getSecondaryMuscles(exercise) {
-  const value =
-    exercise.secondaryMuscles ||
-    exercise.secondary_muscles ||
-    exercise.muscles?.slice(1) ||
-    [];
-  const list = Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
-
+  const list = getSecondaryMuscleList(exercise);
   return list.length > 0 ? list.join(", ") : "n/a";
 }
 
@@ -441,6 +465,11 @@ export default function ExerciseDetailDialog({
               <div>
                 <strong>Secondary:</strong> {getSecondaryMuscles(exercise)}
               </div>
+              <MuscleMap
+                label={exercise.name}
+                primaryMuscles={getPrimaryMuscleList(exercise)}
+                secondaryMuscles={getSecondaryMuscleList(exercise)}
+              />
               {exercise.description || exercise.note ? (
                 <div
                   style={{

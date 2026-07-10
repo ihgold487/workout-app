@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  BarChart3,
   BatteryMedium,
   Check,
   Dumbbell,
@@ -27,6 +28,7 @@ import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import MuscleMap from "./MuscleMap";
 import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
@@ -104,6 +106,130 @@ function SortableExerciseRow({ exercise, children }) {
   );
 }
 
+function getTemplateWorkoutSummary(template) {
+  const exercises = template.exercises || [];
+  const muscleSets = exercises.reduce((summary, exercise) => {
+    const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
+
+    summary[muscle] = (summary[muscle] || 0) + exercise.sets.length;
+
+    return summary;
+  }, {});
+  const totalSets = Object.values(muscleSets).reduce(
+    (total, sets) => total + sets,
+    0
+  );
+
+  return {
+    muscleSets: Object.entries(muscleSets).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    ),
+    totalSets,
+  };
+}
+
+function TemplateMuscleMapSheet({ onClose, template }) {
+  const summary = getTemplateWorkoutSummary(template);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${template.name} muscle map`}
+      style={{
+        background: "rgba(0,0,0,.38)",
+        inset: 0,
+        position: "fixed",
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          background: "var(--surface-raised)",
+          borderRadius: "18px 18px 0 0",
+          bottom: 0,
+          boxShadow: "0 -8px 28px rgba(0,0,0,.18)",
+          left: 0,
+          maxHeight: "78vh",
+          overflowY: "auto",
+          padding: "14px 16px calc(16px + env(safe-area-inset-bottom))",
+          position: "absolute",
+          right: 0,
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+            justifyContent: "space-between",
+            marginBottom: "12px",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                fontSize: "18px",
+                lineHeight: 1.15,
+                margin: 0,
+              }}
+            >
+              {template.name}
+            </h2>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "3px",
+              }}
+            >
+              {summary.totalSets} planned sets
+            </div>
+          </div>
+
+          <IconButton label="Close muscle map" onClick={onClose}>
+            <X size={18} />
+          </IconButton>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          <MuscleMap
+            label={`${template.name} primary muscles`}
+            primaryMuscles={summary.muscleSets.map(([muscle, sets]) => ({
+              muscle,
+              sets,
+            }))}
+            scaleIntensity
+            showLegend={false}
+          />
+
+          {summary.muscleSets.map(([muscle, sets]) => (
+            <div
+              key={muscle}
+              style={{
+                alignItems: "center",
+                borderBottom: "1px solid var(--border)",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                padding: "8px 0",
+              }}
+            >
+              <strong>{muscle}</strong>
+              <span>{sets} sets</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TemplateView({
   template,
   templates,
@@ -141,6 +267,7 @@ export default function TemplateView({
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
+  const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
   const [addToWorkoutsState, setAddToWorkoutsState] = useState({
@@ -656,32 +783,49 @@ export default function TemplateView({
         padding: isEditMode ? "20px 20px 150px" : "20px",
       }}
     >
-      <button
-        aria-label={`Edit workout name: ${template.name}`}
-        onClick={() => {
-          setTemplateNameDraft(template.name);
-          setEditingTemplateName(true);
-        }}
+      <div
         style={{
-          background: "transparent",
-          border: "none",
-          color: "var(--text-h)",
-          display: "block",
-          fontSize: "2rem",
-          fontWeight: "bold",
-          lineHeight: 1.15,
+          alignItems: "start",
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
           marginBottom: "20px",
-          minWidth: 0,
-          overflow: "hidden",
-          padding: 0,
-          textAlign: "left",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          width: "100%",
         }}
       >
-        {template.name}
-      </button>
+        <button
+          aria-label={`Edit workout name: ${template.name}`}
+          onClick={() => {
+            setTemplateNameDraft(template.name);
+            setEditingTemplateName(true);
+          }}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "var(--text-h)",
+            display: "block",
+            fontSize: "2rem",
+            fontWeight: "bold",
+            lineHeight: 1.15,
+            minWidth: 0,
+            overflow: "hidden",
+            padding: 0,
+            textAlign: "left",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            width: "100%",
+          }}
+        >
+          {template.name}
+        </button>
+
+        <IconButton
+          label={`${template.name} muscle map`}
+          onClick={() => setShowTemplateMuscleMap(true)}
+          size={38}
+        >
+          <BarChart3 size={18} />
+        </IconButton>
+      </div>
       <div
         style={{
           display: "flex",
@@ -1120,6 +1264,14 @@ export default function TemplateView({
                               </IconButton>
 
                               <IconButton
+                                label={`${exercise.name} muscle map`}
+                                size={32}
+                                onClick={() => setDetailExercise(exerciseDetail)}
+                              >
+                                <BarChart3 size={16} />
+                              </IconButton>
+
+                              <IconButton
                                 label="Delete exercise"
                                 size={32}
                                 tone="danger"
@@ -1509,6 +1661,12 @@ export default function TemplateView({
           exercise={detailExercise}
           history={history}
           onClose={() => setDetailExercise(null)}
+        />
+      )}
+      {showTemplateMuscleMap && (
+        <TemplateMuscleMapSheet
+          template={template}
+          onClose={() => setShowTemplateMuscleMap(false)}
         />
       )}
     </div>

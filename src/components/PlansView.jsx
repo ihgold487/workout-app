@@ -28,6 +28,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
+import MuscleMap from "./MuscleMap";
 import WeightPickerModal from "./WeightPickerModal";
 import {
   WorkoutExercisePreviewGroup,
@@ -516,6 +517,15 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
             gap: "8px",
           }}
         >
+          <MuscleMap
+            label={`${title} primary muscles`}
+            primaryMuscles={summary.muscleSets.map(([muscle, sets]) => ({
+              muscle,
+              sets,
+            }))}
+            scaleIntensity
+            showLegend={false}
+          />
           {summary.muscleSets.map(([muscle, sets]) => (
             <div
               key={muscle}
