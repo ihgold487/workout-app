@@ -1103,7 +1103,11 @@ export default function App() {
 
     if (domainSet.has("exercisePreferences")) {
       await uploadCustomExercises(data.exerciseLibrary, session);
-      await uploadExercisePreferences(data.exerciseLibrary, session);
+      await uploadExercisePreferences(
+        data.exerciseLibrary,
+        data.exerciseMetadata,
+        session
+      );
     }
 
     if (shouldSyncWorkouts) {
@@ -1140,6 +1144,7 @@ export default function App() {
     const dirtyDomainSet = new Set(dirtyDomains);
     const exercisePreferences = await downloadExerciseLibraryWithPreferences(
       data.exerciseLibrary,
+      data.exerciseMetadata,
       session
     );
     const workoutData = await downloadWorkouts(
@@ -1178,6 +1183,7 @@ export default function App() {
     const nextData = {
       ...data,
       exerciseLibrary: exercisePreferences.exerciseLibrary,
+      exerciseMetadata: exercisePreferences.exerciseMetadata,
       history: historyData.history,
       ownerUserId: session.user.id,
       plans: resolvedPlans,
@@ -1371,7 +1377,7 @@ export default function App() {
     }
 
     markNormalizedSyncDirty(["exercisePreferences"]);
-  }, [exerciseLibrary, indexedDbReady]);
+  }, [exerciseLibrary, exerciseMetadata, indexedDbReady]);
 
   useEffect(() => {
     if (!indexedDbReady) {

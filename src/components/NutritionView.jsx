@@ -5,6 +5,9 @@ import {
 } from "@zxing/browser";
 import { DecodeHintType } from "@zxing/library";
 import {
+  Bell,
+  BellOff,
+  BicepsFlexed,
   ChevronDown,
   ChevronUp,
   Coffee,
@@ -44,6 +47,11 @@ const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
 const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
+const DAILY_CREATINE_LOG_KEY = "dailyCreatineLog";
+const DAILY_CREATINE_REMINDER_KEY = "dailyCreatineReminder";
+const DAILY_CREATINE_REMINDER_TIME_KEY = "dailyCreatineReminderTime";
+const DEFAULT_DAILY_CREATINE_REMINDER_TIME = "16:00";
+const LONG_PRESS_DURATION_MS = 550;
 const FDC_API_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 const FDC_API_KEY = import.meta.env.VITE_USDA_FDC_API_KEY || "";
 const SUPPLEMENTAL_FOOD_SOURCE = "supplemental_library";
@@ -168,6 +176,22 @@ function getDailyCalorieGoalHistoryStorageKey(userId) {
   return userId
     ? `${DAILY_CALORIE_GOAL_HISTORY_KEY}:${userId}`
     : DAILY_CALORIE_GOAL_HISTORY_KEY;
+}
+
+function getDailyCreatineLogStorageKey(userId) {
+  return userId ? `${DAILY_CREATINE_LOG_KEY}:${userId}` : DAILY_CREATINE_LOG_KEY;
+}
+
+function getDailyCreatineReminderStorageKey(userId) {
+  return userId
+    ? `${DAILY_CREATINE_REMINDER_KEY}:${userId}`
+    : DAILY_CREATINE_REMINDER_KEY;
+}
+
+function getDailyCreatineReminderTimeStorageKey(userId) {
+  return userId
+    ? `${DAILY_CREATINE_REMINDER_TIME_KEY}:${userId}`
+    : DAILY_CREATINE_REMINDER_TIME_KEY;
 }
 
 function readNutritionEntries(storageKey = NUTRITION_LOG_KEY) {
@@ -330,6 +354,88 @@ function saveDailyCalorieGoalHistory(
   storageKey = DAILY_CALORIE_GOAL_HISTORY_KEY
 ) {
   localStorage.setItem(storageKey, JSON.stringify(history));
+}
+
+function readDailyCreatineLog(storageKey = DAILY_CREATINE_LOG_KEY) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "{}");
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([date, value]) => [String(date).slice(0, 10), Boolean(value)])
+        .filter(([date, value]) => date && value)
+    );
+  } catch (error) {
+    console.error("Failed to load daily creatine log:", error);
+
+    return {};
+  }
+}
+
+function saveDailyCreatineLog(log, storageKey = DAILY_CREATINE_LOG_KEY) {
+  localStorage.setItem(storageKey, JSON.stringify(log || {}));
+}
+
+function readDailyCreatineReminderEnabled(
+  storageKey = DAILY_CREATINE_REMINDER_KEY
+) {
+  try {
+    return localStorage.getItem(storageKey) === "true";
+  } catch (error) {
+    console.error("Failed to load daily creatine reminder:", error);
+
+    return false;
+  }
+}
+
+function saveDailyCreatineReminderEnabled(enabled, storageKey) {
+  localStorage.setItem(storageKey, enabled ? "true" : "false");
+}
+
+function normalizeTimeValue(value) {
+  const time = String(value || "").trim();
+
+  return /^\d{2}:\d{2}$/.test(time)
+    ? time
+    : DEFAULT_DAILY_CREATINE_REMINDER_TIME;
+}
+
+function readDailyCreatineReminderTime(storageKey) {
+  try {
+    return normalizeTimeValue(localStorage.getItem(storageKey));
+  } catch (error) {
+    console.error("Failed to load daily creatine reminder time:", error);
+
+    return DEFAULT_DAILY_CREATINE_REMINDER_TIME;
+  }
+}
+
+function saveDailyCreatineReminderTime(time, storageKey) {
+  localStorage.setItem(storageKey, normalizeTimeValue(time));
+}
+
+function isCreatineReminderTime(timestamp = Date.now(), reminderTime) {
+  const date = new Date(timestamp);
+  const [hours, minutes] = normalizeTimeValue(reminderTime)
+    .split(":")
+    .map(Number);
+
+  return (
+    date.getHours() > hours ||
+    (date.getHours() === hours && date.getMinutes() >= minutes)
+  );
+}
+
+function formatReminderTime(time) {
+  const [hours, minutes] = normalizeTimeValue(time).split(":").map(Number);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+
+  return `${displayHours}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
 function upsertDailyCalorieGoalHistory(history, date, goal) {
@@ -1589,8 +1695,31 @@ function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
     }));
 }
 
+function getCalorieGoalStatusColor(calories, goal, tolerancePercent) {
+  const normalizedGoal = parseMacroValue(goal);
+
+  if (!normalizedGoal) {
+    return MACRO_COLORS.calories;
+  }
+
+  const toleranceRatio = Math.max(0, parseMacroValue(tolerancePercent)) / 100;
+  const lowerBound = normalizedGoal * (1 - toleranceRatio);
+  const upperBound = normalizedGoal * (1 + toleranceRatio);
+
+  if (calories < lowerBound) {
+    return "#f9a825";
+  }
+
+  if (calories > upperBound) {
+    return "#c62828";
+  }
+
+  return "#2e7d32";
+}
+
 function CalorieHistoryChart({ rows }) {
   const [selectedDate, setSelectedDate] = useState(null);
+  const [tolerancePercent, setTolerancePercent] = useState("5");
   const points = rows.filter((row) => row.date);
 
   if (points.length === 0) {
@@ -1750,13 +1879,17 @@ function CalorieHistoryChart({ rows }) {
           const x = paddingLeft + index * slotWidth + (slotWidth - barWidth) / 2;
           const barHeight = (row.calories / maxValue) * plotHeight;
           const y = height - paddingBottom - barHeight;
-          const overGoal = row.goal && row.calories > row.goal;
+          const barColor = getCalorieGoalStatusColor(
+            row.calories,
+            row.goal,
+            tolerancePercent
+          );
 
           return (
             <rect
               key={row.date}
               aria-label={`${row.date}: ${formatMacro(row.calories, "cal")} calories`}
-              fill={overGoal ? "#c62828" : MACRO_COLORS.calories}
+              fill={barColor}
               height={Math.max(1, barHeight)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -1809,6 +1942,62 @@ function CalorieHistoryChart({ rows }) {
           {lastDate}
         </text>
       </svg>
+
+      <label
+        style={{
+          alignItems: "center",
+          background: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "minmax(0, 1fr) 88px",
+          padding: "10px",
+        }}
+      >
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "13px",
+            textAlign: "left",
+          }}
+        >
+          Tolerance
+        </span>
+        <span
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "6px",
+          }}
+        >
+          <input
+            aria-label="Calorie goal tolerance percent"
+            inputMode="decimal"
+            min="0"
+            onChange={(event) => setTolerancePercent(event.target.value)}
+            step="0.5"
+            type="number"
+            value={tolerancePercent}
+            style={{
+              boxSizing: "border-box",
+              minHeight: "34px",
+              minWidth: 0,
+              textAlign: "right",
+              width: "100%",
+            }}
+          />
+          <span
+            aria-hidden="true"
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "13px",
+            }}
+          >
+            %
+          </span>
+        </span>
+      </label>
 
       <div
         style={{
@@ -2194,6 +2383,10 @@ function formatEditableServingDescription(amount, basis) {
   return `${parsedAmount || 0} ${label}`;
 }
 
+function includesCreatine(value) {
+  return /\bcreatine\b/i.test(String(value || ""));
+}
+
 export default function NutritionView({ session = null }) {
   const signedInUserId = session?.user?.id || null;
   const nutritionStorageKey = useMemo(
@@ -2208,10 +2401,29 @@ export default function NutritionView({ session = null }) {
     () => getDailyCalorieGoalHistoryStorageKey(signedInUserId),
     [signedInUserId]
   );
+  const dailyCreatineLogStorageKey = useMemo(
+    () => getDailyCreatineLogStorageKey(signedInUserId),
+    [signedInUserId]
+  );
+  const dailyCreatineReminderStorageKey = useMemo(
+    () => getDailyCreatineReminderStorageKey(signedInUserId),
+    [signedInUserId]
+  );
+  const dailyCreatineReminderTimeStorageKey = useMemo(
+    () => getDailyCreatineReminderTimeStorageKey(signedInUserId),
+    [signedInUserId]
+  );
   const nutritionStorageKeyRef = useRef(nutritionStorageKey);
   const dailyCalorieGoalStorageKeyRef = useRef(dailyCalorieGoalStorageKey);
   const dailyCalorieGoalHistoryStorageKeyRef = useRef(
     dailyCalorieGoalHistoryStorageKey
+  );
+  const dailyCreatineLogStorageKeyRef = useRef(dailyCreatineLogStorageKey);
+  const dailyCreatineReminderStorageKeyRef = useRef(
+    dailyCreatineReminderStorageKey
+  );
+  const dailyCreatineReminderTimeStorageKeyRef = useRef(
+    dailyCreatineReminderTimeStorageKey
   );
   const [entries, setEntries] = useState(() =>
     readNutritionEntries(nutritionStorageKey)
@@ -2228,12 +2440,29 @@ export default function NutritionView({ session = null }) {
       dailyCalorieGoalHistoryStorageKey
     )
   );
+  const [dailyCreatineLog, setDailyCreatineLog] = useState(() =>
+    readDailyCreatineLog(dailyCreatineLogStorageKey)
+  );
+  const [dailyCreatineReminderEnabled, setDailyCreatineReminderEnabled] =
+    useState(() =>
+      readDailyCreatineReminderEnabled(dailyCreatineReminderStorageKey)
+    );
+  const [dailyCreatineReminderTime, setDailyCreatineReminderTime] = useState(
+    () => readDailyCreatineReminderTime(dailyCreatineReminderTimeStorageKey)
+  );
+  const [creatineReminderTick, setCreatineReminderTick] = useState(() =>
+    Date.now()
+  );
+  const [creatineReminderTimePickerOpen, setCreatineReminderTimePickerOpen] =
+    useState(false);
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [expandedMealGroups, setExpandedMealGroups] = useState({});
   const [copyFoodSheetOpen, setCopyFoodSheetOpen] = useState(false);
   const [copyFoodSourceDate, setCopyFoodSourceDate] = useState("");
   const [copyFoodStatus, setCopyFoodStatus] = useState("");
+  const [pendingCopySelection, setPendingCopySelection] = useState(null);
+  const [copyDestinationMeal, setCopyDestinationMeal] = useState(DEFAULT_MEAL);
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [dayPanelOpen, setDayPanelOpen] = useState(true);
   const [calorieHistorySheetOpen, setCalorieHistorySheetOpen] = useState(false);
@@ -2295,6 +2524,7 @@ export default function NutritionView({ session = null }) {
   const [recipeSearchLoading, setRecipeSearchLoading] = useState(false);
   const [recipeStatus, setRecipeStatus] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
+  const [recipeCreatineById, setRecipeCreatineById] = useState({});
   const entryFormRef = useRef(null);
   const foodNameInputRef = useRef(null);
   const barcodeVideoRef = useRef(null);
@@ -2304,6 +2534,8 @@ export default function NutritionView({ session = null }) {
   const latestNutritionEntriesRef = useRef(entries);
   const latestDailyCalorieGoalRef = useRef(dailyCalorieGoal);
   const latestDailyCalorieGoalHistoryRef = useRef(dailyCalorieGoalHistory);
+  const creatineReminderLongPressTimerRef = useRef(null);
+  const suppressCreatineReminderClickRef = useRef(false);
 
   useEffect(() => {
     nutritionStorageKeyRef.current = nutritionStorageKey;
@@ -2319,6 +2551,20 @@ export default function NutritionView({ session = null }) {
   }, [dailyCalorieGoalHistoryStorageKey]);
 
   useEffect(() => {
+    dailyCreatineLogStorageKeyRef.current = dailyCreatineLogStorageKey;
+  }, [dailyCreatineLogStorageKey]);
+
+  useEffect(() => {
+    dailyCreatineReminderStorageKeyRef.current =
+      dailyCreatineReminderStorageKey;
+  }, [dailyCreatineReminderStorageKey]);
+
+  useEffect(() => {
+    dailyCreatineReminderTimeStorageKeyRef.current =
+      dailyCreatineReminderTimeStorageKey;
+  }, [dailyCreatineReminderTimeStorageKey]);
+
+  useEffect(() => {
     latestNutritionEntriesRef.current = entries;
   }, [entries]);
 
@@ -2330,9 +2576,62 @@ export default function NutritionView({ session = null }) {
     latestDailyCalorieGoalHistoryRef.current = dailyCalorieGoalHistory;
   }, [dailyCalorieGoalHistory]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCreatineReminderTick(Date.now());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (creatineReminderLongPressTimerRef.current) {
+        window.clearTimeout(creatineReminderLongPressTimerRef.current);
+      }
+    },
+    []
+  );
+
   const dayEntries = useMemo(
     () => entries.filter((entry) => entry.date === selectedDate),
     [entries, selectedDate]
+  );
+  const dayRecipeIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          dayEntries
+            .map((entry) => entry.recipeId)
+            .filter(Boolean)
+            .map(String)
+        ),
+      ].sort(),
+    [dayEntries]
+  );
+  const creatineFoodDetected = useMemo(
+    () =>
+      dayEntries.some(
+        (entry) =>
+          includesCreatine(entry.name) ||
+          includesCreatine(entry.servingDescription)
+      ),
+    [dayEntries]
+  );
+  const creatineRecipeDetected = useMemo(
+    () => dayRecipeIds.some((recipeId) => recipeCreatineById[recipeId]),
+    [dayRecipeIds, recipeCreatineById]
+  );
+  const creatineAutoDetected = creatineFoodDetected || creatineRecipeDetected;
+  const creatineManuallyChecked = Boolean(dailyCreatineLog[selectedDate]);
+  const creatineTaken = creatineAutoDetected || creatineManuallyChecked;
+  const creatineReminderDue =
+    dailyCreatineReminderEnabled &&
+    selectedDate === getTodayKey() &&
+    !creatineTaken &&
+    isCreatineReminderTime(creatineReminderTick, dailyCreatineReminderTime);
+  const creatineReminderTimeLabel = formatReminderTime(
+    dailyCreatineReminderTime
   );
   const latestBodyWeight = useMemo(
     () =>
@@ -2373,6 +2672,10 @@ export default function NutritionView({ session = null }) {
   const mealSelectOptions = useMemo(
     () => getMealSelectOptions(dayEntries, entryDraft.meal),
     [dayEntries, entryDraft.meal]
+  );
+  const copyDestinationMealOptions = useMemo(
+    () => getMealSelectOptions(dayEntries, copyDestinationMeal),
+    [copyDestinationMeal, dayEntries]
   );
   const calorieGoalValue = parseMacroValue(dailyCalorieGoal);
   const caloriesRemaining = calorieGoalValue - totals.calories;
@@ -2430,6 +2733,84 @@ export default function NutritionView({ session = null }) {
   const hasFatSecretSearchResults = foodSearchResults.some(
     (food) => food.source === "fatsecret"
   );
+
+  useEffect(() => {
+    const scopedLog = readDailyCreatineLog(dailyCreatineLogStorageKey);
+    const legacyLog =
+      signedInUserId && Object.keys(scopedLog).length === 0
+        ? readDailyCreatineLog(DAILY_CREATINE_LOG_KEY)
+        : {};
+    const seededLog =
+      Object.keys(scopedLog).length > 0 ? scopedLog : legacyLog;
+
+    setDailyCreatineLog(seededLog);
+    saveDailyCreatineLog(seededLog, dailyCreatineLogStorageKey);
+  }, [dailyCreatineLogStorageKey, signedInUserId]);
+
+  useEffect(() => {
+    const scopedReminder = readDailyCreatineReminderEnabled(
+      dailyCreatineReminderStorageKey
+    );
+
+    setDailyCreatineReminderEnabled(scopedReminder);
+    saveDailyCreatineReminderEnabled(
+      scopedReminder,
+      dailyCreatineReminderStorageKey
+    );
+  }, [dailyCreatineReminderStorageKey]);
+
+  useEffect(() => {
+    const scopedReminderTime = readDailyCreatineReminderTime(
+      dailyCreatineReminderTimeStorageKey
+    );
+
+    setDailyCreatineReminderTime(scopedReminderTime);
+    saveDailyCreatineReminderTime(
+      scopedReminderTime,
+      dailyCreatineReminderTimeStorageKey
+    );
+  }, [dailyCreatineReminderTimeStorageKey]);
+
+  useEffect(() => {
+    if (
+      dayRecipeIds.length === 0 ||
+      !session?.user?.id ||
+      !isSupabaseConfigured
+    ) {
+      setRecipeCreatineById({});
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadCreatineRecipeIngredients() {
+      const entriesByRecipeId = {};
+
+      await Promise.all(
+        dayRecipeIds.map(async (recipeId) => {
+          try {
+            const ingredients = await fetchSupplementalRecipeIngredients(recipeId);
+            entriesByRecipeId[recipeId] = ingredients.some((ingredient) =>
+              includesCreatine(ingredient.ingredient_name)
+            );
+          } catch (error) {
+            console.error("Failed to check recipe ingredients for creatine:", error);
+            entriesByRecipeId[recipeId] = false;
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setRecipeCreatineById(entriesByRecipeId);
+      }
+    }
+
+    loadCreatineRecipeIngredients();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dayRecipeIds, session]);
 
   useEffect(() => {
     const scopedLocalEntries = readNutritionEntries(nutritionStorageKey);
@@ -2584,7 +2965,7 @@ export default function NutritionView({ session = null }) {
           mergedHistory,
           dailyCalorieGoalHistoryStorageKey
         );
-        setCalorieTargetSyncStatus("Calorie goal synced.");
+        setCalorieTargetSyncStatus("");
       } catch (error) {
         console.error("Failed to sync daily calorie targets:", error);
 
@@ -2951,9 +3332,30 @@ export default function NutritionView({ session = null }) {
   function closeCopyFoodSheet() {
     setCopyFoodSheetOpen(false);
     setCopyFoodStatus("");
+    setPendingCopySelection(null);
   }
 
-  function cloneEntriesForSelectedDate(sourceEntries) {
+  function openCopyDestinationDialog(sourceEntries, label = "") {
+    if (!sourceEntries.length) {
+      return;
+    }
+
+    const sourceMeal = normalizeMeal(sourceEntries[0]?.meal);
+
+    setPendingCopySelection({
+      entries: sourceEntries,
+      label: label || sourceEntries[0]?.name || "Selected food",
+      sourceMeal,
+    });
+    setCopyDestinationMeal(sourceMeal);
+    setCopyFoodStatus("");
+  }
+
+  function closeCopyDestinationDialog() {
+    setPendingCopySelection(null);
+  }
+
+  function cloneEntriesForSelectedDate(sourceEntries, meal) {
     const timestamp = Date.now();
 
     return sourceEntries.map((entry, index) => ({
@@ -2961,30 +3363,46 @@ export default function NutritionView({ session = null }) {
       createdAt: new Date(timestamp + index).toISOString(),
       date: selectedDate,
       id: timestamp + index,
-      meal: normalizeMeal(entry.meal),
+      meal: normalizeMeal(meal),
       updatedAt: new Date(timestamp + index).toISOString(),
     }));
   }
 
-  function copyEntriesFromAnotherDay(sourceEntries) {
+  function copyEntriesFromAnotherDay(sourceEntries, destinationMeal) {
     if (!sourceEntries.length) {
       return;
     }
 
-    const copiedEntries = cloneEntriesForSelectedDate(sourceEntries);
+    const normalizedDestinationMeal =
+      destinationMeal === ADD_SNACK_VALUE
+        ? getNextSnackMeal(dayEntries)
+        : normalizeMeal(destinationMeal);
+    const copiedEntries = cloneEntriesForSelectedDate(
+      sourceEntries,
+      normalizedDestinationMeal
+    );
     updateEntries([...entries, ...copiedEntries], copiedEntries);
     setExpandedMealGroups((current) => {
       const next = { ...current };
 
-      copiedEntries.forEach((entry) => {
-        next[normalizeMeal(entry.meal)] = true;
-      });
+      next[normalizedDestinationMeal] = true;
 
       return next;
     });
     setCopyFoodStatus(
-      `${copiedEntries.length} ${copiedEntries.length === 1 ? "food" : "foods"} added to ${selectedDate}.`
+      `${copiedEntries.length} ${
+        copiedEntries.length === 1 ? "food" : "foods"
+      } added to ${getMealLabel(normalizedDestinationMeal)} on ${selectedDate}.`
     );
+  }
+
+  function confirmCopySelection() {
+    if (!pendingCopySelection?.entries?.length) {
+      return;
+    }
+
+    copyEntriesFromAnotherDay(pendingCopySelection.entries, copyDestinationMeal);
+    closeCopyDestinationDialog();
   }
 
   function updateBodyWeightEntries(nextEntries) {
@@ -4160,6 +4578,84 @@ export default function NutritionView({ session = null }) {
     }
   }
 
+  function toggleDailyCreatine() {
+    if (creatineAutoDetected) {
+      return;
+    }
+
+    const targetDate = selectedDate || getTodayKey();
+    const nextLog = {
+      ...dailyCreatineLog,
+    };
+
+    if (nextLog[targetDate]) {
+      delete nextLog[targetDate];
+    } else {
+      nextLog[targetDate] = true;
+    }
+
+    setDailyCreatineLog(nextLog);
+    saveDailyCreatineLog(nextLog, dailyCreatineLogStorageKeyRef.current);
+  }
+
+  function toggleDailyCreatineReminder() {
+    const nextValue = !dailyCreatineReminderEnabled;
+
+    setDailyCreatineReminderEnabled(nextValue);
+    saveDailyCreatineReminderEnabled(
+      nextValue,
+      dailyCreatineReminderStorageKeyRef.current
+    );
+    setCreatineReminderTick(Date.now());
+  }
+
+  function startCreatineReminderLongPress(event) {
+    event.preventDefault();
+    suppressCreatineReminderClickRef.current = false;
+
+    if (creatineReminderLongPressTimerRef.current) {
+      window.clearTimeout(creatineReminderLongPressTimerRef.current);
+    }
+
+    creatineReminderLongPressTimerRef.current = window.setTimeout(() => {
+      suppressCreatineReminderClickRef.current = true;
+      setCreatineReminderTimePickerOpen(true);
+      creatineReminderLongPressTimerRef.current = null;
+    }, LONG_PRESS_DURATION_MS);
+  }
+
+  function cancelCreatineReminderLongPress() {
+    if (!creatineReminderLongPressTimerRef.current) {
+      return;
+    }
+
+    window.clearTimeout(creatineReminderLongPressTimerRef.current);
+    creatineReminderLongPressTimerRef.current = null;
+  }
+
+  function finishCreatineReminderPress(event) {
+    event.preventDefault();
+
+    if (creatineReminderLongPressTimerRef.current) {
+      cancelCreatineReminderLongPress();
+      toggleDailyCreatineReminder();
+      return;
+    }
+
+    suppressCreatineReminderClickRef.current = false;
+  }
+
+  function updateDailyCreatineReminderTime(value) {
+    const nextTime = normalizeTimeValue(value);
+
+    setDailyCreatineReminderTime(nextTime);
+    saveDailyCreatineReminderTime(
+      nextTime,
+      dailyCreatineReminderTimeStorageKeyRef.current
+    );
+    setCreatineReminderTick(Date.now());
+  }
+
   function updateDailyCalorieGoal(value) {
     const goal = Math.round(parseMacroValue(value));
 
@@ -4197,7 +4693,7 @@ export default function NutritionView({ session = null }) {
         session
       )
         .then(() => {
-          setCalorieTargetSyncStatus("Calorie goal synced.");
+          setCalorieTargetSyncStatus("");
         })
         .catch((error) => {
           console.error("Failed to save daily calorie target:", error);
@@ -4408,6 +4904,204 @@ export default function NutritionView({ session = null }) {
           <Plus size={18} />
         </button>
 	      </section>
+
+      <section
+        aria-label="Daily creatine"
+        style={{
+          alignItems: "center",
+          background: creatineReminderDue ? "#fde8e8" : "transparent",
+          border: creatineReminderDue
+            ? "1px solid #8a1f11"
+            : "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto auto",
+          marginBottom: "14px",
+          padding: "10px 12px",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
+      >
+        <BicepsFlexed size={20} color="#6d4c41" />
+        <strong>Creatine</strong>
+        <button
+          aria-label={
+            dailyCreatineReminderEnabled
+              ? "Turn creatine reminder off"
+              : "Turn creatine reminder on"
+          }
+          aria-pressed={dailyCreatineReminderEnabled}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setCreatineReminderTimePickerOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleDailyCreatineReminder();
+            }
+          }}
+          onPointerCancel={cancelCreatineReminderLongPress}
+          onPointerDown={startCreatineReminderLongPress}
+          onPointerLeave={cancelCreatineReminderLongPress}
+          onPointerUp={finishCreatineReminderPress}
+          style={{
+            alignItems: "center",
+            background: dailyCreatineReminderEnabled ? "#e6f4ea" : "#f7fbf7",
+            border: dailyCreatineReminderEnabled
+              ? "1px solid #137333"
+              : "1px solid #b7d7bf",
+            borderRadius: "8px",
+            color: creatineReminderDue
+              ? "#8a1f11"
+              : dailyCreatineReminderEnabled
+                ? "#137333"
+                : "#5f7f68",
+            display: "inline-flex",
+            height: "34px",
+            justifyContent: "center",
+            padding: 0,
+            touchAction: "manipulation",
+            WebkitTouchCallout: "none",
+            WebkitUserSelect: "none",
+            userSelect: "none",
+            width: "34px",
+          }}
+          title={
+            dailyCreatineReminderEnabled
+              ? `Creatine reminder is on at ${creatineReminderTimeLabel}. Long press to change time.`
+              : `Creatine reminder is off. Long press to change ${creatineReminderTimeLabel} time.`
+          }
+          type="button"
+        >
+          {dailyCreatineReminderEnabled ? (
+            <Bell size={17} />
+          ) : (
+            <BellOff size={17} />
+          )}
+        </button>
+        <input
+          aria-label={
+            creatineAutoDetected
+              ? "Creatine logged from food or recipe"
+              : "Mark daily creatine taken"
+          }
+          checked={creatineTaken}
+          disabled={creatineAutoDetected}
+          onChange={toggleDailyCreatine}
+          style={{
+            accentColor: "#6d4c41",
+            height: "22px",
+            justifySelf: "center",
+            margin: 0,
+            width: "22px",
+          }}
+          title={
+            creatineAutoDetected
+              ? "Creatine was detected in today's food log."
+              : "Mark creatine taken for this day."
+          }
+          type="checkbox"
+        />
+      </section>
+
+      {creatineReminderTimePickerOpen && (
+        <div
+          aria-label="Creatine reminder time"
+          aria-modal="true"
+          onClick={() => setCreatineReminderTimePickerOpen(false)}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.48)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 2300,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              boxShadow: "0 18px 48px rgba(0,0,0,.28)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "340px",
+              minWidth: 0,
+              overflow: "hidden",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "18px",
+                lineHeight: 1.15,
+                margin: 0,
+              }}
+            >
+              Creatine Reminder
+            </h3>
+            <label
+              style={{
+                display: "grid",
+                gap: "6px",
+                minWidth: 0,
+              }}
+            >
+              Time
+              <span
+                style={{
+                  boxSizing: "border-box",
+                  display: "block",
+                  maxWidth: "100%",
+                  minWidth: 0,
+                  overflow: "hidden",
+                  width: "100%",
+                }}
+              >
+                <input
+                  aria-label="Creatine reminder time"
+                  onChange={(event) =>
+                    updateDailyCreatineReminderTime(event.target.value)
+                  }
+                  style={{
+                    WebkitAppearance: "none",
+                    appearance: "none",
+                    boxSizing: "border-box",
+                    display: "block",
+                    font: "inherit",
+                    maxWidth: "100%",
+                    minHeight: "44px",
+                    minWidth: 0,
+                    padding: "7px 10px",
+                    width: "100%",
+                  }}
+                  type="time"
+                  value={dailyCreatineReminderTime}
+                />
+              </span>
+            </label>
+            <button
+              onClick={() => setCreatineReminderTimePickerOpen(false)}
+              style={{
+                minHeight: "44px",
+              }}
+              type="button"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {calorieTargetSyncStatus && (
         <div
@@ -6002,7 +6696,9 @@ export default function NutritionView({ session = null }) {
                           </span>
                         </div>
                         <button
-                          onClick={() => copyEntriesFromAnotherDay(group.entries)}
+                          onClick={() =>
+                            openCopyDestinationDialog(group.entries, group.label)
+                          }
                           type="button"
                         >
                           Add meal
@@ -6061,7 +6757,9 @@ export default function NutritionView({ session = null }) {
                               </span>
                             </div>
                             <button
-                              onClick={() => copyEntriesFromAnotherDay([entry])}
+                              onClick={() =>
+                                openCopyDestinationDialog([entry], entry.name)
+                              }
                               type="button"
                             >
                               Add
@@ -6085,6 +6783,121 @@ export default function NutritionView({ session = null }) {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {pendingCopySelection && (
+        <div
+          aria-label="Choose destination meal"
+          aria-modal="true"
+          onClick={closeCopyDestinationDialog}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.48)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 2300,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              boxShadow: "0 18px 48px rgba(0,0,0,.28)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "420px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gap: "4px",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "18px",
+                  lineHeight: 1.15,
+                  margin: 0,
+                }}
+              >
+                Add to meal
+              </h3>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {pendingCopySelection.entries.length === 1
+                  ? pendingCopySelection.label
+                  : `${pendingCopySelection.entries.length} foods from ${pendingCopySelection.label}`}
+              </div>
+            </div>
+
+            <label
+              style={{
+                display: "grid",
+                gap: "5px",
+              }}
+            >
+              Meal for {selectedDate}
+              <select
+                value={copyDestinationMeal}
+                onChange={(event) => setCopyDestinationMeal(event.target.value)}
+                style={{
+                  boxSizing: "border-box",
+                  font: "inherit",
+                  minHeight: "42px",
+                  padding: "7px 10px",
+                  width: "100%",
+                }}
+              >
+                {copyDestinationMealOptions.map(([meal, label]) => (
+                  <option key={meal} value={meal}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <button
+                onClick={closeCopyDestinationDialog}
+                style={{
+                  minHeight: "46px",
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCopySelection}
+                style={{
+                  minHeight: "46px",
+                }}
+                type="button"
+              >
+                Add
+              </button>
+            </div>
           </div>
         </div>
       )}

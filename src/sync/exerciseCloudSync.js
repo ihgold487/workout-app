@@ -281,22 +281,86 @@ async function loadCloudExercisePreferenceTargets(userId) {
   };
 }
 
-function localExercisePreferenceToCloud(exercise, userId, exerciseId) {
+function normalizeE1RMMetadata(value) {
+  const numericValue = Number(value?.value);
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return {
+    date: value?.date || null,
+    value: numericValue,
+  };
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([, entry]) => entry !== null && entry !== undefined
+    )
+  );
+}
+
+function localExercisePreferenceToCloud(
+  exercise,
+  userId,
+  exerciseId,
+  exerciseMetadata = {}
+) {
   const isInactive = exercise.active === "inactive";
+  const localMetadata = exerciseMetadata?.[exercise.id] || {};
+  const latestE1RM = normalizeE1RMMetadata(localMetadata.latestE1RM);
+  const maxE1RM = normalizeE1RMMetadata(localMetadata.maxE1RM);
 
   return {
     exclude_from_plans: isInactive,
     exercise_id: exerciseId,
     include_in_plans: !isInactive,
     is_favorite: false,
-    metadata: {
+    metadata: compactObject({
+      latestE1RM,
       localActiveStatus: isInactive ? "inactive" : "active",
       localExerciseId: exercise.id,
       localExerciseType: exercise.builtin ? "builtin" : "custom",
+      maxE1RM,
       syncedAt: new Date().toISOString(),
-    },
+    }),
+    notes: String(localMetadata.note || "").trim() || null,
     updated_at: new Date().toISOString(),
     user_id: userId,
+  };
+}
+
+function cloudPreferenceMetadataToLocal(preference) {
+  const metadata = preference?.metadata || {};
+  const latestE1RM = normalizeE1RMMetadata(metadata.latestE1RM);
+  const maxE1RM = normalizeE1RMMetadata(metadata.maxE1RM);
+
+  return compactObject({
+    latestE1RM,
+    maxE1RM,
+    note: String(preference?.notes || "").trim() || null,
+  });
+}
+
+function mergePreferenceMetadata(
+  currentExerciseMetadata,
+  localExercise,
+  preference
+) {
+  const preferenceMetadata = cloudPreferenceMetadataToLocal(preference);
+
+  if (Object.keys(preferenceMetadata).length === 0) {
+    return currentExerciseMetadata;
+  }
+
+  return {
+    ...currentExerciseMetadata,
+    [localExercise.id]: {
+      ...(currentExerciseMetadata?.[localExercise.id] || {}),
+      ...preferenceMetadata,
+    },
   };
 }
 
@@ -358,7 +422,11 @@ function applyCloudExerciseMetadata(localExercise, cloudExercise) {
   });
 }
 
-export async function uploadExercisePreferences(exerciseLibrary, session) {
+export async function uploadExercisePreferences(
+  exerciseLibrary,
+  exerciseMetadata,
+  session
+) {
   assertCloudReady(session);
 
   const userId = session.user.id;
@@ -384,7 +452,14 @@ export async function uploadExercisePreferences(exerciseLibrary, session) {
       continue;
     }
 
-    records.push(localExercisePreferenceToCloud(exercise, userId, exerciseId));
+    records.push(
+      localExercisePreferenceToCloud(
+        exercise,
+        userId,
+        exerciseId,
+        exerciseMetadata
+      )
+    );
   }
 
   if (records.length > 0) {
@@ -409,6 +484,7 @@ export async function uploadExercisePreferences(exerciseLibrary, session) {
 
 export async function downloadExerciseLibraryWithPreferences(
   currentExerciseLibrary,
+  currentExerciseMetadata,
   session
 ) {
   assertCloudReady(session);
@@ -429,7 +505,7 @@ export async function downloadExerciseLibraryWithPreferences(
 
   const { data: preferences, error: preferenceError } = await supabase
     .from(EXERCISE_PREFERENCES_TABLE)
-    .select("exercise_id,include_in_plans,exclude_from_plans")
+    .select("exercise_id,include_in_plans,exclude_from_plans,notes,metadata")
     .eq("user_id", userId);
 
   if (preferenceError) {
@@ -453,6 +529,7 @@ export async function downloadExerciseLibraryWithPreferences(
       .map((exercise) => [exercise.source_key, exercise])
   );
   const matchedCloudExerciseIds = new Set();
+  let nextExerciseMetadata = { ...(currentExerciseMetadata || {}) };
   let updated = 0;
   let inactive = 0;
 
@@ -472,6 +549,11 @@ export async function downloadExerciseLibraryWithPreferences(
       ...applyCloudExerciseMetadata(exercise, cloudExercise),
       active: getPreferenceStatus(preference),
     };
+    nextExerciseMetadata = mergePreferenceMetadata(
+      nextExerciseMetadata,
+      nextExercise,
+      preference
+    );
 
     if (nextExercise.active === EXERCISE_STATUS.inactive) {
       inactive += 1;
@@ -496,10 +578,17 @@ export async function downloadExerciseLibraryWithPreferences(
       const localExercise = cloudExerciseToLocal(exercise);
       const preference = preferencesByExerciseId.get(exercise.id);
 
-      return {
+      const nextExercise = {
         ...localExercise,
         active: getPreferenceStatus(preference),
       };
+      nextExerciseMetadata = mergePreferenceMetadata(
+        nextExerciseMetadata,
+        nextExercise,
+        preference
+      );
+
+      return nextExercise;
     })
     .filter((exercise) => !existingLocalIds.has(String(exercise.id)));
   addedBuiltInExercises.forEach((exercise) => {
@@ -516,10 +605,17 @@ export async function downloadExerciseLibraryWithPreferences(
       const localExercise = cloudExerciseToLocal(exercise);
       const preference = preferencesByExerciseId.get(exercise.id);
 
-      return {
+      const nextExercise = {
         ...localExercise,
         active: getPreferenceStatus(preference),
       };
+      nextExerciseMetadata = mergePreferenceMetadata(
+        nextExerciseMetadata,
+        nextExercise,
+        preference
+      );
+
+      return nextExercise;
     })
     .filter((exercise) => !existingLocalIds.has(String(exercise.id)));
 
@@ -535,6 +631,7 @@ export async function downloadExerciseLibraryWithPreferences(
       ...addedBuiltInExercises,
       ...addedCustomExercises,
     ],
+    exerciseMetadata: nextExerciseMetadata,
     inactive,
     preferences: preferences.length,
     total:
