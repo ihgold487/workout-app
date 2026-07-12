@@ -26,6 +26,7 @@ import PlansView from "./components/PlansView";
 import NutritionView from "./components/NutritionView";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import {
+  createWorkoutBackup,
   clearLegacyEquipmentStorage,
   getSavedStorageVersion,
   loadWorkoutData,
@@ -42,6 +43,8 @@ import {
   subscribeToAuthChanges,
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
+import { BENCH_PRESS_HISTORY_TEST_DATA } from "./data/benchPressHistoryTestData";
+import { calculateE1RM } from "./utils/e1rm";
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
@@ -81,6 +84,9 @@ const AUTO_SYNC_SUPPRESS_MS = 4000;
 const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
 const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
+const BENCH_HISTORY_TEST_BACKUP_KEY = "benchHistoryTestBackup";
+const BENCH_HISTORY_TEST_ID_PREFIX = "bench-history-test";
+const LOCAL_TEST_SYNC_SUPPRESS_MS = 60 * 60 * 1000;
 const NORMALIZED_SYNC_DOMAINS = [
   "exercisePreferences",
   "workouts",
@@ -294,6 +300,122 @@ function formatAuditLocalSummary(summary) {
 
 function formatAuditNormalizedSummary(summary) {
   return `${summary.exercises} exercises, ${summary.exercisePreferences} exercise preferences, ${summary.workouts} workout rows, ${summary.trainingPlans} plans, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets, ${summary.nutritionEntries} nutrition entries, ${summary.bodyMeasurements} body measurements`;
+}
+
+function isBenchHistoryTestWorkout(workout) {
+  return String(workout?.id || "").startsWith(BENCH_HISTORY_TEST_ID_PREFIX);
+}
+
+function getPrimaryEquipment(exercise) {
+  return Array.isArray(exercise?.equipment)
+    ? exercise.equipment[0] || ""
+    : exercise?.equipment || "";
+}
+
+function findBenchPressBarbellExercise(exerciseLibrary) {
+  return exerciseLibrary.find(
+    (exercise) =>
+      String(exercise.name || "").trim().toLowerCase() === "bench press" &&
+      String(getPrimaryEquipment(exercise)).trim().toLowerCase() === "barbell"
+  );
+}
+
+function formatCompletedAt(isoValue) {
+  const parsed = new Date(isoValue);
+
+  return Number.isFinite(parsed.getTime())
+    ? parsed.toLocaleDateString()
+    : String(isoValue || "");
+}
+
+function buildBenchHistoryTestWorkouts(benchExercise) {
+  return BENCH_PRESS_HISTORY_TEST_DATA.map((entry, workoutIndex) => {
+    const workoutId = `${BENCH_HISTORY_TEST_ID_PREFIX}-${entry.completedAtIso.slice(
+      0,
+      10
+    )}-${workoutIndex + 1}`;
+
+    return {
+      completedAt: formatCompletedAt(entry.completedAtIso),
+      completedAtIso: entry.completedAtIso,
+      durationSeconds: entry.durationSeconds || null,
+      exercises: [
+        {
+          equipment: benchExercise.equipment || ["Barbell"],
+          exerciseId: benchExercise.id,
+          id: `${workoutId}-exercise-1`,
+          imageAlt: benchExercise.imageAlt || "",
+          imageUrl: benchExercise.imageUrl || "",
+          muscles: benchExercise.muscles || [],
+          name: benchExercise.name,
+          note: "Temporary local bench history test import.",
+          sets: entry.sets.map((set) => ({
+            actualReps: set.reps,
+            actualRir: set.rir,
+            actualWeight: set.weight,
+            completed: true,
+            id: `${workoutId}-set-${set.setNumber}`,
+            isDropSet: false,
+            targetReps: "",
+            targetRir: "",
+            targetWeight: "",
+          })),
+          supersetGroup: null,
+        },
+      ],
+      id: workoutId,
+      planId: null,
+      planWeek: null,
+      planWorkoutId: null,
+      sourceSessionId: null,
+      startedAt: formatCompletedAt(entry.completedAtIso),
+      startedAtIso: entry.completedAtIso,
+      templateId: null,
+      templateName: "Bench Press History Test",
+    };
+  });
+}
+
+function getBenchHistoryMetadata(importedHistory, existing = {}) {
+  let latestE1RM = null;
+  let maxE1RM = existing.maxE1RM || null;
+
+  importedHistory.forEach((workout) => {
+    const exercise = workout.exercises?.[0];
+    let workoutBestE1RM = null;
+
+    exercise?.sets?.forEach((set) => {
+      const e1rm = calculateE1RM(
+        set.actualWeight,
+        set.actualReps,
+        set.actualRir
+      );
+
+      if (e1rm && (!workoutBestE1RM || e1rm > workoutBestE1RM)) {
+        workoutBestE1RM = e1rm;
+      }
+
+      if (e1rm && (!maxE1RM || e1rm > maxE1RM.value)) {
+        maxE1RM = {
+          date: workout.completedAt,
+          value: e1rm,
+        };
+      }
+    });
+
+    if (!latestE1RM && workoutBestE1RM) {
+      latestE1RM = {
+        date: workout.completedAt,
+        value: workoutBestE1RM,
+      };
+    }
+  });
+
+  return {
+    ...existing,
+    latestE1RM: latestE1RM || existing.latestE1RM,
+    maxE1RM,
+  };
 }
 
 function hasInactiveExercisePreference(exerciseLibrary) {
@@ -740,6 +862,11 @@ export default function App() {
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
 
+  const [benchHistoryTestStatus, setBenchHistoryTestStatus] = useState("");
+
+  const [benchHistoryBackupAvailable, setBenchHistoryBackupAvailable] =
+    useState(() => Boolean(localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY)));
+
   const currentWorkoutDataRef = useRef(null);
 
   const authSessionRef = useRef(null);
@@ -969,6 +1096,105 @@ export default function App() {
     setExerciseMetadata(data.exerciseMetadata);
     setLocalOwnerUserId(data.ownerUserId || null);
     setSelectedSessionId(data.selectedSessionId);
+  }
+
+  async function saveLocalWorkoutDataImmediately(data) {
+    saveWorkoutData(data, STORAGE_VERSION);
+
+    if (indexedDbReady) {
+      await saveWorkoutDataToIndexedDb(data, STORAGE_VERSION);
+    }
+  }
+
+  async function importBenchHistoryTestData() {
+    const benchExercise = findBenchPressBarbellExercise(exerciseLibrary);
+
+    if (!benchExercise) {
+      setBenchHistoryTestStatus("Bench Press / Barbell was not found.");
+      return;
+    }
+
+    const currentData = getCurrentWorkoutData();
+    const backupExists = Boolean(
+      localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY)
+    );
+    const importedHistory = buildBenchHistoryTestWorkouts(benchExercise);
+    const nextHistory = [
+      ...importedHistory,
+      ...currentData.history.filter((workout) => !isBenchHistoryTestWorkout(workout)),
+    ].sort((a, b) =>
+      String(b.completedAtIso || "").localeCompare(String(a.completedAtIso || ""))
+    );
+    const existingMetadata = currentData.exerciseMetadata?.[benchExercise.id] || {};
+    const nextData = {
+      ...currentData,
+      exerciseMetadata: {
+        ...currentData.exerciseMetadata,
+        [benchExercise.id]: getBenchHistoryMetadata(
+          importedHistory,
+          existingMetadata
+        ),
+      },
+      history: nextHistory,
+    };
+
+    if (!backupExists) {
+      safeSetLocalStorage(
+        BENCH_HISTORY_TEST_BACKUP_KEY,
+        JSON.stringify(createWorkoutBackup(currentData))
+      );
+      setBenchHistoryBackupAvailable(true);
+    }
+
+    automaticSyncSuppressUntilRef.current =
+      getCurrentTimeMs() + LOCAL_TEST_SYNC_SUPPRESS_MS;
+    replaceWorkoutData(nextData);
+
+    try {
+      await saveLocalWorkoutDataImmediately(nextData);
+      setBenchHistoryTestStatus(
+        `Imported ${importedHistory.length} local-only bench history workouts. Restore before syncing if you do not want them uploaded.`
+      );
+      setSyncStatus(
+        "Bench history test data was imported locally. Automatic sync is temporarily suppressed."
+      );
+    } catch (error) {
+      console.error("Bench history test import failed:", error);
+      setBenchHistoryTestStatus(`Import failed: ${error.message}`);
+    }
+  }
+
+  async function restoreBenchHistoryTestBackup() {
+    const rawBackup = localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY);
+
+    if (!rawBackup) {
+      setBenchHistoryTestStatus("No bench history test backup is available.");
+      setBenchHistoryBackupAvailable(false);
+      return;
+    }
+
+    try {
+      const backup = JSON.parse(rawBackup);
+      const restoredData = backup?.data;
+
+      if (!restoredData) {
+        throw new Error("Backup data is missing.");
+      }
+
+      automaticSyncSuppressUntilRef.current =
+        getCurrentTimeMs() + LOCAL_TEST_SYNC_SUPPRESS_MS;
+      replaceWorkoutData(restoredData);
+      await saveLocalWorkoutDataImmediately(restoredData);
+      localStorage.removeItem(BENCH_HISTORY_TEST_BACKUP_KEY);
+      setBenchHistoryBackupAvailable(false);
+      setBenchHistoryTestStatus("Restored the pre-import local workout data.");
+      setSyncStatus(
+        "Bench history test data was restored locally. Automatic sync is temporarily suppressed."
+      );
+    } catch (error) {
+      console.error("Bench history test restore failed:", error);
+      setBenchHistoryTestStatus(`Restore failed: ${error.message}`);
+    }
   }
 
   function resetLocalWorkoutDataForUser(userId = null) {
@@ -3029,6 +3255,65 @@ export default function App() {
               {getCustomExercises(exerciseLibrary).length} custom exercises
               ready for the normalized exercise table.
             </div>
+          </div>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              marginTop: "10px",
+              paddingTop: "10px",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "15px",
+                margin: "0 0 6px",
+              }}
+            >
+              Bench History Test
+            </h3>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                margin: "0 0 8px",
+              }}
+            >
+              Imports 71 local-only Barbell Bench Press history entries from
+              the older CSV for chart testing. A local backup is saved before
+              the first import.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "center",
+              }}
+            >
+              <button onClick={importBenchHistoryTestData} type="button">
+                Import Bench Test Data
+              </button>
+              <button
+                disabled={!benchHistoryBackupAvailable}
+                onClick={restoreBenchHistoryTestBackup}
+                type="button"
+              >
+                Restore Pre-Import Data
+              </button>
+            </div>
+            {benchHistoryTestStatus && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "6px",
+                }}
+              >
+                {benchHistoryTestStatus}
+              </div>
+            )}
           </div>
           <div
             style={{

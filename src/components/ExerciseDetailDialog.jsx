@@ -1,7 +1,45 @@
 import { useMemo, useState } from "react";
-import { ImagePlus, LineChart, ListChecks, X } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarCheck,
+  Check,
+  Palette,
+  Dumbbell,
+  ImagePlus,
+  LineChart,
+  ListChecks,
+  TrendingUp,
+  Trophy,
+  X,
+} from "lucide-react";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 import MuscleMap from "./MuscleMap";
+
+const RANGE_OPTIONS = [
+  { label: "1 week", value: 7 },
+  { label: "1 month", value: 30 },
+  { label: "3 months", value: 90 },
+  { label: "6 months", value: 183 },
+  { label: "9 months", value: 274 },
+  { label: "1 year", value: 365 },
+  { label: "All", value: null },
+];
+
+const TREND_OPTIONS = [
+  { label: "None", value: null },
+  { label: "1 week", value: 7 },
+  { label: "2 weeks", value: 14 },
+  { label: "1 month", value: 30 },
+];
+
+const CHART_SETTINGS_STORAGE_KEY = "exerciseHistoryChartSettings";
+const TREND_COLOR_CHANGE_THRESHOLD_LB = 5;
+const TREND_COLOR_CHANGE_THRESHOLD_PERCENT = 0.025;
+const TREND_COLORS = {
+  decreasing: "#c62828",
+  flat: "#f9a825",
+  increasing: "#2e7d32",
+};
 
 function formatEquipment(equipment) {
   return Array.isArray(equipment) ? equipment.filter(Boolean).join(", ") : equipment || "";
@@ -104,6 +142,146 @@ function daysBetween(startDate, endDate) {
   return Math.round((end - start) / 86400000);
 }
 
+function getOptionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || "";
+}
+
+function isValidOptionValue(options, value) {
+  return options.some((option) => option.value === value);
+}
+
+function getStoredChartSettings() {
+  if (typeof window === "undefined") {
+    return {
+      colorTrend: false,
+      rangeDays: null,
+      trendDays: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(CHART_SETTINGS_STORAGE_KEY) || "{}"
+    );
+
+    return {
+      colorTrend: Boolean(parsed.colorTrend),
+      rangeDays: isValidOptionValue(RANGE_OPTIONS, parsed.rangeDays)
+        ? parsed.rangeDays
+        : null,
+      trendDays: isValidOptionValue(TREND_OPTIONS, parsed.trendDays)
+        ? parsed.trendDays
+        : null,
+    };
+  } catch {
+    return {
+      colorTrend: false,
+      rangeDays: null,
+      trendDays: null,
+    };
+  }
+}
+
+function saveStoredChartSettings(settings) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      CHART_SETTINGS_STORAGE_KEY,
+      JSON.stringify(settings)
+    );
+  } catch (error) {
+    console.warn("Failed to save exercise history chart settings:", error);
+  }
+}
+
+function filterPointsByRange(points, rangeDays) {
+  if (!rangeDays || points.length === 0) {
+    return points;
+  }
+
+  const lastDate = points[points.length - 1].dateKey;
+  const filtered = points.filter(
+    (point) => daysBetween(point.dateKey, lastDate) <= rangeDays
+  );
+
+  return filtered.length > 0 ? filtered : [points[points.length - 1]];
+}
+
+function buildTrendPoints(points, trendDays) {
+  if (!trendDays || points.length === 0) {
+    return [];
+  }
+
+  return points.map((point) => {
+    const windowPoints = points.filter(
+      (candidate) =>
+        candidate.dateKey <= point.dateKey &&
+        daysBetween(candidate.dateKey, point.dateKey) <= trendDays
+    );
+    const averageValue =
+      windowPoints.reduce((total, candidate) => total + candidate.value, 0) /
+      Math.max(1, windowPoints.length);
+
+    return {
+      ...point,
+      value: averageValue,
+    };
+  });
+}
+
+function getRegressionTrendDirection(points) {
+  if (points.length < 2) {
+    return "flat";
+  }
+
+  const xValues = points.map((point) => new Date(`${point.dateKey}T00:00:00`).getTime());
+  const yValues = points.map((point) => point.value);
+  const xMean =
+    xValues.reduce((total, value) => total + value, 0) / xValues.length;
+  const yMean =
+    yValues.reduce((total, value) => total + value, 0) / yValues.length;
+  const denominator = xValues.reduce(
+    (total, value) => total + (value - xMean) ** 2,
+    0
+  );
+
+  if (!denominator) {
+    return "flat";
+  }
+
+  const numerator = xValues.reduce(
+    (total, value, index) =>
+      total + (value - xMean) * (yValues[index] - yMean),
+    0
+  );
+  const slope = numerator / denominator;
+  const predictedFirst = yMean + slope * (xValues[0] - xMean);
+  const predictedLast =
+    yMean + slope * (xValues[xValues.length - 1] - xMean);
+  const predictedChange = predictedLast - predictedFirst;
+  const percentChange =
+    predictedFirst === 0 ? 0 : predictedChange / Math.abs(predictedFirst);
+
+  if (
+    predictedChange >= TREND_COLOR_CHANGE_THRESHOLD_LB ||
+    percentChange >= TREND_COLOR_CHANGE_THRESHOLD_PERCENT
+  ) {
+    return "increasing";
+  }
+
+  if (
+    predictedChange <= -TREND_COLOR_CHANGE_THRESHOLD_LB ||
+    percentChange <= -TREND_COLOR_CHANGE_THRESHOLD_PERCENT
+  ) {
+    return "decreasing";
+  }
+
+  return "flat";
+}
+
 function buildExerciseHistory(exercise, history) {
   return [...(history || [])]
     .flatMap((workout) => {
@@ -154,8 +332,196 @@ function buildExerciseHistory(exercise, history) {
     .reverse();
 }
 
-function MetricChart({ data, metric }) {
-  const points = data
+function buildHistorySummary(exerciseHistory) {
+  const maxWeight = Math.max(
+    0,
+    ...exerciseHistory
+      .flatMap((entry) => entry.sets || [])
+      .map((set) => Number(set.weight))
+      .filter(Number.isFinite)
+  );
+  const maxE1RM = Math.max(
+    0,
+    ...exerciseHistory
+      .flatMap((entry) => entry.sets || [])
+      .map((set) => Number(set.e1rm))
+      .filter(Number.isFinite)
+  );
+
+  return {
+    maxE1RM: maxE1RM || null,
+    maxWeight: maxWeight || null,
+    workouts: exerciseHistory.length,
+  };
+}
+
+function HistorySummaryItem({ icon: Icon, label, value }) {
+  return (
+    <div
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "6px",
+        gridTemplateColumns: "auto minmax(0, 1fr)",
+        minWidth: 0,
+      }}
+    >
+      <Icon size={17} color="var(--accent)" />
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "11px",
+            lineHeight: 1.1,
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: "14px",
+            fontWeight: 700,
+            lineHeight: 1.2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectionSheet({
+  colorTrend,
+  onClose,
+  onSelect,
+  onToggleColorTrend,
+  options,
+  selectedValue,
+  showColorTrendToggle = false,
+  title,
+}) {
+  return (
+    <div
+      aria-label={title}
+      aria-modal="true"
+      onClick={onClose}
+      role="dialog"
+      style={{
+        alignItems: "flex-end",
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        position: "fixed",
+        zIndex: 1600,
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "var(--surface-raised)",
+          borderRadius: "18px 18px 0 0",
+          boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+          boxSizing: "border-box",
+          display: "grid",
+          gap: "8px",
+          maxWidth: "420px",
+          padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+          width: "100%",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "17px",
+              margin: 0,
+            }}
+          >
+            {title}
+          </h3>
+          <div
+            style={{
+              display: "inline-flex",
+              gap: "6px",
+            }}
+          >
+            {showColorTrendToggle && (
+              <button
+                aria-label={
+                  colorTrend
+                    ? "Turn e1RM trend coloring off"
+                    : "Turn e1RM trend coloring on"
+                }
+                aria-pressed={colorTrend}
+                onClick={onToggleColorTrend}
+                style={{
+                  alignItems: "center",
+                  borderColor: colorTrend ? "var(--accent)" : undefined,
+                  color: colorTrend ? "var(--accent)" : undefined,
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "34px",
+                  minWidth: "34px",
+                  padding: 0,
+                }}
+                title={
+                  colorTrend
+                    ? "Trend coloring is on"
+                    : "Trend coloring is off"
+                }
+                type="button"
+              >
+                <Palette size={17} />
+              </button>
+            )}
+            <button aria-label={`Close ${title}`} onClick={onClose} type="button">
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+        {options.map((option) => {
+          const selected = option.value === selectedValue;
+
+          return (
+            <button
+              key={option.label}
+              onClick={() => {
+                onSelect(option.value);
+                onClose();
+              }}
+              style={{
+                alignItems: "center",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "20px minmax(0, 1fr)",
+                justifyItems: "start",
+                minHeight: "42px",
+                textAlign: "left",
+              }}
+              type="button"
+            >
+              {selected ? <Check size={17} color="var(--accent)" /> : <span />}
+              <span>{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
+  const allPoints = data
     .map((entry) => ({
       dateKey: entry.completedDateKey,
       label: entry.completedAt,
@@ -163,14 +529,31 @@ function MetricChart({ data, metric }) {
     }))
     .filter((point) => Number.isFinite(point.value) && point.dateKey)
     .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+  const points = filterPointsByRange(allPoints, rangeDays);
+  const trendPoints = buildTrendPoints(points, trendDays);
+  const trendColorPoints = trendDays ? trendPoints : points;
+  const trendDirection =
+    metric === "e1rm" && colorTrend
+      ? getRegressionTrendDirection(trendColorPoints)
+      : null;
+  const chartColor = trendDirection
+    ? TREND_COLORS[trendDirection]
+    : "var(--accent)";
 
   if (points.length < 2) {
     return (
       <div
         style={{
+          alignItems: "center",
+          background: "var(--surface-muted)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
           color: "var(--text-muted)",
+          display: "flex",
           fontSize: "12px",
-          padding: "12px 0",
+          justifyContent: "center",
+          minHeight: "260px",
+          padding: "12px",
         }}
       >
         Not enough history for a chart yet.
@@ -178,104 +561,159 @@ function MetricChart({ data, metric }) {
     );
   }
 
-  const width = 320;
-  const height = 150;
-  const padding = 24;
+  const width = 360;
+  const height = 360;
+  const paddingLeft = 42;
+  const paddingRight = 16;
+  const paddingTop = 22;
+  const paddingBottom = 34;
   const min = Math.min(...points.map((point) => point.value));
   const max = Math.max(...points.map((point) => point.value));
   const range = max - min || 1;
   const firstDate = points[0].dateKey;
   const lastDate = points[points.length - 1].dateKey;
+  const middleDate = points[Math.floor((points.length - 1) / 2)]?.dateKey || firstDate;
   const dateSpan = Math.max(1, daysBetween(firstDate, lastDate));
-  const plotted = points.map((point) => {
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const plotPoint = (point) => {
     const x =
-      padding +
-      (daysBetween(firstDate, point.dateKey) / dateSpan) *
-        (width - padding * 2);
+      points.length === 1
+        ? width / 2
+        : paddingLeft +
+          (daysBetween(firstDate, point.dateKey) / dateSpan) * plotWidth;
     const y =
       height -
-      padding -
-      ((point.value - min) / range) * (height - padding * 2);
+      paddingBottom -
+      ((point.value - min) / range) * plotHeight;
 
     return {
       ...point,
       x,
       y,
     };
-  });
+  };
+  const plotted = points.map(plotPoint);
+  const trendPlotted = trendPoints.map(plotPoint);
 
   return (
-    <svg
-      role="img"
-      aria-label={metric === "maxWeight" ? "Max weight over time" : "e1RM over time"}
-      viewBox={`0 0 ${width} ${height}`}
+    <div
       style={{
         background: "var(--surface-muted)",
         border: "1px solid var(--border)",
-        borderRadius: "6px",
-        width: "100%",
+        borderRadius: "8px",
+        padding: "8px",
       }}
     >
-      <line
-        x1={padding}
-        x2={width - padding}
-        y1={height - padding}
-        y2={height - padding}
-        stroke="var(--border)"
-      />
-      <line
-        x1={padding}
-        x2={padding}
-        y1={padding}
-        y2={height - padding}
-        stroke="var(--border)"
-      />
-      {plotted.slice(1).map((point, index) => {
-        const previous = plotted[index];
-        const skippedDays = daysBetween(previous.dateKey, point.dateKey) > 1;
-
-        return (
-          <line
-            key={`${previous.dateKey}-${point.dateKey}-${index}`}
-            x1={previous.x}
-            x2={point.x}
-            y1={previous.y}
-            y2={point.y}
-            stroke="var(--accent)"
-            strokeDasharray={skippedDays ? "5 5" : undefined}
-            strokeLinecap="round"
-            strokeWidth="3"
-          />
-        );
-      })}
-      {plotted.map((point, pointIndex) => (
-        <circle
-          key={`${point.label}-${pointIndex}`}
-          cx={point.x}
-          cy={point.y}
-          fill="var(--accent)"
-          r="4"
-        />
-      ))}
-      <text x={padding} y="16" fill="var(--text-muted)" fontSize="11">
-        {max.toFixed(1)}
-      </text>
-      <text x={padding} y={height - 6} fill="var(--text-muted)" fontSize="11">
-        {min.toFixed(1)}
-      </text>
-      <text x={padding} y={height - 18} fill="var(--text-muted)" fontSize="10">
-        {firstDate}
-      </text>
-      <text
-        x={width - padding}
-        y={height - 18}
-        fill="var(--text-muted)"
-        fontSize="10"
-        textAnchor="end"
+      <svg
+        role="img"
+        aria-label={metric === "maxWeight" ? "Max weight over time" : "e1RM over time"}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{
+          aspectRatio: "1 / 1",
+          display: "block",
+          width: "100%",
+        }}
       >
-        {lastDate}
-      </text>
-    </svg>
+        <line
+          x1={paddingLeft}
+          x2={width - paddingRight}
+          y1={height - paddingBottom}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <line
+          x1={paddingLeft}
+          x2={paddingLeft}
+          y1={paddingTop}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <text
+          x={paddingLeft - 8}
+          y={paddingTop + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {max.toFixed(1)}
+        </text>
+        <text
+          x={paddingLeft - 8}
+          y={height - paddingBottom + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {min.toFixed(1)}
+        </text>
+        {plotted.slice(1).map((point, index) => {
+          const previous = plotted[index];
+
+          return (
+            <line
+              key={`${previous.dateKey}-${point.dateKey}-${index}`}
+              x1={previous.x}
+              x2={point.x}
+              y1={previous.y}
+              y2={point.y}
+              stroke={
+                trendDays
+                  ? `color-mix(in srgb, ${chartColor} 30%, var(--border))`
+                  : chartColor
+              }
+              strokeLinecap="round"
+              strokeWidth={trendDays ? "2" : "2.5"}
+            />
+          );
+        })}
+        {trendDays &&
+          trendPlotted.slice(1).map((point, index) => {
+            const previous = trendPlotted[index];
+
+            return (
+              <line
+                key={`trend-${previous.dateKey}-${point.dateKey}-${index}`}
+                x1={previous.x}
+                x2={point.x}
+                y1={previous.y}
+                y2={point.y}
+                stroke={chartColor}
+                strokeLinecap="round"
+                strokeWidth="3.5"
+              />
+            );
+          })}
+        <text
+          x={paddingLeft}
+          y={height - 7}
+          fill="var(--text-muted)"
+          fontSize="10"
+        >
+          {firstDate}
+        </text>
+        {points.length > 2 && (
+          <text
+            x={paddingLeft + plotWidth / 2}
+            y={height - 7}
+            fill="var(--text-muted)"
+            fontSize="10"
+            textAnchor="middle"
+          >
+            {middleDate}
+          </text>
+        )}
+        <text
+          x={width - paddingRight}
+          y={height - 7}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {lastDate}
+        </text>
+      </svg>
+    </div>
   );
 }
 
@@ -288,11 +726,35 @@ export default function ExerciseDetailDialog({
 }) {
   const [activeTab, setActiveTab] = useState("info");
   const [chartMetric, setChartMetric] = useState("maxWeight");
+  const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
+  const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
+  const [trendSheetOpen, setTrendSheetOpen] = useState(false);
   const exerciseHistory = useMemo(
     () => buildExerciseHistory(exercise, history),
     [exercise, history]
   );
+  const historySummary = useMemo(
+    () => buildHistorySummary(exerciseHistory),
+    [exerciseHistory]
+  );
   const instructionSteps = getInstructionSteps(exercise);
+  const { colorTrend, rangeDays, trendDays } = chartSettings;
+  const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
+  const trendLabel = getOptionLabel(TREND_OPTIONS, trendDays);
+  const e1RMTrendColoringActive = chartMetric === "e1rm" && colorTrend;
+
+  function updateChartSettings(nextSettings) {
+    setChartSettings((currentSettings) => {
+      const updatedSettings = {
+        ...currentSettings,
+        ...nextSettings,
+      };
+
+      saveStoredChartSettings(updatedSettings);
+
+      return updatedSettings;
+    });
+  }
 
   if (!exercise) {
     return null;
@@ -370,6 +832,41 @@ export default function ExerciseDetailDialog({
             <X size={18} />
           </button>
         </div>
+
+        {activeTab === "history" && (
+          <div
+            aria-label="Exercise history summary"
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              display: "grid",
+              gap: "10px",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              marginTop: "12px",
+              padding: "10px",
+            }}
+          >
+            <HistorySummaryItem
+              icon={CalendarCheck}
+              label="Workouts"
+              value={historySummary.workouts}
+            />
+            <HistorySummaryItem
+              icon={Trophy}
+              label="Max weight"
+              value={
+                historySummary.maxWeight == null
+                  ? "—"
+                  : `${historySummary.maxWeight} lb`
+              }
+            />
+            <HistorySummaryItem
+              icon={Dumbbell}
+              label="e1RM"
+              value={formatE1RM(historySummary.maxE1RM)}
+            />
+          </div>
+        )}
 
         <div
           role="tablist"
@@ -549,7 +1046,7 @@ export default function ExerciseDetailDialog({
               style={{
                 display: "grid",
                 gap: "8px",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto auto",
               }}
             >
               <button
@@ -582,9 +1079,57 @@ export default function ExerciseDetailDialog({
               >
                 e1RM
               </button>
+              <button
+                aria-label={`Set exercise trend, current ${trendLabel}`}
+                onClick={() => setTrendSheetOpen(true)}
+                style={{
+                  alignItems: "center",
+                  borderColor:
+                    trendDays || e1RMTrendColoringActive
+                      ? "var(--accent)"
+                      : undefined,
+                  color:
+                    trendDays || e1RMTrendColoringActive
+                      ? "var(--accent)"
+                      : undefined,
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "40px",
+                  minWidth: "40px",
+                  padding: 0,
+                }}
+                title={`Trend: ${trendLabel}`}
+                type="button"
+              >
+                <TrendingUp size={18} />
+              </button>
+              <button
+                aria-label={`Set exercise range, current ${rangeLabel}`}
+                onClick={() => setRangeSheetOpen(true)}
+                style={{
+                  alignItems: "center",
+                  borderColor: rangeDays ? "var(--accent)" : undefined,
+                  color: rangeDays ? "var(--accent)" : undefined,
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "40px",
+                  minWidth: "40px",
+                  padding: 0,
+                }}
+                title={`Range: ${rangeLabel}`}
+                type="button"
+              >
+                <CalendarDays size={18} />
+              </button>
             </div>
 
-            <MetricChart data={exerciseHistory} metric={chartMetric} />
+            <MetricChart
+              colorTrend={colorTrend}
+              data={exerciseHistory}
+              metric={chartMetric}
+              rangeDays={rangeDays}
+              trendDays={trendDays}
+            />
 
             {exerciseHistory.length === 0 ? (
               <div
@@ -669,6 +1214,29 @@ export default function ExerciseDetailDialog({
           </button>
         )}
       </div>
+      {rangeSheetOpen && (
+        <SelectionSheet
+          onClose={() => setRangeSheetOpen(false)}
+          onSelect={(value) => updateChartSettings({ rangeDays: value })}
+          options={RANGE_OPTIONS}
+          selectedValue={rangeDays}
+          title="Exercise range"
+        />
+      )}
+      {trendSheetOpen && (
+        <SelectionSheet
+          colorTrend={colorTrend}
+          onClose={() => setTrendSheetOpen(false)}
+          onSelect={(value) => updateChartSettings({ trendDays: value })}
+          onToggleColorTrend={() =>
+            updateChartSettings({ colorTrend: !colorTrend })
+          }
+          options={TREND_OPTIONS}
+          selectedValue={trendDays}
+          showColorTrendToggle
+          title="Exercise trend"
+        />
+      )}
     </div>
   );
 }
