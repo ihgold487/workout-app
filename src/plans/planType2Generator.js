@@ -16,6 +16,30 @@ const PLAN_CONFIGS = {
   },
 };
 
+const WORKOUT_TYPE_CONFIGS = {
+  "type-1": {
+    label: "Workout Type 1",
+  },
+  "type-2": {
+    label: "Workout Type 2",
+  },
+  push: {
+    label: "Push",
+  },
+  pull: {
+    label: "Pull",
+  },
+  upper: {
+    label: "Upper",
+  },
+  lower: {
+    label: "Lower",
+  },
+  "full-body": {
+    label: "Full Body",
+  },
+};
+
 function normalizeMuscle(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -293,6 +317,47 @@ function buildType2Workout(workoutIndex, usage, seed) {
   };
 }
 
+function buildNamedWorkout(workoutType) {
+  const workoutGroupsByType = {
+    push: [
+      createGroup("Chest", ["Upper Chest", "Chest", "Chest"], 3, null),
+      createGroup("Shoulders", ["Side Delts", "Rear Delts"], 3, null),
+      createGroup("Triceps", ["Triceps", "Triceps"], 3, null),
+      createGroup("Abs", ["Abs"], 3, null),
+    ],
+    pull: [
+      createGroup("Back", ["Lats", "Upper Back", "Lats"], 3, null),
+      createGroup("Delts", ["Rear Delts", "Side Delts"], 3, null),
+      createGroup("Traps", ["Traps"], 3, null),
+      createGroup("Biceps", ["Biceps", "Biceps"], 3, null),
+    ],
+    upper: [
+      createGroup("Chest", ["Upper Chest", "Chest"], 3, null),
+      createGroup("Back", ["Lats", "Upper Back"], 3, null),
+      createGroup("Shoulders", ["Side Delts"], 3, null),
+      createGroup("Arms", ["Triceps", "Biceps"], 3, null),
+    ],
+    lower: [
+      createGroup("Legs", ["Glutes", "Quads", "Hamstrings"], 3, null),
+      createGroup("Calves", ["Calves"], 3, null),
+      createGroup("Core", ["Abs", "Obliques"], 3, null),
+    ],
+    "full-body": [
+      createGroup("Lower", ["Glutes", "Quads"], 3, null),
+      createGroup("Chest", ["Chest"], 3, null),
+      createGroup("Back", ["Lats", "Upper Back"], 3, null),
+      createGroup("Shoulders", ["Side Delts"], 3, null),
+      createGroup("Arms", ["Triceps", "Biceps"], 3, null),
+      createGroup("Abs", ["Abs"], 3, null),
+    ],
+  };
+
+  return {
+    name: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
+    groups: workoutGroupsByType[workoutType] || workoutGroupsByType["full-body"],
+  };
+}
+
 function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
   const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
   const usage = {
@@ -303,6 +368,18 @@ function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
   return Array.from({ length: workoutCount }, (_, workoutIndex) =>
     builder(workoutIndex, usage, seed)
   );
+}
+
+function buildSingleWorkoutDefinition({ planType, seed, workoutType }) {
+  if (workoutType === "type-1") {
+    return buildType1Workout(0, { setTotalsByMuscle: new Map() }, seed);
+  }
+
+  if (workoutType === "type-2") {
+    return buildType2Workout(0, { setTotalsByMuscle: new Map() }, seed);
+  }
+
+  return buildNamedWorkout(workoutType || planType || "full-body");
 }
 
 function chooseExercise(exerciseLibrary, muscle, usage, offset) {
@@ -481,19 +558,32 @@ export function generatePlanWorkouts({
   daysPerWeek,
   durationWeeks,
   exerciseLibrary,
+  generationMode = "plan",
   goal = "maintain",
   history,
   planType,
   reps,
   rir,
   seed = 0,
+  workoutType,
 }) {
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
-  const workoutDefinitions = buildWorkoutDefinitions({
-    daysPerWeek,
-    planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
-    seed,
-  });
+  const isWorkoutMode = generationMode === "workout";
+  const workoutConfig =
+    WORKOUT_TYPE_CONFIGS[workoutType] || WORKOUT_TYPE_CONFIGS["full-body"];
+  const workoutDefinitions = isWorkoutMode
+    ? [
+        buildSingleWorkoutDefinition({
+          planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
+          seed,
+          workoutType,
+        }),
+      ]
+    : buildWorkoutDefinitions({
+        daysPerWeek,
+        planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
+        seed,
+      });
   const workoutCount = workoutDefinitions.length;
   const activeExerciseLibrary = exerciseLibrary.filter(isExerciseActive);
   const usage = {
@@ -543,8 +633,11 @@ export function generatePlanWorkouts({
       daysPerWeek: workoutCount,
       exercises,
       lastCompleted: null,
-      name: `${config.label} - ${workout.name}`,
+      name: isWorkoutMode
+        ? `${workoutConfig.label} Workout`
+        : `${config.label} - ${workout.name}`,
       planType,
+      workoutType: isWorkoutMode ? workoutType : null,
     };
   });
 

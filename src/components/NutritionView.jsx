@@ -8,9 +8,13 @@ import {
   Bell,
   BellOff,
   BicepsFlexed,
+  BookPlus,
+  CalendarPlus,
+  ChefHat,
   ChevronDown,
   ChevronUp,
   Coffee,
+  Library,
   Plus,
   ScanBarcode,
   Scale,
@@ -112,6 +116,7 @@ const BASE_MEAL_OPTIONS = [
   ["dinner", "Dinner"],
 ];
 const ADD_SNACK_VALUE = "__add_snack__";
+const COPY_TO_MEAL_VALUE = "__copy_to_meal__";
 const DEFAULT_SNACK_MEAL = "snack-1";
 const ALWAYS_VISIBLE_MEALS = new Set([
   "breakfast",
@@ -2297,6 +2302,13 @@ function getMealSelectOptions(entries, currentMeal) {
   ];
 }
 
+function getMealMoveOptions(entries, currentMeal) {
+  return [
+    ...getMealSelectOptions(entries, currentMeal),
+    [COPY_TO_MEAL_VALUE, "Copy to ..."],
+  ];
+}
+
 function getMealGroups(entries, expandedMeals) {
   const snackMeals = getSnackMealOptions(entries);
   const mealOptions = [...BASE_MEAL_OPTIONS, ...snackMeals];
@@ -2332,6 +2344,60 @@ function MealIcon({ meal, size = 16 }) {
   }
 
   return <Coffee size={size} color="#7c3f18" />;
+}
+
+function MealSelect({
+  ariaLabel = "Meal",
+  onChange,
+  onClick,
+  onKeyDown,
+  options,
+  selectStyle,
+  value,
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          alignItems: "center",
+          display: "inline-flex",
+          height: "100%",
+          left: "10px",
+          pointerEvents: "none",
+          position: "absolute",
+          top: 0,
+        }}
+      >
+        <MealIcon meal={value} />
+      </span>
+      <select
+        aria-label={ariaLabel}
+        onChange={onChange}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        value={value}
+        style={{
+          boxSizing: "border-box",
+          font: "inherit",
+          minHeight: "42px",
+          padding: "7px 10px 7px 34px",
+          width: "100%",
+          ...selectStyle,
+        }}
+      >
+        {options.map(([meal, label]) => (
+          <option key={meal} value={meal}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 function MealMacroSummary({ totals }) {
@@ -2463,6 +2529,9 @@ export default function NutritionView({ session = null }) {
   const [copyFoodStatus, setCopyFoodStatus] = useState("");
   const [pendingCopySelection, setPendingCopySelection] = useState(null);
   const [copyDestinationMeal, setCopyDestinationMeal] = useState(DEFAULT_MEAL);
+  const [pendingMealCopyEntry, setPendingMealCopyEntry] = useState(null);
+  const [mealCopyDestinationMeal, setMealCopyDestinationMeal] =
+    useState(DEFAULT_MEAL);
   const [selectedDate, setSelectedDate] = useState(getTodayKey);
   const [dayPanelOpen, setDayPanelOpen] = useState(true);
   const [calorieHistorySheetOpen, setCalorieHistorySheetOpen] = useState(false);
@@ -2676,6 +2745,10 @@ export default function NutritionView({ session = null }) {
   const copyDestinationMealOptions = useMemo(
     () => getMealSelectOptions(dayEntries, copyDestinationMeal),
     [copyDestinationMeal, dayEntries]
+  );
+  const mealCopyDestinationMealOptions = useMemo(
+    () => getMealSelectOptions(dayEntries, mealCopyDestinationMeal),
+    [dayEntries, mealCopyDestinationMeal]
   );
   const calorieGoalValue = parseMacroValue(dailyCalorieGoal);
   const caloriesRemaining = calorieGoalValue - totals.calories;
@@ -3403,6 +3476,59 @@ export default function NutritionView({ session = null }) {
 
     copyEntriesFromAnotherDay(pendingCopySelection.entries, copyDestinationMeal);
     closeCopyDestinationDialog();
+  }
+
+  function openMealCopyDialog(entry) {
+    if (!entry) {
+      return;
+    }
+
+    const sourceMeal = normalizeMeal(entry.meal);
+
+    setPendingMealCopyEntry(entry);
+    setMealCopyDestinationMeal(sourceMeal);
+  }
+
+  function closeMealCopyDialog() {
+    setPendingMealCopyEntry(null);
+  }
+
+  function copyEntryToMeal(entry, destinationMeal) {
+    if (!entry) {
+      return;
+    }
+
+    const normalizedDestinationMeal =
+      destinationMeal === ADD_SNACK_VALUE
+        ? getNextSnackMeal(dayEntries)
+        : normalizeMeal(destinationMeal);
+    const timestamp = Date.now();
+    const copiedEntry = {
+      ...entry,
+      createdAt: new Date(timestamp).toISOString(),
+      date: selectedDate,
+      id: timestamp,
+      meal: normalizedDestinationMeal,
+      updatedAt: new Date(timestamp).toISOString(),
+    };
+
+    updateEntries([...entries, copiedEntry], [copiedEntry]);
+    setExpandedMealGroups((current) => ({
+      ...current,
+      [normalizedDestinationMeal]: true,
+    }));
+    setNutritionSyncStatus(
+      `Copied ${entry.name} to ${getMealLabel(normalizedDestinationMeal)}.`
+    );
+  }
+
+  function confirmMealCopy() {
+    if (!pendingMealCopyEntry) {
+      return;
+    }
+
+    copyEntryToMeal(pendingMealCopyEntry, mealCopyDestinationMeal);
+    closeMealCopyDialog();
   }
 
   function updateBodyWeightEntries(nextEntries) {
@@ -4439,6 +4565,13 @@ export default function NutritionView({ session = null }) {
   }
 
   function updateEntryMeal(entryId, meal) {
+    if (meal === COPY_TO_MEAL_VALUE) {
+      const entry = entries.find((currentEntry) => currentEntry.id === entryId);
+
+      openMealCopyDialog(entry);
+      return;
+    }
+
     const normalizedMeal =
       meal === ADD_SNACK_VALUE ? getNextSnackMeal(dayEntries) : normalizeMeal(meal);
     const updatedAt = new Date().toISOString();
@@ -6289,24 +6422,12 @@ export default function NutritionView({ session = null }) {
             }}
           >
             Meal
-            <select
-              aria-label="Meal"
+            <MealSelect
+              ariaLabel="Meal"
+              options={mealSelectOptions}
               value={normalizeMeal(entryDraft.meal)}
               onChange={(event) => updateEntryDraftMeal(event.target.value)}
-              style={{
-                boxSizing: "border-box",
-                font: "inherit",
-                minHeight: "42px",
-                padding: "7px 10px",
-                width: "100%",
-              }}
-            >
-              {mealSelectOptions.map(([meal, label]) => (
-                <option key={meal} value={meal}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
 
           {(selectedFood || editingServingBasis) && (
@@ -6448,7 +6569,7 @@ export default function NutritionView({ session = null }) {
               minHeight: "42px",
             }}
           >
-            {!editingEntryId && <Plus size={18} />}
+            {!editingEntryId && <Utensils size={18} />}
             {editingEntryId ? "Update Food" : "Add Food"}
           </button>
 
@@ -6464,7 +6585,7 @@ export default function NutritionView({ session = null }) {
             }}
             type="button"
           >
-            <Plus size={18} />
+            <CalendarPlus size={18} />
             Add Food from another day
           </button>
 
@@ -6486,30 +6607,45 @@ export default function NutritionView({ session = null }) {
             disabled={!entryDraft.name.trim()}
             onClick={openLibrarySheet}
             style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              justifyContent: "center",
               minHeight: "42px",
             }}
             type="button"
           >
+            <BookPlus size={18} />
             Add to library
           </button>
 
           <button
             onClick={openRecipeSheet}
             style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              justifyContent: "center",
               minHeight: "42px",
             }}
             type="button"
           >
+            <ChefHat size={18} />
             Create recipe
           </button>
 
           <button
             onClick={openLibraryManager}
             style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              justifyContent: "center",
               minHeight: "42px",
             }}
             type="button"
           >
+            <Library size={18} />
             Manage library
           </button>
         </div>
@@ -6853,23 +6989,12 @@ export default function NutritionView({ session = null }) {
               }}
             >
               Meal for {selectedDate}
-              <select
+              <MealSelect
+                ariaLabel="Destination meal"
+                options={copyDestinationMealOptions}
                 value={copyDestinationMeal}
                 onChange={(event) => setCopyDestinationMeal(event.target.value)}
-                style={{
-                  boxSizing: "border-box",
-                  font: "inherit",
-                  minHeight: "42px",
-                  padding: "7px 10px",
-                  width: "100%",
-                }}
-              >
-                {copyDestinationMealOptions.map(([meal, label]) => (
-                  <option key={meal} value={meal}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
 
             <div
@@ -6896,6 +7021,110 @@ export default function NutritionView({ session = null }) {
                 type="button"
               >
                 Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingMealCopyEntry && (
+        <div
+          aria-label="Copy food to meal"
+          aria-modal="true"
+          onClick={closeMealCopyDialog}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.48)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 2300,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              boxShadow: "0 18px 48px rgba(0,0,0,.28)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "420px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gap: "4px",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "18px",
+                  lineHeight: 1.15,
+                  margin: 0,
+                }}
+              >
+                Copy to meal
+              </h3>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {pendingMealCopyEntry.name}
+              </div>
+            </div>
+
+            <label
+              style={{
+                display: "grid",
+                gap: "5px",
+              }}
+            >
+              Meal for {selectedDate}
+              <MealSelect
+                ariaLabel="Copy destination meal"
+                options={mealCopyDestinationMealOptions}
+                value={mealCopyDestinationMeal}
+                onChange={(event) =>
+                  setMealCopyDestinationMeal(event.target.value)
+                }
+              />
+            </label>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <button
+                onClick={closeMealCopyDialog}
+                style={{
+                  minHeight: "46px",
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmMealCopy}
+                style={{
+                  minHeight: "46px",
+                }}
+                type="button"
+              >
+                Copy
               </button>
             </div>
           </div>
@@ -7078,30 +7307,23 @@ export default function NutritionView({ session = null }) {
 		                            </span>
 		                          </div>
 
-		                          <select
-		                            aria-label={`Move ${entry.name} to meal`}
+		                          <MealSelect
+		                            ariaLabel={`Move ${entry.name} to meal`}
 		                            onClick={(event) => event.stopPropagation()}
 		                            onChange={(event) => {
 		                              event.stopPropagation();
 		                              updateEntryMeal(entry.id, event.target.value);
 		                            }}
 		                            onKeyDown={(event) => event.stopPropagation()}
+		                            options={getMealMoveOptions(dayEntries, entry.meal)}
 		                            value={normalizeMeal(entry.meal)}
-		                            style={{
-		                              boxSizing: "border-box",
-		                              font: "inherit",
+		                            selectStyle={{
 		                              minHeight: "34px",
 		                              minWidth: 0,
-		                              padding: "4px 8px",
-		                              width: "100%",
+		                              paddingBottom: "4px",
+		                              paddingTop: "4px",
 		                            }}
-		                          >
-		                            {getMealSelectOptions(dayEntries, entry.meal).map(([meal, label]) => (
-		                              <option key={meal} value={meal}>
-		                                {label}
-		                              </option>
-		                            ))}
-		                          </select>
+		                          />
 	
 		                          <button
 	                            aria-label={`Remove ${entry.name}`}

@@ -96,6 +96,59 @@ function getExerciseDetailRecord(exercise, exerciseLibrary) {
   };
 }
 
+function getPrimaryMuscles(exercise) {
+  const muscles = Array.isArray(exercise?.muscles) ? exercise.muscles : [];
+  return muscles[0] ? [muscles[0]] : [];
+}
+
+function getSecondaryMuscles(exercise) {
+  const muscles = Array.isArray(exercise?.muscles) ? exercise.muscles : [];
+  const primaryMuscle = muscles[0] || "";
+
+  return muscles
+    .slice(1)
+    .filter((muscle) => muscle && muscle !== primaryMuscle);
+}
+
+function ExerciseMuscleMapThumbnails({ exercise }) {
+  const primaryMuscles = getPrimaryMuscles(exercise);
+  const secondaryMuscles = getSecondaryMuscles(exercise);
+
+  if (primaryMuscles.length === 0 && secondaryMuscles.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "4px",
+        width: "66px",
+      }}
+    >
+      {primaryMuscles.length > 0 ? (
+        <MuscleMap
+          compact
+          label={`${exercise.name} primary muscles`}
+          primaryMuscles={primaryMuscles}
+          showLegend={false}
+          showViewLabels={false}
+        />
+      ) : null}
+
+      {secondaryMuscles.length > 0 ? (
+        <MuscleMap
+          compact
+          label={`${exercise.name} secondary muscles`}
+          secondaryMuscles={secondaryMuscles}
+          showLegend={false}
+          showViewLabels={false}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function getExercisePreferenceKeys(exercise) {
   return [
     exercise?.exerciseId,
@@ -169,6 +222,20 @@ function renameWorkoutForDayOrder(name, dayNumber, planType) {
   const currentName = String(name || fallbackName).trim();
 
   return currentName || fallbackName;
+}
+
+function getWorkoutTypeLabel(workoutType) {
+  const labels = {
+    "type-1": "Workout Type 1",
+    "type-2": "Workout Type 2",
+    push: "Push",
+    pull: "Pull",
+    upper: "Upper",
+    lower: "Lower",
+    "full-body": "Full Body",
+  };
+
+  return labels[workoutType] || "Workout";
 }
 
 function findWorkoutIndexForSlot(layout, slotKey) {
@@ -570,6 +637,10 @@ function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
   return `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1}`;
 }
 
+function getDefaultWorkoutName(workoutType) {
+  return `${getWorkoutTypeLabel(workoutType)} Workout`;
+}
+
 function getGoalLabel(goal) {
   return goal === "progress" ? "Progress" : "Maintain";
 }
@@ -664,6 +735,9 @@ function PlanWorkoutPreview({
                         exercise={exercise}
                         exerciseDetail={exerciseDetail}
                         onExerciseClick={() => onShowExerciseDetail(exerciseDetail)}
+                        sideContent={
+                          <ExerciseMuscleMapThumbnails exercise={exerciseDetail} />
+                        }
                         leadingControl={
                           <span
                             {...attributes}
@@ -795,10 +869,15 @@ export default function PlansView({
 }) {
   const [durationWeeks, setDurationWeeks] = useState("4");
   const [daysPerWeek, setDaysPerWeek] = useState("2");
+  const [generationMode, setGenerationMode] = useState("plan");
   const [goal, setGoal] = useState("maintain");
   const [planType, setPlanType] = useState("type-2");
+  const [workoutType, setWorkoutType] = useState("type-2");
   const [planName, setPlanName] = useState(() =>
     getDefaultPlanName("type-2", "2", "4")
+  );
+  const [workoutName, setWorkoutName] = useState(() =>
+    getDefaultWorkoutName("type-2")
   );
   const [isPlanNameCustom, setIsPlanNameCustom] = useState(false);
   const [reps, setReps] = useState("10");
@@ -948,24 +1027,28 @@ export default function PlansView({
         durationWeeks,
         exerciseLibrary: generatorExerciseLibrary,
         exerciseMetadata,
+        generationMode,
         goal,
         history,
         planType,
         reps,
         rir,
         seed,
+        workoutType,
       }),
     [
       daysPerWeek,
       durationWeeks,
       generatorExerciseLibrary,
       exerciseMetadata,
+      generationMode,
       goal,
       history,
       planType,
       reps,
       rir,
       seed,
+      workoutType,
     ]
   );
 
@@ -1032,44 +1115,46 @@ export default function PlansView({
           workoutIndex
         )
           ? workoutNameBySlot[workoutIndex]
-          : getDefaultSavedWorkoutName(workout, workoutIndex, planType),
+          : generationMode === "workout"
+            ? workoutName
+            : getDefaultSavedWorkoutName(workout, workoutIndex, planType),
         previewWorkoutKey: workoutIndex,
         exercises: normalizedExerciseLayout[workoutIndex]
           .map((slotKey) => {
-          const slot = exerciseSlotByKey.get(slotKey);
+            const slot = exerciseSlotByKey.get(slotKey);
 
-          if (!slot) {
-            return null;
-          }
+            if (!slot) {
+              return null;
+            }
 
-          const exercise = slot.exercise;
-          const replacementExercise = replacementBySlot[slotKey];
-          const supersetGroup = Object.prototype.hasOwnProperty.call(
-            supersetGroupBySlot,
-            slotKey
-          )
-            ? supersetGroupBySlot[slotKey]
-            : exercise.supersetGroup;
-          const previewExercise = replacementExercise
-            ? createPlanExercise({
-                exercise: replacementExercise,
-                goal,
-                history,
-                planMuscle: exercise.planMuscle,
-                reps,
-                rir,
-                setCount: exercise.sets.length,
-                supersetGroup,
-              })
-            : {
-                ...exercise,
-                supersetGroup,
-              };
+            const exercise = slot.exercise;
+            const replacementExercise = replacementBySlot[slotKey];
+            const supersetGroup = Object.prototype.hasOwnProperty.call(
+              supersetGroupBySlot,
+              slotKey
+            )
+              ? supersetGroupBySlot[slotKey]
+              : exercise.supersetGroup;
+            const previewExercise = replacementExercise
+              ? createPlanExercise({
+                  exercise: replacementExercise,
+                  goal,
+                  history,
+                  planMuscle: exercise.planMuscle,
+                  reps,
+                  rir,
+                  setCount: exercise.sets.length,
+                  supersetGroup,
+                })
+              : {
+                  ...exercise,
+                  supersetGroup,
+                };
 
-          return {
-            ...previewExercise,
-            previewSlotKey: slotKey,
-          };
+            return {
+              ...previewExercise,
+              previewSlotKey: slotKey,
+            };
           })
           .filter(Boolean),
       })),
@@ -1083,9 +1168,10 @@ export default function PlansView({
       supersetGroupBySlot,
       reps,
       rir,
-      daysPerWeek,
-      durationWeeks,
       workoutNameBySlot,
+      generationMode,
+      planType,
+      workoutName,
     ]
   );
 
@@ -1113,15 +1199,23 @@ export default function PlansView({
           return {
             ...workout,
             dayNumber: dayIndex + 1,
-            name: renameWorkoutForDayOrder(
-              workout.name,
-              dayIndex + 1,
-              planType
-            ),
+            name:
+              generationMode === "workout"
+                ? workout.name
+                : renameWorkoutForDayOrder(
+                    workout.name,
+                    dayIndex + 1,
+                    planType
+                  ),
           };
         })
         .filter(Boolean),
-    [daysPerWeek, durationWeeks, orderedWorkoutKeys, previewWorkouts]
+    [
+      generationMode,
+      orderedWorkoutKeys,
+      planType,
+      previewWorkouts,
+    ]
   );
   const displayedWorkout =
     orderedPreviewWorkouts.find(
@@ -1140,6 +1234,7 @@ export default function PlansView({
   }
 
   async function saveGeneratedPlan() {
+    const isWorkoutMode = generationMode === "workout";
     const savedAt = Date.now();
     const planId = savedAt;
     const workouts = orderedPreviewWorkouts.map((workout, workoutIndex) => {
@@ -1149,15 +1244,14 @@ export default function PlansView({
 
       const templateId = savedAt + workoutIndex + 1;
       const planWorkoutId = `${planId}:workout-${workoutIndex + 1}`;
-      const isSingleWorkout = daysPerWeek === "1";
 
       return {
         ...savedWorkout,
         id: templateId,
         name: workout.name,
         dayNumber: workoutIndex + 1,
-        planId: isSingleWorkout ? null : planId,
-        planWorkoutId: isSingleWorkout ? null : planWorkoutId,
+        planId: isWorkoutMode ? null : planId,
+        planWorkoutId: isWorkoutMode ? null : planWorkoutId,
         exercises: workout.exercises.map((exercise, exerciseIndex) => {
           const savedExercise = { ...exercise };
 
@@ -1186,7 +1280,7 @@ export default function PlansView({
       return;
     }
 
-    if (daysPerWeek === "1") {
+    if (isWorkoutMode) {
       if (!isTrainerTargetSelf) {
         setSaveStatus("Saving workout for selected user...");
 
@@ -1367,7 +1461,9 @@ export default function PlansView({
             margin: 0,
           }}
         >
-          {getPlanTypeLabel(planType)}
+          {generationMode === "workout"
+            ? getWorkoutTypeLabel(workoutType)
+            : getPlanTypeLabel(planType)}
         </h2>
 
         <label
@@ -1376,10 +1472,19 @@ export default function PlansView({
             gap: "4px",
           }}
         >
-          Plan name
+          {generationMode === "workout" ? "Workout name" : "Plan name"}
           <input
-            value={planName}
+            value={generationMode === "workout" ? workoutName : planName}
             onChange={(event) => {
+              if (generationMode === "workout") {
+                setWorkoutName(event.target.value);
+                setWorkoutNameBySlot({
+                  ...workoutNameBySlot,
+                  0: event.target.value,
+                });
+                return;
+              }
+
               setIsPlanNameCustom(true);
               setPlanName(event.target.value);
             }}
@@ -1428,7 +1533,7 @@ export default function PlansView({
             }}
           >
             <Save size={16} />
-            {daysPerWeek === "1" ? "Save Workout" : "Save Plan"}
+            {generationMode === "workout" ? "Save Workout" : "Save Plan"}
           </button>
         </div>
 
@@ -1459,20 +1564,13 @@ export default function PlansView({
             gap: "4px",
           }}
         >
-          Plan type
+          Create
           <select
-            value={planType}
+            value={generationMode}
             onChange={(event) => {
-              setPlanType(event.target.value);
-              if (!isPlanNameCustom) {
-                setPlanName(
-                  getDefaultPlanName(
-                    event.target.value,
-                    daysPerWeek,
-                    durationWeeks
-                  )
-                );
-              }
+              const nextMode = event.target.value;
+
+              setGenerationMode(nextMode);
               resetPlanPreviewEdits();
               setWorkoutNameBySlot({});
               setSaveStatus("");
@@ -1485,10 +1583,85 @@ export default function PlansView({
               width: "100%",
             }}
           >
-            <option value="type-1">Type 1</option>
-            <option value="type-2">Type 2</option>
+            <option value="plan">Plan</option>
+            <option value="workout">Workout</option>
           </select>
         </label>
+
+        {generationMode === "plan" ? (
+          <label
+            style={{
+              display: "grid",
+              gap: "4px",
+            }}
+          >
+            Plan type
+            <select
+              value={planType}
+              onChange={(event) => {
+                setPlanType(event.target.value);
+                if (!isPlanNameCustom) {
+                  setPlanName(
+                    getDefaultPlanName(
+                      event.target.value,
+                      daysPerWeek,
+                      durationWeeks
+                    )
+                  );
+                }
+                resetPlanPreviewEdits();
+                setWorkoutNameBySlot({});
+                setSaveStatus("");
+              }}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                minHeight: "40px",
+                padding: "6px 10px",
+                width: "100%",
+              }}
+            >
+              <option value="type-1">Type 1</option>
+              <option value="type-2">Type 2</option>
+            </select>
+          </label>
+        ) : (
+          <label
+            style={{
+              display: "grid",
+              gap: "4px",
+            }}
+          >
+            Workout type
+            <select
+              value={workoutType}
+              onChange={(event) => {
+                const nextWorkoutType = event.target.value;
+
+                setWorkoutType(nextWorkoutType);
+                setWorkoutName(getDefaultWorkoutName(nextWorkoutType));
+                resetPlanPreviewEdits();
+                setWorkoutNameBySlot({});
+                setSaveStatus("");
+              }}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                minHeight: "40px",
+                padding: "6px 10px",
+                width: "100%",
+              }}
+            >
+              <option value="type-1">Type 1</option>
+              <option value="type-2">Type 2</option>
+              <option value="push">Push</option>
+              <option value="pull">Pull</option>
+              <option value="upper">Upper</option>
+              <option value="lower">Lower</option>
+              <option value="full-body">Full Body</option>
+            </select>
+          </label>
+        )}
 
         <label
           style={{
@@ -1517,18 +1690,21 @@ export default function PlansView({
           </select>
         </label>
 
-        <PlanPickerButton
-          label="Days per week"
-          value={`${daysPerWeek} ${daysPerWeek === "1" ? "day" : "days"}`}
-          onClick={() => setActiveValuePicker("days")}
-        />
+        {generationMode === "plan" && (
+          <>
+            <PlanPickerButton
+              label="Days per week"
+              value={`${daysPerWeek} ${daysPerWeek === "1" ? "day" : "days"}`}
+              onClick={() => setActiveValuePicker("days")}
+            />
 
-        <PlanPickerButton
-          disabled={daysPerWeek === "1"}
-          label="Duration in weeks"
-          value={daysPerWeek === "1" ? "Single workout" : durationWeeks}
-          onClick={() => setActiveValuePicker("duration")}
-        />
+            <PlanPickerButton
+              label="Duration in weeks"
+              value={durationWeeks}
+              onClick={() => setActiveValuePicker("duration")}
+            />
+          </>
+        )}
 
         <PlanPickerButton
           label="Reps"
@@ -1604,7 +1780,7 @@ export default function PlansView({
         }}
       >
         <div
-          aria-label="Plan days"
+          aria-label={generationMode === "workout" ? "Workout" : "Plan days"}
           style={{
             display: "flex",
             gap: "6px",
@@ -1624,7 +1800,11 @@ export default function PlansView({
                 key={workout.previewWorkoutKey}
                 active={workout.previewWorkoutKey === displayedWorkoutKey}
                 count={workout.exercises.length}
-                label={`Day ${dayIndex + 1}`}
+                label={
+                  generationMode === "workout"
+                    ? "Workout"
+                    : `Day ${dayIndex + 1}`
+                }
                 workoutKey={workout.previewWorkoutKey}
                 onClick={() => {
                   setActiveWorkoutIndex(workout.previewWorkoutKey);
@@ -1665,6 +1845,9 @@ export default function PlansView({
                   ...workoutNameBySlot,
                   [renamedWorkout.previewWorkoutKey]: name,
                 });
+                if (generationMode === "workout") {
+                  setWorkoutName(name);
+                }
                 setSaveStatus("");
               }}
               onShowSummary={setSummaryWorkout}

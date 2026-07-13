@@ -173,7 +173,14 @@ function buildMuscleMapViews({
   ].filter((view) => view.overlays.length > 0);
 }
 
-function MuscleMapFigure({ baseSrc, label, overlays, viewName }) {
+function MuscleMapFigure({
+  baseSrc,
+  compact = false,
+  label,
+  overlays,
+  showViewLabel = true,
+  viewName,
+}) {
   return (
     <div
       aria-label={label}
@@ -181,30 +188,32 @@ function MuscleMapFigure({ baseSrc, label, overlays, viewName }) {
       style={{
         background: "var(--surface)",
         border: "1px solid var(--border)",
-        borderRadius: "6px",
+        borderRadius: compact ? "4px" : "6px",
         minHeight: 0,
         overflow: "hidden",
-        padding: "8px",
+        padding: compact ? "2px" : "8px",
       }}
     >
-      <div
-        style={{
-          color: "var(--text-muted)",
-          fontSize: "11px",
-          fontWeight: 700,
-          letterSpacing: "0.04em",
-          marginBottom: "6px",
-          textAlign: "center",
-          textTransform: "uppercase",
-        }}
-      >
-        {viewName}
-      </div>
+      {showViewLabel ? (
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "11px",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            marginBottom: "6px",
+            textAlign: "center",
+            textTransform: "uppercase",
+          }}
+        >
+          {viewName}
+        </div>
+      ) : null}
       <div
         style={{
           aspectRatio: "200 / 369",
           margin: "0 auto",
-          maxWidth: "124px",
+          maxWidth: compact ? "28px" : "124px",
           position: "relative",
           width: "100%",
         }}
@@ -245,11 +254,13 @@ function MuscleMapFigure({ baseSrc, label, overlays, viewName }) {
 }
 
 export default function MuscleMap({
+  compact = false,
   label = "Exercise",
   primaryMuscles = [],
   scaleIntensity = false,
   secondaryMuscles = [],
   showLegend = true,
+  showViewLabels = true,
 }) {
   const mapViews = buildMuscleMapViews({
     label,
@@ -266,13 +277,13 @@ export default function MuscleMap({
     <div
       style={{
         display: "grid",
-        gap: "8px",
+        gap: compact ? "3px" : "8px",
       }}
     >
       <div
         style={{
           display: "grid",
-          gap: "8px",
+          gap: compact ? "3px" : "8px",
           gridTemplateColumns:
             mapViews.length > 1 ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)",
         }}
@@ -280,9 +291,11 @@ export default function MuscleMap({
         {mapViews.map((view) => (
           <MuscleMapFigure
             baseSrc={view.baseSrc}
+            compact={compact}
             key={view.viewName}
             label={view.label}
             overlays={view.overlays}
+            showViewLabel={showViewLabels}
             viewName={view.viewName}
           />
         ))}

@@ -28,6 +28,7 @@ export function WorkoutExercisePreviewRow({
   onClearNote,
   onExerciseClick,
   onSetClick,
+  sideContent,
 }) {
   return (
     <div
@@ -178,6 +179,7 @@ export function WorkoutExercisePreviewRow({
         <div
           style={{
             display: "grid",
+            flex: 1,
             gap: "5px",
             minWidth: 0,
           }}
@@ -210,6 +212,17 @@ export function WorkoutExercisePreviewRow({
             </div>
           ))}
         </div>
+
+        {sideContent ? (
+          <div
+            style={{
+              flexShrink: 0,
+              marginLeft: "auto",
+            }}
+          >
+            {sideContent}
+          </div>
+        ) : null}
       </div>
     </div>
   );
