@@ -36,9 +36,9 @@ const CHART_SETTINGS_STORAGE_KEY = "exerciseHistoryChartSettings";
 const TREND_COLOR_CHANGE_THRESHOLD_LB = 5;
 const TREND_COLOR_CHANGE_THRESHOLD_PERCENT = 0.025;
 const TREND_COLORS = {
-  decreasing: "#c62828",
-  flat: "#f9a825",
-  increasing: "#2e7d32",
+  decreasing: "#e53935",
+  flat: "#fdd835",
+  increasing: "#43a047",
 };
 
 function formatEquipment(equipment) {
@@ -466,13 +466,14 @@ function SelectionSheet({
                 onClick={onToggleColorTrend}
                 style={{
                   alignItems: "center",
-                  borderColor: colorTrend ? "var(--accent)" : undefined,
-                  color: colorTrend ? "var(--accent)" : undefined,
-                  display: "inline-flex",
+                  borderColor: colorTrend ? TREND_COLORS.increasing : undefined,
+                  color: colorTrend ? TREND_COLORS.increasing : undefined,
+                  display: "grid",
                   justifyContent: "center",
                   minHeight: "34px",
                   minWidth: "34px",
                   padding: 0,
+                  placeItems: "center",
                 }}
                 title={
                   colorTrend
@@ -481,7 +482,43 @@ function SelectionSheet({
                 }
                 type="button"
               >
-                <Palette size={17} />
+                <span
+                  style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "1px",
+                    justifyItems: "center",
+                    lineHeight: 1,
+                  }}
+                >
+                  <Palette size={17} />
+                  {colorTrend && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: "grid",
+                        gap: "1px",
+                        gridTemplateColumns: "repeat(3, 4px)",
+                      }}
+                    >
+                      {[
+                        TREND_COLORS.decreasing,
+                        TREND_COLORS.flat,
+                        TREND_COLORS.increasing,
+                      ].map((color) => (
+                        <span
+                          key={color}
+                          style={{
+                            background: color,
+                            borderRadius: "999px",
+                            height: "4px",
+                            width: "4px",
+                          }}
+                        />
+                      ))}
+                    </span>
+                  )}
+                </span>
               </button>
             )}
             <button aria-label={`Close ${title}`} onClick={onClose} type="button">
@@ -1233,7 +1270,7 @@ export default function ExerciseDetailDialog({
           }
           options={TREND_OPTIONS}
           selectedValue={trendDays}
-          showColorTrendToggle
+          showColorTrendToggle={chartMetric === "e1rm"}
           title="Exercise trend"
         />
       )}
