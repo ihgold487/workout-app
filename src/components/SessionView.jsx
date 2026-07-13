@@ -158,6 +158,18 @@ export default function SessionView({
     return weightUnit === "kg" ? lbsToKg(weight) : weight;
   }
 
+  function displayHistoricalValue(value) {
+    return isBlankValue(value) ? "—" : value;
+  }
+
+  function displayHistoricalWeight(weight) {
+    return isBlankValue(weight)
+      ? "—"
+      : weightUnit === "kg"
+      ? lbsToKg(weight)
+      : weight;
+  }
+
   function formatList(value) {
     if (Array.isArray(value)) {
       return value.filter(Boolean).join(", ");
@@ -228,17 +240,35 @@ export default function SessionView({
     };
   }
 
+  function exerciseMatchesHistoryExercise(sessionExercise, historyExercise) {
+    if (sessionExercise.exerciseId && historyExercise.exerciseId) {
+      return String(sessionExercise.exerciseId) === String(historyExercise.exerciseId);
+    }
+
+    return getExerciseKey(sessionExercise) === getExerciseKey(historyExercise);
+  }
+
   function getLatestWorkoutPerformance(exerciseId) {
+    const sessionExercise = session.exercises.find(
+      (exercise) => exercise.exerciseId === exerciseId || exercise.id === exerciseId
+    );
+
     const workout = history.find((workout) =>
-      workout.exercises.some((exercise) => exercise.exerciseId === exerciseId)
+      workout.exercises.some((exercise) =>
+        sessionExercise
+          ? exerciseMatchesHistoryExercise(sessionExercise, exercise)
+          : exercise.exerciseId === exerciseId
+      )
     );
 
     if (!workout) {
       return null;
     }
 
-    const exercise = workout.exercises.find(
-      (exercise) => exercise.exerciseId === exerciseId
+    const exercise = workout.exercises.find((exercise) =>
+      sessionExercise
+        ? exerciseMatchesHistoryExercise(sessionExercise, exercise)
+        : exercise.exerciseId === exerciseId
     );
 
     if (!exercise) {
@@ -1437,6 +1467,21 @@ export default function SessionView({
     completedSetContext = {},
     startedAt = null
   ) {
+    const completedExercise = session.exercises.find(
+      (exercise) => exercise.id === completedSetContext.exerciseId
+    );
+    const nextExercise = nextActiveSet
+      ? session.exercises.find((exercise) => exercise.id === nextActiveSet.exerciseId)
+      : null;
+    const advancesWithinSuperset =
+      completedExercise?.supersetGroup &&
+      completedExercise.supersetGroup === nextExercise?.supersetGroup &&
+      completedExercise.id !== nextExercise.id;
+
+    if (advancesWithinSuperset) {
+      return;
+    }
+
     const reps = getNextSetTimerReps(nextActiveSet, completedSetContext);
 
     if (reps == null) {
@@ -1444,7 +1489,6 @@ export default function SessionView({
     }
 
     const duration = getRestDurationForReps(reps);
-    const wasActive = timerRunning || timerPaused || timerFinished;
 
     setRestMinutes(Math.floor(duration / 60));
     setRestRemainder(duration % 60);
@@ -1452,11 +1496,8 @@ export default function SessionView({
     setTimerExpiredAt(null);
     setTimerFinished(false);
     setTimerPaused(false);
-
-    if (wasActive) {
-      setTimerStartedAt(startedAt);
-      setTimerRunning(true);
-    }
+    setTimerStartedAt(startedAt);
+    setTimerRunning(true);
   }
 
   function resetRestTimer() {
@@ -1889,6 +1930,203 @@ export default function SessionView({
       exerciseId: exercise.id,
       setId: nextSet.id,
     });
+  }
+
+  function renderLatestSetHistory(exercise) {
+    const latestPerformance = getLatestWorkoutPerformance(
+      exercise.exerciseId || exercise.id
+    );
+
+    return (
+      <div
+        style={{
+          borderTop: "1px solid var(--border)",
+          display: "grid",
+          gap: "7px",
+          marginTop: "10px",
+          paddingTop: "10px",
+        }}
+      >
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            fontWeight: 700,
+          }}
+        >
+          Last completed sets
+          {latestPerformance?.completedAt
+            ? ` · ${latestPerformance.completedAt}`
+            : ""}
+        </div>
+
+        {!latestPerformance?.sets?.length ? (
+          <div
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "12px",
+            }}
+          >
+            No completed history for this exercise yet.
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                alignItems: "center",
+                color: "var(--text-muted)",
+                display: "flex",
+                fontSize: "14px",
+                fontWeight: "bold",
+                marginLeft: "0px",
+              }}
+            >
+              <span
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  fontSize: "14px",
+                  gap: "3px",
+                  whiteSpace: "nowrap",
+                  width: "78px",
+                }}
+              >
+                Set
+              </span>
+
+              <span
+                title="Weight"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  fontSize: "14px",
+                  justifyContent: "center",
+                  marginLeft: "4px",
+                  whiteSpace: "nowrap",
+                  width: "50px",
+                }}
+              >
+                <Weight size={15} aria-label="Weight" />
+              </span>
+
+              <span
+                title="Reps"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  fontSize: "14px",
+                  justifyContent: "center",
+                  whiteSpace: "nowrap",
+                  width: "46px",
+                }}
+              >
+                <Hash size={15} aria-label="Reps" />
+              </span>
+
+              <span
+                title="RIR"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  fontSize: "14px",
+                  justifyContent: "center",
+                  whiteSpace: "nowrap",
+                  width: "36px",
+                }}
+              >
+                <BatteryMedium size={15} aria-label="RIR" />
+              </span>
+
+              <span
+                title="e1RM"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  fontSize: "14px",
+                  justifyContent: "center",
+                  marginLeft: "2px",
+                  whiteSpace: "nowrap",
+                  width: "42px",
+                }}
+              >
+                <Dumbbell size={15} aria-label="e1RM" />
+              </span>
+            </div>
+
+            {latestPerformance.sets.map((set, setIndex) => {
+              const weight = firstPresentValue(set.actualWeight, set.targetWeight);
+              const reps = firstPresentValue(set.actualReps, set.targetReps);
+              const rir = firstPresentValue(set.actualRir, set.targetRir);
+              const e1rm = isBlankValue(weight)
+                ? null
+                : calculateE1RM(weight, reps, rir);
+
+              return (
+                <div
+                  key={set.id || setIndex}
+                  style={{
+                    alignItems: "center",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    flexWrap: "nowrap",
+                    fontSize: "12px",
+                    gap: "4px",
+                    padding: "3px 2px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      width: "78px",
+                    }}
+                  >
+                    {setIndex + 1}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: "4px",
+                      textAlign: "center",
+                      width: "50px",
+                    }}
+                  >
+                    {displayHistoricalWeight(weight)}
+                  </span>
+                  <span
+                    style={{
+                      textAlign: "center",
+                      width: "46px",
+                    }}
+                  >
+                    {displayHistoricalValue(reps)}
+                  </span>
+                  <span
+                    style={{
+                      textAlign: "center",
+                      width: "36px",
+                    }}
+                  >
+                    {displayHistoricalValue(rir)}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: "2px",
+                      textAlign: "center",
+                      width: "42px",
+                    }}
+                  >
+                    {e1rm == null
+                      ? "—"
+                      : weightUnit === "kg"
+                      ? lbsToKg(e1rm.toFixed(1))
+                      : e1rm.toFixed(1)}
+                  </span>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
   }
 
   function saveSessionName() {
@@ -3427,6 +3665,7 @@ export default function SessionView({
                         display: "inline-flex",
                         gap: "5px",
                         justifyContent: "center",
+                        marginTop: "2px",
                       }}
                     >
                       <button
@@ -3478,6 +3717,8 @@ export default function SessionView({
                         )}
                       </IconButton>
                     </div>
+
+                    {renderLatestSetHistory(exercise)}
                   </div>
                 ))}
               </div>
