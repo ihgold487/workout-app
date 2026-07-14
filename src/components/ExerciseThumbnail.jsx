@@ -2,10 +2,14 @@ import { ImagePlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function ExerciseThumbnail({
+  active = false,
   alt,
   imageUrl,
   size = 56,
 }) {
+  const activeBackground =
+    "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))";
+
   const [poster, setPoster] = useState({
     failed: false,
     imageUrl: "",
@@ -67,9 +71,10 @@ export default function ExerciseThumbnail({
 
   return (
     <span
+      onContextMenu={(event) => event.preventDefault()}
       style={{
         alignItems: "center",
-        background: "var(--surface-muted)",
+        background: active ? activeBackground : "var(--surface-muted)",
         border: "1px solid var(--border)",
         borderRadius: "6px",
         display: "flex",
@@ -77,6 +82,8 @@ export default function ExerciseThumbnail({
         height: `${size}px`,
         justifyContent: "center",
         overflow: "hidden",
+        userSelect: "none",
+        WebkitTouchCallout: "none",
         width: `${size}px`,
       }}
     >
@@ -94,6 +101,8 @@ export default function ExerciseThumbnail({
           style={{
             background: posterFailed
               ? "linear-gradient(135deg, var(--surface-muted), var(--surface))"
+              : active
+              ? activeBackground
               : "var(--surface-muted)",
             display: "block",
             height: "100%",
@@ -103,11 +112,17 @@ export default function ExerciseThumbnail({
       ) : (
         <img
           alt={alt}
+          draggable={false}
+          onContextMenu={(event) => event.preventDefault()}
           src={displayUrl}
           style={{
             display: "block",
             height: "100%",
+            mixBlendMode: active ? "multiply" : undefined,
             objectFit: "contain",
+            pointerEvents: "none",
+            userSelect: "none",
+            WebkitTouchCallout: "none",
             width: "100%",
           }}
         />

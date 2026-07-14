@@ -64,6 +64,17 @@ function matchesExercise(historyExercise, exercise) {
   return getExerciseKey(historyExercise) === getExerciseKey(exercise);
 }
 
+function getWorkoutTimestamp(workout) {
+  const value =
+    workout?.completedAtIso ||
+    workout?.completed_at ||
+    workout?.completedAt ||
+    workout?.created_at;
+  const timestamp = Date.parse(value);
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function collectHistoricalSets(history, exercise) {
   return (history || []).flatMap((workout) => {
     const matchingExercise = workout.exercises?.find((item) =>
@@ -94,10 +105,21 @@ function collectHistoricalSets(history, exercise) {
   });
 }
 
-function findPreviousWorkoutBestSet(history, exercise) {
-  const matchingWorkout = (history || []).find((workout) =>
-    workout.exercises?.some((item) => matchesExercise(item, exercise))
-  );
+function findPreviousWorkoutBaselineSet(history, exercise, setIndex) {
+  const matchingWorkout = (history || [])
+    .map((workout, originalIndex) => ({
+      originalIndex,
+      timestamp: getWorkoutTimestamp(workout),
+      workout,
+    }))
+    .filter(({ workout }) =>
+      workout.exercises?.some((item) => matchesExercise(item, exercise))
+    )
+    .sort(
+      (a, b) =>
+        b.timestamp - a.timestamp ||
+        a.originalIndex - b.originalIndex
+    )[0]?.workout;
 
   if (!matchingWorkout) {
     return null;
@@ -106,7 +128,7 @@ function findPreviousWorkoutBestSet(history, exercise) {
   const matchingExercise = matchingWorkout.exercises.find((item) =>
     matchesExercise(item, exercise)
   );
-  const bestSet = (matchingExercise.sets || [])
+  const performances = (matchingExercise.sets || [])
     .map((set, setIndex) => {
       const performance = getSetPerformance(set);
 
@@ -120,10 +142,24 @@ function findPreviousWorkoutBestSet(history, exercise) {
           }
         : null;
     })
-    .filter(Boolean)
-    .sort((a, b) => b.e1rm - a.e1rm)[0];
+    .filter(Boolean);
+  const matchingSet = performances.find((item) => item.setIndex === setIndex);
 
-  return bestSet || null;
+  if (matchingSet) {
+    return {
+      ...matchingSet,
+      source: "previous-workout-matching-set",
+    };
+  }
+
+  const bestSet = performances.slice().sort((a, b) => b.e1rm - a.e1rm)[0];
+
+  return bestSet
+    ? {
+        ...bestSet,
+        source: "previous-workout-best-set",
+      }
+    : null;
 }
 
 export function findBaselineSet({
@@ -131,22 +167,14 @@ export function findBaselineSet({
   history,
   setIndex = 0,
 }) {
-  const bestHistoricalSet = findBestBaselineSet({
-    exercise,
+  const previousWorkoutSet = findPreviousWorkoutBaselineSet(
     history,
-  });
+    exercise,
+    setIndex
+  );
 
-  if (bestHistoricalSet) {
-    return bestHistoricalSet;
-  }
-
-  const previousWorkoutBestSet = findPreviousWorkoutBestSet(history, exercise);
-
-  if (previousWorkoutBestSet) {
-    return {
-      ...previousWorkoutBestSet,
-      source: "previous-workout-best-set",
-    };
+  if (previousWorkoutSet) {
+    return previousWorkoutSet;
   }
 
   const historicalSets = collectHistoricalSets(history, exercise);
@@ -346,16 +374,11 @@ export function recommendSetTarget({
   targetRir,
   weightIncrement,
 }) {
-  const baseline =
-    findBaselineSet({
-      exercise,
-      history,
-      setIndex,
-    }) ||
-    findBestBaselineSet({
-      exercise,
-      history,
-    });
+  const baseline = findBaselineSet({
+    exercise,
+    history,
+    setIndex,
+  });
 
   if (!baseline) {
     return {

@@ -1,5 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   AlertTriangle,
   BatteryMedium,
   Check,
@@ -79,6 +94,57 @@ function IconButton({
       {children}
     </button>
   );
+}
+
+function SortableExerciseThumbnail({ children, exerciseId }) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: exerciseId,
+  });
+  const style = {
+    opacity: isDragging ? 0.72 : undefined,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 3 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({
+        attributes,
+        isDragging,
+        listeners,
+      })}
+    </div>
+  );
+}
+
+function formatList(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(", ");
+  }
+
+  return value || "";
+}
+
+function normalizeLookupValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getExerciseKey(exercise) {
+  return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
+    formatList(exercise?.equipment)
+  )}`;
 }
 
 export default function SessionView({
@@ -170,14 +236,6 @@ export default function SessionView({
       : weight;
   }
 
-  function formatList(value) {
-    if (Array.isArray(value)) {
-      return value.filter(Boolean).join(", ");
-    }
-
-    return value || "";
-  }
-
   function createCompletedWorkoutId(sessionId) {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
       return `${sessionId}:completed:${crypto.randomUUID()}`;
@@ -186,20 +244,6 @@ export default function SessionView({
     return `${sessionId}:completed:${Date.now()}:${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-  }
-
-  function normalizeLookupValue(value) {
-    return String(value || "")
-      .toLowerCase()
-      .replace(/&/g, "and")
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  }
-
-  function getExerciseKey(exercise) {
-    return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
-      formatList(exercise?.equipment)
-    )}`;
   }
 
   function getExerciseDetailRecord(sessionExercise) {
@@ -240,45 +284,91 @@ export default function SessionView({
     };
   }
 
-  function exerciseMatchesHistoryExercise(sessionExercise, historyExercise) {
+  const exerciseMatchesHistoryExercise = useCallback((sessionExercise, historyExercise) => {
     if (sessionExercise.exerciseId && historyExercise.exerciseId) {
       return String(sessionExercise.exerciseId) === String(historyExercise.exerciseId);
     }
 
     return getExerciseKey(sessionExercise) === getExerciseKey(historyExercise);
-  }
+  }, []);
+
+  const isCurrentSessionHistoryWorkout = useCallback((historyWorkout) => {
+    return (
+      String(historyWorkout.id) === String(session.id) ||
+      String(historyWorkout.sourceSessionId || "") === String(session.id)
+    );
+  }, [session.id]);
+
+  const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
+    const workout = history.find((historyWorkout) => {
+      if (isCurrentSessionHistoryWorkout(historyWorkout)) {
+        return false;
+      }
+
+      return historyWorkout.exercises?.some((historyExercise) =>
+        exerciseMatchesHistoryExercise(sessionExercise, historyExercise)
+      );
+    });
+
+    const exercise = workout?.exercises?.find((historyExercise) =>
+      exerciseMatchesHistoryExercise(sessionExercise, historyExercise)
+    );
+
+    return workout && exercise ? { exercise, workout } : null;
+  }, [
+    exerciseMatchesHistoryExercise,
+    history,
+    isCurrentSessionHistoryWorkout,
+  ]);
 
   function getLatestWorkoutPerformance(exerciseId) {
     const sessionExercise = session.exercises.find(
       (exercise) => exercise.exerciseId === exerciseId || exercise.id === exerciseId
     );
 
-    const workout = history.find((workout) =>
-      workout.exercises.some((exercise) =>
-        sessionExercise
-          ? exerciseMatchesHistoryExercise(sessionExercise, exercise)
-          : exercise.exerciseId === exerciseId
-      )
-    );
-
-    if (!workout) {
+    if (!sessionExercise) {
       return null;
     }
 
-    const exercise = workout.exercises.find((exercise) =>
-      sessionExercise
-        ? exerciseMatchesHistoryExercise(sessionExercise, exercise)
-        : exercise.exerciseId === exerciseId
-    );
+    const latestPerformance =
+      getLatestMatchingHistoryPerformance(sessionExercise);
 
-    if (!exercise) {
+    if (!latestPerformance) {
       return null;
     }
 
     return {
-      completedAt: workout.completedAt,
+      completedAt: latestPerformance.workout.completedAt,
 
-      sets: exercise.sets,
+      sets: latestPerformance.exercise.sets,
+    };
+  }
+
+  function getLatestActualForSet(sessionExercise, setIndex) {
+    const historySet =
+      getLatestMatchingHistoryPerformance(sessionExercise)?.exercise?.sets?.[
+        setIndex
+      ];
+
+    if (!historySet) {
+      return null;
+    }
+
+    const weight = firstPresentValue(historySet.actualWeight);
+    const reps = firstPresentValue(historySet.actualReps);
+    const rir = firstPresentValue(historySet.actualRir);
+
+    if (isBlankValue(weight) && isBlankValue(reps) && isBlankValue(rir)) {
+      return null;
+    }
+
+    return {
+      e1rm: isBlankValue(weight) || isBlankValue(reps)
+        ? null
+        : calculateE1RM(weight, reps, rir),
+      reps,
+      rir,
+      weight,
     };
   }
 
@@ -480,13 +570,13 @@ export default function SessionView({
     }
 
     const baseWeight = parseSessionNumber(
-      firstPresentValue(firstSet.targetWeight, firstSet.actualWeight)
+      firstSet.actualWeight
     );
     const baseReps = parseSessionNumber(
-      firstPresentValue(firstSet.targetReps, firstSet.actualReps)
+      firstSet.actualReps
     );
     const targetRir = parseSessionNumber(
-      firstPresentValue(firstSet.targetRir, firstSet.actualRir, 0)
+      firstPresentValue(firstSet.actualRir, 0)
     );
     const baseE1RM = calculateE1RM(baseWeight, baseReps, targetRir);
     const weightIncrement = getExerciseWeightIncrement(exercise);
@@ -611,6 +701,20 @@ export default function SessionView({
 
   const setRowRefs = useRef({});
   const completeWorkoutButtonRef = useRef(null);
+  const wasAllSetsCompletedRef = useRef(false);
+  const exerciseDragSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 350,
+        tolerance: 8,
+      },
+    })
+  );
 
   const updateSession = useCallback(
     (updater) => {
@@ -620,6 +724,103 @@ export default function SessionView({
     },
     [session.id, setSessions]
   );
+
+  function idsMatch(left, right) {
+    return String(left) === String(right);
+  }
+
+  function resetSupersetOrders(supersetOrders, groupsToReset) {
+    if (!groupsToReset.size) {
+      return supersetOrders || {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(supersetOrders || {}).filter(
+        ([group]) => !groupsToReset.has(group)
+      )
+    );
+  }
+
+  function handleExerciseThumbnailDragEnd({ active, over }) {
+    window.getSelection?.()?.removeAllRanges();
+
+    if (!over || idsMatch(active.id, over.id)) {
+      return;
+    }
+
+    updateSession((s) => {
+      const exercises = s.exercises || [];
+      const activeIndex = exercises.findIndex((exercise) =>
+        idsMatch(exercise.id, active.id)
+      );
+      const overIndex = exercises.findIndex((exercise) =>
+        idsMatch(exercise.id, over.id)
+      );
+
+      if (activeIndex < 0 || overIndex < 0 || activeIndex === overIndex) {
+        return s;
+      }
+
+      const activeExercise = exercises[activeIndex];
+      const activeGroup = activeExercise.supersetGroup || null;
+      const groupsToReset = new Set();
+      let nextExercises;
+
+      if (activeGroup) {
+        const groupExercises = exercises.filter(
+          (exercise) => exercise.supersetGroup === activeGroup
+        );
+        const firstGroupExercise = groupExercises[0];
+        const isSupersetLeader = idsMatch(firstGroupExercise?.id, active.id);
+
+        if (isSupersetLeader) {
+          if (groupExercises.some((exercise) => idsMatch(exercise.id, over.id))) {
+            return s;
+          }
+
+          const remainingExercises = exercises.filter(
+            (exercise) => exercise.supersetGroup !== activeGroup
+          );
+          const remainingOverIndex = remainingExercises.findIndex((exercise) =>
+            idsMatch(exercise.id, over.id)
+          );
+
+          if (remainingOverIndex < 0) {
+            return s;
+          }
+
+          const insertIndex =
+            activeIndex < overIndex ? remainingOverIndex + 1 : remainingOverIndex;
+
+          nextExercises = [
+            ...remainingExercises.slice(0, insertIndex),
+            ...groupExercises,
+            ...remainingExercises.slice(insertIndex),
+          ];
+        } else {
+          groupsToReset.add(activeGroup);
+          nextExercises = arrayMove(exercises, activeIndex, overIndex).map(
+            (exercise) =>
+              idsMatch(exercise.id, active.id)
+                ? {
+                    ...exercise,
+                    supersetGroup: null,
+                  }
+                : exercise
+          );
+        }
+      } else {
+        nextExercises = arrayMove(exercises, activeIndex, overIndex);
+      }
+
+      return {
+        ...s,
+        templateChanged: true,
+        supersetOrders: resetSupersetOrders(s.supersetOrders, groupsToReset),
+        exercises: nextExercises,
+      };
+    });
+  }
 
   const updateActual = useCallback(
     (exerciseId, setId, field, value) => {
@@ -687,12 +888,7 @@ export default function SessionView({
 
   function openTargetAlternatives(exercise, set, setIndex) {
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
-    const current = {
-      e1rm: calculateE1RM(set.actualWeight, set.actualReps, set.actualRir),
-      reps: set.actualReps,
-      rir: set.actualRir,
-      weight: set.actualWeight,
-    };
+    const current = getLatestActualForSet(exercise, setIndex);
     const suggested = {
       e1rm: calculateE1RM(
         "",
@@ -741,27 +937,8 @@ export default function SessionView({
       return;
     }
 
-    const latestWorkout = history.find((historyWorkout) =>
-      historyWorkout.exercises?.some((historyExercise) => {
-        if (exercise.exerciseId && historyExercise.exerciseId) {
-          return (
-            String(exercise.exerciseId) === String(historyExercise.exerciseId)
-          );
-        }
-
-        return false;
-      })
-    );
-    const latestExercise = latestWorkout?.exercises?.find((historyExercise) => {
-      if (exercise.exerciseId && historyExercise.exerciseId) {
-        return (
-          String(exercise.exerciseId) === String(historyExercise.exerciseId)
-        );
-      }
-
-      return false;
-    });
-    const historySet = latestExercise?.sets?.[setIndex];
+    const latestPerformance = getLatestMatchingHistoryPerformance(exercise);
+    const historySet = latestPerformance?.exercise?.sets?.[setIndex];
     const defaults = historySet
       ? {
           actualReps: formatSetupDefault(
@@ -815,7 +992,12 @@ export default function SessionView({
           : ex
       ),
     }));
-  }, [activeSet, history, session.exercises, updateSession]);
+  }, [
+    activeSet,
+    getLatestMatchingHistoryPerformance,
+    session.exercises,
+    updateSession,
+  ]);
 
   const [expandedNotes, setExpandedNotes] = useState({});
 
@@ -834,6 +1016,7 @@ export default function SessionView({
   });
 
   const [confirmExitWorkout, setConfirmExitWorkout] = useState(false);
+  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
 
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
@@ -991,27 +1174,38 @@ export default function SessionView({
       session.exercises.every((exercise) =>
         exercise.sets.every((set) => set.completed)
       );
+    const justCompleted = allSetsCompleted && !wasAllSetsCompletedRef.current;
 
-    if (!allSetsCompleted) {
+    wasAllSetsCompletedRef.current = allSetsCompleted;
+
+    if (!justCompleted) {
       return;
     }
 
-    const element = completeWorkoutButtonRef.current;
+    setSessionActionsOpen(true);
 
-    if (!element) {
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      const element = completeWorkoutButtonRef.current;
 
-    const rect = element.getBoundingClientRect();
+      if (!element) {
+        return;
+      }
 
-    const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      element.focus({ preventScroll: true });
 
-    if (!visible) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
+      const rect = element.getBoundingClientRect();
+
+      const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+      if (!visible) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [session.exercises]);
 
   useEffect(() => {
@@ -1942,9 +2136,9 @@ export default function SessionView({
         style={{
           borderTop: "1px solid var(--border)",
           display: "grid",
-          gap: "7px",
+          gap: "3px",
           marginTop: "10px",
-          paddingTop: "10px",
+          paddingTop: "8px",
         }}
       >
         <div
@@ -1978,6 +2172,7 @@ export default function SessionView({
                 display: "flex",
                 fontSize: "14px",
                 fontWeight: "bold",
+                lineHeight: 1,
                 marginLeft: "0px",
               }}
             >
@@ -2071,7 +2266,8 @@ export default function SessionView({
                     flexWrap: "nowrap",
                     fontSize: "12px",
                     gap: "4px",
-                    padding: "3px 2px",
+                    lineHeight: 1,
+                    padding: "0 2px",
                   }}
                 >
                   <span
@@ -2281,6 +2477,15 @@ export default function SessionView({
         {`
           .session-exercise-strip {
             scrollbar-width: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+          }
+
+          .session-exercise-strip * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
           }
 
           .session-exercise-strip::-webkit-scrollbar {
@@ -2343,48 +2548,6 @@ export default function SessionView({
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={() => setConfirmExitWorkout(true)}
-            style={{
-              minWidth: "78px",
-              padding: "6px 8px",
-              fontSize: "14px",
-            }}
-          >
-            ← End Workout
-          </button>
-
-          <button
-            onClick={() => setWeightUnit(weightUnit === "lb" ? "kg" : "lb")}
-            style={{
-              minWidth: "78px",
-              padding: "6px 8px",
-              fontWeight: "bold",
-              fontSize: "14px",
-            }}
-          >
-            {weightUnit === "lb" ? "⚖️ LB" : "⚖️ KG"}
-          </button>
-          <button
-            onClick={() => setKeepScreenAwake((v) => !v)}
-            style={{
-              minWidth: "78px",
-              padding: "6px 8px",
-              fontWeight: "bold",
-              fontSize: "14px",
-            }}
-          >
-            {keepScreenAwake ? "☀️ Auto-Lock Off" : "🌙 Auto-Lock On"}
-          </button>
-        </div>
-
         {confirmExitWorkout && (
           <div
             style={{
@@ -2751,11 +2914,8 @@ export default function SessionView({
           }}
         >
           <button
-            aria-label={`Edit workout name: ${session.templateName}`}
-            onClick={() => {
-              setSessionNameDraft(session.templateName || "");
-              setEditingSessionName(true);
-            }}
+            aria-label={`Open workout controls: ${session.templateName}`}
+            onClick={() => setSessionActionsOpen(true)}
             style={{
               background: "transparent",
               border: "none",
@@ -2779,96 +2939,160 @@ export default function SessionView({
           <div
             aria-label="Workout exercises"
             className="session-exercise-strip"
+            onContextMenu={(event) => event.preventDefault()}
             style={{
+              alignItems: "center",
               display: "flex",
               gap: "8px",
               margin: "0 -20px",
               overflowX: "auto",
               padding: "2px 20px 4px",
+              userSelect: "none",
               WebkitOverflowScrolling: "touch",
+              WebkitTouchCallout: "none",
+              WebkitUserSelect: "none",
             }}
           >
-            {groupedExercises.map((group) => (
-              <div
-                key={group.group || group.exercises[0].id}
-                style={{
-                  border: group.group ? "1px solid var(--border)" : "none",
-                  borderRadius: "8px",
-                  display: "flex",
-                  flex: "0 0 auto",
-                  gap: "5px",
-                  padding: group.group ? "4px" : 0,
-                }}
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={handleExerciseThumbnailDragEnd}
+              onDragStart={() => window.getSelection?.()?.removeAllRanges()}
+              sensors={exerciseDragSensors}
+            >
+              <SortableContext
+                items={session.exercises.map((exercise) => exercise.id)}
+                strategy={horizontalListSortingStrategy}
               >
-                {group.exercises.map((exercise) => {
-                  const exerciseDetail = getExerciseDetailRecord(exercise);
-                  const isCurrent = currentExercise?.id === exercise.id;
-                  const isExerciseComplete =
-                    exercise.sets.length > 0 &&
-                    exercise.sets.every((set) => set.completed);
+                {groupedExercises.map((group) => (
+                  <div
+                    key={group.group || group.exercises[0].id}
+                    style={{
+                      border: group.group
+                        ? "2px solid color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                        : "none",
+                      borderRadius: "8px",
+                      alignItems: "center",
+                      display: "flex",
+                      flex: "0 0 auto",
+                      gap: "5px",
+                      padding: group.group ? "4px" : 0,
+                    }}
+                  >
+                    {group.exercises.map((exercise) => {
+                      const exerciseDetail = getExerciseDetailRecord(exercise);
+                      const isCurrent = currentExercise?.id === exercise.id;
+                      const isExerciseComplete =
+                        exercise.sets.length > 0 &&
+                        exercise.sets.every((set) => set.completed);
 
-                  return (
-                    <button
-                      aria-label={`Show ${exercise.name}`}
-                      key={exercise.id}
-                      onClick={() => activateExerciseFromThumbnail(exercise)}
-                      style={{
-                        alignItems: "center",
-                        background: isCurrent
-                          ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
-                          : "var(--surface-raised)",
-                        border: "none",
-                        borderRadius: "8px",
-                        boxShadow: isCurrent
-                          ? "inset 0 0 0 2px var(--accent)"
-                          : "none",
-                        display: "inline-flex",
-                        flex: "0 0 52px",
-                        height: "52px",
-                        justifyContent: "center",
-                        opacity: isCurrent ? 1 : 0.42,
-                        padding: "4px",
-                        position: "relative",
-                        width: "52px",
-                      }}
-                      title={exercise.name}
-                      type="button"
-                    >
-                      <ExerciseThumbnail
-                        alt={
-                          exerciseDetail.imageAlt ||
-                          `${exercise.name} demonstration`
-                        }
-                        imageUrl={exerciseDetail.imageUrl}
-                        size={42}
-                      />
-                      {isExerciseComplete ? (
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            alignItems: "center",
-                            background: "#16a34a",
-                            borderRadius: "999px",
-                            color: "white",
-                            display: "inline-flex",
-                            fontWeight: 700,
-                            height: "16px",
-                            justifyContent: "center",
-                            left: "2px",
-                            lineHeight: 1,
-                            position: "absolute",
-                            top: "2px",
-                            width: "16px",
-                          }}
+                      return (
+                        <SortableExerciseThumbnail
+                          exerciseId={exercise.id}
+                          key={exercise.id}
                         >
-                          <Check size={11} strokeWidth={3} />
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                          {({ attributes, isDragging, listeners }) => (
+                            <button
+                              {...attributes}
+                              {...listeners}
+                              aria-label={`Show ${exercise.name}`}
+                              onContextMenu={(event) => event.preventDefault()}
+                              onClick={() => activateExerciseFromThumbnail(exercise)}
+                              style={{
+                                alignItems: "center",
+                                background: isCurrent
+                                  ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                                  : "var(--surface-raised)",
+                                border: "none",
+                                borderRadius: "8px",
+                                boxShadow: isCurrent
+                                  ? "inset 0 0 0 2px var(--accent)"
+                                  : "none",
+                                cursor: isDragging ? "grabbing" : "pointer",
+                                display: "inline-flex",
+                                flex: "0 0 52px",
+                                height: "52px",
+                                justifyContent: "center",
+                                opacity: isDragging ? 0.72 : isCurrent ? 1 : 0.42,
+                                padding: "4px",
+                                position: "relative",
+                                touchAction: "pan-x",
+                                userSelect: "none",
+                                WebkitTouchCallout: "none",
+                                width: "52px",
+                              }}
+                              title={exercise.name}
+                              type="button"
+                            >
+                              <ExerciseThumbnail
+                                active={isCurrent}
+                                alt={
+                                  exerciseDetail.imageAlt ||
+                                  `${exercise.name} demonstration`
+                                }
+                                imageUrl={exerciseDetail.imageUrl}
+                                size={42}
+                              />
+                              {isExerciseComplete ? (
+                                <span
+                                  aria-hidden="true"
+                                  style={{
+                                    alignItems: "center",
+                                    background: "#16a34a",
+                                    borderRadius: "999px",
+                                    color: "white",
+                                    display: "inline-flex",
+                                    fontWeight: 700,
+                                    height: "16px",
+                                    justifyContent: "center",
+                                    left: "2px",
+                                    lineHeight: 1,
+                                    position: "absolute",
+                                    top: "2px",
+                                    width: "16px",
+                                  }}
+                                >
+                                  <Check size={11} strokeWidth={3} />
+                                </span>
+                              ) : null}
+                            </button>
+                          )}
+                        </SortableExerciseThumbnail>
+                      );
+                    })}
+                  </div>
+                ))}
+              </SortableContext>
+            </DndContext>
+            <button
+              aria-label={showAddExercise ? "Cancel adding exercise" : "Add exercise"}
+              onClick={() => {
+                setShowAddExercise((isOpen) => !isOpen);
+                setReplacingExerciseId(null);
+                setSearch("");
+              }}
+              title={showAddExercise ? "Cancel" : "Add exercise"}
+              type="button"
+              style={{
+                alignItems: "center",
+                background: showAddExercise
+                  ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                  : "var(--surface-raised)",
+                border: "none",
+                borderRadius: "8px",
+                boxShadow: showAddExercise
+                  ? "inset 0 0 0 2px var(--accent)"
+                  : "inset 0 0 0 1px var(--border)",
+                color: "var(--accent)",
+                display: "inline-flex",
+                flex: "0 0 52px",
+                height: "52px",
+                justifyContent: "center",
+                padding: 0,
+                width: "52px",
+              }}
+            >
+              {showAddExercise ? <X size={30} /> : <Plus size={32} />}
+            </button>
           </div>
         </div>
       </div>
@@ -3924,78 +4148,6 @@ export default function SessionView({
         )}
 
         <>
-          <hr
-            style={{
-              margin: "16px 0",
-            }}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: "12px",
-              marginBottom: "12px",
-            }}
-          >
-            <button
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "6px",
-                padding: "10px 14px",
-              }}
-              onClick={() => {
-                setShowAddExercise((isOpen) => !isOpen);
-                setReplacingExerciseId(null);
-                setSearch("");
-              }}
-            >
-              {showAddExercise ? (
-                <>
-                  <X size={16} /> Cancel
-                </>
-              ) : (
-                <>
-                  <Plus size={16} /> Add Exercise
-                </>
-              )}
-            </button>
-
-            <button
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "6px",
-                padding: "10px 14px",
-              }}
-              onClick={() => setShowSupersetEditor(true)}
-            >
-              <Link2 size={16} /> Supersets
-            </button>
-
-            <button
-              ref={completeWorkoutButtonRef}
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "6px",
-                padding: "10px 14px",
-
-                border: allSetsCompleted ? "3px solid #4caf50" : undefined,
-
-                boxShadow: allSetsCompleted
-                  ? "0 0 8px rgba(76,175,80,.5)"
-                  : undefined,
-
-                fontWeight: allSetsCompleted ? "bold" : undefined,
-              }}
-              onClick={() => setConfirmComplete(true)}
-            >
-              <Trophy size={16} /> Complete
-            </button>
-          </div>
-
           {showSupersetEditor && (
             <div
               style={{
@@ -4248,11 +4400,219 @@ export default function SessionView({
                     Save
                   </button>
                 </div>
+            </div>
+          </div>
+        )}
+
+        {sessionActionsOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workout actions"
+            onClick={() => setSessionActionsOpen(false)}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: 2200,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxWidth: "520px",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      lineHeight: 1.15,
+                      margin: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {session.templateName}
+                  </h2>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "3px",
+                    }}
+                  >
+                    Workout controls
+                  </div>
+                </div>
+
+                <IconButton
+                  label="Close workout actions"
+                  onClick={() => setSessionActionsOpen(false)}
+                  size={36}
+                >
+                  <X size={18} />
+                </IconButton>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    setSessionActionsOpen(false);
+                    setConfirmExitWorkout(true);
+                  }}
+                  type="button"
+                  style={{
+                    alignItems: "center",
+                    background: "var(--danger-bg)",
+                    border: "1px solid #c66",
+                    borderRadius: "8px",
+                    color: "var(--danger-text)",
+                    display: "flex",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    justifyContent: "space-between",
+                    minHeight: "44px",
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>End Workout</span>
+                  <AlertTriangle size={18} />
+                </button>
+
+                <button
+                  onClick={() => setWeightUnit(weightUnit === "lb" ? "kg" : "lb")}
+                  type="button"
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text)",
+                    display: "flex",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    justifyContent: "space-between",
+                    minHeight: "44px",
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>Weight Unit</span>
+                  <span>{weightUnit === "lb" ? "LB" : "KG"}</span>
+                </button>
+
+                <button
+                  onClick={() => setKeepScreenAwake((value) => !value)}
+                  type="button"
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text)",
+                    display: "flex",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    justifyContent: "space-between",
+                    minHeight: "44px",
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>Auto-Lock</span>
+                  <span>{keepScreenAwake ? "Off" : "On"}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSessionActionsOpen(false);
+                    setShowSupersetEditor(true);
+                  }}
+                  type="button"
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text)",
+                    display: "flex",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    justifyContent: "space-between",
+                    minHeight: "44px",
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>Supersets</span>
+                  <Link2 size={18} />
+                </button>
+
+                <button
+                  ref={completeWorkoutButtonRef}
+                  onClick={() => {
+                    setSessionActionsOpen(false);
+                    setConfirmComplete(true);
+                  }}
+                  type="button"
+                  style={{
+                    alignItems: "center",
+                    background: allSetsCompleted
+                      ? "color-mix(in srgb, #4caf50 16%, var(--surface-muted))"
+                      : "var(--surface-muted)",
+                    border: allSetsCompleted
+                      ? "3px solid #4caf50"
+                      : "1px solid var(--border)",
+                    borderRadius: "8px",
+                    boxShadow: allSetsCompleted
+                      ? "0 0 8px rgba(76,175,80,.5)"
+                      : undefined,
+                    color: "var(--text)",
+                    display: "flex",
+                    fontSize: "15px",
+                    fontWeight: allSetsCompleted ? 800 : 700,
+                    justifyContent: "space-between",
+                    minHeight: "44px",
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>Complete Workout</span>
+                  <Trophy size={18} />
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {confirmComplete && (
+        {confirmComplete && (
             <div
               style={{
                 position: "fixed",
@@ -4553,7 +4913,7 @@ export default function SessionView({
                         Most recent actual
                       </div>
                       <strong>
-                        {targetAlternativesData.current?.weight
+                        {!isBlankValue(targetAlternativesData.current?.weight)
                           ? formatPrescriptionLabel(
                               targetAlternativesData.current
                             )
@@ -4610,7 +4970,7 @@ export default function SessionView({
                         Suggested target
                       </div>
                       <strong>
-                        {targetAlternativesData.suggested?.weight
+                        {!isBlankValue(targetAlternativesData.suggested?.weight)
                           ? formatPrescriptionLabel(
                               targetAlternativesData.suggested
                             )
@@ -4849,7 +5209,7 @@ export default function SessionView({
                       padding: "12px",
                     }}
                   >
-                    Add a target weight and target reps to the first working set
+                    Add actual weight and actual reps to the first working set
                     to calculate warmups.
                   </div>
                 ) : (
