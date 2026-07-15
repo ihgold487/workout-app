@@ -649,6 +649,27 @@ function getDefaultPlanName(planType, daysPerWeek, durationWeeks) {
   return `${getPlanTypeLabel(planType)} (${daysPerWeek}d ${durationWeeks}wk)`;
 }
 
+const PLAN_TYPE_DEFAULTS = {
+  "type-1": {
+    daysPerWeek: "2",
+    durationWeeks: "4",
+    goal: "maintain",
+    reps: "15",
+    rir: "2",
+  },
+  "type-2": {
+    daysPerWeek: "2",
+    durationWeeks: "4",
+    goal: "maintain",
+    reps: "12",
+    rir: "2",
+  },
+};
+
+function getPlanTypeDefaults(planType) {
+  return PLAN_TYPE_DEFAULTS[planType] || PLAN_TYPE_DEFAULTS["type-2"];
+}
+
 function PlanWorkoutPreview({
   exerciseLibrary,
   onEditSuperset,
@@ -867,21 +888,30 @@ export default function PlansView({
   setTemplates,
   templates,
 }) {
-  const [durationWeeks, setDurationWeeks] = useState("4");
-  const [daysPerWeek, setDaysPerWeek] = useState("2");
+  const initialPlanDefaults = getPlanTypeDefaults("type-2");
+  const [durationWeeks, setDurationWeeks] = useState(
+    initialPlanDefaults.durationWeeks
+  );
+  const [daysPerWeek, setDaysPerWeek] = useState(
+    initialPlanDefaults.daysPerWeek
+  );
   const [generationMode, setGenerationMode] = useState("plan");
-  const [goal, setGoal] = useState("maintain");
+  const [goal, setGoal] = useState(initialPlanDefaults.goal);
   const [planType, setPlanType] = useState("type-2");
   const [workoutType, setWorkoutType] = useState("type-2");
   const [planName, setPlanName] = useState(() =>
-    getDefaultPlanName("type-2", "2", "4")
+    getDefaultPlanName(
+      "type-2",
+      initialPlanDefaults.daysPerWeek,
+      initialPlanDefaults.durationWeeks
+    )
   );
   const [workoutName, setWorkoutName] = useState(() =>
     getDefaultWorkoutName("type-2")
   );
   const [isPlanNameCustom, setIsPlanNameCustom] = useState(false);
-  const [reps, setReps] = useState("10");
-  const [rir, setRir] = useState("2");
+  const [reps, setReps] = useState(initialPlanDefaults.reps);
+  const [rir, setRir] = useState(initialPlanDefaults.rir);
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
   const [replacementBySlot, setReplacementBySlot] = useState({});
@@ -1599,13 +1629,21 @@ export default function PlansView({
             <select
               value={planType}
               onChange={(event) => {
-                setPlanType(event.target.value);
+                const nextPlanType = event.target.value;
+                const nextDefaults = getPlanTypeDefaults(nextPlanType);
+
+                setPlanType(nextPlanType);
+                setGoal(nextDefaults.goal);
+                setDaysPerWeek(nextDefaults.daysPerWeek);
+                setDurationWeeks(nextDefaults.durationWeeks);
+                setReps(nextDefaults.reps);
+                setRir(nextDefaults.rir);
                 if (!isPlanNameCustom) {
                   setPlanName(
                     getDefaultPlanName(
-                      event.target.value,
-                      daysPerWeek,
-                      durationWeeks
+                      nextPlanType,
+                      nextDefaults.daysPerWeek,
+                      nextDefaults.durationWeeks
                     )
                   );
                 }

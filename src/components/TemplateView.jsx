@@ -538,8 +538,8 @@ export default function TemplateView({
     set,
     setIndex,
   }) {
-    const targetReps = set.targetReps ?? "";
-    const targetRir = set.targetRir ?? set.rir ?? "";
+    const targetReps = set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
+    const targetRir = set.targetRir ?? set.rir ?? plan?.config?.rir ?? "";
     const recommendationExercise = {
       ...(libraryExercise || {}),
       ...exercise,
@@ -610,12 +610,12 @@ export default function TemplateView({
 
               targetReps: formatTargetValue(
                 dynamicTarget?.reps,
-                set.targetReps || ""
+                set.targetReps ?? set.reps ?? plan?.config?.reps ?? ""
               ),
 
               targetRir: formatTargetValue(
                 dynamicTarget?.rir,
-                set.targetRir ?? set.rir ?? ""
+                set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
               ),
             };
             const actualDefaults = getActualDefaultsForSet(

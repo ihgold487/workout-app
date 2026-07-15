@@ -766,6 +766,7 @@ export default function ExerciseDetailDialog({
   const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const exerciseHistory = useMemo(
     () => buildExerciseHistory(exercise, history),
     [exercise, history]
@@ -793,6 +794,10 @@ export default function ExerciseDetailDialog({
     });
   }
 
+  function closeExerciseDetail() {
+    setIsClosing(true);
+  }
+
   if (!exercise) {
     return null;
   }
@@ -812,7 +817,50 @@ export default function ExerciseDetailDialog({
         zIndex,
       }}
     >
+      <style>
+        {`
+          .exercise-detail-sheet {
+            animation: exerciseDetailSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            will-change: opacity, transform;
+          }
+
+          .exercise-detail-sheet[data-closing="true"] {
+            animation-name: exerciseDetailSheetSlideDown;
+          }
+
+          @keyframes exerciseDetailSheetSlideUp {
+            from {
+              opacity: 0.25;
+              transform: translateY(calc(100% + 24px));
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes exerciseDetailSheetSlideDown {
+            from {
+              opacity: 1;
+              transform: translateY(0);
+            }
+
+            to {
+              opacity: 0;
+              transform: translateY(calc(100% + 24px));
+            }
+          }
+        `}
+      </style>
       <div
+        className="exercise-detail-sheet"
+        data-closing={isClosing ? "true" : "false"}
+        onAnimationEnd={(event) => {
+          if (event.currentTarget === event.target && isClosing) {
+            onClose();
+          }
+        }}
         onClick={(event) => event.stopPropagation()}
         style={{
           background: "var(--surface-raised)",
@@ -880,7 +928,7 @@ export default function ExerciseDetailDialog({
             )}
             <button
               aria-label="Close"
-              onClick={onClose}
+              onClick={closeExerciseDetail}
               style={{
                 alignItems: "center",
                 borderRadius: "999px",

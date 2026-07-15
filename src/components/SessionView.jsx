@@ -235,6 +235,8 @@ export default function SessionView({
   const [rirPickerData, setRirPickerData] = useState(null);
   const [showApplyChangesPrompt, setShowApplyChangesPrompt] = useState(false);
   const [targetAlternativesData, setTargetAlternativesData] = useState(null);
+  const [targetAlternativesClosing, setTargetAlternativesClosing] =
+    useState(false);
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
   const appliedHistoryDefaultsRef = useRef(new Set());
@@ -1042,6 +1044,7 @@ export default function SessionView({
 
     window.getSelection?.()?.removeAllRanges();
 
+    setTargetAlternativesClosing(false);
     setTargetAlternativesData({
       alternatives,
       current,
@@ -1049,6 +1052,16 @@ export default function SessionView({
       setId: set.id,
       suggested,
     });
+  }
+
+  function closeTargetAlternatives({ immediate = false } = {}) {
+    if (immediate) {
+      setTargetAlternativesClosing(false);
+      setTargetAlternativesData(null);
+      return;
+    }
+
+    setTargetAlternativesClosing(true);
   }
 
   function cancelTargetPressTimer() {
@@ -1139,6 +1152,7 @@ export default function SessionView({
 
   const [confirmExitWorkout, setConfirmExitWorkout] = useState(false);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
+  const [sessionActionsClosing, setSessionActionsClosing] = useState(false);
 
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
@@ -1347,7 +1361,7 @@ export default function SessionView({
       return;
     }
 
-    setSessionActionsOpen(true);
+    openSessionActions();
 
     const timeoutId = window.setTimeout(() => {
       const element = completeWorkoutButtonRef.current;
@@ -1808,15 +1822,24 @@ export default function SessionView({
       return null;
     }
 
+    const planTargets = getPlanTargetValues();
     const nextTargetReps =
       nextActiveSet.exerciseId === completedSetContext.exerciseId &&
       nextSetIndex === completedSetContext.setIndex + 1
         ? firstPresentValue(
             completedSetContext.set?.actualReps,
             completedSetContext.set?.targetReps,
-            nextSet.targetReps
+            completedSetContext.set?.reps,
+            nextSet.targetReps,
+            nextSet.reps,
+            planTargets.reps
           )
-        : firstPresentValue(nextSet.targetReps, nextSet.actualReps);
+        : firstPresentValue(
+            nextSet.targetReps,
+            nextSet.reps,
+            nextSet.actualReps,
+            planTargets.reps
+          );
 
     return parseTimerReps(nextTargetReps);
   }
@@ -1832,12 +1855,18 @@ export default function SessionView({
     const nextExercise = nextActiveSet
       ? session.exercises.find((exercise) => exercise.id === nextActiveSet.exerciseId)
       : null;
-    const advancesWithinSuperset =
+    const completedSetIndex = completedSetContext.setIndex ?? -1;
+    const nextSetIndex = nextActiveSet
+      ? nextExercise?.sets.findIndex((set) => set.id === nextActiveSet.setId) ??
+        -1
+      : -1;
+    const advancesWithinSupersetRound =
       completedExercise?.supersetGroup &&
       completedExercise.supersetGroup === nextExercise?.supersetGroup &&
-      completedExercise.id !== nextExercise.id;
+      completedExercise.id !== nextExercise.id &&
+      completedSetIndex === nextSetIndex;
 
-    if (advancesWithinSuperset) {
+    if (advancesWithinSupersetRound) {
       return;
     }
 
@@ -2009,6 +2038,21 @@ export default function SessionView({
     }
 
     updateExerciseSupersetGroup(exercise.id, group.trim() || null);
+  }
+
+  function openSessionActions() {
+    setSessionActionsClosing(false);
+    setSessionActionsOpen(true);
+  }
+
+  function closeSessionActions({ immediate = false } = {}) {
+    if (immediate) {
+      setSessionActionsClosing(false);
+      setSessionActionsOpen(false);
+      return;
+    }
+
+    setSessionActionsClosing(true);
   }
 
   function replaceExercise(oldExerciseId, newExercise, replacementValues) {
@@ -2674,6 +2718,17 @@ export default function SessionView({
             animation-name: sessionExerciseSlidePrevious;
           }
 
+          .session-workout-actions-sheet,
+          .session-target-options-sheet {
+            animation: sessionSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            will-change: opacity, transform;
+          }
+
+          .session-workout-actions-sheet[data-closing="true"],
+          .session-target-options-sheet[data-closing="true"] {
+            animation-name: sessionSheetSlideDown;
+          }
+
           @keyframes sessionExerciseSlideNext {
             from {
               opacity: 0.25;
@@ -2698,8 +2753,34 @@ export default function SessionView({
             }
           }
 
+          @keyframes sessionSheetSlideUp {
+            from {
+              opacity: 0.25;
+              transform: translateY(calc(100% + 24px));
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes sessionSheetSlideDown {
+            from {
+              opacity: 1;
+              transform: translateY(0);
+            }
+
+            to {
+              opacity: 0;
+              transform: translateY(calc(100% + 24px));
+            }
+          }
+
           @media (prefers-reduced-motion: reduce) {
-            .session-current-exercise-panel {
+            .session-current-exercise-panel,
+            .session-workout-actions-sheet,
+            .session-target-options-sheet {
               animation: none;
             }
           }
@@ -3082,7 +3163,7 @@ export default function SessionView({
         >
           <button
             aria-label={`Open workout controls: ${session.templateName}`}
-            onClick={() => setSessionActionsOpen(true)}
+            onClick={openSessionActions}
             style={{
               background: "transparent",
               border: "none",
@@ -3502,6 +3583,76 @@ export default function SessionView({
                       </div>
                     </div>
 
+                    {(expandedNotes[exercise.id] ||
+                      exerciseMetadata?.[
+                        exercise.exerciseId
+                      ]?.note?.trim()) && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "4px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        <input
+                          placeholder="Notes"
+                          style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            boxSizing: "border-box",
+                            fontSize: "0.85rem",
+                            height: "28px",
+                            padding: "2px",
+                            width: "100%",
+                          }}
+                          value={
+                            exerciseMetadata?.[exercise.exerciseId]?.note || ""
+                          }
+                          onChange={(e) =>
+                            setExerciseMetadata({
+                              ...exerciseMetadata,
+
+                              [exercise.exerciseId]: {
+                                ...(exerciseMetadata?.[exercise.exerciseId] ||
+                                  {}),
+
+                                note: e.target.value,
+                              },
+                            })
+                          }
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = {
+                              ...exerciseMetadata,
+                            };
+
+                            delete updated[exercise.exerciseId];
+
+                            setExerciseMetadata(updated);
+
+                            setExpandedNotes((notes) => ({
+                              ...notes,
+
+                              [exercise.id]: false,
+                            }));
+                          }}
+                          style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            minWidth: "28px",
+                            padding: "2px 7px",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
                     <div
                       style={{
                         display: "flex",
@@ -3522,63 +3673,6 @@ export default function SessionView({
                         <Flame size={15} /> Warmup sets
                       </button>
                     </div>
-
-                    {(expandedNotes[exercise.id] ||
-                      exerciseMetadata?.[
-                        exercise.exerciseId
-                      ]?.note?.trim()) && (
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "4px",
-                        }}
-                      >
-                        <input
-                          placeholder="Notes"
-                          style={{
-                            width: "100%",
-                            height: "20px",
-                            fontSize: "0.85rem",
-                            padding: "2px",
-                          }}
-                          value={
-                            exerciseMetadata?.[exercise.exerciseId]?.note || ""
-                          }
-                          onChange={(e) =>
-                            setExerciseMetadata({
-                              ...exerciseMetadata,
-
-                              [exercise.exerciseId]: {
-                                ...(exerciseMetadata?.[exercise.exerciseId] ||
-                                  {}),
-
-                                note: e.target.value,
-                              },
-                            })
-                          }
-                        />
-
-                        <button
-                          onClick={() => {
-                            const updated = {
-                              ...exerciseMetadata,
-                            };
-
-                            delete updated[exercise.exerciseId];
-
-                            setExerciseMetadata(updated);
-
-                            setExpandedNotes((notes) => ({
-                              ...notes,
-
-                              [exercise.id]: false,
-                            }));
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
 
                     {
                       <>
@@ -4571,12 +4665,12 @@ export default function SessionView({
           </div>
         )}
 
-        {sessionActionsOpen && (
+        {(sessionActionsOpen || sessionActionsClosing) && (
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Workout actions"
-            onClick={() => setSessionActionsOpen(false)}
+            onClick={() => closeSessionActions()}
             style={{
               alignItems: "flex-end",
               background: "rgba(0,0,0,.45)",
@@ -4588,6 +4682,17 @@ export default function SessionView({
             }}
           >
             <div
+              className="session-workout-actions-sheet"
+              data-closing={sessionActionsClosing ? "true" : "false"}
+              onAnimationEnd={(event) => {
+                if (
+                  event.currentTarget === event.target &&
+                  sessionActionsClosing
+                ) {
+                  setSessionActionsClosing(false);
+                  setSessionActionsOpen(false);
+                }
+              }}
               onClick={(event) => event.stopPropagation()}
               style={{
                 background: "var(--surface-raised)",
@@ -4635,7 +4740,7 @@ export default function SessionView({
 
                 <IconButton
                   label="Close workout actions"
-                  onClick={() => setSessionActionsOpen(false)}
+                  onClick={() => closeSessionActions()}
                   size={36}
                 >
                   <X size={18} />
@@ -5040,12 +5145,12 @@ export default function SessionView({
             </div>
           )}
 
-          {targetAlternativesData && (
+          {(targetAlternativesData || targetAlternativesClosing) && (
             <div
               role="dialog"
               aria-modal="true"
               aria-label="Target alternatives"
-              onClick={() => setTargetAlternativesData(null)}
+              onClick={() => closeTargetAlternatives()}
               style={{
                 alignItems: "flex-end",
                 background: "rgba(0,0,0,.45)",
@@ -5057,6 +5162,17 @@ export default function SessionView({
               }}
             >
               <div
+                className="session-target-options-sheet"
+                data-closing={targetAlternativesClosing ? "true" : "false"}
+                onAnimationEnd={(event) => {
+                  if (
+                    event.currentTarget === event.target &&
+                    targetAlternativesClosing
+                  ) {
+                    setTargetAlternativesClosing(false);
+                    setTargetAlternativesData(null);
+                  }
+                }}
                 onClick={(event) => event.stopPropagation()}
                 style={{
                   background: "var(--surface-raised)",
@@ -5101,7 +5217,7 @@ export default function SessionView({
 
                   <IconButton
                     label="Close target options"
-                    onClick={() => setTargetAlternativesData(null)}
+                    onClick={() => closeTargetAlternatives()}
                     size={36}
                   >
                     <X size={18} />
@@ -5257,7 +5373,7 @@ export default function SessionView({
                             targetAlternativesData.setId,
                             option
                           );
-                          setTargetAlternativesData(null);
+                          closeTargetAlternatives({ immediate: true });
                         }}
                         style={{
                           alignItems: "center",
