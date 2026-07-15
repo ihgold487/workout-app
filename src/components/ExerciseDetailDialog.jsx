@@ -854,20 +854,46 @@ export default function ExerciseDetailDialog({
               {formatEquipment(exercise.equipment) || "No equipment"}
             </div>
           </div>
-          <button
-            aria-label="Close"
-            onClick={onClose}
+          <div
             style={{
               alignItems: "center",
-              borderRadius: "999px",
-              display: "inline-flex",
-              height: "36px",
-              justifyContent: "center",
-              width: "36px",
+              display: "flex",
+              flexShrink: 0,
+              gap: "8px",
             }}
           >
-            <X size={18} />
-          </button>
+            {onSelect && (
+              <button
+                onClick={() => onSelect(exercise)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "36px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                <Check size={16} />
+                Select Exercise
+              </button>
+            )}
+            <button
+              aria-label="Close"
+              onClick={onClose}
+              style={{
+                alignItems: "center",
+                borderRadius: "999px",
+                display: "inline-flex",
+                height: "36px",
+                justifyContent: "center",
+                width: "36px",
+              }}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {activeTab === "history" && (
@@ -1236,19 +1262,6 @@ export default function ExerciseDetailDialog({
                 ))
             )}
           </div>
-        )}
-
-        {onSelect && (
-          <button
-            onClick={() => onSelect(exercise)}
-            style={{
-              marginTop: "12px",
-              minHeight: "44px",
-              width: "100%",
-            }}
-          >
-            Select Exercise
-          </button>
         )}
       </div>
       {rangeSheetOpen && (

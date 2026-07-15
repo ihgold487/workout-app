@@ -131,6 +131,8 @@ const MACRO_COLORS = {
   fat: "#7b3fc7",
   protein: "#137333",
 };
+const DAILY_PROTEIN_TARGET_GRAMS = 200;
+const DAILY_PROTEIN_TARGET_CALORIES = DAILY_PROTEIN_TARGET_GRAMS * 4;
 
 const emptyEntry = {
   calories: "",
@@ -1723,6 +1725,7 @@ function getCalorieGoalStatusColor(calories, goal, tolerancePercent) {
 }
 
 function CalorieHistoryChart({ rows }) {
+  const [chartMode, setChartMode] = useState("macros");
   const [selectedDate, setSelectedDate] = useState(null);
   const [tolerancePercent, setTolerancePercent] = useState("5");
   const points = rows.filter((row) => row.date);
@@ -1755,16 +1758,25 @@ function CalorieHistoryChart({ rows }) {
   const paddingBottom = 32;
   const plotWidth = width - paddingLeft - paddingRight;
   const plotHeight = height - paddingTop - paddingBottom;
-  const maxValue = Math.max(
+  const rawMaxValue = Math.max(
     100,
+    DAILY_PROTEIN_TARGET_CALORIES,
     ...points.map((row) => Math.max(row.calories, row.goal || 0))
   );
+  const maxValue = Math.ceil((rawMaxValue * 1.1) / 100) * 100;
   const barGap = points.length > 16 ? 2 : 5;
   const barWidth = Math.max(4, plotWidth / points.length - barGap);
   const firstDate = points[0].date;
   const lastDate = points[points.length - 1].date;
   const selectedPoint =
     points.find((point) => point.date === selectedDate) || points[points.length - 1];
+  const currentGoal = points[points.length - 1]?.goal || 0;
+  const currentGoalY =
+    height - paddingBottom - (currentGoal / maxValue) * plotHeight;
+  const proteinTargetY =
+    height -
+    paddingBottom -
+    (DAILY_PROTEIN_TARGET_CALORIES / maxValue) * plotHeight;
   const selectedIndex = points.findIndex((point) => point.date === selectedPoint.date);
   const selectedX =
     paddingLeft +
@@ -1775,6 +1787,14 @@ function CalorieHistoryChart({ rows }) {
     paddingBottom -
     (Math.max(selectedPoint.calories, selectedPoint.goal || 0) / maxValue) *
       plotHeight;
+  const selectedIndicatorColor =
+    chartMode === "goal"
+      ? getCalorieGoalStatusColor(
+          selectedPoint.calories,
+          selectedPoint.goal,
+          tolerancePercent
+        )
+      : MACRO_COLORS.calories;
   const targetPoints = points.map((row, index) => {
     const x =
       paddingLeft +
@@ -1870,6 +1890,46 @@ function CalorieHistoryChart({ rows }) {
         >
           {formatMacro(maxValue, "cal")}
         </text>
+        {currentGoal > 0 && (
+          <>
+            <line
+              x1={paddingLeft - 4}
+              x2={paddingLeft}
+              y1={currentGoalY}
+              y2={currentGoalY}
+              stroke="var(--text-muted)"
+            />
+            <text
+              x={paddingLeft - 8}
+              y={currentGoalY + 4}
+              fill="var(--text-muted)"
+              fontSize="10"
+              textAnchor="end"
+            >
+              {formatMacro(currentGoal, "cal")}
+            </text>
+          </>
+        )}
+        {chartMode === "macros" && (
+          <>
+            <line
+              x1={paddingLeft - 4}
+              x2={paddingLeft}
+              y1={proteinTargetY}
+              y2={proteinTargetY}
+              stroke={MACRO_COLORS.protein}
+            />
+            <text
+              x={paddingLeft - 8}
+              y={proteinTargetY + 4}
+              fill={MACRO_COLORS.protein}
+              fontSize="10"
+              textAnchor="end"
+            >
+              {formatMacro(DAILY_PROTEIN_TARGET_CALORIES, "cal")}
+            </text>
+          </>
+        )}
         <text
           x={paddingLeft - 8}
           y={height - paddingBottom + 4}
@@ -1884,30 +1944,81 @@ function CalorieHistoryChart({ rows }) {
           const x = paddingLeft + index * slotWidth + (slotWidth - barWidth) / 2;
           const barHeight = (row.calories / maxValue) * plotHeight;
           const y = height - paddingBottom - barHeight;
-          const barColor = getCalorieGoalStatusColor(
+          const goalStatusColor = getCalorieGoalStatusColor(
             row.calories,
             row.goal,
             tolerancePercent
           );
+          const macroCalories = {
+            carbs: row.carbs * 4,
+            fat: row.fat * 9,
+            protein: row.protein * 4,
+          };
+          const totalMacroCalories =
+            macroCalories.protein + macroCalories.carbs + macroCalories.fat;
+          const macroSegments = [
+            ["protein", macroCalories.protein, MACRO_COLORS.protein],
+            ["carbs", macroCalories.carbs, MACRO_COLORS.carbs],
+            ["fat", macroCalories.fat, MACRO_COLORS.fat],
+          ].filter(([, calories]) => calories > 0);
+          let stackedHeight = 0;
 
           return (
-            <rect
+            <g
               key={row.date}
               aria-label={`${row.date}: ${formatMacro(row.calories, "cal")} calories`}
-              fill={barColor}
-              height={Math.max(1, barHeight)}
               onClick={(event) => {
                 event.stopPropagation();
                 setSelectedDate(row.date);
               }}
               opacity={selectedDate && selectedDate !== row.date ? 0.42 : 0.9}
               role="button"
-              rx="2"
               style={{ cursor: "pointer" }}
-              width={barWidth}
-              x={x}
-              y={y}
-            />
+            >
+              {chartMode === "goal" ? (
+                <rect
+                  fill={goalStatusColor}
+                  height={Math.max(1, barHeight)}
+                  rx="2"
+                  width={barWidth}
+                  x={x}
+                  y={y}
+                />
+              ) : macroSegments.length > 0 ? (
+                macroSegments.map(([macro, calories, color], segmentIndex) => {
+                  const isLastSegment =
+                    segmentIndex === macroSegments.length - 1;
+                  const segmentHeight = isLastSegment
+                    ? barHeight - stackedHeight
+                    : (calories / totalMacroCalories) * barHeight;
+                  const segmentY =
+                    height - paddingBottom - stackedHeight - segmentHeight;
+
+                  stackedHeight += segmentHeight;
+
+                  return (
+                    <rect
+                      key={macro}
+                      fill={color}
+                      height={Math.max(1, segmentHeight)}
+                      rx="2"
+                      width={barWidth}
+                      x={x}
+                      y={segmentY}
+                    />
+                  );
+                })
+              ) : (
+                <rect
+                  fill="var(--border)"
+                  height={Math.max(1, barHeight)}
+                  rx="2"
+                  width={barWidth}
+                  x={x}
+                  y={y}
+                />
+              )}
+            </g>
           );
         })}
         {points.some((row) => row.goal > 0) && (
@@ -1921,6 +2032,18 @@ function CalorieHistoryChart({ rows }) {
             strokeWidth="2"
           />
         )}
+        {chartMode === "macros" && (
+          <line
+            x1={paddingLeft}
+            x2={width - paddingRight}
+            y1={proteinTargetY}
+            y2={proteinTargetY}
+            stroke={MACRO_COLORS.protein}
+            strokeDasharray="2 4"
+            strokeLinecap="round"
+            strokeWidth="2"
+          />
+        )}
         {selectedPoint && (
           <g pointerEvents="none">
             <line
@@ -1931,7 +2054,7 @@ function CalorieHistoryChart({ rows }) {
               stroke="color-mix(in srgb, #1769aa 45%, var(--border))"
               strokeDasharray="4 4"
             />
-            <circle cx={selectedX} cy={selectedY} fill={MACRO_COLORS.calories} r="3.5" />
+            <circle cx={selectedX} cy={selectedY} fill={selectedIndicatorColor} r="3.5" />
           </g>
         )}
         <text x={paddingLeft} y={height - 7} fill="var(--text-muted)" fontSize="10">
@@ -1948,32 +2071,63 @@ function CalorieHistoryChart({ rows }) {
         </text>
       </svg>
 
-      <label
+      <div
         style={{
           alignItems: "center",
-          background: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
           display: "grid",
           gap: "8px",
-          gridTemplateColumns: "minmax(0, 1fr) 88px",
-          padding: "10px",
+          gridTemplateColumns: "minmax(0, 1fr) 108px",
         }}
       >
-        <span
+        <div
+          aria-label="Calorie chart display"
+          role="group"
           style={{
-            color: "var(--text-muted)",
-            fontSize: "13px",
-            textAlign: "left",
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            display: "grid",
+            gap: "4px",
+            gridTemplateColumns: "1fr 1fr",
+            padding: "4px",
           }}
         >
-          Tolerance
-        </span>
-        <span
+          {[
+            ["macros", "Macros"],
+            ["goal", "Goal"],
+          ].map(([mode, label]) => {
+            const active = chartMode === mode;
+
+            return (
+              <button
+                key={mode}
+                aria-pressed={active}
+                onClick={() => setChartMode(mode)}
+                type="button"
+                style={{
+                  background: active ? "var(--accent)" : "transparent",
+                  border: "1px solid transparent",
+                  borderRadius: "6px",
+                  color: active ? "white" : "var(--text-muted)",
+                  minHeight: "34px",
+                  padding: "6px 8px",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <label
           style={{
             alignItems: "center",
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
             display: "flex",
             gap: "6px",
+            padding: "4px 8px",
           }}
         >
           <input
@@ -2001,8 +2155,8 @@ function CalorieHistoryChart({ rows }) {
           >
             %
           </span>
-        </span>
-      </label>
+        </label>
+      </div>
 
       <div
         style={{
@@ -2167,7 +2321,9 @@ function CalorieHistorySheet({ calorieGoal, entries, goalHistory, onClose }) {
             fontSize: "12px",
           }}
         >
-          Bars show calories consumed. The dashed line shows the daily target.
+          Use Macros for stacked nutrient calories or Goal for tolerance coloring.
+          The black dashed line shows the daily target. The green dotted line
+          shows the 200g protein target as 800 calories.
         </div>
 
         <div

@@ -26,6 +26,8 @@ import {
   History,
   Link2,
   NotebookPen,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Target,
@@ -147,6 +149,43 @@ function getExerciseKey(exercise) {
   )}`;
 }
 
+function getWorkoutDurationSeconds(session, now = Date.now()) {
+  const baseSeconds = Number(session?.workoutTimerBaseSeconds || 0);
+
+  if (session?.workoutTimerPaused) {
+    return Math.max(0, Math.floor(baseSeconds));
+  }
+
+  const resumedAt =
+    session?.workoutTimerResumedAtIso ||
+    session?.workoutStartedAtIso ||
+    session?.startedAtIso;
+  const resumedAtMs = resumedAt ? new Date(resumedAt).getTime() : NaN;
+
+  if (!Number.isFinite(resumedAtMs)) {
+    return Math.max(0, Math.floor(baseSeconds));
+  }
+
+  return Math.max(0, Math.floor(baseSeconds + (now - resumedAtMs) / 1000));
+}
+
+function formatWorkoutDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(
+      remainingSeconds
+    ).padStart(2, "0")}`;
+  }
+
+  return `${String(minutes).padStart(2, "0")}:${String(
+    remainingSeconds
+  ).padStart(2, "0")}`;
+}
+
 export default function SessionView({
   session,
   sessions,
@@ -198,6 +237,7 @@ export default function SessionView({
   const [targetAlternativesData, setTargetAlternativesData] = useState(null);
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
+  const appliedHistoryDefaultsRef = useRef(new Set());
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -429,6 +469,29 @@ export default function SessionView({
   function formatSetupDefault(value) {
     return value == null || value === "" ? "" : String(value);
   }
+
+  const getHistoryDefaultsForSet = useCallback((sessionExercise, setIndex) => {
+    const historySet =
+      getLatestMatchingHistoryPerformance(sessionExercise)?.exercise?.sets?.[
+        setIndex
+      ];
+
+    if (!historySet) {
+      return null;
+    }
+
+    return {
+      actualReps: formatSetupDefault(
+        firstPresentValue(historySet.actualReps, historySet.targetReps)
+      ),
+      actualRir: formatSetupDefault(
+        firstPresentValue(historySet.actualRir, historySet.targetRir)
+      ),
+      actualWeight: formatSetupDefault(
+        firstPresentValue(historySet.actualWeight, historySet.targetWeight)
+      ),
+    };
+  }, [getLatestMatchingHistoryPerformance]);
 
   function isBlankValue(value) {
     return value == null || value === "";
@@ -725,6 +788,79 @@ export default function SessionView({
     [session.id, setSessions]
   );
 
+  useEffect(() => {
+    let hasUpdates = false;
+    const nextAppliedKeys = new Set(appliedHistoryDefaultsRef.current);
+
+    const exercises = session.exercises.map((exercise) => {
+      let exerciseChanged = false;
+      const sets = exercise.sets.map((set, setIndex) => {
+        const defaultKey = `${session.id}:${exercise.id}:${set.id}`;
+
+        if (nextAppliedKeys.has(defaultKey)) {
+          return set;
+        }
+
+        const defaults = getHistoryDefaultsForSet(exercise, setIndex);
+
+        if (!defaults) {
+          return set;
+        }
+
+        nextAppliedKeys.add(defaultKey);
+
+        const updates = {};
+
+        if (isBlankValue(set.actualWeight) && defaults.actualWeight) {
+          updates.actualWeight = defaults.actualWeight;
+        }
+
+        if (isBlankValue(set.actualReps) && defaults.actualReps) {
+          updates.actualReps = defaults.actualReps;
+        }
+
+        if (isBlankValue(set.actualRir) && defaults.actualRir !== "") {
+          updates.actualRir = defaults.actualRir;
+        }
+
+        if (!Object.keys(updates).length) {
+          return set;
+        }
+
+        hasUpdates = true;
+        exerciseChanged = true;
+
+        return {
+          ...set,
+          ...updates,
+        };
+      });
+
+      return exerciseChanged
+        ? {
+            ...exercise,
+            sets,
+          }
+        : exercise;
+    });
+
+    appliedHistoryDefaultsRef.current = nextAppliedKeys;
+
+    if (!hasUpdates) {
+      return;
+    }
+
+    updateSession((s) => ({
+      ...s,
+      exercises,
+    }));
+  }, [
+    getHistoryDefaultsForSet,
+    session.exercises,
+    session.id,
+    updateSession,
+  ]);
+
   function idsMatch(left, right) {
     return String(left) === String(right);
   }
@@ -937,25 +1073,11 @@ export default function SessionView({
       return;
     }
 
-    const latestPerformance = getLatestMatchingHistoryPerformance(exercise);
-    const historySet = latestPerformance?.exercise?.sets?.[setIndex];
-    const defaults = historySet
-      ? {
-          actualReps: formatSetupDefault(
-            firstPresentValue(historySet.actualReps, historySet.targetReps)
-          ),
-          actualRir: formatSetupDefault(
-            firstPresentValue(historySet.actualRir, historySet.targetRir)
-          ),
-          actualWeight: formatSetupDefault(
-            firstPresentValue(historySet.actualWeight, historySet.targetWeight)
-          ),
-        }
-      : {
-          actualReps: formatSetupDefault(currentSet.targetReps),
-          actualRir: formatSetupDefault(currentSet.targetRir),
-          actualWeight: "",
-        };
+    const defaults = getHistoryDefaultsForSet(exercise, setIndex) || {
+      actualReps: formatSetupDefault(currentSet.targetReps),
+      actualRir: formatSetupDefault(currentSet.targetRir),
+      actualWeight: "",
+    };
     const updates = {};
 
     if (isBlankValue(currentSet.actualWeight) && defaults.actualWeight) {
@@ -994,7 +1116,7 @@ export default function SessionView({
     }));
   }, [
     activeSet,
-    getLatestMatchingHistoryPerformance,
+    getHistoryDefaultsForSet,
     session.exercises,
     updateSession,
   ]);
@@ -1045,6 +1167,49 @@ export default function SessionView({
   const [timerExpiredAt, setTimerExpiredAt] = useState(null);
 
   const [restComplete, setRestComplete] = useState(false);
+  const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
+  const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
+
+  useEffect(() => {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
+    const id = setInterval(() => {
+      setWorkoutTimerNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [
+    session.workoutTimerPaused,
+  ]);
+
+  function toggleWorkoutTimerPaused() {
+    const nowIso = new Date().toISOString();
+
+    setWorkoutTimerNow(Date.now());
+
+    updateSession((s) => {
+      if (s.workoutTimerPaused) {
+        return {
+          ...s,
+          workoutTimerPaused: false,
+          workoutTimerResumedAtIso: nowIso,
+        };
+      }
+
+      const durationSeconds = getWorkoutDurationSeconds(s);
+
+      setWorkoutTimerNow(Date.now());
+
+      return {
+        ...s,
+        workoutTimerBaseSeconds: durationSeconds,
+        workoutTimerPaused: true,
+        workoutTimerResumedAtIso: null,
+      };
+    });
+  }
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -2374,12 +2539,14 @@ export default function SessionView({
     const structuralChanges = hasStructuralChanges();
     const nextTemplateExercises = createNextTemplateExercisesFromSession();
     const completedAtIso = new Date().toISOString();
+    const durationSeconds = getWorkoutDurationSeconds(session);
     let completedWorkout = {
       ...session,
       id: createCompletedWorkoutId(session.id),
       sourceSessionId: session.id,
       completedAt: new Date(completedAtIso).toLocaleDateString(),
       completedAtIso,
+      durationSeconds,
     };
     let nextTemplates = templates;
 
@@ -4481,6 +4648,79 @@ export default function SessionView({
                   gap: "8px",
                 }}
               >
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    display: "grid",
+                    gap: "10px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    padding: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      gap: "10px",
+                      minWidth: 0,
+                    }}
+                  >
+                    <Timer size={18} color="var(--text-muted)" />
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Workout Duration
+                      </div>
+                      <div
+                        style={{
+                          color: "var(--text-h)",
+                          fontSize: "26px",
+                          fontVariantNumeric: "tabular-nums",
+                          fontWeight: 800,
+                          letterSpacing: 0,
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {formatWorkoutDuration(workoutElapsedSeconds)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    aria-label={
+                      session.workoutTimerPaused
+                        ? "Resume workout timer"
+                        : "Pause workout timer"
+                    }
+                    onClick={toggleWorkoutTimerPaused}
+                    type="button"
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      justifyContent: "center",
+                      minHeight: "40px",
+                      minWidth: "104px",
+                      padding: "8px 10px",
+                    }}
+                  >
+                    {session.workoutTimerPaused ? (
+                      <Play size={16} />
+                    ) : (
+                      <Pause size={16} />
+                    )}
+                    {session.workoutTimerPaused ? "Resume" : "Pause"}
+                  </button>
+                </div>
+
                 <button
                   onClick={() => {
                     setSessionActionsOpen(false);
