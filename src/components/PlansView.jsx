@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   ClipboardList,
+  Copy,
   GripVertical,
   Link2,
   RefreshCw,
@@ -649,6 +650,10 @@ function getDefaultPlanName(planType, daysPerWeek, durationWeeks) {
   return `${getPlanTypeLabel(planType)} (${daysPerWeek}d ${durationWeeks}wk)`;
 }
 
+function formatPlanSetting(value, fallback) {
+  return value == null || value === "" ? fallback : String(value);
+}
+
 const PLAN_TYPE_DEFAULTS = {
   "type-1": {
     daysPerWeek: "2",
@@ -668,6 +673,91 @@ const PLAN_TYPE_DEFAULTS = {
 
 function getPlanTypeDefaults(planType) {
   return PLAN_TYPE_DEFAULTS[planType] || PLAN_TYPE_DEFAULTS["type-2"];
+}
+
+function buildEditablePlanWorkouts(plan, templates) {
+  if (!plan) {
+    return null;
+  }
+
+  return (plan.workouts || []).map((planWorkout, workoutIndex) => {
+    const template = templates.find(
+      (item) => String(item.id) === String(planWorkout.templateId)
+    );
+
+    return {
+      ...(template || {
+        exercises: [],
+      }),
+      dayNumber: planWorkout.dayNumber || workoutIndex + 1,
+      exercises: template?.exercises || [],
+      id: template?.id || planWorkout.templateId || `${plan.id}:template-${workoutIndex + 1}`,
+      name: template?.name || planWorkout.name || `Workout ${workoutIndex + 1}`,
+      planId: plan.id,
+      planWorkoutId:
+        planWorkout.planWorkoutId || `${plan.id}:workout-${workoutIndex + 1}`,
+    };
+  });
+}
+
+function sortObjectKeys(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortObjectKeys);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce((normalized, key) => {
+      if (key === "previewSlotKey" || key === "previewWorkoutKey") {
+        return normalized;
+      }
+
+      normalized[key] = sortObjectKeys(value[key]);
+      return normalized;
+    }, {});
+}
+
+function getPlanComparable(plan) {
+  return sortObjectKeys({
+    id: plan?.id,
+    name: plan?.name || "",
+    planType: plan?.planType || "",
+    goal: plan?.goal || "",
+    daysPerWeek: Number(plan?.daysPerWeek || 0),
+    durationWeeks: Number(plan?.durationWeeks || 0),
+    config: {
+      reps: formatPlanSetting(plan?.config?.reps, ""),
+      rir: formatPlanSetting(plan?.config?.rir, ""),
+    },
+    workouts: (plan?.workouts || []).map((workout) => ({
+      dayNumber: Number(workout?.dayNumber || 0),
+      name: workout?.name || "",
+      planWorkoutId: workout?.planWorkoutId || "",
+      templateId: workout?.templateId,
+    })),
+  });
+}
+
+function getWorkoutComparable(workouts) {
+  return sortObjectKeys(
+    (workouts || []).map((workout) => ({
+      ...workout,
+      dayNumber: Number(workout?.dayNumber || 0),
+    }))
+  );
+}
+
+function hasPlanUpdateChanges(editingPlan, nextPlan, previousWorkouts, nextWorkouts) {
+  return (
+    JSON.stringify(getPlanComparable(editingPlan)) !==
+      JSON.stringify(getPlanComparable(nextPlan)) ||
+    JSON.stringify(getWorkoutComparable(previousWorkouts)) !==
+      JSON.stringify(getWorkoutComparable(nextWorkouts))
+  );
 }
 
 function PlanWorkoutPreview({
@@ -879,39 +969,55 @@ function PlanPickerButton({ disabled = false, label, onClick, value }) {
 }
 
 export default function PlansView({
+  editingPlan,
   exerciseLibrary,
   exerciseMetadata,
   history,
+  onCancel,
   onSave,
   plans,
   setPlans,
   setTemplates,
   templates,
 }) {
-  const initialPlanDefaults = getPlanTypeDefaults("type-2");
-  const [durationWeeks, setDurationWeeks] = useState(
-    initialPlanDefaults.durationWeeks
-  );
-  const [daysPerWeek, setDaysPerWeek] = useState(
+  const initialPlanType = editingPlan?.planType || "type-2";
+  const initialPlanDefaults = getPlanTypeDefaults(initialPlanType);
+  const editingPlanConfig = editingPlan?.config || {};
+  const initialDaysPerWeek = formatPlanSetting(
+    editingPlan?.daysPerWeek,
     initialPlanDefaults.daysPerWeek
   );
+  const initialDurationWeeks = formatPlanSetting(
+    editingPlan?.durationWeeks,
+    initialPlanDefaults.durationWeeks
+  );
+  const [durationWeeks, setDurationWeeks] = useState(
+    initialDurationWeeks
+  );
+  const [daysPerWeek, setDaysPerWeek] = useState(
+    initialDaysPerWeek
+  );
   const [generationMode, setGenerationMode] = useState("plan");
-  const [goal, setGoal] = useState(initialPlanDefaults.goal);
-  const [planType, setPlanType] = useState("type-2");
+  const [goal, setGoal] = useState(editingPlan?.goal || initialPlanDefaults.goal);
+  const [planType, setPlanType] = useState(initialPlanType);
   const [workoutType, setWorkoutType] = useState("type-2");
   const [planName, setPlanName] = useState(() =>
-    getDefaultPlanName(
-      "type-2",
-      initialPlanDefaults.daysPerWeek,
-      initialPlanDefaults.durationWeeks
-    )
+    editingPlan?.name ||
+    getDefaultPlanName(initialPlanType, initialDaysPerWeek, initialDurationWeeks)
   );
   const [workoutName, setWorkoutName] = useState(() =>
     getDefaultWorkoutName("type-2")
   );
-  const [isPlanNameCustom, setIsPlanNameCustom] = useState(false);
-  const [reps, setReps] = useState(initialPlanDefaults.reps);
-  const [rir, setRir] = useState(initialPlanDefaults.rir);
+  const [isPlanNameCustom, setIsPlanNameCustom] = useState(Boolean(editingPlan));
+  const [reps, setReps] = useState(
+    formatPlanSetting(editingPlanConfig.reps, initialPlanDefaults.reps)
+  );
+  const [rir, setRir] = useState(
+    formatPlanSetting(editingPlanConfig.rir, initialPlanDefaults.rir)
+  );
+  const [editPreviewWorkouts, setEditPreviewWorkouts] = useState(() =>
+    buildEditablePlanWorkouts(editingPlan, templates)
+  );
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
   const [replacementBySlot, setReplacementBySlot] = useState({});
@@ -1051,8 +1157,15 @@ export default function PlansView({
   ]);
 
   const generatedPlan = useMemo(
-    () =>
-      generatePlanWorkouts({
+    () => {
+      if (generationMode === "plan" && editPreviewWorkouts) {
+        return {
+          gaps: [],
+          workouts: editPreviewWorkouts,
+        };
+      }
+
+      return generatePlanWorkouts({
         daysPerWeek,
         durationWeeks,
         exerciseLibrary: generatorExerciseLibrary,
@@ -1065,10 +1178,12 @@ export default function PlansView({
         rir,
         seed,
         workoutType,
-      }),
+      });
+    },
     [
       daysPerWeek,
       durationWeeks,
+      editPreviewWorkouts,
       generatorExerciseLibrary,
       exerciseMetadata,
       generationMode,
@@ -1147,7 +1262,9 @@ export default function PlansView({
           ? workoutNameBySlot[workoutIndex]
           : generationMode === "workout"
             ? workoutName
-            : getDefaultSavedWorkoutName(workout, workoutIndex, planType),
+            : editPreviewWorkouts
+              ? workout.name
+              : getDefaultSavedWorkoutName(workout, workoutIndex, planType),
         previewWorkoutKey: workoutIndex,
         exercises: normalizedExerciseLayout[workoutIndex]
           .map((slotKey) => {
@@ -1200,6 +1317,7 @@ export default function PlansView({
       rir,
       workoutNameBySlot,
       generationMode,
+      editPreviewWorkouts,
       planType,
       workoutName,
     ]
@@ -1232,6 +1350,8 @@ export default function PlansView({
             name:
               generationMode === "workout"
                 ? workout.name
+                : editPreviewWorkouts
+                  ? workout.name
                 : renameWorkoutForDayOrder(
                     workout.name,
                     dayIndex + 1,
@@ -1242,6 +1362,7 @@ export default function PlansView({
         .filter(Boolean),
     [
       generationMode,
+      editPreviewWorkouts,
       orderedWorkoutKeys,
       planType,
       previewWorkouts,
@@ -1263,17 +1384,39 @@ export default function PlansView({
     setDayOrder(null);
   }
 
-  async function saveGeneratedPlan() {
+  function regeneratePlanPreview() {
+    setEditPreviewWorkouts(null);
+    resetPlanPreviewEdits();
+  }
+
+  async function saveGeneratedPlan({ saveAs = false } = {}) {
     const isWorkoutMode = generationMode === "workout";
+    const isEditingExistingPlan = Boolean(editingPlan && !isWorkoutMode && !saveAs);
     const savedAt = Date.now();
-    const planId = savedAt;
+    const planId = isEditingExistingPlan ? editingPlan.id : savedAt;
+    const existingPlanWorkouts = editingPlan?.workouts || [];
     const workouts = orderedPreviewWorkouts.map((workout, workoutIndex) => {
       const savedWorkout = { ...workout };
+      const existingPlanWorkout = isEditingExistingPlan
+        ? existingPlanWorkouts[workoutIndex]
+        : null;
+      const existingTemplate = existingPlanWorkout
+        ? templates.find(
+            (template) =>
+              String(template.id) === String(existingPlanWorkout.templateId)
+          )
+        : null;
 
       delete savedWorkout.previewWorkoutKey;
 
-      const templateId = savedAt + workoutIndex + 1;
-      const planWorkoutId = `${planId}:workout-${workoutIndex + 1}`;
+      const templateId = isEditingExistingPlan
+        ? existingPlanWorkout?.templateId || savedAt + workoutIndex + 1
+        : savedAt + workoutIndex + 1;
+      const planWorkoutId = isEditingExistingPlan
+        ? workout.planWorkoutId ||
+          existingPlanWorkout?.planWorkoutId ||
+          `${planId}:workout-${workoutIndex + 1}`
+        : `${planId}:workout-${workoutIndex + 1}`;
 
       return {
         ...savedWorkout,
@@ -1284,16 +1427,22 @@ export default function PlansView({
         planWorkoutId: isWorkoutMode ? null : planWorkoutId,
         exercises: workout.exercises.map((exercise, exerciseIndex) => {
           const savedExercise = { ...exercise };
+          const existingExercise = existingTemplate?.exercises?.[exerciseIndex];
 
           delete savedExercise.previewSlotKey;
           delete savedExercise.previewWorkoutKey;
 
           return {
             ...savedExercise,
-            id: savedAt + workoutIndex * 100 + exerciseIndex,
+            id: isEditingExistingPlan
+              ? existingExercise?.id || savedAt + workoutIndex * 100 + exerciseIndex
+              : savedAt + workoutIndex * 100 + exerciseIndex,
             sets: exercise.sets.map((set, setIndex) => ({
               ...set,
-              id: savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
+              id: isEditingExistingPlan
+                ? existingExercise?.sets?.[setIndex]?.id ||
+                  savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex
+                : savedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
             })),
           };
         }),
@@ -1341,18 +1490,25 @@ export default function PlansView({
     }
 
     const plan = {
+      ...(editingPlan || {}),
       id: planId,
       name:
-        planName.trim() ||
+        saveAs && editingPlan && planName.trim() === editingPlan.name
+          ? `${editingPlan.name} Copy`
+          : planName.trim() ||
         getDefaultPlanName(planType, daysPerWeek, durationWeeks),
       planType,
       goal,
       daysPerWeek: Number(daysPerWeek),
       durationWeeks: Number(durationWeeks),
-      currentWeek: 1,
-      status: "inactive",
-      createdAt: new Date().toISOString(),
-      completions: [],
+      currentWeek: isEditingExistingPlan ? editingPlan?.currentWeek || 1 : 1,
+      status: isEditingExistingPlan ? editingPlan?.status || "inactive" : "inactive",
+      createdAt:
+        isEditingExistingPlan && editingPlan?.createdAt
+          ? editingPlan.createdAt
+          : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completions: isEditingExistingPlan ? editingPlan?.completions || [] : [],
       config: {
         reps,
         rir,
@@ -1383,6 +1539,40 @@ export default function PlansView({
       onSave?.({
         targetUserId: selectedTrainerUserId,
         type: "trainer-plan",
+      });
+      return;
+    }
+
+    if (isEditingExistingPlan) {
+      const previousWorkouts = existingPlanWorkouts.map((workout) =>
+        templates.find((template) => String(template.id) === String(workout.templateId))
+      );
+
+      if (!hasPlanUpdateChanges(editingPlan, plan, previousWorkouts, workouts)) {
+        setSaveStatus("No plan changes to update.");
+        return;
+      }
+
+      const replacedTemplateIds = new Set(
+        existingPlanWorkouts
+          .map((workout) => workout.templateId)
+          .filter((templateId) => templateId != null)
+          .map((templateId) => String(templateId))
+      );
+
+      setPlans(
+        plans.map((item) => (String(item.id) === String(plan.id) ? plan : item))
+      );
+      setTemplates([
+        ...templates.filter(
+          (template) => !replacedTemplateIds.has(String(template.id))
+        ),
+        ...workouts,
+      ]);
+      setSaveStatus(`Updated ${plan.name}.`);
+      onSave?.({
+        planId: plan.id,
+        type: "plan-update",
       });
       return;
     }
@@ -1420,7 +1610,7 @@ export default function PlansView({
         </h1>
       </div>
 
-      {trainerUsers.length > 1 && (
+      {!editingPlan && trainerUsers.length > 1 && (
         <label
           style={{
             display: "grid",
@@ -1433,7 +1623,7 @@ export default function PlansView({
             value={selectedTrainerUserId}
             onChange={(event) => {
               setSelectedTrainerUserId(event.target.value);
-              resetPlanPreviewEdits();
+              regeneratePlanPreview();
               setWorkoutNameBySlot({});
               setSaveStatus("");
             }}
@@ -1531,29 +1721,32 @@ export default function PlansView({
         <div
           style={{
             display: "flex",
+            flexWrap: "wrap",
             gap: "8px",
           }}
         >
-          <button
-            onClick={() => {
-              setSeed((value) => value + 1);
-              resetPlanPreviewEdits();
-              setSaveStatus("");
-            }}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-              minHeight: "40px",
-              padding: "6px 10px",
-            }}
-          >
-            <RefreshCw size={16} />
-            Regenerate
-          </button>
+          {!editingPlan && (
+            <button
+              onClick={() => {
+                setSeed((value) => value + 1);
+                regeneratePlanPreview();
+                setSaveStatus("");
+              }}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
+                minHeight: "40px",
+                padding: "6px 10px",
+              }}
+            >
+              <RefreshCw size={16} />
+              Regenerate
+            </button>
+          )}
 
           <button
-            onClick={saveGeneratedPlan}
+            onClick={() => saveGeneratedPlan()}
             style={{
               alignItems: "center",
               display: "inline-flex",
@@ -1563,8 +1756,44 @@ export default function PlansView({
             }}
           >
             <Save size={16} />
-            {generationMode === "workout" ? "Save Workout" : "Save Plan"}
+            {editingPlan
+              ? "Update Plan"
+              : generationMode === "workout"
+                ? "Save Workout"
+                : "Save Plan"}
           </button>
+
+          {editingPlan && (
+            <>
+              <button
+                onClick={() => saveGeneratedPlan({ saveAs: true })}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Copy size={16} />
+                Save As
+              </button>
+
+              <button
+                onClick={onCancel}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <X size={16} />
+                Cancel
+              </button>
+            </>
+          )}
         </div>
 
         {saveStatus && (
@@ -1588,37 +1817,39 @@ export default function PlansView({
           marginBottom: "16px",
         }}
       >
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          Create
-          <select
-            value={generationMode}
-            onChange={(event) => {
-              const nextMode = event.target.value;
-
-              setGenerationMode(nextMode);
-              resetPlanPreviewEdits();
-              setWorkoutNameBySlot({});
-              setSaveStatus("");
-            }}
+        {!editingPlan && (
+          <label
             style={{
-              boxSizing: "border-box",
-              font: "inherit",
-              minHeight: "40px",
-              padding: "6px 10px",
-              width: "100%",
+              display: "grid",
+              gap: "4px",
             }}
           >
-            <option value="plan">Plan</option>
-            <option value="workout">Workout</option>
-          </select>
-        </label>
+            Create
+            <select
+              value={generationMode}
+              onChange={(event) => {
+                const nextMode = event.target.value;
 
-        {generationMode === "plan" ? (
+                setGenerationMode(nextMode);
+                regeneratePlanPreview();
+                setWorkoutNameBySlot({});
+                setSaveStatus("");
+              }}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                minHeight: "40px",
+                padding: "6px 10px",
+                width: "100%",
+              }}
+            >
+              <option value="plan">Plan</option>
+              <option value="workout">Workout</option>
+            </select>
+          </label>
+        )}
+
+        {generationMode === "plan" && !editingPlan && (
           <label
             style={{
               display: "grid",
@@ -1647,7 +1878,7 @@ export default function PlansView({
                     )
                   );
                 }
-                resetPlanPreviewEdits();
+                regeneratePlanPreview();
                 setWorkoutNameBySlot({});
                 setSaveStatus("");
               }}
@@ -1663,7 +1894,9 @@ export default function PlansView({
               <option value="type-2">Type 2</option>
             </select>
           </label>
-        ) : (
+        )}
+
+        {generationMode === "workout" && (
           <label
             style={{
               display: "grid",
@@ -1678,7 +1911,7 @@ export default function PlansView({
 
                 setWorkoutType(nextWorkoutType);
                 setWorkoutName(getDefaultWorkoutName(nextWorkoutType));
-                resetPlanPreviewEdits();
+                regeneratePlanPreview();
                 setWorkoutNameBySlot({});
                 setSaveStatus("");
               }}
@@ -1712,7 +1945,7 @@ export default function PlansView({
             value={goal}
             onChange={(event) => {
               setGoal(event.target.value);
-              resetPlanPreviewEdits();
+              regeneratePlanPreview();
               setSaveStatus("");
             }}
             style={{
@@ -1952,7 +2185,7 @@ export default function PlansView({
               getDefaultPlanName(planType, nextDaysPerWeek, durationWeeks)
             );
           }
-          resetPlanPreviewEdits();
+          regeneratePlanPreview();
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
@@ -1973,7 +2206,7 @@ export default function PlansView({
               getDefaultPlanName(planType, daysPerWeek, nextDurationWeeks)
             );
           }
-          resetPlanPreviewEdits();
+          regeneratePlanPreview();
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
@@ -1988,7 +2221,7 @@ export default function PlansView({
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => {
           setReps(String(value));
-          resetPlanPreviewEdits();
+          regeneratePlanPreview();
           setSaveStatus("");
         }}
       />
@@ -2001,7 +2234,7 @@ export default function PlansView({
         values={[0, 1, 2, 3, 4, 5, 6]}
         onSelect={(value) => {
           setRir(String(value));
-          resetPlanPreviewEdits();
+          regeneratePlanPreview();
           setSaveStatus("");
         }}
       />

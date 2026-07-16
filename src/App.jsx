@@ -11,6 +11,7 @@ import {
   Dumbbell,
   History,
   Home,
+  Pencil,
   Play,
   RotateCcw,
   Settings,
@@ -811,6 +812,7 @@ export default function App() {
   const [showExercises, setShowExercises] = useState(false);
 
   const [showPlans, setShowPlans] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState(null);
 
   const [showNutrition, setShowNutrition] = useState(false);
 
@@ -1998,6 +2000,9 @@ export default function App() {
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+  const editingPlan = plans.find(
+    (plan) => String(plan.id) === String(editingPlanId)
+  );
   const isHomeView =
     !showExercises &&
     !showPlans &&
@@ -2549,6 +2554,21 @@ export default function App() {
                 {plan.name}
               </strong>
             </button>
+            <button
+              aria-label={`Edit ${plan.name}`}
+              onClick={() => openPlanEditor(plan)}
+              title="Edit plan"
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "32px",
+                minWidth: "32px",
+                padding: "4px",
+              }}
+            >
+              <Pencil size={15} />
+            </button>
           </div>
 
           <div
@@ -2783,6 +2803,7 @@ export default function App() {
 
     setShowExercises(false);
     setShowPlans(false);
+    setEditingPlanId(null);
     setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -2797,6 +2818,7 @@ export default function App() {
 
     setShowExercises(true);
     setShowPlans(false);
+    setEditingPlanId(null);
     setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -2810,6 +2832,7 @@ export default function App() {
     }
 
     setShowExercises(false);
+    setEditingPlanId(null);
     setShowPlans(true);
     setShowNutrition(false);
     setShowSettings(false);
@@ -2825,6 +2848,7 @@ export default function App() {
 
     setShowExercises(false);
     setShowPlans(false);
+    setEditingPlanId(null);
     setShowNutrition(true);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -2839,8 +2863,28 @@ export default function App() {
 
     setShowExercises(false);
     setShowPlans(false);
+    setEditingPlanId(null);
     setShowNutrition(false);
     setShowSettings(true);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplateId(null);
+  }
+
+  function openPlanEditor(plan) {
+    if (templatePreviewEditActive) {
+      return;
+    }
+
+    setEditingPlanId(plan.id);
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [plan.id]: true,
+    }));
+    setShowExercises(false);
+    setShowPlans(true);
+    setShowNutrition(false);
+    setShowSettings(false);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
@@ -3534,10 +3578,16 @@ export default function App() {
   if (showPlans) {
     return renderAppShell(
       <PlansView
+        editingPlan={editingPlan}
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         history={history}
+        onCancel={() => {
+          setEditingPlanId(null);
+          goHome();
+        }}
         onSave={(result) => {
+          setEditingPlanId(null);
           goHome();
           if (result?.type === "trainer-plan" || result?.type === "trainer-workout") {
             return;
@@ -3545,7 +3595,11 @@ export default function App() {
 
           requestSyncCheckpoint(
             result?.type === "workout" ? ["workouts"] : ["plans", "workouts"],
-            result?.type === "workout" ? "workout save" : "plan save"
+            result?.type === "workout"
+              ? "workout save"
+              : result?.type === "plan-update"
+                ? "plan update"
+                : "plan save"
           );
         }}
         plans={plans}
