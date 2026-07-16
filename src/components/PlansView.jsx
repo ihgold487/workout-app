@@ -635,7 +635,13 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
 }
 
 function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
-  return `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1}`;
+  const compactPrefix = getCompactPlanTypeLabel(planType);
+
+  if (planType === "type-3" && workout?.workoutTypeLabel) {
+    return `${compactPrefix} W${workoutIndex + 1} ${workout.workoutTypeLabel}`;
+  }
+
+  return `${compactPrefix} W${workoutIndex + 1}`;
 }
 
 function getDefaultWorkoutName(workoutType) {
@@ -668,6 +674,13 @@ const PLAN_TYPE_DEFAULTS = {
     goal: "maintain",
     reps: "12",
     rir: "2",
+  },
+  "type-3": {
+    daysPerWeek: "5",
+    durationWeeks: "5",
+    goal: "progress",
+    reps: "3",
+    rir: "3",
   },
 };
 
@@ -938,11 +951,23 @@ function PlanWorkoutPreview({
 }
 
 function getPlanTypeLabel(planType) {
-  return planType === "type-1" ? "Plan Type 1" : "Plan Type 2";
+  const labels = {
+    "type-1": "Plan Type 1 'Laura'",
+    "type-2": "Plan Type 2 'Sam'",
+    "type-3": "Plan Type 3 'Ira'",
+  };
+
+  return labels[planType] || labels["type-2"];
 }
 
 function getCompactPlanTypeLabel(planType) {
-  return planType === "type-1" ? "P1" : "P2";
+  const labels = {
+    "type-1": "P1",
+    "type-2": "P2",
+    "type-3": "P3",
+  };
+
+  return labels[planType] || labels["type-2"];
 }
 
 function PlanPickerButton({ disabled = false, label, onClick, value }) {
@@ -1890,8 +1915,9 @@ export default function PlansView({
                 width: "100%",
               }}
             >
-              <option value="type-1">Type 1</option>
-              <option value="type-2">Type 2</option>
+              <option value="type-1">{getPlanTypeLabel("type-1")}</option>
+              <option value="type-2">{getPlanTypeLabel("type-2")}</option>
+              <option value="type-3">{getPlanTypeLabel("type-3")}</option>
             </select>
           </label>
         )}

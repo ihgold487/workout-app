@@ -9,12 +9,17 @@ const UPPER_BODY_CATEGORIES = ["Lats", "Upper Back", "Chest"];
 
 const PLAN_CONFIGS = {
   "type-1": {
-    label: "Plan Type 1",
+    label: "Plan Type 1 'Laura'",
   },
   "type-2": {
-    label: "Plan Type 2",
+    label: "Plan Type 2 'Sam'",
+  },
+  "type-3": {
+    label: "Plan Type 3 'Ira'",
   },
 };
+
+const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
 
 const WORKOUT_TYPE_CONFIGS = {
   "type-1": {
@@ -355,11 +360,21 @@ function buildNamedWorkout(workoutType) {
   return {
     name: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
     groups: workoutGroupsByType[workoutType] || workoutGroupsByType["full-body"],
+    workoutTypeLabel: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
   };
 }
 
 function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
   const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
+
+  if (planType === "type-3") {
+    return Array.from({ length: workoutCount }, (_, workoutIndex) =>
+      buildNamedWorkout(
+        TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length]
+      )
+    );
+  }
+
   const usage = {
     setTotalsByMuscle: new Map(),
   };
@@ -568,20 +583,21 @@ export function generatePlanWorkouts({
   workoutType,
 }) {
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
+  const resolvedPlanType = PLAN_CONFIGS[planType] ? planType : "type-2";
   const isWorkoutMode = generationMode === "workout";
   const workoutConfig =
     WORKOUT_TYPE_CONFIGS[workoutType] || WORKOUT_TYPE_CONFIGS["full-body"];
   const workoutDefinitions = isWorkoutMode
     ? [
         buildSingleWorkoutDefinition({
-          planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
+          planType: resolvedPlanType,
           seed,
           workoutType,
         }),
       ]
     : buildWorkoutDefinitions({
         daysPerWeek,
-        planType: config === PLAN_CONFIGS["type-1"] ? "type-1" : "type-2",
+        planType: resolvedPlanType,
         seed,
       });
   const workoutCount = workoutDefinitions.length;
@@ -637,6 +653,7 @@ export function generatePlanWorkouts({
         ? `${workoutConfig.label} Workout`
         : `${config.label} - ${workout.name}`,
       planType,
+      workoutTypeLabel: workout.workoutTypeLabel || null,
       workoutType: isWorkoutMode ? workoutType : null,
     };
   });

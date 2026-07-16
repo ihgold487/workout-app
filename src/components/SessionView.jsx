@@ -51,6 +51,8 @@ import {
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
 
+const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
+
 function IconButton({
   children,
   disabled = false,
@@ -5448,7 +5450,7 @@ export default function SessionView({
             }}
             value={rirPickerData?.value}
             title="Select RIR"
-            values={[0, 1, 2, 3, 4, 5, 6]}
+            values={RIR_PICKER_VALUES}
             onSelect={(value) => {
               if (!rirPickerData) {
                 return;
