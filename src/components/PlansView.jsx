@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   ClipboardList,
@@ -41,6 +41,12 @@ import {
   generatePlanWorkouts,
 } from "../plans/planType2Generator";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
+import {
+  RIR_PERIODIZATION_MODES,
+  RIR_PERIODIZATION_ORDER,
+  getDefaultRirPeriodizationMode,
+  getRirForPlanWeek,
+} from "../utils/rirPeriodization";
 
 function formatList(value) {
   if (Array.isArray(value)) {
@@ -660,11 +666,22 @@ function formatPlanSetting(value, fallback) {
   return value == null || value === "" ? fallback : String(value);
 }
 
+function firstPresentValue(...values) {
+  const value = values.find((item) => item != null && item !== "");
+
+  return value == null ? "" : value;
+}
+
+const WEEKLY_RIR_VALUES = [0, 1, 2, 3, 4, 5, 6];
+const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
+const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
+
 const PLAN_TYPE_DEFAULTS = {
   "type-1": {
     daysPerWeek: "2",
     durationWeeks: "4",
     goal: "maintain",
+    rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
     reps: "15",
     rir: "2",
   },
@@ -672,6 +689,7 @@ const PLAN_TYPE_DEFAULTS = {
     daysPerWeek: "2",
     durationWeeks: "4",
     goal: "maintain",
+    rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
     reps: "12",
     rir: "2",
   },
@@ -679,6 +697,7 @@ const PLAN_TYPE_DEFAULTS = {
     daysPerWeek: "5",
     durationWeeks: "5",
     goal: "progress",
+    rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
     reps: "3",
     rir: "3",
   },
@@ -745,6 +764,9 @@ function getPlanComparable(plan) {
     config: {
       reps: formatPlanSetting(plan?.config?.reps, ""),
       rir: formatPlanSetting(plan?.config?.rir, ""),
+      rirPeriodization:
+        plan?.config?.rirPeriodization ||
+        getDefaultRirPeriodizationMode(plan?.planType),
     },
     workouts: (plan?.workouts || []).map((workout) => ({
       dayNumber: Number(workout?.dayNumber || 0),
@@ -774,8 +796,10 @@ function hasPlanUpdateChanges(editingPlan, nextPlan, previousWorkouts, nextWorko
 }
 
 function PlanWorkoutPreview({
+  enableWeeklyPrescriptions = false,
   exerciseLibrary,
   onEditSuperset,
+  onEditWeeklyPrescription,
   onRenameWorkout,
   onReplaceExercise,
   onShowExerciseDetail,
@@ -859,6 +883,18 @@ function PlanWorkoutPreview({
                         exercise={exercise}
                         exerciseDetail={exerciseDetail}
                         onExerciseClick={() => onShowExerciseDetail(exerciseDetail)}
+                        onPrescriptionClick={
+                          enableWeeklyPrescriptions
+                            ? () => onEditWeeklyPrescription(exercise)
+                            : null
+                        }
+                        prescriptionSummary={
+                          enableWeeklyPrescriptions
+                            ? getPrescriptionSummary(
+                                exercise.weeklyPrescriptions || []
+                              )
+                            : null
+                        }
                         sideContent={
                           <ExerciseMuscleMapThumbnails exercise={exerciseDetail} />
                         }
@@ -993,6 +1029,673 @@ function PlanPickerButton({ disabled = false, label, onClick, value }) {
   );
 }
 
+function getRirPeriodizationLabel(mode) {
+  if (mode === RIR_PERIODIZATION_MODES.LINEAR) {
+    return "Linear RIR decrease";
+  }
+
+  if (mode === RIR_PERIODIZATION_MODES.STEP) {
+    return "Stair-step RIR decrease";
+  }
+
+  return "Constant RIR";
+}
+
+function RirPeriodizationIcon({ mode }) {
+  if (mode === RIR_PERIODIZATION_MODES.STEP) {
+    return (
+      <svg aria-hidden="true" height="24" viewBox="0 0 32 24" width="32">
+        <path
+          d="M5 5 H13 V11 H21 V17 H27"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+        />
+      </svg>
+    );
+  }
+
+  if (mode === RIR_PERIODIZATION_MODES.LINEAR) {
+    return (
+      <svg aria-hidden="true" height="24" viewBox="0 0 32 24" width="32">
+        <path
+          d="M5 5 L27 19"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2.5"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" height="24" viewBox="0 0 32 24" width="32">
+      <path
+        d="M5 12 H27"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.5"
+      />
+    </svg>
+  );
+}
+
+function getNextRirPeriodizationMode(mode) {
+  const currentIndex = RIR_PERIODIZATION_ORDER.indexOf(mode);
+  const nextIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+
+  return RIR_PERIODIZATION_ORDER[nextIndex % RIR_PERIODIZATION_ORDER.length];
+}
+
+function RirPeriodizationButton({ mode, onChange }) {
+  const label = getRirPeriodizationLabel(mode);
+
+  return (
+    <button
+      aria-label={label}
+      onClick={() => onChange(getNextRirPeriodizationMode(mode))}
+      title={label}
+      style={{
+        alignItems: "center",
+        alignSelf: "end",
+        display: "inline-flex",
+        justifyContent: "center",
+        minHeight: "40px",
+        minWidth: "56px",
+        padding: "6px 10px",
+      }}
+    >
+      <RirPeriodizationIcon mode={mode} />
+    </button>
+  );
+}
+
+function formatRange(values) {
+  const normalizedValues = [...new Set(values.map(String).filter(Boolean))];
+
+  if (normalizedValues.length === 0) {
+    return "";
+  }
+
+  const numericValues = normalizedValues
+    .map(Number)
+    .filter((value) => Number.isFinite(value));
+
+  if (numericValues.length !== normalizedValues.length) {
+    return normalizedValues.join("/");
+  }
+
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const formatValue = (value) =>
+    Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+
+  return min === max ? formatValue(min) : `${formatValue(min)}-${formatValue(max)}`;
+}
+
+function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
+  const firstSet = exercise?.sets?.[0] || {};
+
+  return {
+    reps: firstPresentValue(firstSet.targetReps, firstSet.reps, fallbackReps),
+    rir: firstPresentValue(firstSet.targetRir, firstSet.rir, fallbackRir),
+    sets: String(exercise?.sets?.length || 1),
+  };
+}
+
+function getDefaultWeeklyPrescriptions({
+  durationWeeks,
+  exercise,
+  reps,
+  rir,
+  rirPeriodization,
+}) {
+  const weekCount = Math.max(1, Number(durationWeeks) || 1);
+  const base = getBaseExercisePrescription(exercise, reps, rir);
+
+  return Array.from({ length: weekCount }, (_, index) => {
+    const weekNumber = index + 1;
+
+    return {
+      reps: String(base.reps),
+      rir: getRirForPlanWeek({
+        durationWeeks: weekCount,
+        initialRir: base.rir,
+        mode: rirPeriodization,
+        weekNumber,
+      }),
+      sets: String(base.sets),
+      weekNumber,
+    };
+  });
+}
+
+function normalizeWeeklyPrescriptions({
+  durationWeeks,
+  exercise,
+  overrides,
+  reps,
+  rir,
+  rirPeriodization,
+}) {
+  const defaults = getDefaultWeeklyPrescriptions({
+    durationWeeks,
+    exercise,
+    reps,
+    rir,
+    rirPeriodization,
+  });
+  const savedByWeek = new Map(
+    (exercise?.weeklyPrescriptions || []).map((week) => [
+      Number(week.weekNumber),
+      week,
+    ])
+  );
+  const overrideByWeek = new Map(
+    (overrides || []).map((week) => [Number(week.weekNumber), week])
+  );
+
+  return defaults.map((defaultWeek) => ({
+    ...defaultWeek,
+    ...(savedByWeek.get(defaultWeek.weekNumber) || {}),
+    ...(overrideByWeek.get(defaultWeek.weekNumber) || {}),
+    weekNumber: defaultWeek.weekNumber,
+  }));
+}
+
+function getPrescriptionSummary(weeklyPrescriptions) {
+  const setRange = formatRange(weeklyPrescriptions.map((week) => week.sets));
+  const repRange = formatRange(weeklyPrescriptions.map((week) => week.reps));
+  const rirRange = formatRange(weeklyPrescriptions.map((week) => week.rir));
+  const setLabel = setRange === "1" ? "set" : "sets";
+
+  return `${setRange} ${setLabel} - ${repRange} reps - ${rirRange} RIR`;
+}
+
+function WeeklyPrescriptionSheet({
+  exercise,
+  onClose,
+  onEditValue,
+  weeklyPrescriptions,
+}) {
+  const [isClosing, setIsClosing] = useState(false);
+
+  if (!exercise) {
+    return null;
+  }
+
+  function closeWithAnimation() {
+    setIsClosing(true);
+    setTimeout(onClose, 750);
+  }
+
+  return (
+    <div
+      onClick={closeWithAnimation}
+      style={{
+        alignItems: "flex-end",
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        position: "fixed",
+        zIndex: 900,
+      }}
+    >
+      <style>
+        {`
+          .plan-weekly-prescription-sheet {
+            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            will-change: opacity, transform;
+          }
+
+          .plan-weekly-prescription-sheet[data-closing="true"] {
+            animation-name: planSheetSlideDown;
+          }
+
+          @keyframes planSheetSlideUp {
+            from {
+              opacity: 0.25;
+              transform: translateY(calc(100% + 24px));
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes planSheetSlideDown {
+            from {
+              opacity: 1;
+              transform: translateY(0);
+            }
+
+            to {
+              opacity: 0;
+              transform: translateY(calc(100% + 24px));
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .plan-weekly-prescription-sheet {
+              animation: none;
+            }
+          }
+        `}
+      </style>
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="plan-weekly-prescription-sheet"
+        data-closing={isClosing ? "true" : "false"}
+        style={{
+          background: "var(--surface-raised)",
+          borderTopLeftRadius: "10px",
+          borderTopRightRadius: "10px",
+          boxShadow: "0 -6px 24px rgba(0,0,0,.25)",
+          boxSizing: "border-box",
+          color: "var(--text)",
+          maxHeight: "calc(100dvh - 16px)",
+          overflowY: "auto",
+          padding: "14px 16px calc(96px + env(safe-area-inset-bottom))",
+          WebkitOverflowScrolling: "touch",
+          width: "min(560px, 100%)",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+            justifyContent: "space-between",
+            marginBottom: "12px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "18px",
+              lineHeight: 1.15,
+              margin: 0,
+            }}
+          >
+            {exercise.name}
+          </h2>
+
+          <button
+            aria-label="Close weekly targets"
+            onClick={closeWithAnimation}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
+              minHeight: "34px",
+              minWidth: "34px",
+              padding: "4px",
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            paddingBottom: "8px",
+          }}
+        >
+          <div
+            style={{
+              color: "var(--text-muted)",
+              display: "grid",
+              fontSize: "12px",
+              fontWeight: "bold",
+              gap: "6px",
+              gridTemplateColumns: "52px 1fr 1fr 1fr",
+              textTransform: "uppercase",
+            }}
+          >
+            <span>Week</span>
+            <span>Sets</span>
+            <span>Reps</span>
+            <span>RIR</span>
+          </div>
+
+          {weeklyPrescriptions.map((week) => (
+            <div
+              key={week.weekNumber}
+              style={{
+                alignItems: "center",
+                display: "grid",
+                gap: "6px",
+                gridTemplateColumns: "52px 1fr 1fr 1fr",
+              }}
+            >
+              <strong>W{week.weekNumber}</strong>
+              {["sets", "reps", "rir"].map((field) => (
+                <button
+                  key={field}
+                  onClick={() => onEditValue(week.weekNumber, field)}
+                  style={{
+                    minHeight: "38px",
+                    padding: "6px 8px",
+                    textAlign: "center",
+                  }}
+                >
+                  {week[field]}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScopeSwitch({ checked, label, onChange }) {
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "flex",
+        gap: "8px",
+        justifyContent: "space-between",
+      }}
+    >
+      <span>{label}</span>
+      <button
+        aria-pressed={checked}
+        onClick={() => onChange(!checked)}
+        type="button"
+        style={{
+          alignItems: "center",
+          background: checked ? "var(--accent)" : "var(--surface-muted)",
+          border: "1px solid var(--border)",
+          borderRadius: "999px",
+          display: "inline-flex",
+          height: "26px",
+          justifyContent: checked ? "flex-end" : "flex-start",
+          padding: "2px",
+          width: "46px",
+        }}
+      >
+        <span
+          style={{
+            background: "var(--surface)",
+            borderRadius: "999px",
+            display: "block",
+            height: "20px",
+            width: "20px",
+          }}
+        />
+      </button>
+    </label>
+  );
+}
+
+function WeeklyPrescriptionValuePicker({
+  field,
+  onClose,
+  onSelect,
+  scope,
+  setScope,
+  value,
+  weekNumber,
+}) {
+  const [isClosing, setIsClosing] = useState(false);
+  const [manualValue, setManualValue] = useState(String(value ?? ""));
+  const scrollRef = useRef(null);
+  const values =
+    field === "sets"
+      ? WEEKLY_SET_VALUES
+      : field === "reps"
+        ? WEEKLY_REP_VALUES
+        : WEEKLY_RIR_VALUES;
+  const title =
+    field === "sets" ? "sets" : field === "reps" ? "reps" : "RIR";
+
+  useEffect(() => {
+    if (!scrollRef.current) {
+      return;
+    }
+
+    setTimeout(() => {
+      const selectedIndex = values.findIndex(
+        (option) => option === Number(manualValue)
+      );
+
+      if (selectedIndex < 0) {
+        return;
+      }
+
+      scrollRef.current.children[selectedIndex]?.scrollIntoView({
+        block: "center",
+      });
+    }, 0);
+  }, [manualValue, values]);
+
+  function closeWithAnimation() {
+    setIsClosing(true);
+    setTimeout(onClose, 750);
+  }
+
+  function saveManualValue() {
+    const nextValue = Math.max(0, Number(manualValue));
+
+    if (!Number.isNaN(nextValue)) {
+      onSelect(nextValue);
+    }
+
+    closeWithAnimation();
+  }
+
+  if (!field) {
+    return null;
+  }
+
+  return (
+    <div
+      onClick={closeWithAnimation}
+      style={{
+        alignItems: "flex-end",
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        position: "fixed",
+        zIndex: 1200,
+      }}
+    >
+      <style>
+        {`
+          .plan-weekly-value-picker-sheet {
+            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            will-change: opacity, transform;
+          }
+
+          .plan-weekly-value-picker-sheet[data-closing="true"] {
+            animation-name: planSheetSlideDown;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .plan-weekly-value-picker-sheet {
+              animation: none;
+            }
+          }
+        `}
+      </style>
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="plan-weekly-value-picker-sheet"
+        data-closing={isClosing ? "true" : "false"}
+        style={{
+          background: "var(--surface-raised)",
+          borderTopLeftRadius: "10px",
+          borderTopRightRadius: "10px",
+          boxShadow: "0 -6px 24px rgba(0,0,0,.25)",
+          boxSizing: "border-box",
+          color: "var(--text)",
+          maxHeight: "calc(100dvh - 16px)",
+          overflowY: "auto",
+          padding: "14px 16px calc(96px + env(safe-area-inset-bottom))",
+          WebkitOverflowScrolling: "touch",
+          width: "min(420px, 100%)",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "12px",
+          }}
+        >
+          <strong>Week {weekNumber} {title}</strong>
+          <button
+            aria-label="Close value picker"
+            onClick={closeWithAnimation}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
+              minHeight: "34px",
+              minWidth: "34px",
+              padding: "4px",
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            marginBottom: "14px",
+          }}
+        >
+          <ScopeSwitch
+            checked={scope.allExercises}
+            label="All exercises"
+            onChange={(checked) =>
+              setScope((current) => ({ ...current, allExercises: checked }))
+            }
+          />
+          <ScopeSwitch
+            checked={scope.allDays}
+            label="All days"
+            onChange={(checked) =>
+              setScope((current) => ({ ...current, allDays: checked }))
+            }
+          />
+          <ScopeSwitch
+            checked={scope.allWeeks}
+            label="All weeks"
+            onChange={(checked) =>
+              setScope((current) => ({ ...current, allWeeks: checked }))
+            }
+          />
+        </div>
+
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            marginBottom: "8px",
+            textAlign: "center",
+          }}
+        >
+          Scroll or tap a value
+        </div>
+
+        <div
+          ref={scrollRef}
+          style={{
+            border: "1px solid var(--border)",
+            maxHeight: "260px",
+            overflowY: "auto",
+            padding: "4px",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {values.map((option) => (
+            <button
+              key={option}
+              onClick={() => {
+                setManualValue(String(option));
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text)",
+                display: "block",
+                fontSize: Number(manualValue) === option ? "24px" : "16px",
+                fontWeight: Number(manualValue) === option ? "bold" : "normal",
+                opacity: Number(manualValue) === option ? 1 : 0.6,
+                padding: "6px",
+                width: "100%",
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: "12px",
+          }}
+        >
+          <button
+            aria-label="Cancel value change"
+            onClick={closeWithAnimation}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: "28px",
+            }}
+          >
+            ❌
+          </button>
+
+          <input
+            inputMode="decimal"
+            min="0"
+            value={manualValue}
+            onChange={(event) => setManualValue(event.target.value)}
+            style={{
+              fontSize: "22px",
+              fontWeight: "bold",
+              textAlign: "center",
+              width: "90px",
+            }}
+          />
+
+          <button
+            aria-label="Apply value change"
+            onClick={saveManualValue}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: "28px",
+            }}
+          >
+            ✅
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PlansView({
   editingPlan,
   exerciseLibrary,
@@ -1040,12 +1743,25 @@ export default function PlansView({
   const [rir, setRir] = useState(
     formatPlanSetting(editingPlanConfig.rir, initialPlanDefaults.rir)
   );
+  const [rirPeriodization, setRirPeriodization] = useState(
+    editingPlanConfig.rirPeriodization ||
+      initialPlanDefaults.rirPeriodization ||
+      getDefaultRirPeriodizationMode(initialPlanType)
+  );
   const [editPreviewWorkouts, setEditPreviewWorkouts] = useState(() =>
     buildEditablePlanWorkouts(editingPlan, templates)
   );
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
   const [replacementBySlot, setReplacementBySlot] = useState({});
+  const [weeklyPrescriptionBySlot, setWeeklyPrescriptionBySlot] = useState({});
+  const [weeklyPrescriptionTarget, setWeeklyPrescriptionTarget] = useState(null);
+  const [weeklyPrescriptionPicker, setWeeklyPrescriptionPicker] = useState(null);
+  const [weeklyPrescriptionScope, setWeeklyPrescriptionScope] = useState({
+    allDays: false,
+    allExercises: false,
+    allWeeks: false,
+  });
   const [workoutNameBySlot, setWorkoutNameBySlot] = useState({});
   const [pickerTarget, setPickerTarget] = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -1326,6 +2042,18 @@ export default function PlansView({
             return {
               ...previewExercise,
               previewSlotKey: slotKey,
+              ...(generationMode === "plan"
+                ? {
+                    weeklyPrescriptions: normalizeWeeklyPrescriptions({
+                      durationWeeks,
+                      exercise: previewExercise,
+                      overrides: weeklyPrescriptionBySlot[slotKey],
+                      reps,
+                      rir,
+                      rirPeriodization,
+                    }),
+                  }
+                : {}),
             };
           })
           .filter(Boolean),
@@ -1338,8 +2066,11 @@ export default function PlansView({
       normalizedExerciseLayout,
       replacementBySlot,
       supersetGroupBySlot,
+      durationWeeks,
       reps,
       rir,
+      rirPeriodization,
+      weeklyPrescriptionBySlot,
       workoutNameBySlot,
       generationMode,
       editPreviewWorkouts,
@@ -1400,11 +2131,104 @@ export default function PlansView({
     orderedPreviewWorkouts[0] ||
     null;
   const displayedWorkoutKey = displayedWorkout?.previewWorkoutKey ?? 0;
+  const weeklyPrescriptionExercise = useMemo(() => {
+    if (!weeklyPrescriptionTarget) {
+      return null;
+    }
+
+    return (
+      orderedPreviewWorkouts
+        .flatMap((workout) => workout.exercises)
+        .find(
+          (exercise) =>
+            String(exercise.previewSlotKey) ===
+            String(weeklyPrescriptionTarget.previewSlotKey)
+        ) || null
+    );
+  }, [orderedPreviewWorkouts, weeklyPrescriptionTarget]);
+
+  function getWeeksForExercise(exercise, currentOverrides) {
+    return (
+      currentOverrides?.[exercise.previewSlotKey] ||
+      exercise.weeklyPrescriptions ||
+      normalizeWeeklyPrescriptions({
+        durationWeeks,
+        exercise,
+        reps,
+        rir,
+        rirPeriodization,
+      })
+    );
+  }
+
+  function updateWeeklyPrescriptionValue(
+    slotKey,
+    weekNumber,
+    field,
+    value,
+    scope = weeklyPrescriptionScope
+  ) {
+    setWeeklyPrescriptionBySlot((current) => {
+      const targetWorkout = orderedPreviewWorkouts.find((workout) =>
+        workout.exercises.some(
+          (exercise) => String(exercise.previewSlotKey) === String(slotKey)
+        )
+      );
+      const targetExercise = targetWorkout?.exercises.find(
+        (exercise) => String(exercise.previewSlotKey) === String(slotKey)
+      );
+      const scopedWorkouts = scope.allDays
+        ? orderedPreviewWorkouts
+        : [targetWorkout].filter(Boolean);
+      const exerciseMatchesTarget = (exercise) => {
+        if (!targetExercise) {
+          return false;
+        }
+
+        if (exercise.exerciseId && targetExercise.exerciseId) {
+          return String(exercise.exerciseId) === String(targetExercise.exerciseId);
+        }
+
+        return (
+          String(exercise.name || "").toLowerCase() ===
+            String(targetExercise.name || "").toLowerCase() &&
+          String(exercise.equipment?.[0] || "").toLowerCase() ===
+            String(targetExercise.equipment?.[0] || "").toLowerCase()
+        );
+      };
+      const scopedExercises = scopedWorkouts.flatMap((workout) =>
+        scope.allExercises
+          ? workout.exercises
+          : workout.exercises.filter((exercise) => exerciseMatchesTarget(exercise))
+      );
+
+      return scopedExercises.reduce(
+        (next, exercise) => ({
+          ...next,
+          [exercise.previewSlotKey]: getWeeksForExercise(exercise, next).map((week) =>
+            scope.allWeeks || Number(week.weekNumber) === Number(weekNumber)
+              ? {
+                  ...week,
+                  [field]: String(value),
+                }
+              : week
+          ),
+        }),
+        {
+          ...current,
+        }
+      );
+    });
+    setSaveStatus("");
+  }
 
   function resetPlanPreviewEdits() {
     setActiveWorkoutIndex(0);
     setExerciseLayoutByWorkout(null);
     setReplacementBySlot({});
+    setWeeklyPrescriptionBySlot({});
+    setWeeklyPrescriptionTarget(null);
+    setWeeklyPrescriptionPicker(null);
     setSupersetGroupBySlot({});
     setDayOrder(null);
   }
@@ -1537,6 +2361,7 @@ export default function PlansView({
       config: {
         reps,
         rir,
+        rirPeriodization,
       },
       workouts: workouts.map((workout) => ({
         dayNumber: workout.dayNumber,
@@ -1892,6 +2717,10 @@ export default function PlansView({
                 setGoal(nextDefaults.goal);
                 setDaysPerWeek(nextDefaults.daysPerWeek);
                 setDurationWeeks(nextDefaults.durationWeeks);
+                setRirPeriodization(
+                  nextDefaults.rirPeriodization ||
+                    getDefaultRirPeriodizationMode(nextPlanType)
+                );
                 setReps(nextDefaults.reps);
                 setRir(nextDefaults.rir);
                 if (!isPlanNameCustom) {
@@ -2009,11 +2838,31 @@ export default function PlansView({
           onClick={() => setActiveValuePicker("reps")}
         />
 
-        <PlanPickerButton
-          label="RIR"
-          value={rir}
-          onClick={() => setActiveValuePicker("rir")}
-        />
+        <div
+          style={{
+            alignItems: "end",
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns:
+              generationMode === "plan" && !editingPlan ? "1fr auto" : "1fr",
+          }}
+        >
+          <PlanPickerButton
+            label="RIR"
+            value={rir}
+            onClick={() => setActiveValuePicker("rir")}
+          />
+
+          {generationMode === "plan" && !editingPlan && (
+            <RirPeriodizationButton
+              mode={rirPeriodization}
+              onChange={(nextMode) => {
+                setRirPeriodization(nextMode);
+                setSaveStatus("");
+              }}
+            />
+          )}
+        </div>
 
         {generatedPlan.gaps.length > 0 && (
           <div
@@ -2119,6 +2968,7 @@ export default function PlansView({
           {displayedWorkout && (
             <PlanWorkoutPreview
               key={displayedWorkout.previewWorkoutKey}
+              enableWeeklyPrescriptions={generationMode === "plan"}
               exerciseLibrary={exerciseLibrary}
               workout={displayedWorkout}
               onEditSuperset={(exercise) => {
@@ -2146,6 +2996,11 @@ export default function PlansView({
                   setWorkoutName(name);
                 }
                 setSaveStatus("");
+              }}
+              onEditWeeklyPrescription={(exercise) => {
+                setWeeklyPrescriptionTarget({
+                  previewSlotKey: exercise.previewSlotKey,
+                });
               }}
               onShowSummary={setSummaryWorkout}
               onShowExerciseDetail={setDetailExercise}
@@ -2195,6 +3050,57 @@ export default function PlansView({
           onClose={() => setSummaryWorkout(null)}
         />
       )}
+
+      {weeklyPrescriptionTarget && weeklyPrescriptionExercise && (
+        <WeeklyPrescriptionSheet
+          exercise={weeklyPrescriptionExercise}
+          weeklyPrescriptions={weeklyPrescriptionExercise.weeklyPrescriptions || []}
+          onClose={() => {
+            setWeeklyPrescriptionTarget(null);
+            setWeeklyPrescriptionPicker(null);
+          }}
+          onEditValue={(weekNumber, field) => {
+            const week = weeklyPrescriptionExercise.weeklyPrescriptions?.find(
+              (item) => Number(item.weekNumber) === Number(weekNumber)
+            );
+
+            setWeeklyPrescriptionPicker({
+              field,
+              previewSlotKey: weeklyPrescriptionExercise.previewSlotKey,
+              value: week?.[field] || "",
+              weekNumber,
+            });
+            setWeeklyPrescriptionScope({
+              allDays: false,
+              allExercises: false,
+              allWeeks: false,
+            });
+          }}
+        />
+      )}
+
+      <WeeklyPrescriptionValuePicker
+        key={`${weeklyPrescriptionPicker?.field || "closed"}-${weeklyPrescriptionPicker?.weekNumber || "none"}-${weeklyPrescriptionPicker?.value || ""}`}
+        field={weeklyPrescriptionPicker?.field}
+        onClose={() => setWeeklyPrescriptionPicker(null)}
+        scope={weeklyPrescriptionScope}
+        setScope={setWeeklyPrescriptionScope}
+        value={weeklyPrescriptionPicker?.value}
+        weekNumber={weeklyPrescriptionPicker?.weekNumber}
+        onSelect={(value) => {
+          if (!weeklyPrescriptionPicker) {
+            return;
+          }
+
+          updateWeeklyPrescriptionValue(
+            weeklyPrescriptionPicker.previewSlotKey,
+            weeklyPrescriptionPicker.weekNumber,
+            weeklyPrescriptionPicker.field,
+            value,
+            weeklyPrescriptionScope
+          );
+        }}
+      />
 
       <WeightPickerModal
         isOpen={activeValuePicker === "days"}

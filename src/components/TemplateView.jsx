@@ -35,6 +35,7 @@ import {
 } from "./WorkoutExercisePreviewList";
 import { calculateE1RM, formatE1RM } from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
+import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import { recommendSetTarget } from "../utils/targetRecommendation";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 
@@ -363,6 +364,48 @@ export default function TemplateView({
     return plan?.goal === "progress" ? "progress" : "maintenance";
   }
 
+  function getPlanWeekRir(plan, fallbackRir = "") {
+    if (!plan) {
+      return fallbackRir;
+    }
+
+    return getRirForPlanWeek({
+      durationWeeks: plan.durationWeeks,
+      initialRir: plan.config?.rir ?? fallbackRir,
+      mode: plan.config?.rirPeriodization,
+      weekNumber: plan.currentWeek || 1,
+    });
+  }
+
+  function getExerciseWeekPrescription(exercise, plan) {
+    if (!plan) {
+      return null;
+    }
+
+    return (
+      exercise.weeklyPrescriptions?.find(
+        (week) => Number(week.weekNumber) === Number(plan.currentWeek || 1)
+      ) || null
+    );
+  }
+
+  function getExerciseSetsForPlanWeek(exercise, weekPrescription) {
+    const sourceSets = exercise.sets || [];
+    const targetSetCount = Math.max(
+      1,
+      Number(weekPrescription?.sets) || sourceSets.length || 1
+    );
+
+    return Array.from({ length: targetSetCount }, (_, index) => {
+      const sourceSet = sourceSets[index] || sourceSets.at(-1) || {};
+
+      return {
+        ...sourceSet,
+        id: sourceSets[index]?.id || Date.now() + Math.random() + index,
+      };
+    });
+  }
+
   function cloneTemplateEditState(sourceTemplate = template) {
     return {
       exercises: structuredClone(sourceTemplate.exercises || []),
@@ -537,9 +580,14 @@ export default function TemplateView({
     plan,
     set,
     setIndex,
+    weekPrescription,
   }) {
-    const targetReps = set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
-    const targetRir = set.targetRir ?? set.rir ?? plan?.config?.rir ?? "";
+    const targetReps =
+      weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
+    const targetRir = getPlanWeekRir(
+      plan,
+      weekPrescription?.rir ?? set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
+    );
     const recommendationExercise = {
       ...(libraryExercise || {}),
       ...exercise,
@@ -592,13 +640,18 @@ export default function TemplateView({
 
           note: libraryExercise?.note || "",
 
-          sets: exercise.sets.map((set, setIndex) => {
+          sets: getExerciseSetsForPlanWeek(
+            exercise,
+            getExerciseWeekPrescription(exercise, plan)
+          ).map((set, setIndex) => {
+            const weekPrescription = getExerciseWeekPrescription(exercise, plan);
             const dynamicTarget = getDynamicTargetPrescription({
               exercise,
               libraryExercise,
               plan,
               set,
               setIndex,
+              weekPrescription,
             });
 
             const targetSet = {
@@ -610,12 +663,19 @@ export default function TemplateView({
 
               targetReps: formatTargetValue(
                 dynamicTarget?.reps,
-                set.targetReps ?? set.reps ?? plan?.config?.reps ?? ""
+                weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? ""
               ),
 
               targetRir: formatTargetValue(
                 dynamicTarget?.rir,
-                set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
+                getPlanWeekRir(
+                  plan,
+                  weekPrescription?.rir ??
+                    set.targetRir ??
+                    set.rir ??
+                    plan?.config?.rir ??
+                    ""
+                )
               ),
             };
             const actualDefaults = getActualDefaultsForSet(

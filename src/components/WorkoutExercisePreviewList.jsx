@@ -27,7 +27,9 @@ export function WorkoutExercisePreviewRow({
   note,
   onClearNote,
   onExerciseClick,
+  onPrescriptionClick,
   onSetClick,
+  prescriptionSummary,
   sideContent,
 }) {
   return (
@@ -184,33 +186,54 @@ export function WorkoutExercisePreviewRow({
             minWidth: 0,
           }}
         >
-          {exercise.sets.map((set) => (
-            <div
-              key={set.id}
-              onClick={() => onSetClick?.(set)}
+          {prescriptionSummary ? (
+            <button
+              onClick={onPrescriptionClick}
+              type="button"
               style={{
-                alignItems: "center",
-                cursor: onSetClick ? "pointer" : "default",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "6px",
+                background: "var(--surface-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                color: "var(--text)",
+                cursor: onPrescriptionClick ? "pointer" : "default",
+                font: "inherit",
+                fontSize: "13px",
+                minHeight: "34px",
+                padding: "6px 8px",
+                textAlign: "left",
               }}
             >
-              <span>
-                <Target size={14} /> {set.targetWeight || "TBD"}×
-                {set.targetReps}
-                {set.targetRir || set.rir ? ` @ ${set.targetRir || set.rir}` : ""}{" "}
-                (<Dumbbell size={13} />{" "}
-                {calculateE1RM(
-                  null,
-                  set.targetReps,
-                  set.targetRir || set.rir,
-                  set.targetWeight
-                )?.toFixed(1) || "—"}
-                )
-              </span>
-            </div>
-          ))}
+              {prescriptionSummary}
+            </button>
+          ) : (
+            exercise.sets.map((set) => (
+              <div
+                key={set.id}
+                onClick={() => onSetClick?.(set)}
+                style={{
+                  alignItems: "center",
+                  cursor: onSetClick ? "pointer" : "default",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                }}
+              >
+                <span>
+                  <Target size={14} /> {set.targetWeight || "TBD"}×
+                  {set.targetReps}
+                  {set.targetRir || set.rir ? ` @ ${set.targetRir || set.rir}` : ""}{" "}
+                  (<Dumbbell size={13} />{" "}
+                  {calculateE1RM(
+                    null,
+                    set.targetReps,
+                    set.targetRir || set.rir,
+                    set.targetWeight
+                  )?.toFixed(1) || "—"}
+                  )
+                </span>
+              </div>
+            ))
+          )}
         </div>
 
         {sideContent ? (
