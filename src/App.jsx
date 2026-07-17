@@ -651,6 +651,10 @@ function getPlanCompletionsForWeek(plan, weekNumber) {
   );
 }
 
+function getPlanTotalWeeks(plan) {
+  return (Number(plan?.durationWeeks) || 1) + (plan?.config?.deload ? 1 : 0);
+}
+
 function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
   return getPlanCompletionsForWeek(plan, weekNumber).some(
     (completion) => completion.planWorkoutId === planWorkoutId
@@ -671,11 +675,18 @@ function getPlanWeekStatus(plan) {
   const currentWeek = plan.currentWeek || 1;
   const completedThisWeek = getPlanCompletionsForWeek(plan, currentWeek).length;
   const totalThisWeek = plan.workouts?.length || 0;
+  const totalWeeks = getPlanTotalWeeks(plan);
+  const currentWeekLabel =
+    plan.config?.deload && currentWeek > Number(plan.durationWeeks || 0)
+      ? "D"
+      : currentWeek;
 
   return {
     completedThisWeek,
     currentWeek,
+    currentWeekLabel,
     totalThisWeek,
+    totalWeeks,
   };
 }
 
@@ -2634,7 +2645,7 @@ export default function App() {
               }}
             >
               {plan.goal === "progress" ? "Progress" : "Maintain"} · Week{" "}
-              {weekStatus.currentWeek} of {plan.durationWeeks} ·{" "}
+              {weekStatus.currentWeekLabel} of {weekStatus.totalWeeks} ·{" "}
               {weekStatus.completedThisWeek}/{weekStatus.totalThisWeek} this week
             </div>
 
@@ -2779,7 +2790,7 @@ export default function App() {
               marginTop: "6px",
             }}
           >
-            Week {weekStatus.currentWeek} · {weekStatus.completedThisWeek}/
+            Week {weekStatus.currentWeekLabel} · {weekStatus.completedThisWeek}/
             {weekStatus.totalThisWeek} done
           </div>
         )}

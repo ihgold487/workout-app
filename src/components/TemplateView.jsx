@@ -584,10 +584,9 @@ export default function TemplateView({
   }) {
     const targetReps =
       weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
-    const targetRir = getPlanWeekRir(
-      plan,
-      weekPrescription?.rir ?? set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
-    );
+    const targetRir =
+      weekPrescription?.rir ??
+      getPlanWeekRir(plan, set.targetRir ?? set.rir ?? plan?.config?.rir ?? "");
     const recommendationExercise = {
       ...(libraryExercise || {}),
       ...exercise,
@@ -595,9 +594,11 @@ export default function TemplateView({
       exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
     };
     const recommendation = recommendSetTarget({
+      allowedRepWindow: 2,
       exercise: recommendationExercise,
       goalMode: getGoalMode(plan),
       history,
+      preferredRepWindow: 2,
       setIndex,
       targetReps,
       targetRir,
@@ -668,14 +669,8 @@ export default function TemplateView({
 
               targetRir: formatTargetValue(
                 dynamicTarget?.rir,
-                getPlanWeekRir(
-                  plan,
-                  weekPrescription?.rir ??
-                    set.targetRir ??
-                    set.rir ??
-                    plan?.config?.rir ??
-                    ""
-                )
+                weekPrescription?.rir ??
+                  getPlanWeekRir(plan, set.targetRir ?? set.rir ?? plan?.config?.rir ?? "")
               ),
             };
             const actualDefaults = getActualDefaultsForSet(

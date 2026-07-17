@@ -678,6 +678,7 @@ const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
 
 const PLAN_TYPE_DEFAULTS = {
   "type-1": {
+    deload: false,
     daysPerWeek: "2",
     durationWeeks: "4",
     goal: "maintain",
@@ -686,6 +687,7 @@ const PLAN_TYPE_DEFAULTS = {
     rir: "2",
   },
   "type-2": {
+    deload: false,
     daysPerWeek: "2",
     durationWeeks: "4",
     goal: "maintain",
@@ -694,6 +696,7 @@ const PLAN_TYPE_DEFAULTS = {
     rir: "2",
   },
   "type-3": {
+    deload: true,
     daysPerWeek: "5",
     durationWeeks: "5",
     goal: "progress",
@@ -762,6 +765,7 @@ function getPlanComparable(plan) {
     daysPerWeek: Number(plan?.daysPerWeek || 0),
     durationWeeks: Number(plan?.durationWeeks || 0),
     config: {
+      deload: Boolean(plan?.config?.deload),
       reps: formatPlanSetting(plan?.config?.reps, ""),
       rir: formatPlanSetting(plan?.config?.rir, ""),
       rirPeriodization:
@@ -1014,7 +1018,7 @@ function PlanPickerButton({ disabled = false, label, onClick, value }) {
         gap: "4px",
       }}
     >
-      {label}
+      <span style={{ textAlign: "left" }}>{label}</span>
       <button
         disabled={disabled}
         onClick={onClick}
@@ -1026,6 +1030,38 @@ function PlanPickerButton({ disabled = false, label, onClick, value }) {
         {value}
       </button>
     </label>
+  );
+}
+
+function ToggleSwitch({ checked, label, onChange }) {
+  return (
+    <button
+      aria-label={label}
+      aria-pressed={checked}
+      onClick={() => onChange(!checked)}
+      type="button"
+      style={{
+        alignItems: "center",
+        background: checked ? "var(--accent)" : "var(--surface-muted)",
+        border: "1px solid var(--border)",
+        borderRadius: "999px",
+        display: "inline-flex",
+        height: "40px",
+        justifyContent: checked ? "flex-end" : "flex-start",
+        padding: "3px",
+        width: "62px",
+      }}
+    >
+      <span
+        style={{
+          background: "var(--surface)",
+          borderRadius: "999px",
+          display: "block",
+          height: "30px",
+          width: "30px",
+        }}
+      />
+    </button>
   );
 }
 
@@ -1148,6 +1184,7 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
 }
 
 function getDefaultWeeklyPrescriptions({
+  deload,
   durationWeeks,
   exercise,
   reps,
@@ -1156,8 +1193,7 @@ function getDefaultWeeklyPrescriptions({
 }) {
   const weekCount = Math.max(1, Number(durationWeeks) || 1);
   const base = getBaseExercisePrescription(exercise, reps, rir);
-
-  return Array.from({ length: weekCount }, (_, index) => {
+  const trainingWeeks = Array.from({ length: weekCount }, (_, index) => {
     const weekNumber = index + 1;
 
     return {
@@ -1172,9 +1208,26 @@ function getDefaultWeeklyPrescriptions({
       weekNumber,
     };
   });
+
+  if (!deload) {
+    return trainingWeeks;
+  }
+
+  return [
+    ...trainingWeeks,
+    {
+      isDeload: true,
+      label: "D",
+      reps: String(trainingWeeks[0]?.reps || base.reps),
+      rir: "5",
+      sets: "2",
+      weekNumber: weekCount + 1,
+    },
+  ];
 }
 
 function normalizeWeeklyPrescriptions({
+  deload,
   durationWeeks,
   exercise,
   overrides,
@@ -1183,6 +1236,7 @@ function normalizeWeeklyPrescriptions({
   rirPeriodization,
 }) {
   const defaults = getDefaultWeeklyPrescriptions({
+    deload,
     durationWeeks,
     exercise,
     reps,
@@ -1199,21 +1253,37 @@ function normalizeWeeklyPrescriptions({
     (overrides || []).map((week) => [Number(week.weekNumber), week])
   );
 
-  return defaults.map((defaultWeek) => ({
-    ...defaultWeek,
-    ...(savedByWeek.get(defaultWeek.weekNumber) || {}),
-    ...(overrideByWeek.get(defaultWeek.weekNumber) || {}),
-    weekNumber: defaultWeek.weekNumber,
-  }));
+  const normalWeeks = defaults
+    .filter((week) => !week.isDeload)
+    .map((defaultWeek) => ({
+      ...defaultWeek,
+      ...(savedByWeek.get(defaultWeek.weekNumber) || {}),
+      ...(overrideByWeek.get(defaultWeek.weekNumber) || {}),
+      weekNumber: defaultWeek.weekNumber,
+    }));
+  const deloadWeek = defaults.find((week) => week.isDeload);
+
+  if (!deloadWeek) {
+    return normalWeeks;
+  }
+
+  return [
+    ...normalWeeks,
+    {
+      ...deloadWeek,
+      reps: String(normalWeeks[0]?.reps || deloadWeek.reps),
+    },
+  ];
 }
 
 function getPrescriptionSummary(weeklyPrescriptions) {
-  const setRange = formatRange(weeklyPrescriptions.map((week) => week.sets));
-  const repRange = formatRange(weeklyPrescriptions.map((week) => week.reps));
-  const rirRange = formatRange(weeklyPrescriptions.map((week) => week.rir));
+  const primaryWeeks = weeklyPrescriptions.filter((week) => !week.isDeload);
+  const setRange = formatRange(primaryWeeks.map((week) => week.sets));
+  const repRange = formatRange(primaryWeeks.map((week) => week.reps));
+  const rirRange = formatRange(primaryWeeks.map((week) => week.rir));
   const setLabel = setRange === "1" ? "set" : "sets";
 
-  return `${setRange} ${setLabel} - ${repRange} reps - ${rirRange} RIR`;
+  return `${setRange} ${setLabel} | ${repRange} reps | ${rirRange} RIR`;
 }
 
 function WeeklyPrescriptionSheet({
@@ -1375,12 +1445,18 @@ function WeeklyPrescriptionSheet({
                 gridTemplateColumns: "52px 1fr 1fr 1fr",
               }}
             >
-              <strong>W{week.weekNumber}</strong>
+              <strong>{week.isDeload ? "D" : `W${week.weekNumber}`}</strong>
               {["sets", "reps", "rir"].map((field) => (
                 <button
                   key={field}
-                  onClick={() => onEditValue(week.weekNumber, field)}
+                  disabled={week.isDeload}
+                  onClick={() => {
+                    if (!week.isDeload) {
+                      onEditValue(week.weekNumber, field);
+                    }
+                  }}
                   style={{
+                    opacity: week.isDeload ? 0.72 : 1,
                     minHeight: "38px",
                     padding: "6px 8px",
                     textAlign: "center",
@@ -1722,6 +1798,9 @@ export default function PlansView({
   const [durationWeeks, setDurationWeeks] = useState(
     initialDurationWeeks
   );
+  const [deload, setDeload] = useState(
+    editingPlanConfig.deload ?? initialPlanDefaults.deload ?? false
+  );
   const [daysPerWeek, setDaysPerWeek] = useState(
     initialDaysPerWeek
   );
@@ -2045,6 +2124,7 @@ export default function PlansView({
               ...(generationMode === "plan"
                 ? {
                     weeklyPrescriptions: normalizeWeeklyPrescriptions({
+                      deload,
                       durationWeeks,
                       exercise: previewExercise,
                       overrides: weeklyPrescriptionBySlot[slotKey],
@@ -2066,6 +2146,7 @@ export default function PlansView({
       normalizedExerciseLayout,
       replacementBySlot,
       supersetGroupBySlot,
+      deload,
       durationWeeks,
       reps,
       rir,
@@ -2152,6 +2233,7 @@ export default function PlansView({
       currentOverrides?.[exercise.previewSlotKey] ||
       exercise.weeklyPrescriptions ||
       normalizeWeeklyPrescriptions({
+        deload,
         durationWeeks,
         exercise,
         reps,
@@ -2206,7 +2288,8 @@ export default function PlansView({
         (next, exercise) => ({
           ...next,
           [exercise.previewSlotKey]: getWeeksForExercise(exercise, next).map((week) =>
-            scope.allWeeks || Number(week.weekNumber) === Number(weekNumber)
+            !week.isDeload &&
+            (scope.allWeeks || Number(week.weekNumber) === Number(weekNumber))
               ? {
                   ...week,
                   [field]: String(value),
@@ -2359,6 +2442,7 @@ export default function PlansView({
       updatedAt: new Date().toISOString(),
       completions: isEditingExistingPlan ? editingPlan?.completions || [] : [],
       config: {
+        deload,
         reps,
         rir,
         rirPeriodization,
@@ -2717,6 +2801,7 @@ export default function PlansView({
                 setGoal(nextDefaults.goal);
                 setDaysPerWeek(nextDefaults.daysPerWeek);
                 setDurationWeeks(nextDefaults.durationWeeks);
+                setDeload(Boolean(nextDefaults.deload));
                 setRirPeriodization(
                   nextDefaults.rirPeriodization ||
                     getDefaultRirPeriodizationMode(nextPlanType)
@@ -2824,11 +2909,38 @@ export default function PlansView({
               onClick={() => setActiveValuePicker("days")}
             />
 
-            <PlanPickerButton
-              label="Duration in weeks"
-              value={durationWeeks}
-              onClick={() => setActiveValuePicker("duration")}
-            />
+            <div
+              style={{
+                alignItems: "end",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr auto",
+              }}
+            >
+              <PlanPickerButton
+                label="Duration in weeks"
+                value={durationWeeks}
+                onClick={() => setActiveValuePicker("duration")}
+              />
+
+              <label
+                style={{
+                  display: "grid",
+                  gap: "4px",
+                  justifyItems: "end",
+                }}
+              >
+                <span style={{ textAlign: "right" }}>Deload</span>
+                <ToggleSwitch
+                  checked={deload}
+                  label="Deload"
+                  onChange={(checked) => {
+                    setDeload(checked);
+                    setSaveStatus("");
+                  }}
+                />
+              </label>
+            </div>
           </>
         )}
 
@@ -2854,13 +2966,22 @@ export default function PlansView({
           />
 
           {generationMode === "plan" && !editingPlan && (
-            <RirPeriodizationButton
-              mode={rirPeriodization}
-              onChange={(nextMode) => {
-                setRirPeriodization(nextMode);
-                setSaveStatus("");
+            <label
+              style={{
+                display: "grid",
+                gap: "4px",
+                justifyItems: "end",
               }}
-            />
+            >
+              <span style={{ textAlign: "right" }}>Periodization</span>
+              <RirPeriodizationButton
+                mode={rirPeriodization}
+                onChange={(nextMode) => {
+                  setRirPeriodization(nextMode);
+                  setSaveStatus("");
+                }}
+              />
+            </label>
           )}
         </div>
 

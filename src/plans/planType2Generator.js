@@ -530,9 +530,11 @@ function formatTargetValue(value, fallback = "") {
 
 function getRecommendedTargetPrescription(exercise, options) {
   const recommendation = recommendSetTarget({
+    allowedRepWindow: 2,
     exercise,
     goalMode: getGoalMode(options.goal),
     history: options.history,
+    preferredRepWindow: 2,
     setIndex: options.setIndex,
     targetReps: options.reps,
     targetRir: options.rir,

@@ -251,10 +251,62 @@ function compareProgressCandidates(a, b) {
   return (
     a.score.rirDeviation - b.score.rirDeviation ||
     a.score.preferredRepPenalty - b.score.preferredRepPenalty ||
-    a.score.e1rmDeviation - b.score.e1rmDeviation ||
     a.score.repDeviation - b.score.repDeviation ||
+    a.score.e1rmDeviation - b.score.e1rmDeviation ||
     a.weight - b.weight
   );
+}
+
+function getCandidateKey(candidate) {
+  return `${candidate.weight}|${candidate.reps}|${candidate.rir}`;
+}
+
+function addUniqueCandidates(target, candidates, limit, seenKeys) {
+  for (const candidate of candidates) {
+    if (target.length >= limit) {
+      break;
+    }
+
+    const key = getCandidateKey(candidate);
+
+    if (seenKeys.has(key)) {
+      continue;
+    }
+
+    target.push(candidate);
+    seenKeys.add(key);
+  }
+}
+
+function buildAlternativeCandidates({
+  baselineE1RM,
+  rankedCandidates,
+  recommendation,
+  resolvedProgressionPercent,
+  targetProgressCandidates,
+}) {
+  const alternatives = [];
+  const seenKeys = new Set([getCandidateKey(recommendation)]);
+
+  if (resolvedProgressionPercent <= 0) {
+    addUniqueCandidates(alternatives, rankedCandidates, 7, seenKeys);
+    return alternatives;
+  }
+
+  const maintenanceCandidates = rankedCandidates
+    .filter((candidate) => candidate.e1rm <= baselineE1RM * 1.005)
+    .sort(
+      (a, b) =>
+        Math.abs(a.e1rm - baselineE1RM) - Math.abs(b.e1rm - baselineE1RM) ||
+        a.score.repDeviation - b.score.repDeviation ||
+        a.weight - b.weight
+    );
+
+  addUniqueCandidates(alternatives, targetProgressCandidates, 5, seenKeys);
+  addUniqueCandidates(alternatives, maintenanceCandidates, 7, seenKeys);
+  addUniqueCandidates(alternatives, rankedCandidates, 7, seenKeys);
+
+  return alternatives;
 }
 
 export function recommendTargetPrescription({
@@ -263,7 +315,6 @@ export function recommendTargetPrescription({
   minWeight = 0,
   preferredRepWindow = 2,
   previousE1RM,
-  previousWeight,
   progressionPercent,
   targetReps,
   targetRir,
@@ -334,40 +385,41 @@ export function recommendTargetPrescription({
     resolvedProgressionPercent > 0
       ? rankedCandidates.filter((candidate) => candidate.e1rm >= targetE1RM)
       : rankedCandidates;
-  const preferredWeightProgressCandidates =
-    resolvedProgressionPercent > 0
-      ? targetProgressCandidates.filter(
-          (candidate) =>
-            (previousWeight == null || candidate.weight > previousWeight) &&
-            candidate.reps >= reps - preferredRepWindow
-        )
-      : rankedCandidates;
   const baselineProgressCandidates =
     resolvedProgressionPercent > 0
       ? rankedCandidates.filter((candidate) => candidate.e1rm > baselineE1RM)
       : rankedCandidates;
-  const selectedCandidates = preferredWeightProgressCandidates.length
-    ? preferredWeightProgressCandidates
-    : targetProgressCandidates.length
+  const selectedCandidates = targetProgressCandidates.length
     ? targetProgressCandidates
     : baselineProgressCandidates.length
       ? baselineProgressCandidates
-    : rankedCandidates;
+      : rankedCandidates;
+  const recommendation = selectedCandidates[0] || null;
 
   return {
-    alternatives: selectedCandidates.slice(1, 8),
+    alternatives: recommendation
+      ? buildAlternativeCandidates({
+          baselineE1RM,
+          rankedCandidates,
+          recommendation,
+          resolvedProgressionPercent,
+          targetProgressCandidates,
+        })
+      : [],
     baselineE1RM,
     goalMode,
     progressionPercent: resolvedProgressionPercent,
-    recommendation: selectedCandidates[0] || null,
+    recommendation,
     targetE1RM,
   };
 }
 
 export function recommendSetTarget({
+  allowedRepWindow,
   exercise,
   goalMode,
   history,
+  preferredRepWindow,
   progressionPercent,
   setIndex,
   targetReps,
@@ -391,8 +443,9 @@ export function recommendSetTarget({
     baseline,
     result: recommendTargetPrescription({
       goalMode,
+      allowedRepWindow,
       previousE1RM: baseline.e1rm,
-      previousWeight: baseline.weight,
+      preferredRepWindow,
       progressionPercent,
       targetReps,
       targetRir,

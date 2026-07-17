@@ -454,9 +454,11 @@ export default function SessionView({
 
   function getTargetRecommendation(exercise, set, setIndex) {
     return recommendSetTarget({
+      allowedRepWindow: 2,
       exercise,
       goalMode: getGoalMode(),
       history,
+      preferredRepWindow: 2,
       setIndex,
       targetReps: set.targetReps,
       targetRir: set.targetRir,
@@ -1899,6 +1901,55 @@ export default function SessionView({
     setRestSeconds(restMinutes * 60 + restRemainder);
   }
 
+  function getNextSetTargetsAfterCompletion(exercise, currentSet, nextSet) {
+    const actualReps = parseSessionNumber(currentSet.actualReps);
+    const prescribedReps = parseSessionNumber(
+      nextSet.targetReps || currentSet.targetReps
+    );
+    const targetRir = firstPresentValue(nextSet.targetRir, currentSet.targetRir);
+    const actualWeight = firstPresentValue(
+      currentSet.actualWeight,
+      currentSet.targetWeight
+    );
+    const actualRir = firstPresentValue(currentSet.actualRir, currentSet.targetRir);
+    const shouldReduceWeight =
+      actualReps != null &&
+      prescribedReps != null &&
+      actualReps <= prescribedReps - 2;
+
+    if (shouldReduceWeight) {
+      const actualE1RM = calculateE1RM(actualWeight, actualReps, actualRir);
+      const targetRirNumber = parseSessionNumber(targetRir) || 0;
+      const rawTargetWeight =
+        actualE1RM == null
+          ? null
+          : actualE1RM / (1 + (prescribedReps + targetRirNumber) / 30);
+      const reducedWeight =
+        rawTargetWeight == null
+          ? ""
+          : roundWeightToIncrement(
+              rawTargetWeight,
+              getExerciseWeightIncrement(exercise)
+            );
+
+      return {
+        targetReps: nextSet.targetReps || String(prescribedReps),
+        targetRir: targetRir || nextSet.targetRir,
+        targetWeight:
+          reducedWeight != null && reducedWeight !== ""
+            ? String(reducedWeight)
+            : nextSet.targetWeight,
+      };
+    }
+
+    return {
+      targetWeight:
+        currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
+      targetReps: currentSet.actualReps || currentSet.targetReps || nextSet.targetReps,
+      targetRir: currentSet.actualRir || currentSet.targetRir || nextSet.targetRir,
+    };
+  }
+
   function markSetComplete(exerciseId, setId, completedAt = null) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
@@ -1938,20 +1989,15 @@ export default function SessionView({
                 }
 
                 if (!undo && index === currentIndex + 1) {
+                  const nextTargets = getNextSetTargetsAfterCompletion(
+                    exercise,
+                    currentSet,
+                    set
+                  );
+
                   return {
                     ...set,
-                    targetWeight:
-                      currentSet.actualWeight ||
-                      currentSet.targetWeight ||
-                      set.targetWeight,
-                    targetReps:
-                      currentSet.actualReps ||
-                      currentSet.targetReps ||
-                      set.targetReps,
-                    targetRir:
-                      currentSet.actualRir ||
-                      currentSet.targetRir ||
-                      set.targetRir,
+                    ...nextTargets,
                   };
                 }
 
@@ -2163,7 +2209,9 @@ export default function SessionView({
         const weekComplete =
           plan.workouts?.length > 0 &&
           completedThisWeek >= plan.workouts.length;
-        const finalWeek = weekNumber >= plan.durationWeeks;
+        const finalPlanWeek =
+          (Number(plan.durationWeeks) || 1) + (plan.config?.deload ? 1 : 0);
+        const finalWeek = weekNumber >= finalPlanWeek;
 
         return {
           ...plan,
