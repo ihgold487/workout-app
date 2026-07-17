@@ -137,6 +137,39 @@ function getExerciseStatusButtonStyle(active) {
   };
 }
 
+function getFirstEquipmentValue(exercise) {
+  return Array.isArray(exercise?.equipment)
+    ? exercise.equipment[0] || ""
+    : exercise?.equipment || "";
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+function getExercisePreferenceKeys(exercise) {
+  return [
+    exercise?.exerciseId,
+    exercise?.id,
+    exercise?.sourceKey,
+    exercise?.source_key,
+  ]
+    .filter((value) => value !== "" && value != null)
+    .map(String);
+}
+
+function getPreferenceExerciseKeys(preference) {
+  return [
+    preference?.exercise_id,
+    preference?.metadata?.localExerciseId,
+    preference?.metadata?.localExerciseID,
+  ]
+    .filter((value) => value !== "" && value != null)
+    .map(String);
+}
+
 export default function ExerciseView({
   exerciseLibrary,
   history = [],
@@ -172,12 +205,55 @@ export default function ExerciseView({
   const [promoteExerciseStatus, setPromoteExerciseStatus] = useState("");
   const [promotingExerciseId, setPromotingExerciseId] = useState(null);
   const [trainerCanAddBuiltIns, setTrainerCanAddBuiltIns] = useState(false);
+  const [trainerPreferences, setTrainerPreferences] = useState([]);
+  const [trainerStatus, setTrainerStatus] = useState("");
+  const [trainerUsers, setTrainerUsers] = useState([]);
+  const [selectedTrainerUserId, setSelectedTrainerUserId] = useState("");
+  const [savingPreferenceExerciseId, setSavingPreferenceExerciseId] =
+    useState(null);
   const [exerciseStatus, setExerciseStatus] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("");
   const [search, setSearch] = useState("");
 
-  const customExerciseCount = exerciseLibrary.filter(
+  const selectedTrainerUser =
+    trainerUsers.find((user) => user.user_id === selectedTrainerUserId) ||
+    trainerUsers.find((user) => user.is_self) ||
+    trainerUsers[0] ||
+    null;
+  const isTrainerTargetSelf = !selectedTrainerUser || selectedTrainerUser.is_self;
+  const canManageSelectedUserPreferences =
+    !isTrainerTargetSelf && Boolean(selectedTrainerUserId);
+
+  const displayedExerciseLibrary = useMemo(() => {
+    if (isTrainerTargetSelf) {
+      return exerciseLibrary;
+    }
+
+    const preferenceByKey = new Map();
+    trainerPreferences.forEach((preference) => {
+      getPreferenceExerciseKeys(preference).forEach((key) => {
+        preferenceByKey.set(key, preference);
+      });
+    });
+
+    return exerciseLibrary
+      .filter((exercise) => exercise.builtin)
+      .map((exercise) => {
+        const preference = getExercisePreferenceKeys(exercise)
+          .map((key) => preferenceByKey.get(key))
+          .find(Boolean);
+
+        return {
+          ...exercise,
+          active: preference?.exclude_from_plans
+            ? EXERCISE_STATUS.inactive
+            : EXERCISE_STATUS.active,
+        };
+      });
+  }, [exerciseLibrary, isTrainerTargetSelf, trainerPreferences]);
+
+  const customExerciseCount = displayedExerciseLibrary.filter(
     (exercise) => !exercise.builtin
   ).length;
 
@@ -225,6 +301,86 @@ export default function ExerciseView({
     };
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainerUsers() {
+      setTrainerUsers([]);
+      setSelectedTrainerUserId("");
+      setTrainerStatus("");
+
+      if (!session?.user?.id || !isSupabaseConfigured || !supabase) {
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("list_trainer_users");
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setTrainerStatus(`Unable to load trainer users: ${error.message}`);
+        return;
+      }
+
+      const users = Array.isArray(data) ? data : [];
+      setTrainerUsers(users);
+
+      const selfUser = users.find((user) => user.is_self) || users[0];
+      setSelectedTrainerUserId(selfUser?.user_id || "");
+    }
+
+    loadTrainerUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainerPreferences() {
+      setTrainerPreferences([]);
+
+      if (
+        !selectedTrainerUserId ||
+        isTrainerTargetSelf ||
+        !isSupabaseConfigured ||
+        !supabase
+      ) {
+        return;
+      }
+
+      const { data, error } = await supabase.rpc(
+        "get_trainer_user_exercise_preferences",
+        {
+          target_user_id: selectedTrainerUserId,
+        }
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setTrainerStatus(`Unable to load exercise preferences: ${error.message}`);
+        setTrainerPreferences([]);
+        return;
+      }
+
+      setTrainerPreferences(Array.isArray(data) ? data : []);
+      setTrainerStatus("");
+    }
+
+    loadTrainerPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isTrainerTargetSelf, selectedTrainerUserId]);
+
   function setNextCropOffset(nextOffset) {
     cropOffsetRef.current = nextOffset;
     setCropOffset(nextOffset);
@@ -253,7 +409,7 @@ export default function ExerciseView({
   const filteredExercises = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
-    return [...exerciseLibrary]
+    return [...displayedExerciseLibrary]
       .filter((exercise) => {
         const primaryMuscle = exercise.muscles?.[0] || "";
         const equipment = exercise.equipment?.[0] || "";
@@ -280,7 +436,7 @@ export default function ExerciseView({
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [
-    exerciseLibrary,
+    displayedExerciseLibrary,
     exerciseStatus,
     exerciseType,
     search,
@@ -392,10 +548,76 @@ export default function ExerciseView({
     setEditingSaveStatus("");
   }
 
-  function toggleExerciseStatus(exerciseToToggle) {
+  async function toggleExerciseStatus(exerciseToToggle) {
     const nextStatus = isExerciseActive(exerciseToToggle)
       ? EXERCISE_STATUS.inactive
       : EXERCISE_STATUS.active;
+
+    if (canManageSelectedUserPreferences) {
+      const previousPreferences = trainerPreferences;
+      const nextExcludeFromPlans = nextStatus === EXERCISE_STATUS.inactive;
+      const exercisePreferenceKeys = getExercisePreferenceKeys(exerciseToToggle);
+      const existingPreference = trainerPreferences.find((preference) =>
+        getPreferenceExerciseKeys(preference).some((key) =>
+          exercisePreferenceKeys.includes(key)
+        )
+      );
+      const optimisticPreference = {
+        ...(existingPreference || {}),
+        exercise_id:
+          existingPreference?.exercise_id ||
+          exerciseToToggle.exerciseId ||
+          (isUuid(exerciseToToggle.id) ? exerciseToToggle.id : null),
+        exclude_from_plans: nextExcludeFromPlans,
+        include_in_plans: !nextExcludeFromPlans,
+        metadata: {
+          ...(existingPreference?.metadata || {}),
+          localActiveStatus:
+            nextStatus === EXERCISE_STATUS.inactive ? "inactive" : "active",
+          localExerciseId: exerciseToToggle.id,
+        },
+      };
+
+      setTrainerPreferences([
+        ...trainerPreferences.filter((preference) => preference !== existingPreference),
+        optimisticPreference,
+      ]);
+      setSavingPreferenceExerciseId(exerciseToToggle.id);
+      setTrainerStatus("");
+
+      try {
+        const exerciseId =
+          exerciseToToggle.exerciseId ||
+          (isUuid(exerciseToToggle.id) ? exerciseToToggle.id : null);
+
+        const { error } = await supabase.rpc(
+          "set_trainer_user_exercise_plan_status",
+          {
+            exclude_from_plans: nextExcludeFromPlans,
+            exercise_equipment: getFirstEquipmentValue(exerciseToToggle),
+            exercise_name: exerciseToToggle.name,
+            target_exercise_id: exerciseId,
+            target_user_id: selectedTrainerUserId,
+          }
+        );
+
+        if (error) {
+          throw error;
+        }
+
+        setTrainerStatus(
+          `${exerciseToToggle.name} set ${nextStatus} for ${selectedTrainerUser.display_name}.`
+        );
+      } catch (error) {
+        console.error("Failed to update trainer exercise preference:", error);
+        setTrainerPreferences(previousPreferences);
+        setTrainerStatus(`Unable to update exercise status: ${error.message}`);
+      } finally {
+        setSavingPreferenceExerciseId(null);
+      }
+
+      return;
+    }
 
     setExerciseLibrary(
       exerciseLibrary.map((exercise) =>
@@ -1048,58 +1270,106 @@ export default function ExerciseView({
             whiteSpace: "nowrap",
           }}
         >
-          {exerciseLibrary.length} exercises · {customExerciseCount} custom
+          {displayedExerciseLibrary.length} exercises · {customExerciseCount} custom
         </div>
       </div>
 
-      <section
-        ref={addExerciseSectionRef}
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: "6px",
-          marginBottom: "14px",
-          padding: "12px",
-        }}
-      >
-        <div
+      {trainerUsers.length > 1 && (
+        <label
           style={{
-            alignItems: "center",
-            display: "flex",
-            gap: "8px",
-            justifyContent: "space-between",
-            marginBottom: "10px",
+            display: "grid",
+            gap: "4px",
+            marginBottom: "12px",
           }}
         >
-          <h2
+          User name
+          <select
+            value={selectedTrainerUserId}
+            onChange={(event) => {
+              setSelectedTrainerUserId(event.target.value);
+              setTrainerStatus("");
+            }}
             style={{
-              fontSize: "1rem",
-              margin: 0,
+              boxSizing: "border-box",
+              font: "inherit",
+              minHeight: "40px",
+              padding: "6px 10px",
+              width: "100%",
             }}
           >
-            Add Custom Exercise
-          </h2>
-          <button onClick={() => setDraft(emptyDraft)} type="button">
-            Clear
-          </button>
-        </div>
+            {trainerUsers.map((user) => (
+              <option key={user.user_id} value={user.user_id}>
+                {user.display_name}
+                {user.is_self ? " (you)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
-        {renderExerciseForm(draft, setDraft, {
-          draftImagePicker: true,
-        })}
-
+      {trainerStatus && (
         <div
+          role="status"
           style={{
-            alignItems: "flex-end",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "10px",
-            justifyContent: "flex-end",
-            marginTop: "10px",
+            color: "var(--text-muted)",
+            fontSize: "13px",
+            marginBottom: "12px",
           }}
         >
-          <button onClick={addExercise}>+ Add Exercise</button>
+          {trainerStatus}
         </div>
-      </section>
+      )}
+
+      {isTrainerTargetSelf && (
+        <section
+          ref={addExerciseSectionRef}
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            padding: "12px",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "space-between",
+              marginBottom: "10px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "1rem",
+                margin: 0,
+              }}
+            >
+              Add Custom Exercise
+            </h2>
+            <button onClick={() => setDraft(emptyDraft)} type="button">
+              Clear
+            </button>
+          </div>
+
+          {renderExerciseForm(draft, setDraft, {
+            draftImagePicker: true,
+          })}
+
+          <div
+            style={{
+              alignItems: "flex-end",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "10px",
+              justifyContent: "flex-end",
+              marginTop: "10px",
+            }}
+          >
+            <button onClick={addExercise}>+ Add Exercise</button>
+          </div>
+        </section>
+      )}
 
       <section
         style={{
@@ -1203,7 +1473,8 @@ export default function ExerciseView({
                   justifyContent: "space-between",
                 }}
               >
-                {exercise.builtin && !trainerCanAddBuiltIns ? (
+                {canManageSelectedUserPreferences ||
+                (exercise.builtin && !trainerCanAddBuiltIns) ? (
                   <ExerciseThumbnail
                     alt={exercise.imageAlt || `${exercise.name} demonstration`}
                     imageUrl={exercise.imageUrl}
@@ -1282,16 +1553,21 @@ export default function ExerciseView({
                   }}
                 >
                   <button
+                    disabled={savingPreferenceExerciseId === exercise.id}
                     onClick={(event) => {
                       event.stopPropagation();
                       toggleExerciseStatus(exercise);
                     }}
                     style={getExerciseStatusButtonStyle(active)}
                   >
-                    {active ? "Active" : "Inactive"}
+                    {savingPreferenceExerciseId === exercise.id
+                      ? "Saving..."
+                      : active
+                        ? "Active"
+                        : "Inactive"}
                   </button>
 
-                  {exercise.builtin && (
+                  {exercise.builtin && !canManageSelectedUserPreferences && (
                     <>
                       {trainerCanAddBuiltIns && (
                         <button
@@ -1313,7 +1589,7 @@ export default function ExerciseView({
                     </>
                   )}
 
-                  {!exercise.builtin && (
+                  {!exercise.builtin && isTrainerTargetSelf && (
                     <>
                       <button
                         onClick={(event) => {

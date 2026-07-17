@@ -358,6 +358,81 @@ as $$
     and public.can_train_user(target_user_id);
 $$;
 
+create or replace function public.set_trainer_user_exercise_plan_status(
+  target_user_id uuid,
+  target_exercise_id uuid default null,
+  exercise_name text default null,
+  exercise_equipment text default null,
+  exclude_from_plans boolean default false
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  resolved_exercise_id uuid;
+begin
+  if not public.can_train_user(target_user_id) then
+    raise exception 'Not authorized to update exercise preferences for this user.';
+  end if;
+
+  if target_exercise_id is not null then
+    select e.id
+    into resolved_exercise_id
+    from public.exercises e
+    where e.id = target_exercise_id
+      and e.deleted_at is null
+      and (e.user_id is null or e.user_id = target_user_id)
+    limit 1;
+  else
+    select e.id
+    into resolved_exercise_id
+    from public.exercises e
+    where e.is_builtin = true
+      and e.user_id is null
+      and e.deleted_at is null
+      and lower(e.name) = lower(trim(coalesce(exercise_name, '')))
+      and coalesce(lower(e.equipment), '') = coalesce(lower(trim(coalesce(exercise_equipment, ''))), '')
+    order by e.name
+    limit 1;
+  end if;
+
+  if resolved_exercise_id is null then
+    raise exception 'Exercise not found for selected user.';
+  end if;
+
+  insert into public.user_exercise_preferences (
+    user_id,
+    exercise_id,
+    include_in_plans,
+    exclude_from_plans,
+    metadata
+  )
+  values (
+    target_user_id,
+    resolved_exercise_id,
+    not exclude_from_plans,
+    exclude_from_plans,
+    jsonb_build_object(
+      'localActiveStatus',
+      case when exclude_from_plans then 'inactive' else 'active' end,
+      'trainerUpdatedAt',
+      now(),
+      'trainerUserId',
+      auth.uid()
+    )
+  )
+  on conflict (user_id, exercise_id)
+  do update set
+    include_in_plans = excluded.include_in_plans,
+    exclude_from_plans = excluded.exclude_from_plans,
+    metadata = coalesce(public.user_exercise_preferences.metadata, '{}'::jsonb)
+      || excluded.metadata,
+    updated_at = now();
+end;
+$$;
+
 create or replace function public.get_trainer_debug_context()
 returns table (
   current_user_id uuid,
