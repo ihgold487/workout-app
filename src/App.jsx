@@ -38,10 +38,14 @@ import {
 } from "./storage/workoutStorage";
 import {
   getCurrentSession,
+  changePasswordWithCurrentPassword,
+  getMyApprovalStatus,
+  listAppUserApprovals,
   signInWithPassword,
   signOut,
   signUpWithPassword,
   subscribeToAuthChanges,
+  updateAppUserApproval,
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { BENCH_PRESS_HISTORY_TEST_DATA } from "./data/benchPressHistoryTestData";
@@ -88,6 +92,8 @@ const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
 const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
 const BENCH_HISTORY_TEST_BACKUP_KEY = "benchHistoryTestBackup";
+const APP_APPROVAL_CACHE_KEY_PREFIX = "appUserApproval:";
+const APP_OWNER_EMAIL = "ihgold@comcast.net";
 const BENCH_HISTORY_TEST_ID_PREFIX = "bench-history-test";
 const LOCAL_TEST_SYNC_SUPPRESS_MS = 60 * 60 * 1000;
 const NORMALIZED_SYNC_DOMAINS = [
@@ -127,6 +133,50 @@ function safeSetLocalStorage(key, value) {
     localStorage.setItem(key, value);
   } catch (error) {
     console.error(`Failed to write ${key} to localStorage:`, error);
+  }
+}
+
+function getApprovalCacheKey(userId) {
+  return `${APP_APPROVAL_CACHE_KEY_PREFIX}${userId}`;
+}
+
+function readApprovalCache(userId) {
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(localStorage.getItem(getApprovalCacheKey(userId)));
+  } catch (error) {
+    console.error("Failed to read approval cache:", error);
+    return null;
+  }
+}
+
+function writeApprovalCache(userId, approval) {
+  if (!userId) {
+    return;
+  }
+
+  safeSetLocalStorage(
+    getApprovalCacheKey(userId),
+    JSON.stringify({
+      email: approval?.email || "",
+      status: "approved",
+      verifiedAt: new Date().toISOString(),
+    })
+  );
+}
+
+function clearApprovalCache(userId) {
+  if (!userId) {
+    return;
+  }
+
+  try {
+    localStorage.removeItem(getApprovalCacheKey(userId));
+  } catch (error) {
+    console.error("Failed to clear approval cache:", error);
   }
 }
 
@@ -862,6 +912,24 @@ export default function App() {
 
   const [authLoading, setAuthLoading] = useState(false);
 
+  const [approvalStatus, setApprovalStatus] = useState(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+  const [approvalFromCache, setApprovalFromCache] = useState(false);
+  const [approvalAdminRows, setApprovalAdminRows] = useState([]);
+  const [approvalAdminStatus, setApprovalAdminStatus] = useState("");
+  const [approvalAdminLoading, setApprovalAdminLoading] = useState(false);
+
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] =
+    useState(false);
+  const [changePasswordDraft, setChangePasswordDraft] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [changePasswordStatus, setChangePasswordStatus] = useState("");
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
   const [syncStatus, setSyncStatus] = useState(
     "Automatic sync runs after sign-in. Manual controls remain available."
   );
@@ -917,6 +985,14 @@ export default function App() {
 
   const previousHistoryLengthRef = useRef(history.length);
 
+  const userEmail = authSession?.user?.email || "";
+  const normalizedUserEmail = userEmail.toLowerCase();
+  const isIraSettingsUser = normalizedUserEmail === APP_OWNER_EMAIL;
+  const appAccessAllowed = Boolean(
+    authSession?.user?.id &&
+      (isIraSettingsUser || approvalStatus?.status === "approved")
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -959,6 +1035,163 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const userId = authSession?.user?.id || null;
+    const email = authSession?.user?.email || "";
+
+    async function loadApprovalStatus() {
+      if (!userId) {
+        setApprovalStatus(null);
+        setApprovalError("");
+        setApprovalFromCache(false);
+        return;
+      }
+
+      if (!isSupabaseConfigured) {
+        const cachedApproval = readApprovalCache(userId);
+        setApprovalStatus(cachedApproval);
+        setApprovalFromCache(cachedApproval?.status === "approved");
+        setApprovalError(
+          cachedApproval?.status === "approved"
+            ? "Using cached approval. Sync will resume when Supabase is available."
+            : "Supabase is not configured, so approval cannot be verified."
+        );
+        return;
+      }
+
+      setApprovalLoading(true);
+      setApprovalError("");
+
+      try {
+        const status = await getMyApprovalStatus();
+
+        if (cancelled) {
+          return;
+        }
+
+        const normalizedStatus = {
+          email: status?.email || email,
+          status: status?.status || "pending",
+        };
+
+        setApprovalStatus(normalizedStatus);
+        setApprovalFromCache(false);
+
+        if (normalizedStatus.status === "approved") {
+          writeApprovalCache(userId, normalizedStatus);
+          setAuthStatus("Signed in. Automatic sync is on.");
+        } else {
+          clearApprovalCache(userId);
+          setAuthStatus(
+            normalizedStatus.status === "denied"
+              ? "Account access denied."
+              : "Account pending approval."
+          );
+        }
+      } catch (error) {
+        console.error("Failed to verify account approval:", error);
+
+        if (cancelled) {
+          return;
+        }
+
+        const cachedApproval = readApprovalCache(userId);
+        setApprovalStatus(cachedApproval);
+        setApprovalFromCache(cachedApproval?.status === "approved");
+        setApprovalError(
+          cachedApproval?.status === "approved"
+            ? "Approval check failed. Using cached approval until the database is reachable."
+            : `Approval check failed: ${error.message}`
+        );
+      } finally {
+        if (!cancelled) {
+          setApprovalLoading(false);
+        }
+      }
+    }
+
+    loadApprovalStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.user?.id, authSession?.user?.email]);
+
+  async function loadApprovalAdminRows() {
+    if (!authSession?.user?.id || !isIraSettingsUser) {
+      setApprovalAdminRows([]);
+      return;
+    }
+
+    setApprovalAdminLoading(true);
+    setApprovalAdminStatus("Loading approvals...");
+
+    try {
+      const rows = await listAppUserApprovals();
+      setApprovalAdminRows(rows);
+      setApprovalAdminStatus(
+        rows.length > 0 ? `${rows.length} account approvals loaded.` : "No accounts found."
+      );
+    } catch (error) {
+      console.error("Failed to load approval admin rows:", error);
+      setApprovalAdminStatus(`Approval list failed: ${error.message}`);
+    } finally {
+      setApprovalAdminLoading(false);
+    }
+  }
+
+  async function setUserApproval(userId, status) {
+    if (!userId || approvalAdminLoading) {
+      return;
+    }
+
+    setApprovalAdminLoading(true);
+    setApprovalAdminStatus(`Saving ${status} status...`);
+
+    try {
+      await updateAppUserApproval(userId, status);
+      await loadApprovalAdminRows();
+    } catch (error) {
+      console.error("Failed to update user approval:", error);
+      setApprovalAdminStatus(`Approval update failed: ${error.message}`);
+      setApprovalAdminLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!showSettings || !isIraSettingsUser) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      if (!authSession?.user?.id) {
+        setApprovalAdminRows([]);
+        return;
+      }
+
+      setApprovalAdminLoading(true);
+      setApprovalAdminStatus("Loading approvals...");
+
+      try {
+        const rows = await listAppUserApprovals();
+        setApprovalAdminRows(rows);
+        setApprovalAdminStatus(
+          rows.length > 0 ? `${rows.length} account approvals loaded.` : "No accounts found."
+        );
+      } catch (error) {
+        console.error("Failed to load approval admin rows:", error);
+        setApprovalAdminStatus(`Approval list failed: ${error.message}`);
+      } finally {
+        setApprovalAdminLoading(false);
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [showSettings, isIraSettingsUser, authSession?.user?.id]);
+
+  useEffect(() => {
     const userId = authSession?.user?.id || null;
     const storageKey = getNutritionLogStorageKey(userId);
     const scopedLocalEntries = readLocalArray(storageKey);
@@ -973,7 +1206,7 @@ export default function App() {
       setCalendarNutritionEntries(seededLocalEntries);
     });
 
-    if (!authSession?.user?.id || !isSupabaseConfigured) {
+    if (!authSession?.user?.id || !isSupabaseConfigured || !appAccessAllowed) {
       return undefined;
     }
 
@@ -1018,7 +1251,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [authSession]);
+  }, [authSession, appAccessAllowed]);
 
   useEffect(() => {
     if (showNutrition) {
@@ -1094,6 +1327,72 @@ export default function App() {
       setAuthStatus(`Sign out failed: ${error.message}`);
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  function closeChangePasswordDialog() {
+    if (changePasswordLoading) {
+      return;
+    }
+
+    setChangePasswordDialogOpen(false);
+    setChangePasswordDraft({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setChangePasswordStatus("");
+  }
+
+  async function submitChangePassword(event) {
+    event.preventDefault();
+
+    if (!authSession?.user?.email) {
+      setChangePasswordStatus("Sign in before changing your password.");
+      return;
+    }
+
+    const currentPassword = changePasswordDraft.currentPassword;
+    const newPassword = changePasswordDraft.newPassword;
+    const confirmPassword = changePasswordDraft.confirmPassword;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setChangePasswordStatus("Enter your current password and new password.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setChangePasswordStatus("New passwords do not match.");
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setChangePasswordStatus("Choose a new password that is different.");
+      return;
+    }
+
+    setChangePasswordLoading(true);
+    setChangePasswordStatus("Changing password...");
+
+    try {
+      await changePasswordWithCurrentPassword(
+        authSession.user.email,
+        currentPassword,
+        newPassword
+      );
+      setChangePasswordDraft({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setChangePasswordStatus("");
+      setAuthStatus("Password changed.");
+      setChangePasswordDialogOpen(false);
+    } catch (error) {
+      console.error("Change password failed:", error);
+      setChangePasswordStatus(`Password change failed: ${error.message}`);
+    } finally {
+      setChangePasswordLoading(false);
     }
   }
 
@@ -1302,6 +1601,8 @@ export default function App() {
     return Boolean(
       isSupabaseConfigured &&
         session?.user?.id &&
+        appAccessAllowed &&
+        !approvalFromCache &&
         indexedDbReady &&
         (typeof navigator === "undefined" || navigator.onLine)
     );
@@ -3098,57 +3399,59 @@ export default function App() {
           </h2>
         </div>
 
-        <section
-          style={{
-            margin: "18px auto",
-            maxWidth: "420px",
-          }}
-        >
-          <h3>App</h3>
-          <div
+        {isIraSettingsUser && (
+          <section
             style={{
-              color: "var(--text-muted)",
-              fontSize: "12px",
-              marginBottom: "10px",
+              margin: "18px auto",
+              maxWidth: "420px",
             }}
           >
-            v{APP_VERSION}
-            {" • built "}
-            {BUILD_TIME}
-          </div>
-          <button
-            onClick={checkForUpdate}
-            disabled={updateStatus === "checking" || updateStatus === "found"}
-          >
-            {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
-          </button>
-          {(updateStatus || buildNotice) && (
+            <h3>App</h3>
             <div
-              role="status"
-              aria-live="polite"
               style={{
                 color: "var(--text-muted)",
                 fontSize: "12px",
-                marginTop: "6px",
+                marginBottom: "10px",
               }}
             >
-              {updateStatus && (
-                <div>
-                  {UPDATE_STATUS_COPY[updateStatus]}
-                  {updateStatus === "current" && lastUpdateCheck
-                    ? ` (${lastUpdateCheck.toLocaleString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })})`
-                    : ""}
-                </div>
-              )}
-              {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
+              v{APP_VERSION}
+              {" • built "}
+              {BUILD_TIME}
             </div>
-          )}
-        </section>
+            <button
+              onClick={checkForUpdate}
+              disabled={updateStatus === "checking" || updateStatus === "found"}
+            >
+              {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
+            </button>
+            {(updateStatus || buildNotice) && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "6px",
+                }}
+              >
+                {updateStatus && (
+                  <div>
+                    {UPDATE_STATUS_COPY[updateStatus]}
+                    {updateStatus === "current" && lastUpdateCheck
+                      ? ` (${lastUpdateCheck.toLocaleString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })})`
+                      : ""}
+                  </div>
+                )}
+                {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
+              </div>
+            )}
+          </section>
+        )}
 
         <section
           style={{
@@ -3163,22 +3466,69 @@ export default function App() {
           {authSession ? (
             <div
               style={{
-                alignItems: "center",
-                display: "flex",
+                display: "grid",
                 gap: "8px",
-                justifyContent: "center",
               }}
             >
-              <span
+              <div
                 style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  justifyContent: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "12px",
+                  }}
+                >
+                  Signed in as {authSession.user.email}
+                </span>
+                <button
+                  disabled={!isSupabaseConfigured || authLoading}
+                  onClick={() => {
+                    setChangePasswordDraft({
+                      currentPassword: "",
+                      newPassword: "",
+                      confirmPassword: "",
+                    });
+                    setChangePasswordStatus("");
+                    setChangePasswordDialogOpen(true);
+                  }}
+                  type="button"
+                >
+                  Change Password
+                </button>
+                <button disabled={authLoading} onClick={handleSignOut}>
+                  Sign Out
+                </button>
+              </div>
+              <div
+                style={{
+                  color: "var(--text-muted)",
                   fontSize: "12px",
                 }}
               >
-                Signed in as {authSession.user.email}
-              </span>
-              <button disabled={authLoading} onClick={handleSignOut}>
-                Sign Out
-              </button>
+                Approval:{" "}
+                {approvalLoading
+                  ? "checking..."
+                  : approvalStatus?.status || "not verified"}
+                {approvalFromCache ? " (cached)" : ""}
+              </div>
+              {approvalError && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                  }}
+                >
+                  {approvalError}
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -3226,6 +3576,18 @@ export default function App() {
               >
                 Create Account
               </button>
+              <img
+                alt=""
+                src={`${import.meta.env.BASE_URL}workout-icon.png`}
+                style={{
+                  borderRadius: "18px",
+                  gridColumn: "1 / -1",
+                  justifySelf: "center",
+                  marginTop: "18px",
+                  maxWidth: "240px",
+                  width: "58%",
+                }}
+              />
             </div>
           )}
           <div
@@ -3239,6 +3601,154 @@ export default function App() {
           >
             {authStatus}
           </div>
+          {changePasswordDialogOpen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Change password"
+              style={{
+                alignItems: "center",
+                background: "rgba(0,0,0,.5)",
+                display: "flex",
+                inset: 0,
+                justifyContent: "center",
+                padding: "20px",
+                position: "fixed",
+                zIndex: 2300,
+              }}
+            >
+              <form
+                onSubmit={submitChangePassword}
+                style={{
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  boxShadow: "0 18px 42px rgba(0,0,0,.28)",
+                  display: "grid",
+                  gap: "10px",
+                  maxWidth: "360px",
+                  padding: "18px",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: 0,
+                    }}
+                  >
+                    Change Password
+                  </h3>
+                  <button
+                    aria-label="Close change password"
+                    disabled={changePasswordLoading}
+                    onClick={closeChangePasswordDialog}
+                    type="button"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "4px",
+                  }}
+                >
+                  Current password
+                  <input
+                    autoComplete="current-password"
+                    disabled={changePasswordLoading}
+                    type="password"
+                    value={changePasswordDraft.currentPassword}
+                    onChange={(event) =>
+                      setChangePasswordDraft((current) => ({
+                        ...current,
+                        currentPassword: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "4px",
+                  }}
+                >
+                  New password
+                  <input
+                    autoComplete="new-password"
+                    disabled={changePasswordLoading}
+                    type="password"
+                    value={changePasswordDraft.newPassword}
+                    onChange={(event) =>
+                      setChangePasswordDraft((current) => ({
+                        ...current,
+                        newPassword: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "4px",
+                  }}
+                >
+                  Re-enter new password
+                  <input
+                    autoComplete="new-password"
+                    disabled={changePasswordLoading}
+                    type="password"
+                    value={changePasswordDraft.confirmPassword}
+                    onChange={(event) =>
+                      setChangePasswordDraft((current) => ({
+                        ...current,
+                        confirmPassword: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                {changePasswordStatus && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      color: changePasswordStatus.includes("failed")
+                        ? "var(--danger-text)"
+                        : "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {changePasswordStatus}
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "1fr 1fr",
+                  }}
+                >
+                  <button
+                    disabled={changePasswordLoading}
+                    onClick={closeChangePasswordDialog}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button disabled={changePasswordLoading} type="submit">
+                    {changePasswordLoading ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
           <div
             role="status"
             aria-live="polite"
@@ -3267,7 +3777,7 @@ export default function App() {
               Last synced: {formatLastNormalizedSyncAt(lastNormalizedSyncAt)}
             </div>
             <button
-              disabled={!authSession || syncLoading}
+              disabled={!authSession || !appAccessAllowed || approvalFromCache || syncLoading}
               onClick={() => runAutomaticNormalizedSync("manual")}
             >
               Sync Now
@@ -3283,320 +3793,504 @@ export default function App() {
               save checkpoints.
             </div>
           </div>
-          <div
-            style={{
-              borderTop: "1px solid var(--border)",
-              marginTop: "10px",
-              paddingTop: "10px",
-            }}
-          >
-            <button
-              aria-expanded={showAdvancedSyncTools}
-              onClick={() => setShowAdvancedSyncTools((visible) => !visible)}
-            >
-              {showAdvancedSyncTools ? "Hide" : "Show"} Advanced Migration Tools
-            </button>
-            {showAdvancedSyncTools && (
+          {isIraSettingsUser && (
+            <>
               <div
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "8px",
-                  justifyContent: "center",
+                  borderTop: "1px solid var(--border)",
                   marginTop: "10px",
+                  paddingTop: "10px",
                 }}
               >
-                <button
-                  disabled={!authSession || syncLoading}
-                  onClick={pullLatestNormalizedData}
-                >
-                  Pull Latest
-                </button>
-                <button disabled={syncLoading} onClick={repairLocalPlanLinks}>
-                  Repair Plan Links
-                </button>
-                <button
-                  disabled={!authSession || syncLoading}
-                  onClick={checkNormalizedCloudData}
-                >
-                  Check Normalized Data
-                </button>
-                <button
-                  disabled={!authSession || syncLoading}
-                  onClick={resetWorkoutSyncData}
+                <h3
                   style={{
-                    background: "var(--danger-bg)",
-                    border: "1px solid var(--danger-border)",
-                    color: "var(--danger-text)",
+                    fontSize: "15px",
+                    margin: "0 0 6px",
                   }}
                 >
-                  Reset Workout Sync Data
+                  User Approvals
+                </h3>
+                <button
+                  disabled={approvalAdminLoading}
+                  onClick={loadApprovalAdminRows}
+                  type="button"
+                >
+                  {approvalAdminLoading ? "Loading..." : "Refresh Approvals"}
                 </button>
-              </div>
-            )}
-            <div
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                marginTop: "6px",
-              }}
-            >
-              {getCustomExercises(exerciseLibrary).length} custom exercises
-              ready for the normalized exercise table.
-            </div>
-          </div>
-          <div
-            style={{
-              borderTop: "1px solid var(--border)",
-              marginTop: "10px",
-              paddingTop: "10px",
-            }}
-          >
-            <h3
-              style={{
-                fontSize: "15px",
-                margin: "0 0 6px",
-              }}
-            >
-              Bench History Test
-            </h3>
-            <p
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                margin: "0 0 8px",
-              }}
-            >
-              Imports 71 local-only Barbell Bench Press history entries from
-              the older CSV for chart testing. A local backup is saved before
-              the first import.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                justifyContent: "center",
-              }}
-            >
-              <button onClick={importBenchHistoryTestData} type="button">
-                Import Bench Test Data
-              </button>
-              <button
-                disabled={!benchHistoryBackupAvailable}
-                onClick={restoreBenchHistoryTestBackup}
-                type="button"
-              >
-                Restore Pre-Import Data
-              </button>
-            </div>
-            {benchHistoryTestStatus && (
-              <div
-                role="status"
-                aria-live="polite"
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                  marginTop: "6px",
-                }}
-              >
-                {benchHistoryTestStatus}
-              </div>
-            )}
-          </div>
-          <div
-            style={{
-              borderTop: "1px solid var(--border)",
-              marginTop: "10px",
-              paddingTop: "10px",
-            }}
-          >
-            <h3
-              style={{
-                fontSize: "15px",
-                margin: "0 0 6px",
-              }}
-            >
-              Persistence Audit
-            </h3>
-            <p
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                margin: "0 0 8px",
-              }}
-            >
-              Read-only check of local data and normalized Supabase rows.
-            </p>
-            <button disabled={syncLoading} onClick={runPersistenceAudit}>
-              Check Persistence
-            </button>
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                marginTop: "6px",
-              }}
-            >
-              {dataAuditStatus}
-            </div>
-            {dataAuditSummary && (
-              <div
-                style={{
-                  display: "grid",
-                  gap: "8px",
-                  marginTop: "8px",
-                  textAlign: "left",
-                }}
-              >
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "6px",
+                  }}
+                >
+                  {approvalAdminStatus}
+                </div>
                 <div
                   style={{
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    padding: "8px",
+                    display: "grid",
+                    gap: "8px",
+                    marginTop: "8px",
+                    textAlign: "left",
                   }}
                 >
-                  <strong>Local IndexedDB / app state</strong>
+                  {approvalAdminRows.map((row) => (
+                    <div
+                      key={row.user_id}
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        display: "grid",
+                        gap: "8px",
+                        padding: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <strong>{row.email || row.user_id}</strong>
+                        <span
+                          style={{
+                            color:
+                              row.status === "approved"
+                                ? "var(--success-text, #2e7d32)"
+                                : row.status === "denied"
+                                  ? "var(--danger-text)"
+                                  : "var(--text-muted)",
+                            fontSize: "12px",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {row.status}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                        }}
+                      >
+                        <button
+                          disabled={approvalAdminLoading || row.status === "approved"}
+                          onClick={() => setUserApproval(row.user_id, "approved")}
+                          type="button"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          disabled={approvalAdminLoading || row.status === "pending"}
+                          onClick={() => setUserApproval(row.user_id, "pending")}
+                          type="button"
+                        >
+                          Pending
+                        </button>
+                        <button
+                          disabled={approvalAdminLoading || row.status === "denied"}
+                          onClick={() => setUserApproval(row.user_id, "denied")}
+                          style={{
+                            background: "var(--danger-bg)",
+                            border: "1px solid var(--danger-border)",
+                            color: "var(--danger-text)",
+                          }}
+                          type="button"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  marginTop: "10px",
+                  paddingTop: "10px",
+                }}
+              >
+                <button
+                  aria-expanded={showAdvancedSyncTools}
+                  onClick={() => setShowAdvancedSyncTools((visible) => !visible)}
+                >
+                  {showAdvancedSyncTools ? "Hide" : "Show"} Advanced Migration Tools
+                </button>
+                {showAdvancedSyncTools && (
                   <div
                     style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      justifyContent: "center",
+                      marginTop: "10px",
                     }}
                   >
-                    {formatAuditLocalSummary(dataAuditSummary.local)}
+                    <button
+                      disabled={!authSession || syncLoading}
+                      onClick={pullLatestNormalizedData}
+                    >
+                      Pull Latest
+                    </button>
+                    <button disabled={syncLoading} onClick={repairLocalPlanLinks}>
+                      Repair Plan Links
+                    </button>
+                    <button
+                      disabled={!authSession || syncLoading}
+                      onClick={checkNormalizedCloudData}
+                    >
+                      Check Normalized Data
+                    </button>
+                    <button
+                      disabled={!authSession || syncLoading}
+                      onClick={resetWorkoutSyncData}
+                      style={{
+                        background: "var(--danger-bg)",
+                        border: "1px solid var(--danger-border)",
+                        color: "var(--danger-text)",
+                      }}
+                    >
+                      Reset Workout Sync Data
+                    </button>
                   </div>
+                )}
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "6px",
+                  }}
+                >
+                  {getCustomExercises(exerciseLibrary).length} custom exercises
+                  ready for the normalized exercise table.
+                </div>
+              </div>
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  marginTop: "10px",
+                  paddingTop: "10px",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "15px",
+                    margin: "0 0 6px",
+                  }}
+                >
+                  Bench History Test
+                </h3>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Imports 71 local-only Barbell Bench Press history entries from
+                  the older CSV for chart testing. A local backup is saved before
+                  the first import.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    justifyContent: "center",
+                  }}
+                >
+                  <button onClick={importBenchHistoryTestData} type="button">
+                    Import Bench Test Data
+                  </button>
+                  <button
+                    disabled={!benchHistoryBackupAvailable}
+                    onClick={restoreBenchHistoryTestBackup}
+                    type="button"
+                  >
+                    Restore Pre-Import Data
+                  </button>
+                </div>
+                {benchHistoryTestStatus && (
                   <div
+                    role="status"
+                    aria-live="polite"
                     style={{
                       color: "var(--text-muted)",
                       fontSize: "12px",
                       marginTop: "6px",
                     }}
                   >
-                    Standalone workout names:{" "}
-                    {dataAuditSummary.local.standaloneWorkoutNames.length > 0
-                      ? dataAuditSummary.local.standaloneWorkoutNames.join(", ")
-                      : "none"}
+                    {benchHistoryTestStatus}
                   </div>
-                  <div
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                    }}
-                  >
-                    Completed workout names:{" "}
-                    {dataAuditSummary.local.historyDetails.length > 0
-                      ? dataAuditSummary.local.historyDetails
-                          .map(
-                            (workout) =>
-                              `${workout.templateName} (${formatHistoryTimestamp(
-                                workout
-                              )})${
-                                workout.planId ? " [plan]" : ""
-                              }`
-                          )
-                          .join("; ")
-                      : "none"}
-                  </div>
-                  <div
-                    style={{
-                      color:
-                        dataAuditSummary.local.missingPlanWorkouts.length > 0
-                          ? "var(--danger-text)"
-                          : "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                    }}
-                  >
-                    Broken plan workout links:{" "}
-                    {dataAuditSummary.local.missingPlanWorkouts.length > 0
-                      ? dataAuditSummary.local.missingPlanWorkouts
-                          .map(
-                            (workout) =>
-                              `${workout.planName} / ${workout.workoutName} -> ${workout.templateId || "missing template id"}`
-                          )
-                          .join("; ")
-                      : "none"}
-                  </div>
-                  <div
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                    }}
-                  >
-                    Template ids:{" "}
-                    {dataAuditSummary.local.templateDetails.length > 0
-                      ? dataAuditSummary.local.templateDetails
-                          .map(
-                            (template) =>
-                              `${template.id}: ${template.name}${
-                                template.planId
-                                  ? ` [plan ${template.planId}]`
-                                  : ""
-                              }${
-                                template.planWorkoutId
-                                  ? ` [${template.planWorkoutId}]`
-                                  : ""
-                              }`
-                          )
-                          .join("; ")
-                      : "none"}
-                  </div>
-                </div>
-
-                <div
+                )}
+              </div>
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  marginTop: "10px",
+                  paddingTop: "10px",
+                }}
+              >
+                <h3
                   style={{
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    padding: "8px",
+                    fontSize: "15px",
+                    margin: "0 0 6px",
                   }}
                 >
-                  <strong>Normalized Supabase</strong>
+                  Persistence Audit
+                </h3>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Read-only check of local data and normalized Supabase rows.
+                </p>
+                <button disabled={syncLoading} onClick={runPersistenceAudit}>
+                  Check Persistence
+                </button>
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "6px",
+                  }}
+                >
+                  {dataAuditStatus}
+                </div>
+                {dataAuditSummary && (
                   <div
                     style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "4px",
+                      display: "grid",
+                      gap: "8px",
+                      marginTop: "8px",
+                      textAlign: "left",
                     }}
                   >
-                    {dataAuditSummary.normalized
-                      ? formatAuditNormalizedSummary(dataAuditSummary.normalized)
-                      : "Sign in to check normalized cloud rows."}
-                  </div>
-                  {dataAuditSummary.normalized?.recentSessions && (
                     <div
                       style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                        marginTop: "4px",
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        padding: "8px",
                       }}
                     >
-                      Recent cloud completed workouts:{" "}
-                      {dataAuditSummary.normalized.recentSessions.length > 0
-                        ? dataAuditSummary.normalized.recentSessions
+                      <strong>Local IndexedDB / app state</strong>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {formatAuditLocalSummary(dataAuditSummary.local)}
+                      </div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "6px",
+                        }}
+                      >
+                        Standalone workout names:{" "}
+                        {dataAuditSummary.local.standaloneWorkoutNames.length > 0
+                          ? dataAuditSummary.local.standaloneWorkoutNames.join(", ")
+                          : "none"}
+                      </div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        Completed workout names:{" "}
+                        {dataAuditSummary.local.historyDetails.length > 0
+                          ? dataAuditSummary.local.historyDetails
                             .map(
                               (workout) =>
-                                `${workout.workout_name} (${formatHistoryTimestamp(
+                                `${workout.templateName} (${formatHistoryTimestamp(
                                   workout
-                                )})`
+                                )})${
+                                  workout.planId ? " [plan]" : ""
+                                }`
                             )
                             .join("; ")
-                        : "none"}
+                          : "none"}
+                      </div>
+                      <div
+                        style={{
+                          color:
+                            dataAuditSummary.local.missingPlanWorkouts.length > 0
+                              ? "var(--danger-text)"
+                              : "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        Broken plan workout links:{" "}
+                        {dataAuditSummary.local.missingPlanWorkouts.length > 0
+                          ? dataAuditSummary.local.missingPlanWorkouts
+                              .map(
+                                (workout) =>
+                                  `${workout.planName} / ${workout.workoutName} -> ${workout.templateId || "missing template id"}`
+                              )
+                              .join("; ")
+                          : "none"}
+                      </div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        Template ids:{" "}
+                        {dataAuditSummary.local.templateDetails.length > 0
+                          ? dataAuditSummary.local.templateDetails
+                              .map(
+                                (template) =>
+                                  `${template.id}: ${template.name}${
+                                    template.planId
+                                      ? ` [plan ${template.planId}]`
+                                      : ""
+                                  }${
+                                    template.planWorkoutId
+                                      ? ` [${template.planWorkoutId}]`
+                                      : ""
+                                  }`
+                              )
+                              .join("; ")
+                          : "none"}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    <div
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        padding: "8px",
+                      }}
+                    >
+                      <strong>Normalized Supabase</strong>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {dataAuditSummary.normalized
+                          ? formatAuditNormalizedSummary(dataAuditSummary.normalized)
+                          : "Sign in to check normalized cloud rows."}
+                      </div>
+                      {dataAuditSummary.normalized?.recentSessions && (
+                        <div
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "12px",
+                            marginTop: "4px",
+                          }}
+                        >
+                          Recent cloud completed workouts:{" "}
+                          {dataAuditSummary.normalized.recentSessions.length > 0
+                            ? dataAuditSummary.normalized.recentSessions
+                                .map(
+                                  (workout) =>
+                                    `${workout.workout_name} (${formatHistoryTimestamp(
+                                      workout
+                                    )})`
+                                )
+                                .join("; ")
+                            : "none"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </section>
       </div>
     );
+  }
+
+  function renderAccessGate() {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          padding: "20px",
+        }}
+      >
+        <div
+          style={{
+            margin: "0 auto",
+            maxWidth: "460px",
+          }}
+        >
+          <h2
+            style={{
+              margin: "0 0 8px",
+            }}
+          >
+            Account Required
+          </h2>
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "13px",
+              margin: "0 0 12px",
+            }}
+          >
+            Sign in with an approved account to use the app. New accounts remain
+            pending until approved.
+          </p>
+          {authSession && !appAccessAllowed && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                color:
+                  approvalStatus?.status === "denied"
+                    ? "var(--danger-text)"
+                    : "var(--text-muted)",
+                fontSize: "13px",
+                marginBottom: "12px",
+                padding: "10px",
+              }}
+            >
+              Approval status:{" "}
+              {approvalLoading
+                ? "checking..."
+                : approvalStatus?.status || "not verified"}
+              {approvalError ? ` (${approvalError})` : ""}
+            </div>
+          )}
+        </div>
+        {renderSettings()}
+      </div>
+    );
+  }
+
+  if (!appAccessAllowed) {
+    return renderAccessGate();
   }
 
   if (showSettings) {
