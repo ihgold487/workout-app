@@ -10,6 +10,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Repeat2,
   Save,
   Target,
@@ -252,6 +253,7 @@ export default function TemplateView({
   const [showAdd, setShowAdd] = useState(false);
 
   const [pendingExercise, setPendingExercise] = useState(null);
+  const [replacingExercise, setReplacingExercise] = useState(null);
 
   const [newExerciseValues, setNewExerciseValues] = useState({
     weight: "",
@@ -1075,6 +1077,45 @@ export default function TemplateView({
         />
       )}
 
+      {replacingExercise && (
+        <ExercisePickerSheet
+          title="Replace exercise"
+          exerciseLibrary={exerciseLibrary}
+          history={history}
+          search={search}
+          selectedMuscle={selectedMuscle}
+          setSearch={setSearch}
+          setSelectedMuscle={setSelectedMuscle}
+          onClose={() => {
+            setReplacingExercise(null);
+            setSearch("");
+            setSelectedMuscle("");
+          }}
+          onSelect={(exercise) => {
+            updateCurrentTemplate((currentTemplate) => ({
+              ...currentTemplate,
+              exercises: currentTemplate.exercises.map((templateExercise) =>
+                templateExercise.id === replacingExercise.id
+                  ? {
+                      ...templateExercise,
+                      equipment: exercise.equipment,
+                      exerciseId: exercise.id,
+                      imageAlt: exercise.imageAlt || "",
+                      imageUrl: exercise.imageUrl || "",
+                      muscles: exercise.muscles,
+                      name: exercise.name,
+                    }
+                  : templateExercise
+              ),
+            }));
+
+            setReplacingExercise(null);
+            setSearch("");
+            setSelectedMuscle("");
+          }}
+        />
+      )}
+
       {pendingExercise && (
             <div
               style={{
@@ -1281,6 +1322,20 @@ export default function TemplateView({
                               </span>
 
                               <IconButton
+                                label="Replace exercise"
+                                size={32}
+                                onClick={() => {
+                                  setShowAdd(false);
+                                  setPendingExercise(null);
+                                  setReplacingExercise(exercise);
+                                  setSelectedMuscle(exerciseDetail?.muscles?.[0] || "");
+                                  setSearch("");
+                                }}
+                              >
+                                <RefreshCw size={16} />
+                              </IconButton>
+
+                              <IconButton
                                 label="Edit superset"
                                 size={exercise.supersetGroup ? 42 : 32}
                                 onClick={() => {
@@ -1320,14 +1375,6 @@ export default function TemplateView({
                                     {exercise.supersetGroup}
                                   </span>
                                 )}
-                              </IconButton>
-
-                              <IconButton
-                                label={`${exercise.name} muscle map`}
-                                size={32}
-                                onClick={() => setDetailExercise(exerciseDetail)}
-                              >
-                                <BarChart3 size={16} />
                               </IconButton>
 
                               <IconButton

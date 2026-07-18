@@ -60,6 +60,8 @@ import {
 import { downloadPlans, uploadPlans } from "./sync/planCloudSync";
 import {
   downloadNutritionEntries,
+  filterPendingDeletedNutritionEntries,
+  retryPendingNutritionDeletes,
   uploadNutritionEntries,
 } from "./sync/nutritionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
@@ -819,6 +821,7 @@ export default function App() {
   const [selectedHistory, setSelectedHistory] = useState(null);
 
   const [selectedHistoryList, setSelectedHistoryList] = useState(null);
+  const [confirmDeleteHistory, setConfirmDeleteHistory] = useState(null);
 
   const [showExercises, setShowExercises] = useState(false);
 
@@ -978,14 +981,21 @@ export default function App() {
 
     async function syncCalendarNutritionEntries() {
       try {
-        if (seededLocalEntries.length > 0) {
-          await uploadNutritionEntries(seededLocalEntries, authSession);
+        await retryPendingNutritionDeletes(authSession);
+
+        const uploadableSeededEntries = filterPendingDeletedNutritionEntries(
+          seededLocalEntries,
+          userId
+        );
+
+        if (uploadableSeededEntries.length > 0) {
+          await uploadNutritionEntries(uploadableSeededEntries, authSession);
         }
 
         const cloudEntries = await downloadNutritionEntries(authSession);
-        const mergedEntries = mergeNutritionEntries(
-          seededLocalEntries,
-          cloudEntries
+        const mergedEntries = filterPendingDeletedNutritionEntries(
+          mergeNutritionEntries(uploadableSeededEntries, cloudEntries),
+          userId
         );
 
         if (mergedEntries.length > 0) {
@@ -2265,6 +2275,30 @@ export default function App() {
       includeHistory ? ["workouts", "history"] : ["workouts"],
       "workout delete"
     );
+  }
+
+  function deleteHistoryWorkout(workout) {
+    const nextHistory = history.filter(
+      (item) => String(item.id) !== String(workout.id)
+    );
+
+    setHistory(nextHistory);
+    setSelectedHistory((current) =>
+      current && String(current.id) === String(workout.id) ? null : current
+    );
+    setSelectedHistoryList((currentList) => {
+      if (!Array.isArray(currentList)) {
+        return currentList;
+      }
+
+      const nextList = currentList.filter(
+        (item) => String(item.id) !== String(workout.id)
+      );
+
+      return nextList.length > 0 ? nextList : null;
+    });
+    setConfirmDeleteHistory(null);
+    requestSyncCheckpoint(["history"], "history delete");
   }
 
   function getTemplateHistoryCount(templateId) {
@@ -3642,26 +3676,58 @@ export default function App() {
           }}
         >
           {selectedHistoryList.map((workout) => (
-            <button
+            <div
               key={workout.id}
               style={{
+                alignItems: "center",
                 background: "var(--surface-muted)",
                 border: "1px solid var(--border)",
                 borderRadius: "8px",
                 color: "var(--text-h)",
-                display: "block",
-                font: "inherit",
-                fontSize: "13px",
-                padding: "8px",
-                textAlign: "left",
-                width: "100%",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
               }}
-              onClick={() => setSelectedHistory(workout)}
-              type="button"
             >
-              {workout.templateName || workout.workout_name || "Workout"}
-              {` (${formatHistoryTimestamp(workout)})`}
-            </button>
+              <button
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-h)",
+                  display: "block",
+                  font: "inherit",
+                  fontSize: "13px",
+                  minWidth: 0,
+                  padding: "8px",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+                onClick={() => setSelectedHistory(workout)}
+                type="button"
+              >
+                {workout.templateName || workout.workout_name || "Workout"}
+                {` (${formatHistoryTimestamp(workout)})`}
+              </button>
+              <button
+                aria-label={`Delete ${
+                  workout.templateName || workout.workout_name || "workout"
+                } history entry`}
+                onClick={() => setConfirmDeleteHistory(workout)}
+                style={{
+                  alignItems: "center",
+                  color: "var(--danger-text)",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  marginRight: "6px",
+                  minHeight: "34px",
+                  minWidth: "34px",
+                  padding: "5px",
+                }}
+                type="button"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           ))}
         </div>
         {selectedHistory && (
@@ -3670,6 +3736,91 @@ export default function App() {
             onClose={() => setSelectedHistory(null)}
             workout={selectedHistory}
           />
+        )}
+        {confirmDeleteHistory && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete workout history entry"
+            style={{
+              alignItems: "center",
+              background: "rgba(0,0,0,.5)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: "20px",
+              position: "fixed",
+              zIndex: 2300,
+            }}
+          >
+            <div
+              style={{
+                background: "var(--surface-raised)",
+                border: "1px solid var(--danger-text)",
+                borderRadius: "12px",
+                boxShadow: "0 18px 42px rgba(0,0,0,.28)",
+                maxWidth: "360px",
+                padding: "18px",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  background: "var(--danger-bg)",
+                  border: "1px solid var(--danger-text)",
+                  borderRadius: "10px",
+                  color: "var(--danger-text)",
+                  display: "flex",
+                  fontWeight: "bold",
+                  gap: "8px",
+                  marginBottom: "12px",
+                  padding: "10px",
+                }}
+              >
+                <Trash2 size={18} />
+                Delete workout history?
+              </div>
+              <div
+                style={{
+                  color: "var(--text)",
+                  fontSize: "14px",
+                  marginBottom: "16px",
+                }}
+              >
+                Delete{" "}
+                <strong>
+                  {confirmDeleteHistory.templateName ||
+                    confirmDeleteHistory.workout_name ||
+                    "Workout"}
+                </strong>{" "}
+                from {formatHistoryTimestamp(confirmDeleteHistory)}?
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "1fr 1fr",
+                }}
+              >
+                <button onClick={() => setConfirmDeleteHistory(null)} type="button">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteHistoryWorkout(confirmDeleteHistory)}
+                  style={{
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger-text)",
+                    color: "var(--danger-text)",
+                    fontWeight: "bold",
+                  }}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>,
       "home"
@@ -3695,6 +3846,10 @@ export default function App() {
         setSelectedSessionId={setSelectedSessionId}
         setSelectedTemplateId={setSelectedTemplateId}
         onEditModeChange={setTemplatePreviewEditActive}
+        onWorkoutCompleted={(completedWorkout) => {
+          setSelectedHistory(completedWorkout);
+          setSelectedHistoryList(null);
+        }}
       />
     );
   }
@@ -3738,11 +3893,12 @@ export default function App() {
   const calendarBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
 
   return renderAppShell(
-    <div
-      style={{
-        padding: "20px",
-      }}
-    >
+    <>
+      <div
+        style={{
+          padding: "20px",
+        }}
+      >
       <div
         style={{
           alignItems: "center",
@@ -4149,7 +4305,15 @@ export default function App() {
           ))}
         </>
       )}
-    </div>,
+      </div>
+      {selectedHistory && (
+        <CompletedWorkoutSheet
+          history={history}
+          onClose={() => setSelectedHistory(null)}
+          workout={selectedHistory}
+        />
+      )}
+    </>,
     "home"
   );
 }

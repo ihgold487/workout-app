@@ -204,6 +204,7 @@ export default function SessionView({
   setExerciseMetadata,
   setSelectedSessionId,
   setSelectedTemplateId,
+  onWorkoutCompleted,
 }) {
   const [showAddExercise, setShowAddExercise] = useState(false);
 
@@ -228,6 +229,7 @@ export default function SessionView({
   const [showReplaceExercise, setShowReplaceExercise] = useState(false);
   const [replacementExercise, setReplacementExercise] = useState(null);
   const [replacementTarget, setReplacementTarget] = useState(null);
+  const [lastCompletedExerciseId, setLastCompletedExerciseId] = useState(null);
   const [weightUnit, setWeightUnit] = useState("lb");
   const [showWeightPicker, setShowWeightPicker] = useState(false);
   const [weightPickerData, setWeightPickerData] = useState(null);
@@ -2009,9 +2011,14 @@ export default function SessionView({
     }));
 
     if (undo) {
+      setLastCompletedExerciseId((currentExerciseId) =>
+        currentExerciseId === exerciseId ? null : currentExerciseId
+      );
       setActiveSet({ exerciseId, setId });
       return;
     }
+
+    setLastCompletedExerciseId(exerciseId);
 
     if (timerFinished) {
       resetRestTimer();
@@ -2041,6 +2048,9 @@ export default function SessionView({
 
       exercises: s.exercises.filter((ex) => ex.id !== exerciseId),
     }));
+    setLastCompletedExerciseId((currentExerciseId) =>
+      currentExerciseId === exerciseId ? null : currentExerciseId
+    );
   }
 
   function updateExerciseSupersetGroup(exerciseId, supersetGroup) {
@@ -2312,6 +2322,11 @@ export default function SessionView({
     session.exercises.find((exercise) =>
       exercise.sets.some((set) => !set.completed)
     ) ||
+    (allSetsCompleted
+      ? session.exercises.find(
+          (exercise) => exercise.id === lastCompletedExerciseId
+        )
+      : null) ||
     (allSetsCompleted ? null : session.exercises[0]) ||
     null;
   const currentExerciseIndex = currentExercise
@@ -2710,6 +2725,8 @@ export default function SessionView({
     }
 
     setTemplates(nextTemplates);
+
+    onWorkoutCompleted?.(completedWorkout);
 
     setSessions(sessions.filter((s) => s.id !== session.id));
 

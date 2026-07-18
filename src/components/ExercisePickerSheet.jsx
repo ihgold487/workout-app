@@ -54,7 +54,7 @@ export default function ExercisePickerSheet({
         background: "rgba(0,0,0,.38)",
         inset: 0,
         position: "fixed",
-        zIndex: 1000,
+        zIndex: 1200,
       }}
     >
       <div

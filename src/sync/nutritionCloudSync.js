@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 const NUTRITION_ENTRIES_TABLE = "nutrition_entries";
 const LOCAL_APP_SOURCE = "local_app";
+const PENDING_DELETE_KEY = "nutritionPendingDeletes";
 
 function assertCloudReady(session) {
   if (!isSupabaseConfigured) {
@@ -15,6 +16,113 @@ function assertCloudReady(session) {
 
 function sourceKeyForEntry(entryId) {
   return `nutrition-entry:${entryId}`;
+}
+
+function getPendingDeleteStorageKey(userId) {
+  return userId ? `${PENDING_DELETE_KEY}:${userId}` : PENDING_DELETE_KEY;
+}
+
+function normalizePendingDeleteRecord(record) {
+  if (record === null || record === undefined) {
+    return null;
+  }
+
+  if (typeof record === "object") {
+    const id = record.id ?? record.entryId;
+
+    return id === null || id === undefined
+      ? null
+      : {
+          deletedAt: record.deletedAt || new Date().toISOString(),
+          id: String(id),
+        };
+  }
+
+  return {
+    deletedAt: new Date().toISOString(),
+    id: String(record),
+  };
+}
+
+export function readPendingNutritionDeletes(userId) {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(getPendingDeleteStorageKey(userId)) || "[]"
+    );
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map(normalizePendingDeleteRecord).filter(Boolean);
+  } catch (error) {
+    console.error("Failed to load pending nutrition deletes:", error);
+
+    return [];
+  }
+}
+
+function writePendingNutritionDeletes(userId, records) {
+  const storageKey = getPendingDeleteStorageKey(userId);
+  const normalizedRecords = records
+    .map(normalizePendingDeleteRecord)
+    .filter(Boolean);
+
+  if (normalizedRecords.length === 0) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+
+  localStorage.setItem(storageKey, JSON.stringify(normalizedRecords));
+}
+
+export function addPendingNutritionDelete(entryId, userId) {
+  if (entryId === null || entryId === undefined || !userId) {
+    return;
+  }
+
+  const entryKey = String(entryId);
+  const records = readPendingNutritionDeletes(userId);
+
+  if (records.some((record) => record.id === entryKey)) {
+    return;
+  }
+
+  writePendingNutritionDeletes(userId, [
+    ...records,
+    {
+      deletedAt: new Date().toISOString(),
+      id: entryKey,
+    },
+  ]);
+}
+
+export function clearPendingNutritionDelete(entryId, userId) {
+  if (entryId === null || entryId === undefined || !userId) {
+    return;
+  }
+
+  const entryKey = String(entryId);
+  writePendingNutritionDeletes(
+    userId,
+    readPendingNutritionDeletes(userId).filter((record) => record.id !== entryKey)
+  );
+}
+
+export function getPendingNutritionDeleteIds(userId) {
+  return new Set(readPendingNutritionDeletes(userId).map((record) => record.id));
+}
+
+export function filterPendingDeletedNutritionEntries(entries, userId) {
+  const pendingDeleteIds = getPendingNutritionDeleteIds(userId);
+
+  if (pendingDeleteIds.size === 0) {
+    return entries || [];
+  }
+
+  return (entries || []).filter(
+    (entry) => !pendingDeleteIds.has(String(entry?.id))
+  );
 }
 
 function normalizeNumber(value) {
@@ -162,4 +270,30 @@ export async function deleteNutritionEntry(entryId, session) {
   if (error) {
     throw error;
   }
+}
+
+export async function retryPendingNutritionDeletes(session) {
+  assertCloudReady(session);
+
+  const userId = session.user.id;
+  const records = readPendingNutritionDeletes(userId);
+  const failedRecords = [];
+  let deleted = 0;
+
+  for (const record of records) {
+    try {
+      await deleteNutritionEntry(record.id, session);
+      deleted += 1;
+    } catch (error) {
+      console.error("Failed to retry pending nutrition delete:", error);
+      failedRecords.push(record);
+    }
+  }
+
+  writePendingNutritionDeletes(userId, failedRecords);
+
+  return {
+    deleted,
+    failed: failedRecords.length,
+  };
 }

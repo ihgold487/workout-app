@@ -36,8 +36,12 @@ import {
   upsertBodyWeightEntry,
 } from "../sync/bodyMeasurementCloudSync";
 import {
+  addPendingNutritionDelete,
+  clearPendingNutritionDelete,
   deleteNutritionEntry,
   downloadNutritionEntries,
+  filterPendingDeletedNutritionEntries,
+  retryPendingNutritionDeletes,
   uploadNutritionEntries,
 } from "../sync/nutritionCloudSync";
 import {
@@ -3065,15 +3069,28 @@ export default function NutritionView({ session = null }) {
       setNutritionSyncStatus("Syncing nutrition...");
 
       try {
-        if (seededLocalEntries.length > 0) {
-          await uploadNutritionEntries(seededLocalEntries, session);
+        await retryPendingNutritionDeletes(session);
+
+        const currentLocalEntries = filterPendingDeletedNutritionEntries(
+          latestNutritionEntriesRef.current,
+          signedInUserId
+        );
+        const uploadableSeededEntries = filterPendingDeletedNutritionEntries(
+          seededLocalEntries,
+          signedInUserId
+        );
+
+        if (uploadableSeededEntries.length > 0) {
+          await uploadNutritionEntries(uploadableSeededEntries, session);
         }
 
         const cloudEntries = await downloadNutritionEntries(session);
-        const currentLocalEntries = latestNutritionEntriesRef.current;
-        const mergedEntries = mergeNutritionEntries(
-          mergeNutritionEntries(seededLocalEntries, currentLocalEntries),
-          cloudEntries
+        const mergedEntries = filterPendingDeletedNutritionEntries(
+          mergeNutritionEntries(
+            mergeNutritionEntries(uploadableSeededEntries, currentLocalEntries),
+            cloudEntries
+          ),
+          signedInUserId
         );
 
         if (mergedEntries.length > 0) {
@@ -3518,7 +3535,16 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
-    uploadNutritionEntries(entriesToSync, session)
+    const uploadableEntries = filterPendingDeletedNutritionEntries(
+      entriesToSync,
+      session.user.id
+    );
+
+    if (uploadableEntries.length === 0) {
+      return;
+    }
+
+    uploadNutritionEntries(uploadableEntries, session)
       .then(() => {
         setNutritionSyncStatus("");
       })
@@ -3533,8 +3559,10 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
+    addPendingNutritionDelete(entryId, session.user.id);
     deleteNutritionEntry(entryId, session)
       .then(() => {
+        clearPendingNutritionDelete(entryId, session.user.id);
         setNutritionSyncStatus("");
       })
       .catch((error) => {
@@ -4712,6 +4740,7 @@ export default function NutritionView({ session = null }) {
   }
 
   function removeEntry(entryId) {
+    addPendingNutritionDelete(entryId, signedInUserId);
     updateEntries(entries.filter((entry) => entry.id !== entryId), []);
     syncNutritionDeleteToCloud(entryId);
 
