@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Copy,
   GripVertical,
@@ -8,6 +10,7 @@ import {
   RefreshCw,
   Replace,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -245,6 +248,16 @@ function getWorkoutTypeLabel(workoutType) {
   return labels[workoutType] || "Workout";
 }
 
+const WORKOUT_TYPE_OPTIONS = [
+  { label: "Type 1", value: "type-1" },
+  { label: "Type 2", value: "type-2" },
+  { label: "Push", value: "push" },
+  { label: "Pull", value: "pull" },
+  { label: "Upper", value: "upper" },
+  { label: "Lower", value: "lower" },
+  { label: "Full Body", value: "full-body" },
+];
+
 function findWorkoutIndexForSlot(layout, slotKey) {
   return layout.findIndex((slotKeys) => slotKeys.includes(slotKey));
 }
@@ -359,7 +372,18 @@ function PlanSupersetDropZone({ children, group, workoutKey }) {
   return <div ref={setNodeRef}>{children}</div>;
 }
 
-function PlanDayButton({ active, count, label, onClick, workoutKey }) {
+function PlanDayButton({
+  active,
+  count,
+  label,
+  onClick,
+  onLongPress,
+  sortable = true,
+  sublabel,
+  workoutKey,
+}) {
+  const longPressTimeoutRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
   const {
     attributes,
     listeners,
@@ -367,6 +391,7 @@ function PlanDayButton({ active, count, label, onClick, workoutKey }) {
     transform,
     transition,
   } = useSortable({
+    disabled: !sortable,
     id: `plan-day:${workoutKey}`,
   });
   const { isOver, setNodeRef } = useDroppable({
@@ -382,14 +407,49 @@ function PlanDayButton({ active, count, label, onClick, workoutKey }) {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const clearLongPress = () => {
+    window.clearTimeout(longPressTimeoutRef.current);
+  };
+  const startLongPress = (event) => {
+    if (!onLongPress) {
+      return;
+    }
+
+    clearLongPress();
+    longPressTriggeredRef.current = false;
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      onLongPress(event);
+    }, 520);
+  };
 
   return (
     <button
       ref={setRefs}
       aria-pressed={active}
       {...attributes}
-      {...listeners}
-      onClick={onClick}
+      {...(sortable ? listeners : {})}
+      onClick={(event) => {
+        if (longPressTriggeredRef.current) {
+          event.preventDefault();
+          longPressTriggeredRef.current = false;
+          return;
+        }
+
+        onClick?.(event);
+      }}
+      onContextMenu={(event) => {
+        if (!onLongPress) {
+          return;
+        }
+
+        event.preventDefault();
+        onLongPress(event);
+      }}
+      onPointerCancel={clearLongPress}
+      onPointerDown={startLongPress}
+      onPointerLeave={clearLongPress}
+      onPointerUp={clearLongPress}
       style={{
         background: active
           ? "var(--accent)"
@@ -407,8 +467,10 @@ function PlanDayButton({ active, count, label, onClick, workoutKey }) {
           : highlighted
             ? "var(--accent)"
             : "var(--text)",
+        alignItems: "center",
         display: "inline-flex",
         flex: "1 1 0",
+        flexDirection: "column",
         fontSize: "13px",
         fontWeight: active ? "bold" : "normal",
         justifyContent: "center",
@@ -417,24 +479,39 @@ function PlanDayButton({ active, count, label, onClick, workoutKey }) {
         padding: highlighted ? "5px 7px" : "6px 8px",
         touchAction: "none",
         userSelect: "none",
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
         ...sortableStyle,
       }}
     >
-      {label}
-      <span
-        style={{
-          color:
-            active || highlighted
-              ? active
-                ? "rgba(255,255,255,.78)"
-                : "var(--accent)"
-              : "var(--text-muted)",
-          fontSize: "11px",
-          marginLeft: "4px",
-        }}
-      >
-        ({count})
+      <span>
+        {label}
+        <span
+          style={{
+            color:
+              active || highlighted
+                ? active
+                  ? "rgba(255,255,255,.78)"
+                  : "var(--accent)"
+                : "var(--text-muted)",
+            fontSize: "11px",
+            marginLeft: "4px",
+          }}
+        >
+          ({count})
+        </span>
       </span>
+      {sublabel && (
+        <span
+          style={{
+            color: active ? "rgba(255,255,255,.82)" : "var(--text-muted)",
+            fontSize: "11px",
+            lineHeight: 1.1,
+          }}
+        >
+          {sublabel}
+        </span>
+      )}
     </button>
   );
 }
@@ -647,6 +724,10 @@ function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
     return `${compactPrefix} W${workoutIndex + 1} ${workout.workoutTypeLabel}`;
   }
 
+  if (planType === "type-4" && workout?.workoutTypeLabel) {
+    return `${compactPrefix} W${workoutIndex + 1} ${workout.workoutTypeLabel}`;
+  }
+
   return `${compactPrefix} W${workoutIndex + 1}`;
 }
 
@@ -701,8 +782,17 @@ const PLAN_TYPE_DEFAULTS = {
     durationWeeks: "5",
     goal: "progress",
     rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
-    reps: "3",
+    reps: "8",
     rir: "3",
+  },
+  "type-4": {
+    deload: false,
+    daysPerWeek: "3",
+    durationWeeks: "4",
+    goal: "maintain",
+    rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
+    reps: "8",
+    rir: "2",
   },
 };
 
@@ -731,6 +821,17 @@ function buildEditablePlanWorkouts(plan, templates) {
       planId: plan.id,
       planWorkoutId:
         planWorkout.planWorkoutId || `${plan.id}:workout-${workoutIndex + 1}`,
+      workoutType:
+        planWorkout.workoutType ||
+        template?.workoutType ||
+        plan?.config?.workoutTypeByDay?.[workoutIndex] ||
+        null,
+      workoutTypeLabel:
+        planWorkout.workoutTypeLabel ||
+        template?.workoutTypeLabel ||
+        (plan?.config?.workoutTypeByDay?.[workoutIndex]
+          ? getWorkoutTypeLabel(plan.config.workoutTypeByDay[workoutIndex])
+          : null),
     };
   });
 }
@@ -771,12 +872,15 @@ function getPlanComparable(plan) {
       rirPeriodization:
         plan?.config?.rirPeriodization ||
         getDefaultRirPeriodizationMode(plan?.planType),
+      workoutTypeByDay: plan?.config?.workoutTypeByDay || {},
     },
     workouts: (plan?.workouts || []).map((workout) => ({
       dayNumber: Number(workout?.dayNumber || 0),
       name: workout?.name || "",
       planWorkoutId: workout?.planWorkoutId || "",
       templateId: workout?.templateId,
+      workoutType: workout?.workoutType || null,
+      workoutTypeLabel: workout?.workoutTypeLabel || null,
     })),
   });
 }
@@ -995,6 +1099,7 @@ function getPlanTypeLabel(planType) {
     "type-1": "Plan Type 1 'Laura'",
     "type-2": "Plan Type 2 'Sam'",
     "type-3": "Plan Type 3 'Ira'",
+    "type-4": "Plan Type 4 'General'",
   };
 
   return labels[planType] || labels["type-2"];
@@ -1005,6 +1110,7 @@ function getCompactPlanTypeLabel(planType) {
     "type-1": "P1",
     "type-2": "P2",
     "type-3": "P3",
+    "type-4": "P4",
   };
 
   return labels[planType] || labels["type-2"];
@@ -1772,6 +1878,249 @@ function WeeklyPrescriptionValuePicker({
   );
 }
 
+function WorkoutTypePickerSheet({
+  canMoveLeft = false,
+  canMoveRight = false,
+  currentWorkoutType,
+  dayLabel,
+  onClose,
+  onDelete,
+  onMoveLeft,
+  onMoveRight,
+  onSelect,
+  showDelete = false,
+  showMove = false,
+}) {
+  const [isClosing, setIsClosing] = useState(false);
+  const [isInteractive, setIsInteractive] = useState(false);
+  const closeWithAnimation = () => {
+    setIsClosing(true);
+    window.setTimeout(onClose, 730);
+  };
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsInteractive(true);
+    }, 260);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  if (!dayLabel) {
+    return null;
+  }
+
+  return (
+    <div
+      role="presentation"
+      style={{
+        background: "rgba(0,0,0,.42)",
+        inset: 0,
+        position: "fixed",
+        zIndex: 2200,
+      }}
+    >
+      <style>
+        {`
+          .plan-workout-type-picker-sheet {
+            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+          }
+
+          .plan-workout-type-picker-sheet[data-closing="true"] {
+            animation-name: planSheetSlideDown;
+          }
+
+          @keyframes planSheetSlideUp {
+            from {
+              transform: translateY(calc(100% + 24px));
+            }
+
+            to {
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes planSheetSlideDown {
+            from {
+              transform: translateY(0);
+            }
+
+            to {
+              transform: translateY(calc(100% + 24px));
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .plan-workout-type-picker-sheet {
+              animation: none;
+            }
+          }
+        `}
+      </style>
+      <div
+        className="plan-workout-type-picker-sheet"
+        data-closing={isClosing ? "true" : "false"}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${dayLabel} workout type`}
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "var(--surface-raised)",
+          borderTop: "1px solid var(--border)",
+          borderRadius: "12px 12px 0 0",
+          bottom: 0,
+          boxShadow: "0 -16px 36px rgba(0,0,0,.28)",
+          display: "grid",
+          gap: "10px",
+          left: 0,
+          maxHeight: "76vh",
+          overflowY: "auto",
+          padding: "14px",
+          pointerEvents: isInteractive ? "auto" : "none",
+          position: "absolute",
+          right: 0,
+          WebkitOverflowScrolling: "touch",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "16px",
+              margin: 0,
+            }}
+          >
+            {dayLabel} Workout Type
+          </h3>
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+            }}
+          >
+            {showMove && (
+              <>
+                <button
+                  aria-label={`Move ${dayLabel} earlier`}
+                  disabled={!canMoveLeft}
+                  onClick={() => {
+                    if (!isInteractive || !canMoveLeft) {
+                      return;
+                    }
+
+                    onMoveLeft?.();
+                  }}
+                  style={{
+                    opacity: canMoveLeft ? 1 : 0.45,
+                  }}
+                  type="button"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  aria-label={`Move ${dayLabel} later`}
+                  disabled={!canMoveRight}
+                  onClick={() => {
+                    if (!isInteractive || !canMoveRight) {
+                      return;
+                    }
+
+                    onMoveRight?.();
+                  }}
+                  style={{
+                    opacity: canMoveRight ? 1 : 0.45,
+                  }}
+                  type="button"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </>
+            )}
+            {showDelete && (
+              <button
+                aria-label={`Delete ${dayLabel}`}
+                onClick={() => {
+                  if (!isInteractive) {
+                    return;
+                  }
+
+                  onDelete?.();
+                }}
+                style={{
+                  background: "var(--danger-bg)",
+                  border: "1px solid var(--danger-border)",
+                  color: "var(--danger-text)",
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+            <button aria-label="Close workout type picker" onClick={closeWithAnimation}>
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          {WORKOUT_TYPE_OPTIONS.map((option) => {
+            const selected = option.value === currentWorkoutType;
+
+            return (
+              <button
+                key={option.value}
+                aria-pressed={selected}
+                onContextMenu={(event) => event.preventDefault()}
+                onClick={() => {
+                  if (!isInteractive) {
+                    return;
+                  }
+
+	                  onSelect(option.value);
+	                }}
+                style={{
+                  alignItems: "center",
+                  background: selected ? "var(--accent)" : "var(--surface-muted)",
+                  border: selected
+                    ? "1px solid var(--accent)"
+                    : "1px solid var(--border)",
+                  color: selected ? "#fff" : "var(--text)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  minHeight: "42px",
+                  padding: "8px 10px",
+                  textAlign: "left",
+                  WebkitTouchCallout: "none",
+                  WebkitUserSelect: "none",
+                  userSelect: "none",
+                }}
+              >
+                {option.label}
+                {selected && <span>Current</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PlansView({
   editingPlan,
   exerciseLibrary,
@@ -1830,6 +2179,9 @@ export default function PlansView({
   const [editPreviewWorkouts, setEditPreviewWorkouts] = useState(() =>
     buildEditablePlanWorkouts(editingPlan, templates)
   );
+  const [createPreviewEditMode, setCreatePreviewEditMode] = useState(false);
+  const [createPreviewEditSnapshot, setCreatePreviewEditSnapshot] =
+    useState(null);
   const [seed, setSeed] = useState(0);
   const [saveStatus, setSaveStatus] = useState("");
   const [replacementBySlot, setReplacementBySlot] = useState({});
@@ -1841,6 +2193,11 @@ export default function PlansView({
     allExercises: false,
     allWeeks: false,
   });
+  const [workoutTypeByDay, setWorkoutTypeByDay] = useState(
+    editingPlanConfig.workoutTypeByDay || {}
+  );
+  const [workoutTypePickerTarget, setWorkoutTypePickerTarget] = useState(null);
+  const [confirmDeleteDay, setConfirmDeleteDay] = useState(null);
   const [workoutNameBySlot, setWorkoutNameBySlot] = useState({});
   const [pickerTarget, setPickerTarget] = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -1852,6 +2209,8 @@ export default function PlansView({
   const [exerciseLayoutByWorkout, setExerciseLayoutByWorkout] = useState(null);
   const [supersetGroupBySlot, setSupersetGroupBySlot] = useState({});
   const [dayOrder, setDayOrder] = useState(null);
+  const planStickyHeaderRef = useRef(null);
+  const planDayStripRef = useRef(null);
   const [trainerUsers, setTrainerUsers] = useState([]);
   const [selectedTrainerUserId, setSelectedTrainerUserId] = useState("");
   const [trainerPreferences, setTrainerPreferences] = useState([]);
@@ -1870,6 +2229,9 @@ export default function PlansView({
     trainerUsers[0] ||
     null;
   const isTrainerTargetSelf = !selectedTrainerUser || selectedTrainerUser.is_self;
+  const isPlanEditMode = Boolean(editingPlan) || createPreviewEditMode;
+  const isCreateDraftEditMode =
+    !editingPlan && generationMode === "plan" && createPreviewEditMode;
 
   useEffect(() => {
     let cancelled = false;
@@ -1946,6 +2308,27 @@ export default function PlansView({
     };
   }, [selectedTrainerUserId]);
 
+  useEffect(() => {
+    if (!workoutTypePickerTarget || !planDayStripRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const stripRect = planDayStripRef.current.getBoundingClientRect();
+      const headerHeight =
+        planStickyHeaderRef.current?.getBoundingClientRect().height || 0;
+      const visibleTopOffset = headerHeight + 18;
+      const targetTop = window.scrollY + stripRect.top - visibleTopOffset;
+
+      window.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
+      });
+    }, 120);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [workoutTypePickerTarget]);
+
   const generatorExerciseLibrary = useMemo(() => {
     if (isTrainerTargetSelf) {
       return exerciseLibrary;
@@ -1998,6 +2381,7 @@ export default function PlansView({
         rir,
         seed,
         workoutType,
+        workoutTypeByDay,
       });
     },
     [
@@ -2014,6 +2398,7 @@ export default function PlansView({
       rir,
       seed,
       workoutType,
+      workoutTypeByDay,
     ]
   );
 
@@ -2212,6 +2597,8 @@ export default function PlansView({
     orderedPreviewWorkouts[0] ||
     null;
   const displayedWorkoutKey = displayedWorkout?.previewWorkoutKey ?? 0;
+  const canEditPlanDays = generationMode === "plan";
+  const canAddPlanDay = generationMode === "plan" && isPlanEditMode;
   const weeklyPrescriptionExercise = useMemo(() => {
     if (!weeklyPrescriptionTarget) {
       return null;
@@ -2243,6 +2630,96 @@ export default function PlansView({
     );
   }
 
+  function clonePlanEditWorkouts(workouts) {
+    return (workouts || []).map((workout, workoutIndex) => ({
+      ...workout,
+      dayNumber: workoutIndex + 1,
+      exercises: (workout.exercises || []).map((exercise) => ({
+        ...exercise,
+        sets: (exercise.sets || []).map((set) => ({ ...set })),
+        weeklyPrescriptions: exercise.weeklyPrescriptions
+          ? exercise.weeklyPrescriptions.map((week) => ({ ...week }))
+          : undefined,
+      })),
+      previewWorkoutKey: workoutIndex,
+    }));
+  }
+
+  function makeGeneratedWorkoutForType(workoutTypeValue, workoutIndex) {
+    const workout = generatePlanWorkouts({
+      daysPerWeek: 1,
+      durationWeeks,
+      exerciseLibrary: generatorExerciseLibrary,
+      exerciseMetadata,
+      generationMode: "workout",
+      goal,
+      history,
+      planType,
+      reps,
+      rir,
+      seed: seed + Number(workoutIndex || 0),
+      workoutType: workoutTypeValue,
+    }).workouts[0];
+
+    return {
+      ...workout,
+      dayNumber: workoutIndex + 1,
+      name:
+        planType === "type-4"
+          ? `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1} ${
+              workout.workoutTypeLabel || getWorkoutTypeLabel(workoutTypeValue)
+            }`
+          : workout.name,
+      previewWorkoutKey: workoutIndex,
+    };
+  }
+
+  function enterPlanDraftEditMode(workouts = orderedPreviewWorkouts) {
+    if (generationMode !== "plan") {
+      return;
+    }
+
+    if (!editingPlan) {
+      setCreatePreviewEditMode(true);
+      setCreatePreviewEditSnapshot((currentSnapshot) => {
+        if (currentSnapshot) {
+          return currentSnapshot;
+        }
+
+        return {
+          activeWorkoutIndex,
+          dayOrder: dayOrder ? [...dayOrder] : null,
+          editPreviewWorkouts: editPreviewWorkouts
+            ? clonePlanEditWorkouts(editPreviewWorkouts)
+            : null,
+          exerciseLayoutByWorkout: exerciseLayoutByWorkout
+            ? Object.fromEntries(
+                Object.entries(exerciseLayoutByWorkout).map(([key, value]) => [
+                  key,
+                  [...value],
+                ])
+              )
+            : null,
+          replacementBySlot: { ...replacementBySlot },
+          supersetGroupBySlot: { ...supersetGroupBySlot },
+          weeklyPrescriptionBySlot: Object.fromEntries(
+            Object.entries(weeklyPrescriptionBySlot).map(([key, weeks]) => [
+              key,
+              weeks.map((week) => ({ ...week })),
+            ])
+          ),
+          workoutNameBySlot: { ...workoutNameBySlot },
+          workoutTypeByDay: { ...workoutTypeByDay },
+          workouts: clonePlanEditWorkouts(workouts),
+        };
+      });
+    }
+
+    if (!editPreviewWorkouts) {
+      setEditPreviewWorkouts(clonePlanEditWorkouts(workouts));
+    }
+  }
+
   function updateWeeklyPrescriptionValue(
     slotKey,
     weekNumber,
@@ -2250,6 +2727,7 @@ export default function PlansView({
     value,
     scope = weeklyPrescriptionScope
   ) {
+    enterPlanDraftEditMode();
     setWeeklyPrescriptionBySlot((current) => {
       const targetWorkout = orderedPreviewWorkouts.find((workout) =>
         workout.exercises.some(
@@ -2307,18 +2785,234 @@ export default function PlansView({
 
   function resetPlanPreviewEdits() {
     setActiveWorkoutIndex(0);
+    setCreatePreviewEditMode(false);
+    setCreatePreviewEditSnapshot(null);
     setExerciseLayoutByWorkout(null);
     setReplacementBySlot({});
     setWeeklyPrescriptionBySlot({});
     setWeeklyPrescriptionTarget(null);
     setWeeklyPrescriptionPicker(null);
+    setWorkoutTypeByDay({});
+    setWorkoutTypePickerTarget(null);
     setSupersetGroupBySlot({});
     setDayOrder(null);
+  }
+
+  function addPlanDay(workoutTypeValue = "full-body") {
+    const baseWorkouts = clonePlanEditWorkouts(orderedPreviewWorkouts);
+    const nextWorkoutIndex = baseWorkouts.length;
+    const nextWorkout = makeGeneratedWorkoutForType(
+      workoutTypeValue,
+      nextWorkoutIndex
+    );
+    const nextWorkouts = [...baseWorkouts, nextWorkout].map((workout, index) => ({
+      ...workout,
+      dayNumber: index + 1,
+      previewWorkoutKey: index,
+    }));
+
+    enterPlanDraftEditMode(nextWorkouts);
+    setEditPreviewWorkouts(nextWorkouts);
+    setDaysPerWeek(String(nextWorkouts.length));
+    setDayOrder(null);
+    setWorkoutTypeByDay(
+      nextWorkouts.reduce((types, workout, index) => {
+        types[index] = workout.workoutType || "full-body";
+        return types;
+      }, {})
+    );
+    setActiveWorkoutIndex(nextWorkoutIndex);
+    setWorkoutTypePickerTarget(null);
+    setSaveStatus("");
+  }
+
+  function requestDeletePlanDay(target) {
+    if (!target || orderedPreviewWorkouts.length <= 1) {
+      setWorkoutTypePickerTarget(null);
+      setSaveStatus("A plan needs at least one day.");
+      return;
+    }
+
+    setConfirmDeleteDay(target);
+  }
+
+  function movePlanDay(target, direction) {
+    if (!target || target.isNewDay) {
+      return;
+    }
+
+    const currentIndex = orderedWorkoutKeys.indexOf(target.workoutKey);
+    const nextIndex = currentIndex + direction;
+
+    if (
+      currentIndex === -1 ||
+      nextIndex < 0 ||
+      nextIndex >= orderedWorkoutKeys.length
+    ) {
+      return;
+    }
+
+    enterPlanDraftEditMode();
+    setDayOrder(arrayMove(orderedWorkoutKeys, currentIndex, nextIndex));
+    setActiveWorkoutIndex(target.workoutKey);
+    setWorkoutTypePickerTarget({
+      ...target,
+      dayIndex: nextIndex,
+    });
+    setSaveStatus("");
+  }
+
+  function deletePlanDay(target) {
+    if (!target) {
+      return;
+    }
+
+    const nextWorkouts = clonePlanEditWorkouts(orderedPreviewWorkouts)
+      .filter((workout) => workout.previewWorkoutKey !== target.workoutKey)
+      .map((workout, index) => ({
+        ...workout,
+        dayNumber: index + 1,
+        previewWorkoutKey: index,
+      }));
+
+    if (nextWorkouts.length === 0) {
+      setConfirmDeleteDay(null);
+      setSaveStatus("A plan needs at least one day.");
+      return;
+    }
+
+    enterPlanDraftEditMode(nextWorkouts);
+    setEditPreviewWorkouts(nextWorkouts);
+    setDaysPerWeek(String(nextWorkouts.length));
+    setActiveWorkoutIndex(Math.min(target.dayIndex, nextWorkouts.length - 1));
+    setDayOrder(null);
+    setWorkoutTypeByDay(
+      nextWorkouts.reduce((types, workout, index) => {
+        types[index] = workout.workoutType || "full-body";
+        return types;
+      }, {})
+    );
+    setReplacementBySlot({});
+    setExerciseLayoutByWorkout(null);
+    setSupersetGroupBySlot({});
+    setWeeklyPrescriptionBySlot({});
+    setWorkoutTypePickerTarget(null);
+    setConfirmDeleteDay(null);
+    setSaveStatus("");
+  }
+
+  function changePlanDayWorkoutType(workoutKey, nextWorkoutType) {
+    const currentWorkout = orderedPreviewWorkouts.find(
+      (workout) => workout.previewWorkoutKey === workoutKey
+    );
+    const currentWorkoutType = currentWorkout?.workoutType || "full-body";
+
+    if (!currentWorkout || currentWorkoutType === nextWorkoutType) {
+      setWorkoutTypePickerTarget(null);
+      return;
+    }
+
+    const baseWorkouts = clonePlanEditWorkouts(orderedPreviewWorkouts);
+    const nextWorkouts = baseWorkouts.map((workout, index) => {
+      if (workout.previewWorkoutKey !== workoutKey) {
+        return workout;
+      }
+
+      return {
+        ...makeGeneratedWorkoutForType(nextWorkoutType, index),
+        dayNumber: workout.dayNumber || index + 1,
+        id: workout.id,
+        name: workoutNameBySlot[index] || workout.name,
+        planId: workout.planId,
+        planWorkoutId: workout.planWorkoutId,
+        previewWorkoutKey: index,
+      };
+    });
+
+    enterPlanDraftEditMode(nextWorkouts);
+    setEditPreviewWorkouts(nextWorkouts);
+    setWorkoutTypeByDay(
+      nextWorkouts.reduce((types, workout, index) => {
+        types[index] = workout.workoutType || "full-body";
+        return types;
+      }, {})
+    );
+
+    setWorkoutNameBySlot((current) => {
+      if (Object.prototype.hasOwnProperty.call(current, workoutKey)) {
+        return current;
+      }
+
+      return current;
+    });
+    setReplacementBySlot({});
+    setExerciseLayoutByWorkout(null);
+    setSupersetGroupBySlot({});
+    setWeeklyPrescriptionBySlot({});
+    setWorkoutTypePickerTarget(null);
+    setSaveStatus("");
   }
 
   function regeneratePlanPreview() {
     setEditPreviewWorkouts(null);
     resetPlanPreviewEdits();
+  }
+
+  function preservePlanDraftEditMode() {
+    if (generationMode === "plan" && isPlanEditMode) {
+      enterPlanDraftEditMode();
+      return true;
+    }
+
+    return false;
+  }
+
+  function cancelCreateDraftEditMode() {
+    if (!createPreviewEditSnapshot) {
+      regeneratePlanPreview();
+      setWorkoutNameBySlot({});
+      setSaveStatus("Plan edits canceled.");
+      return;
+    }
+
+    setActiveWorkoutIndex(createPreviewEditSnapshot.activeWorkoutIndex || 0);
+    setCreatePreviewEditMode(false);
+    setCreatePreviewEditSnapshot(null);
+    setDayOrder(
+      createPreviewEditSnapshot.dayOrder
+        ? [...createPreviewEditSnapshot.dayOrder]
+        : null
+    );
+    setEditPreviewWorkouts(
+      createPreviewEditSnapshot.editPreviewWorkouts
+        ? clonePlanEditWorkouts(createPreviewEditSnapshot.editPreviewWorkouts)
+        : null
+    );
+    setExerciseLayoutByWorkout(
+      createPreviewEditSnapshot.exerciseLayoutByWorkout
+        ? Object.fromEntries(
+            Object.entries(createPreviewEditSnapshot.exerciseLayoutByWorkout).map(
+              ([key, value]) => [key, [...value]]
+            )
+          )
+        : null
+    );
+    setReplacementBySlot({ ...createPreviewEditSnapshot.replacementBySlot });
+    setSupersetGroupBySlot({ ...createPreviewEditSnapshot.supersetGroupBySlot });
+    setWeeklyPrescriptionBySlot(
+      Object.fromEntries(
+        Object.entries(createPreviewEditSnapshot.weeklyPrescriptionBySlot).map(
+          ([key, weeks]) => [key, weeks.map((week) => ({ ...week }))]
+        )
+      )
+    );
+    setWorkoutNameBySlot({ ...createPreviewEditSnapshot.workoutNameBySlot });
+    setWorkoutTypeByDay({ ...createPreviewEditSnapshot.workoutTypeByDay });
+    setWorkoutTypePickerTarget(null);
+    setConfirmDeleteDay(null);
+    setWeeklyPrescriptionTarget(null);
+    setWeeklyPrescriptionPicker(null);
+    setSaveStatus("Plan edits canceled.");
   }
 
   async function saveGeneratedPlan({ saveAs = false } = {}) {
@@ -2330,7 +3024,15 @@ export default function PlansView({
     const workouts = orderedPreviewWorkouts.map((workout, workoutIndex) => {
       const savedWorkout = { ...workout };
       const existingPlanWorkout = isEditingExistingPlan
-        ? existingPlanWorkouts[workoutIndex]
+        ? existingPlanWorkouts.find(
+            (item) =>
+              workout.planWorkoutId &&
+              String(item.planWorkoutId) === String(workout.planWorkoutId)
+          ) ||
+          existingPlanWorkouts.find(
+            (item) => workout.id && String(item.templateId) === String(workout.id)
+          ) ||
+          existingPlanWorkouts[workoutIndex]
         : null;
       const existingTemplate = existingPlanWorkout
         ? templates.find(
@@ -2446,12 +3148,21 @@ export default function PlansView({
         reps,
         rir,
         rirPeriodization,
+        workoutTypeByDay:
+          planType === "type-4"
+            ? orderedPreviewWorkouts.reduce((types, workout, workoutIndex) => {
+                types[workoutIndex] = workout.workoutType || "full-body";
+                return types;
+              }, {})
+            : {},
       },
       workouts: workouts.map((workout) => ({
         dayNumber: workout.dayNumber,
         name: workout.name,
         planWorkoutId: workout.planWorkoutId,
         templateId: workout.id,
+        workoutType: workout.workoutType || null,
+        workoutTypeLabel: workout.workoutTypeLabel || null,
       })),
     };
 
@@ -2544,7 +3255,7 @@ export default function PlansView({
         </h1>
       </div>
 
-      {!editingPlan && trainerUsers.length > 1 && (
+      {!isPlanEditMode && trainerUsers.length > 1 && (
         <label
           style={{
             display: "grid",
@@ -2559,6 +3270,7 @@ export default function PlansView({
               setSelectedTrainerUserId(event.target.value);
               regeneratePlanPreview();
               setWorkoutNameBySlot({});
+              setWorkoutTypeByDay({});
               setSaveStatus("");
             }}
             style={{
@@ -2597,6 +3309,7 @@ export default function PlansView({
       )}
 
       <div
+        ref={planStickyHeaderRef}
         style={{
           background: "color-mix(in srgb, var(--surface) 96%, transparent)",
           borderBottom: "1px solid var(--border)",
@@ -2659,46 +3372,22 @@ export default function PlansView({
             gap: "8px",
           }}
         >
-          {!editingPlan && (
-            <button
-              onClick={() => {
-                setSeed((value) => value + 1);
-                regeneratePlanPreview();
-                setSaveStatus("");
-              }}
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "6px",
-                minHeight: "40px",
-                padding: "6px 10px",
-              }}
-            >
-              <RefreshCw size={16} />
-              Regenerate
-            </button>
-          )}
-
-          <button
-            onClick={() => saveGeneratedPlan()}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-              minHeight: "40px",
-              padding: "6px 10px",
-            }}
-          >
-            <Save size={16} />
-            {editingPlan
-              ? "Update Plan"
-              : generationMode === "workout"
-                ? "Save Workout"
-                : "Save Plan"}
-          </button>
-
-          {editingPlan && (
+          {editingPlan ? (
             <>
+              <button
+                onClick={() => saveGeneratedPlan()}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Save size={16} />
+                Update Plan
+              </button>
+
               <button
                 onClick={() => saveGeneratedPlan({ saveAs: true })}
                 style={{
@@ -2727,6 +3416,70 @@ export default function PlansView({
                 Cancel
               </button>
             </>
+          ) : isCreateDraftEditMode ? (
+            <>
+              <button
+                onClick={() => saveGeneratedPlan()}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Save size={16} />
+                Save Plan
+              </button>
+
+              <button
+                onClick={cancelCreateDraftEditMode}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <X size={16} />
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setSeed((value) => value + 1);
+                  regeneratePlanPreview();
+                  setSaveStatus("");
+                }}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <RefreshCw size={16} />
+                Regenerate
+              </button>
+
+              <button
+                onClick={() => saveGeneratedPlan()}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Save size={16} />
+                {generationMode === "workout" ? "Save Workout" : "Save Plan"}
+              </button>
+            </>
           )}
         </div>
 
@@ -2751,7 +3504,7 @@ export default function PlansView({
           marginBottom: "16px",
         }}
       >
-        {!editingPlan && (
+        {!isPlanEditMode && (
           <label
             style={{
               display: "grid",
@@ -2759,14 +3512,15 @@ export default function PlansView({
             }}
           >
             Create
-            <select
-              value={generationMode}
-              onChange={(event) => {
+              <select
+                value={generationMode}
+                onChange={(event) => {
                 const nextMode = event.target.value;
 
                 setGenerationMode(nextMode);
                 regeneratePlanPreview();
                 setWorkoutNameBySlot({});
+                setWorkoutTypeByDay({});
                 setSaveStatus("");
               }}
               style={{
@@ -2783,7 +3537,7 @@ export default function PlansView({
           </label>
         )}
 
-        {generationMode === "plan" && !editingPlan && (
+        {generationMode === "plan" && !isPlanEditMode && (
           <label
             style={{
               display: "grid",
@@ -2819,6 +3573,7 @@ export default function PlansView({
                 }
                 regeneratePlanPreview();
                 setWorkoutNameBySlot({});
+                setWorkoutTypeByDay({});
                 setSaveStatus("");
               }}
               style={{
@@ -2832,6 +3587,7 @@ export default function PlansView({
               <option value="type-1">{getPlanTypeLabel("type-1")}</option>
               <option value="type-2">{getPlanTypeLabel("type-2")}</option>
               <option value="type-3">{getPlanTypeLabel("type-3")}</option>
+              <option value="type-4">{getPlanTypeLabel("type-4")}</option>
             </select>
           </label>
         )}
@@ -2853,6 +3609,7 @@ export default function PlansView({
                 setWorkoutName(getDefaultWorkoutName(nextWorkoutType));
                 regeneratePlanPreview();
                 setWorkoutNameBySlot({});
+                setWorkoutTypeByDay({});
                 setSaveStatus("");
               }}
               style={{
@@ -2903,11 +3660,13 @@ export default function PlansView({
 
         {generationMode === "plan" && (
           <>
-            <PlanPickerButton
-              label="Days per week"
-              value={`${daysPerWeek} ${daysPerWeek === "1" ? "day" : "days"}`}
-              onClick={() => setActiveValuePicker("days")}
-            />
+            {!isPlanEditMode && (
+              <PlanPickerButton
+                label="Days per week"
+                value={`${daysPerWeek} ${daysPerWeek === "1" ? "day" : "days"}`}
+                onClick={() => setActiveValuePicker("days")}
+              />
+            )}
 
             <div
               style={{
@@ -2956,7 +3715,7 @@ export default function PlansView({
             display: "grid",
             gap: "8px",
             gridTemplateColumns:
-              generationMode === "plan" && !editingPlan ? "1fr auto" : "1fr",
+              generationMode === "plan" ? "1fr auto" : "1fr",
           }}
         >
           <PlanPickerButton
@@ -2965,7 +3724,7 @@ export default function PlansView({
             onClick={() => setActiveValuePicker("rir")}
           />
 
-          {generationMode === "plan" && !editingPlan && (
+          {generationMode === "plan" && (
             <label
               style={{
                 display: "grid",
@@ -2977,6 +3736,7 @@ export default function PlansView({
               <RirPeriodizationButton
                 mode={rirPeriodization}
                 onChange={(nextMode) => {
+                  preservePlanDraftEditMode();
                   setRirPeriodization(nextMode);
                   setSaveStatus("");
                 }}
@@ -3025,6 +3785,7 @@ export default function PlansView({
             const newIndex = orderedWorkoutKeys.indexOf(overWorkoutKey);
 
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+              enterPlanDraftEditMode();
               setDayOrder(arrayMove(orderedWorkoutKeys, oldIndex, newIndex));
               setSaveStatus("");
             }
@@ -3032,6 +3793,7 @@ export default function PlansView({
             return;
           }
 
+          enterPlanDraftEditMode();
           setExerciseLayoutByWorkout((currentLayout) =>
             moveSlotInLayout(
               currentLayout || normalizedExerciseLayout,
@@ -3048,6 +3810,7 @@ export default function PlansView({
       >
         <div
           aria-label={generationMode === "workout" ? "Workout" : "Plan days"}
+          ref={planDayStripRef}
           style={{
             display: "flex",
             gap: "6px",
@@ -3072,6 +3835,24 @@ export default function PlansView({
                     ? "Workout"
                     : `Day ${dayIndex + 1}`
                 }
+                onLongPress={
+                  canEditPlanDays
+                    ? () => {
+                        setActiveWorkoutIndex(workout.previewWorkoutKey);
+                        setWorkoutTypePickerTarget({
+                          dayIndex,
+                          workoutKey: workout.previewWorkoutKey,
+                        });
+                      }
+                    : null
+                }
+                sortable={!canEditPlanDays}
+                sublabel={
+                  canEditPlanDays
+                    ? workout.workoutTypeLabel ||
+                      getWorkoutTypeLabel(workout.workoutType || "full-body")
+                    : null
+                }
                 workoutKey={workout.previewWorkoutKey}
                 onClick={() => {
                   setActiveWorkoutIndex(workout.previewWorkoutKey);
@@ -3080,6 +3861,30 @@ export default function PlansView({
               />
             ))}
           </SortableContext>
+          {canAddPlanDay && (
+            <button
+              aria-label="Add plan day"
+              onClick={() =>
+                setWorkoutTypePickerTarget({
+                  dayIndex: orderedPreviewWorkouts.length,
+                  isNewDay: true,
+                  workoutKey: orderedPreviewWorkouts.length,
+                })
+              }
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                flex: "0 0 42px",
+                fontSize: "22px",
+                justifyContent: "center",
+                minHeight: "38px",
+                padding: "6px 8px",
+              }}
+              type="button"
+            >
+              +
+            </button>
+          )}
         </div>
 
         <SortableContext
@@ -3102,6 +3907,7 @@ export default function PlansView({
                   return;
                 }
 
+                enterPlanDraftEditMode();
                 setSupersetGroupBySlot((currentGroups) => ({
                   ...currentGroups,
                   [exercise.previewSlotKey]: group.trim() || null,
@@ -3109,6 +3915,7 @@ export default function PlansView({
                 setSaveStatus("");
               }}
               onRenameWorkout={(renamedWorkout, name) => {
+                enterPlanDraftEditMode();
                 setWorkoutNameBySlot({
                   ...workoutNameBySlot,
                   [renamedWorkout.previewWorkoutKey]: name,
@@ -3135,6 +3942,120 @@ export default function PlansView({
         </SortableContext>
       </DndContext>
 
+      {workoutTypePickerTarget && (
+        <WorkoutTypePickerSheet
+          canMoveLeft={
+            !workoutTypePickerTarget.isNewDay &&
+            orderedWorkoutKeys.indexOf(workoutTypePickerTarget.workoutKey) > 0
+          }
+          canMoveRight={
+            !workoutTypePickerTarget.isNewDay &&
+            orderedWorkoutKeys.indexOf(workoutTypePickerTarget.workoutKey) !== -1 &&
+            orderedWorkoutKeys.indexOf(workoutTypePickerTarget.workoutKey) <
+              orderedWorkoutKeys.length - 1
+          }
+          currentWorkoutType={
+            workoutTypePickerTarget.isNewDay
+              ? "full-body"
+              : orderedPreviewWorkouts.find(
+                  (workout) =>
+                    workout.previewWorkoutKey === workoutTypePickerTarget.workoutKey
+                )?.workoutType || "full-body"
+          }
+          dayLabel={`Day ${workoutTypePickerTarget.dayIndex + 1}`}
+          onClose={() => setWorkoutTypePickerTarget(null)}
+          onDelete={() => requestDeletePlanDay(workoutTypePickerTarget)}
+          onMoveLeft={() => movePlanDay(workoutTypePickerTarget, -1)}
+          onMoveRight={() => movePlanDay(workoutTypePickerTarget, 1)}
+          onSelect={(nextWorkoutType) => {
+            if (workoutTypePickerTarget.isNewDay) {
+              addPlanDay(nextWorkoutType);
+              return;
+            }
+
+            changePlanDayWorkoutType(
+              workoutTypePickerTarget.workoutKey,
+              nextWorkoutType
+            );
+          }}
+          showDelete={!workoutTypePickerTarget.isNewDay}
+          showMove={!workoutTypePickerTarget.isNewDay}
+        />
+      )}
+
+      {confirmDeleteDay && (
+        <div
+          role="presentation"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.52)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 2400,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Delete Day ${confirmDeleteDay.dayIndex + 1}`}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--danger-border)",
+              borderRadius: "10px",
+              boxShadow: "0 18px 42px rgba(0,0,0,.32)",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "360px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                color: "var(--danger-text)",
+                margin: 0,
+              }}
+            >
+              Delete Day {confirmDeleteDay.dayIndex + 1}?
+            </h3>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                margin: 0,
+              }}
+            >
+              This removes the day and all exercises in it from the plan.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <button onClick={() => setConfirmDeleteDay(null)} type="button">
+                Cancel
+              </button>
+              <button
+                onClick={() => deletePlanDay(confirmDeleteDay)}
+                style={{
+                  background: "var(--danger-bg)",
+                  border: "1px solid var(--danger-border)",
+                  color: "var(--danger-text)",
+                }}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pickerTarget && (
         <ExercisePickerSheet
           title={`Replace ${getEffectivePrimaryMuscle(pickerTarget) || "exercise"}`}
@@ -3146,6 +4067,7 @@ export default function PlansView({
           setSelectedMuscle={setPickerMuscle}
           onClose={() => setPickerTarget(null)}
           onSelect={(exercise) => {
+            enterPlanDraftEditMode();
             setReplacementBySlot({
               ...replacementBySlot,
               [pickerTarget.previewSlotKey]: exercise,
@@ -3238,8 +4160,11 @@ export default function PlansView({
               getDefaultPlanName(planType, nextDaysPerWeek, durationWeeks)
             );
           }
-          regeneratePlanPreview();
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
           setWorkoutNameBySlot({});
+          setWorkoutTypeByDay({});
           setSaveStatus("");
         }}
       />
@@ -3259,7 +4184,9 @@ export default function PlansView({
               getDefaultPlanName(planType, daysPerWeek, nextDurationWeeks)
             );
           }
-          regeneratePlanPreview();
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
           setWorkoutNameBySlot({});
           setSaveStatus("");
         }}
@@ -3274,7 +4201,9 @@ export default function PlansView({
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => {
           setReps(String(value));
-          regeneratePlanPreview();
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
           setSaveStatus("");
         }}
       />
@@ -3287,7 +4216,9 @@ export default function PlansView({
         values={[0, 1, 2, 3, 4, 5, 6]}
         onSelect={(value) => {
           setRir(String(value));
-          regeneratePlanPreview();
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
           setSaveStatus("");
         }}
       />

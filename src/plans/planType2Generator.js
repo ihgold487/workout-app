@@ -17,6 +17,9 @@ const PLAN_CONFIGS = {
   "type-3": {
     label: "Plan Type 3 'Ira'",
   },
+  "type-4": {
+    label: "Plan Type 4 'General'",
+  },
 };
 
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
@@ -267,6 +270,8 @@ function buildType1Workout(workoutIndex, usage, seed) {
       createGroup("B", [secondLeg, secondUpper], 2),
       createGroup("C", armPair, 2),
     ],
+    workoutType: "type-1",
+    workoutTypeLabel: WORKOUT_TYPE_CONFIGS["type-1"].label,
   };
 }
 
@@ -319,6 +324,8 @@ function buildType2Workout(workoutIndex, usage, seed) {
       createGroup("D", armPair, 2),
       createGroup("Abs", ["Abs"], 3, null),
     ],
+    workoutType: "type-2",
+    workoutTypeLabel: WORKOUT_TYPE_CONFIGS["type-2"].label,
   };
 }
 
@@ -360,11 +367,12 @@ function buildNamedWorkout(workoutType) {
   return {
     name: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
     groups: workoutGroupsByType[workoutType] || workoutGroupsByType["full-body"],
+    workoutType,
     workoutTypeLabel: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
   };
 }
 
-function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
+function buildWorkoutDefinitions({ daysPerWeek, planType, seed, workoutTypeByDay }) {
   const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
 
   if (planType === "type-3") {
@@ -372,6 +380,12 @@ function buildWorkoutDefinitions({ daysPerWeek, planType, seed }) {
       buildNamedWorkout(
         TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length]
       )
+    );
+  }
+
+  if (planType === "type-4") {
+    return Array.from({ length: workoutCount }, (_, workoutIndex) =>
+      buildNamedWorkout(workoutTypeByDay?.[workoutIndex] || "full-body")
     );
   }
 
@@ -583,6 +597,7 @@ export function generatePlanWorkouts({
   rir,
   seed = 0,
   workoutType,
+  workoutTypeByDay,
 }) {
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
   const resolvedPlanType = PLAN_CONFIGS[planType] ? planType : "type-2";
@@ -601,6 +616,7 @@ export function generatePlanWorkouts({
         daysPerWeek,
         planType: resolvedPlanType,
         seed,
+        workoutTypeByDay,
       });
   const workoutCount = workoutDefinitions.length;
   const activeExerciseLibrary = exerciseLibrary.filter(isExerciseActive);
@@ -656,7 +672,9 @@ export function generatePlanWorkouts({
         : `${config.label} - ${workout.name}`,
       planType,
       workoutTypeLabel: workout.workoutTypeLabel || null,
-      workoutType: isWorkoutMode ? workoutType : null,
+      workoutType: isWorkoutMode
+        ? workoutType
+        : workout.workoutType || workoutTypeByDay?.[workoutIndex] || null,
     };
   });
 
