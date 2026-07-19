@@ -992,6 +992,13 @@ export default function App() {
     authSession?.user?.id &&
       (isIraSettingsUser || approvalStatus?.status === "approved")
   );
+  const pendingApprovalCount = isIraSettingsUser
+    ? approvalAdminRows.filter((row) => row.status === "pending").length
+    : 0;
+  const pendingApprovalMessage =
+    pendingApprovalCount === 1
+      ? "1 pending approval"
+      : `${pendingApprovalCount} pending approvals`;
 
   useEffect(() => {
     let cancelled = false;
@@ -1117,24 +1124,32 @@ export default function App() {
     };
   }, [authSession?.user?.id, authSession?.user?.email]);
 
-  async function loadApprovalAdminRows() {
+  async function loadApprovalAdminRows({ updateStatus = true } = {}) {
     if (!authSession?.user?.id || !isIraSettingsUser) {
       setApprovalAdminRows([]);
       return;
     }
 
     setApprovalAdminLoading(true);
-    setApprovalAdminStatus("Loading approvals...");
+    if (updateStatus) {
+      setApprovalAdminStatus("Loading approvals...");
+    }
 
     try {
       const rows = await listAppUserApprovals();
       setApprovalAdminRows(rows);
-      setApprovalAdminStatus(
-        rows.length > 0 ? `${rows.length} account approvals loaded.` : "No accounts found."
-      );
+      if (updateStatus) {
+        setApprovalAdminStatus(
+          rows.length > 0
+            ? `${rows.length} account approvals loaded.`
+            : "No accounts found."
+        );
+      }
     } catch (error) {
       console.error("Failed to load approval admin rows:", error);
-      setApprovalAdminStatus(`Approval list failed: ${error.message}`);
+      if (updateStatus) {
+        setApprovalAdminStatus(`Approval list failed: ${error.message}`);
+      }
     } finally {
       setApprovalAdminLoading(false);
     }
@@ -1159,37 +1174,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!showSettings || !isIraSettingsUser) {
-      return undefined;
+    if (!authSession?.user?.id || !isIraSettingsUser) {
+      setApprovalAdminRows([]);
+      return;
     }
 
-    const timeoutId = window.setTimeout(async () => {
-      if (!authSession?.user?.id) {
-        setApprovalAdminRows([]);
-        return;
-      }
-
-      setApprovalAdminLoading(true);
-      setApprovalAdminStatus("Loading approvals...");
-
-      try {
-        const rows = await listAppUserApprovals();
-        setApprovalAdminRows(rows);
-        setApprovalAdminStatus(
-          rows.length > 0 ? `${rows.length} account approvals loaded.` : "No accounts found."
-        );
-      } catch (error) {
-        console.error("Failed to load approval admin rows:", error);
-        setApprovalAdminStatus(`Approval list failed: ${error.message}`);
-      } finally {
-        setApprovalAdminLoading(false);
-      }
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [showSettings, isIraSettingsUser, authSession?.user?.id]);
+    loadApprovalAdminRows({ updateStatus: showSettings });
+  }, [authSession?.user?.id, isIraSettingsUser, showSettings]);
 
   useEffect(() => {
     const userId = authSession?.user?.id || null;
@@ -3340,36 +3331,75 @@ export default function App() {
 
   function renderAuthSyncIndicator() {
     const signedIn = Boolean(authSession?.user?.id);
+    const hasPendingApprovals = signedIn && pendingApprovalCount > 0;
 
     return (
       <div
-        aria-label={signedIn ? "Signed in; sync is on" : "Signed out; local only"}
         style={{
           alignItems: "center",
-          background: signedIn ? "#e8f5e9" : "#fff8e1",
-          border: `1px solid ${signedIn ? "#a5d6a7" : "#ffe082"}`,
-          borderRadius: "999px",
-          color: signedIn ? "#1b5e20" : "#7a4f01",
           display: "inline-flex",
-          fontSize: "12px",
           gap: "6px",
           justifySelf: "center",
-          lineHeight: 1.2,
           margin: "-6px 0 14px",
           maxWidth: "100%",
-          padding: "5px 10px",
         }}
       >
         <span
-          aria-hidden="true"
+          aria-label={
+            signedIn ? "Signed in; sync is on" : "Signed out; local only"
+          }
           style={{
-            background: signedIn ? "#2e7d32" : "#f9a825",
+            alignItems: "center",
+            background: signedIn ? "#e8f5e9" : "#fff8e1",
+            border: `1px solid ${signedIn ? "#a5d6a7" : "#ffe082"}`,
             borderRadius: "999px",
-            height: "8px",
-            width: "8px",
+            color: signedIn ? "#1b5e20" : "#7a4f01",
+            display: "inline-flex",
+            fontSize: "12px",
+            gap: "6px",
+            lineHeight: 1.2,
+            padding: "5px 10px",
           }}
-        />
-        {signedIn ? "Signed in - sync on" : "Signed out - local only"}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              background: signedIn ? "#2e7d32" : "#f9a825",
+              borderRadius: "999px",
+              height: "8px",
+              width: "8px",
+            }}
+          />
+          {signedIn ? "Signed in - sync on" : "Signed out - local only"}
+        </span>
+        {hasPendingApprovals && (
+          <span
+            aria-label={pendingApprovalMessage}
+            style={{
+              alignItems: "center",
+              background: "#ffebee",
+              border: "1px solid #ef9a9a",
+              borderRadius: "999px",
+              color: "#b71c1c",
+              display: "inline-flex",
+              fontSize: "12px",
+              gap: "6px",
+              lineHeight: 1.2,
+              padding: "5px 10px",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                background: "#c62828",
+                borderRadius: "999px",
+                height: "8px",
+                width: "8px",
+              }}
+            />
+            <span>{pendingApprovalMessage}</span>
+          </span>
+        )}
       </div>
     );
   }

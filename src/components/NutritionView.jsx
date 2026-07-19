@@ -7461,36 +7461,35 @@ export default function NutritionView({ session = null }) {
 		                          }}
 		                          tabIndex={0}
 		                        >
-	                          <div
-	                            style={{
-	                              minWidth: 0,
-	                            }}
-	                          >
-	                            <strong
-	                              style={{
-	                                display: "block",
-	                                overflow: "hidden",
-	                                textOverflow: "ellipsis",
-	                                whiteSpace: "nowrap",
-	                              }}
-	                            >
-	                              {entry.name}
-	                            </strong>
-	                            <span
-	                              style={{
-	                                color: "var(--text-muted)",
-	                                fontSize: "12px",
-	                              }}
-	                            >
-	                              {formatMacro(entry.calories, "cal")} cal ·{" "}
-	                              {formatMacro(entry.protein)} protein ·{" "}
-	                              {formatMacro(entry.carbs)} carbs ·{" "}
-	                              {formatMacro(entry.fat)} fat
-	                              {entry.servingDescription
-	                                ? ` · ${entry.servingDescription}`
-	                                : ""}
-		                            </span>
-		                          </div>
+		                          <strong
+		                            style={{
+		                              display: "block",
+		                              gridColumn: "1 / -1",
+		                              overflow: "hidden",
+		                              textOverflow: "ellipsis",
+		                              whiteSpace: "nowrap",
+		                            }}
+		                          >
+		                            {entry.name}
+		                          </strong>
+		                          <span
+		                            style={{
+		                              color: "var(--text-muted)",
+		                              fontSize: "12px",
+		                              minWidth: 0,
+		                              overflow: "hidden",
+		                              textOverflow: "ellipsis",
+		                              whiteSpace: "nowrap",
+		                            }}
+		                          >
+		                            {formatMacro(entry.calories, "cal")} cal ·{" "}
+		                            {formatMacro(entry.protein)} protein ·{" "}
+		                            {formatMacro(entry.carbs)} carbs ·{" "}
+		                            {formatMacro(entry.fat)} fat
+		                            {entry.servingDescription
+		                              ? ` · ${entry.servingDescription}`
+		                              : ""}
+		                          </span>
 
 		                          <MealSelect
 		                            ariaLabel={`Move ${entry.name} to meal`}
