@@ -1,5 +1,7 @@
 import { ImagePlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const LOAD_ROOT_MARGIN = "240px";
 
 export default function ExerciseThumbnail({
   active = false,
@@ -7,9 +9,11 @@ export default function ExerciseThumbnail({
   imageUrl,
   size = 56,
 }) {
+  const containerRef = useRef(null);
   const activeBackground =
     "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))";
 
+  const [shouldLoad, setShouldLoad] = useState(false);
   const [poster, setPoster] = useState({
     failed: false,
     imageUrl: "",
@@ -20,9 +24,42 @@ export default function ExerciseThumbnail({
   const displayUrl = posterUrl || (posterFailed ? imageUrl : "");
 
   useEffect(() => {
-    let cancelled = false;
+    setShouldLoad(false);
 
     if (!imageUrl) {
+      return undefined;
+    }
+
+    const element = containerRef.current;
+
+    if (!element || !("IntersectionObserver" in window)) {
+      setShouldLoad(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: LOAD_ROOT_MARGIN,
+      }
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [imageUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!imageUrl || !shouldLoad) {
       return undefined;
     }
 
@@ -67,10 +104,11 @@ export default function ExerciseThumbnail({
     return () => {
       cancelled = true;
     };
-  }, [imageUrl]);
+  }, [imageUrl, shouldLoad]);
 
   return (
     <span
+      ref={containerRef}
       onContextMenu={(event) => event.preventDefault()}
       style={{
         alignItems: "center",
@@ -113,6 +151,7 @@ export default function ExerciseThumbnail({
         <img
           alt={alt}
           draggable={false}
+          loading="lazy"
           onContextMenu={(event) => event.preventDefault()}
           src={displayUrl}
           style={{

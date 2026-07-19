@@ -3531,7 +3531,11 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                signInWithEmailPassword();
+              }}
               style={{
                 alignItems: "center",
                 display: "grid",
@@ -3541,6 +3545,11 @@ export default function App() {
             >
               {/* Keep access control server-side; frontend allowlists are not security. */}
               <input
+                autoCapitalize="none"
+                autoComplete="username"
+                id="auth-email"
+                inputMode="email"
+                name="username"
                 type="email"
                 value={authEmail}
                 onChange={(event) => setAuthEmail(event.target.value)}
@@ -3552,6 +3561,9 @@ export default function App() {
                 }}
               />
               <input
+                autoComplete="current-password"
+                id="auth-password"
+                name="password"
                 type="password"
                 value={authPassword}
                 onChange={(event) => setAuthPassword(event.target.value)}
@@ -3563,7 +3575,7 @@ export default function App() {
               />
               <button
                 disabled={!isSupabaseConfigured || authLoading}
-                onClick={signInWithEmailPassword}
+                type="submit"
               >
                 Sign In
               </button>
@@ -3573,6 +3585,7 @@ export default function App() {
                 style={{
                   gridColumn: "1 / -1",
                 }}
+                type="button"
               >
                 Create Account
               </button>
@@ -3588,7 +3601,7 @@ export default function App() {
                   width: "58%",
                 }}
               />
-            </div>
+            </form>
           )}
           <div
             role="status"

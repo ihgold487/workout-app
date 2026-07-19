@@ -53,9 +53,24 @@ export default defineConfig({
       },
 
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,json,webp,gif,jpg,jpeg}"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,json}"],
 
         cleanupOutdatedCaches: true,
+
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.pathname.includes("/workout-app/exercise-media/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "exercise-media-runtime",
+              expiration: {
+                maxEntries: 75,
+                maxAgeSeconds: 60 * 24 * 60 * 60,
+              },
+            },
+          },
+        ],
 
         clientsClaim: false,
 
