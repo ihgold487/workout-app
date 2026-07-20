@@ -329,38 +329,39 @@ function buildType2Workout(workoutIndex, usage, seed) {
   };
 }
 
-function buildNamedWorkout(workoutType) {
+function buildNamedWorkout(workoutType, setCount = 3) {
+  const sets = Math.max(1, Number(setCount) || 3);
   const workoutGroupsByType = {
     push: [
-      createGroup("Chest", ["Upper Chest", "Chest", "Chest"], 3, null),
-      createGroup("Shoulders", ["Side Delts", "Rear Delts"], 3, null),
-      createGroup("Triceps", ["Triceps", "Triceps"], 3, null),
-      createGroup("Abs", ["Abs"], 3, null),
+      createGroup("Chest", ["Upper Chest", "Chest", "Chest"], sets, null),
+      createGroup("Shoulders", ["Side Delts", "Rear Delts"], sets, null),
+      createGroup("Triceps", ["Triceps", "Triceps"], sets, null),
+      createGroup("Abs", ["Abs"], sets, null),
     ],
     pull: [
-      createGroup("Back", ["Lats", "Upper Back", "Lats"], 3, null),
-      createGroup("Delts", ["Rear Delts", "Side Delts"], 3, null),
-      createGroup("Traps", ["Traps"], 3, null),
-      createGroup("Biceps", ["Biceps", "Biceps"], 3, null),
+      createGroup("Back", ["Lats", "Upper Back", "Lats"], sets, null),
+      createGroup("Delts", ["Rear Delts", "Side Delts"], sets, null),
+      createGroup("Traps", ["Traps"], sets, null),
+      createGroup("Biceps", ["Biceps", "Biceps"], sets, null),
     ],
     upper: [
-      createGroup("Chest", ["Upper Chest", "Chest"], 3, null),
-      createGroup("Back", ["Lats", "Upper Back"], 3, null),
-      createGroup("Shoulders", ["Side Delts"], 3, null),
-      createGroup("Arms", ["Triceps", "Biceps"], 3, null),
+      createGroup("Chest", ["Upper Chest", "Chest"], sets, null),
+      createGroup("Back", ["Lats", "Upper Back"], sets, null),
+      createGroup("Shoulders", ["Side Delts"], sets, null),
+      createGroup("Arms", ["Triceps", "Biceps"], sets, null),
     ],
     lower: [
-      createGroup("Legs", ["Glutes", "Quads", "Hamstrings"], 3, null),
-      createGroup("Calves", ["Calves"], 3, null),
-      createGroup("Core", ["Abs", "Obliques"], 3, null),
+      createGroup("Legs", ["Glutes", "Quads", "Hamstrings"], sets, null),
+      createGroup("Calves", ["Calves"], sets, null),
+      createGroup("Core", ["Abs", "Obliques"], sets, null),
     ],
     "full-body": [
-      createGroup("Lower", ["Glutes", "Quads"], 3, null),
-      createGroup("Chest", ["Chest"], 3, null),
-      createGroup("Back", ["Lats", "Upper Back"], 3, null),
-      createGroup("Shoulders", ["Side Delts"], 3, null),
-      createGroup("Arms", ["Triceps", "Biceps"], 3, null),
-      createGroup("Abs", ["Abs"], 3, null),
+      createGroup("Lower", ["Glutes", "Quads"], sets, null),
+      createGroup("Chest", ["Chest"], sets, null),
+      createGroup("Back", ["Lats", "Upper Back"], sets, null),
+      createGroup("Shoulders", ["Side Delts"], sets, null),
+      createGroup("Arms", ["Triceps", "Biceps"], sets, null),
+      createGroup("Abs", ["Abs"], sets, null),
     ],
   };
 
@@ -372,20 +373,27 @@ function buildNamedWorkout(workoutType) {
   };
 }
 
-function buildWorkoutDefinitions({ daysPerWeek, planType, seed, workoutTypeByDay }) {
+function buildWorkoutDefinitions({
+  daysPerWeek,
+  planType,
+  seed,
+  setCount,
+  workoutTypeByDay,
+}) {
   const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
 
   if (planType === "type-3") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>
       buildNamedWorkout(
-        TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length]
+        TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length],
+        setCount
       )
     );
   }
 
   if (planType === "type-4") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>
-      buildNamedWorkout(workoutTypeByDay?.[workoutIndex] || "full-body")
+      buildNamedWorkout(workoutTypeByDay?.[workoutIndex] || "full-body", setCount)
     );
   }
 
@@ -399,7 +407,7 @@ function buildWorkoutDefinitions({ daysPerWeek, planType, seed, workoutTypeByDay
   );
 }
 
-function buildSingleWorkoutDefinition({ planType, seed, workoutType }) {
+function buildSingleWorkoutDefinition({ planType, seed, setCount, workoutType }) {
   if (workoutType === "type-1") {
     return buildType1Workout(0, { setTotalsByMuscle: new Map() }, seed);
   }
@@ -408,7 +416,7 @@ function buildSingleWorkoutDefinition({ planType, seed, workoutType }) {
     return buildType2Workout(0, { setTotalsByMuscle: new Map() }, seed);
   }
 
-  return buildNamedWorkout(workoutType || planType || "full-body");
+  return buildNamedWorkout(workoutType || planType || "full-body", setCount);
 }
 
 function chooseExercise(exerciseLibrary, muscle, usage, offset) {
@@ -596,6 +604,7 @@ export function generatePlanWorkouts({
   reps,
   rir,
   seed = 0,
+  sets,
   workoutType,
   workoutTypeByDay,
 }) {
@@ -609,6 +618,7 @@ export function generatePlanWorkouts({
         buildSingleWorkoutDefinition({
           planType: resolvedPlanType,
           seed,
+          setCount: sets,
           workoutType,
         }),
       ]
@@ -616,6 +626,7 @@ export function generatePlanWorkouts({
         daysPerWeek,
         planType: resolvedPlanType,
         seed,
+        setCount: sets,
         workoutTypeByDay,
       });
   const workoutCount = workoutDefinitions.length;

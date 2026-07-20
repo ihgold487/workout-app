@@ -1303,6 +1303,32 @@ export default function WorkoutCalendar({
                 })}
               </div>
 
+              <button
+                onClick={(event) => {
+                  const nextToday = new Date();
+
+                  event.stopPropagation();
+                  setDisplayedMonth(
+                    new Date(nextToday.getFullYear(), nextToday.getMonth(), 1)
+                  );
+                  setSelectedFood(null);
+                  setSelectedFoods(null);
+                  setSelectedWeight(null);
+                  setSelectedWorkout(null);
+                  setSelectedWorkoutExerciseDetail(null);
+                  setSelectedWorkoutExercise(null);
+                  setSelectedDate(nextToday);
+                }}
+                style={{
+                  marginTop: "12px",
+                  minHeight: "40px",
+                  width: "100%",
+                }}
+                type="button"
+              >
+                Today
+              </button>
+
               {selectedDate && (
                 <div
                   style={{

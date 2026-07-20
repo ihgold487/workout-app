@@ -3902,13 +3902,29 @@ export default function App() {
                         <strong>{row.email || row.user_id}</strong>
                         <span
                           style={{
+                            background:
+                              row.status === "approved"
+                                ? "#e8f5e9"
+                                : row.status === "denied"
+                                  ? "#ffebee"
+                                  : "#fff8e1",
+                            border: `1px solid ${
+                              row.status === "approved"
+                                ? "#a5d6a7"
+                                : row.status === "denied"
+                                  ? "#ef9a9a"
+                                  : "#ffe082"
+                            }`,
+                            borderRadius: "999px",
                             color:
                               row.status === "approved"
-                                ? "var(--success-text, #2e7d32)"
+                                ? "#1b5e20"
                                 : row.status === "denied"
-                                  ? "var(--danger-text)"
-                                  : "var(--text-muted)",
+                                  ? "#b71c1c"
+                                  : "#7a4f01",
                             fontSize: "12px",
+                            lineHeight: 1.2,
+                            padding: "4px 8px",
                             textTransform: "capitalize",
                           }}
                         >
@@ -3939,11 +3955,6 @@ export default function App() {
                         <button
                           disabled={approvalAdminLoading || row.status === "denied"}
                           onClick={() => setUserApproval(row.user_id, "denied")}
-                          style={{
-                            background: "var(--danger-bg)",
-                            border: "1px solid var(--danger-border)",
-                            color: "var(--danger-text)",
-                          }}
                           type="button"
                         >
                           Deny

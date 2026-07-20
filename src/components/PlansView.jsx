@@ -543,13 +543,20 @@ function getWorkoutSummary(workouts) {
   };
 }
 
-function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
-  const [summaryScope, setSummaryScope] = useState("workout");
+function WorkoutSummarySheet({
+  initialScope = "workout",
+  lockScope = false,
+  onClose,
+  planTitle = "Combined Plan",
+  selectedWorkout,
+  workouts,
+}) {
+  const [summaryScope, setSummaryScope] = useState(initialScope);
   const displayedWorkouts =
     summaryScope === "plan" ? workouts : [selectedWorkout];
   const summary = getWorkoutSummary(displayedWorkouts);
   const title =
-    summaryScope === "plan" ? "Combined Plan" : selectedWorkout.name;
+    summaryScope === "plan" ? planTitle : selectedWorkout.name;
 
   return (
     <div
@@ -623,44 +630,46 @@ function WorkoutSummarySheet({ onClose, selectedWorkout, workouts }) {
           </button>
         </div>
 
-        <div
-          role="tablist"
-          aria-label="Summary scope"
-          style={{
-            background: "var(--surface-muted)",
-            borderRadius: "999px",
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            marginBottom: "12px",
-            padding: "3px",
-          }}
-        >
-          {[
-            ["workout", "Workout"],
-            ["plan", "Plan"],
-          ].map(([value, label]) => {
-            const active = summaryScope === value;
+        {!lockScope && (
+          <div
+            role="tablist"
+            aria-label="Summary scope"
+            style={{
+              background: "var(--surface-muted)",
+              borderRadius: "999px",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              marginBottom: "12px",
+              padding: "3px",
+            }}
+          >
+            {[
+              ["workout", "Workout"],
+              ["plan", "Plan"],
+            ].map(([value, label]) => {
+              const active = summaryScope === value;
 
-            return (
-              <button
-                key={value}
-                aria-selected={active}
-                role="tab"
-                onClick={() => setSummaryScope(value)}
-                style={{
-                  background: active ? "var(--surface-raised)" : "transparent",
-                  border: "none",
-                  borderRadius: "999px",
-                  boxShadow: active ? "0 1px 4px rgba(0,0,0,.12)" : "none",
-                  fontWeight: active ? "bold" : "normal",
-                  minHeight: "34px",
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+              return (
+                <button
+                  key={value}
+                  aria-selected={active}
+                  role="tab"
+                  onClick={() => setSummaryScope(value)}
+                  style={{
+                    background: active ? "var(--surface-raised)" : "transparent",
+                    border: "none",
+                    borderRadius: "999px",
+                    boxShadow: active ? "0 1px 4px rgba(0,0,0,.12)" : "none",
+                    fontWeight: active ? "bold" : "normal",
+                    minHeight: "34px",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div
           style={{
@@ -784,6 +793,7 @@ const PLAN_TYPE_DEFAULTS = {
     rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
     reps: "8",
     rir: "3",
+    sets: "3",
   },
   "type-4": {
     deload: false,
@@ -793,6 +803,7 @@ const PLAN_TYPE_DEFAULTS = {
     rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
     reps: "8",
     rir: "2",
+    sets: "3",
   },
 };
 
@@ -872,6 +883,7 @@ function getPlanComparable(plan) {
       rirPeriodization:
         plan?.config?.rirPeriodization ||
         getDefaultRirPeriodizationMode(plan?.planType),
+      sets: formatPlanSetting(plan?.config?.sets, ""),
       workoutTypeByDay: plan?.config?.workoutTypeByDay || {},
     },
     workouts: (plan?.workouts || []).map((workout) => ({
@@ -2133,7 +2145,7 @@ export default function PlansView({
   setTemplates,
   templates,
 }) {
-  const initialPlanType = editingPlan?.planType || "type-2";
+  const initialPlanType = editingPlan?.planType || "type-4";
   const initialPlanDefaults = getPlanTypeDefaults(initialPlanType);
   const editingPlanConfig = editingPlan?.config || {};
   const initialDaysPerWeek = formatPlanSetting(
@@ -2171,6 +2183,9 @@ export default function PlansView({
   const [rir, setRir] = useState(
     formatPlanSetting(editingPlanConfig.rir, initialPlanDefaults.rir)
   );
+  const [sets, setSets] = useState(
+    formatPlanSetting(editingPlanConfig.sets, initialPlanDefaults.sets || "3")
+  );
   const [rirPeriodization, setRirPeriodization] = useState(
     editingPlanConfig.rirPeriodization ||
       initialPlanDefaults.rirPeriodization ||
@@ -2203,6 +2218,7 @@ export default function PlansView({
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState("");
   const [summaryWorkout, setSummaryWorkout] = useState(null);
+  const [planSummaryOpen, setPlanSummaryOpen] = useState(false);
   const [detailExercise, setDetailExercise] = useState(null);
   const [activeValuePicker, setActiveValuePicker] = useState(null);
   const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
@@ -2232,6 +2248,8 @@ export default function PlansView({
   const isPlanEditMode = Boolean(editingPlan) || createPreviewEditMode;
   const isCreateDraftEditMode =
     !editingPlan && generationMode === "plan" && createPreviewEditMode;
+  const showPlanSetPicker =
+    generationMode === "plan" && ["type-3", "type-4"].includes(planType);
 
   useEffect(() => {
     let cancelled = false;
@@ -2380,6 +2398,7 @@ export default function PlansView({
         reps,
         rir,
         seed,
+        sets,
         workoutType,
         workoutTypeByDay,
       });
@@ -2397,6 +2416,7 @@ export default function PlansView({
       reps,
       rir,
       seed,
+      sets,
       workoutType,
       workoutTypeByDay,
     ]
@@ -2536,6 +2556,7 @@ export default function PlansView({
       reps,
       rir,
       rirPeriodization,
+      sets,
       weeklyPrescriptionBySlot,
       workoutNameBySlot,
       generationMode,
@@ -3148,6 +3169,7 @@ export default function PlansView({
         reps,
         rir,
         rirPeriodization,
+        sets: showPlanSetPicker ? sets : undefined,
         workoutTypeByDay:
           planType === "type-4"
             ? orderedPreviewWorkouts.reduce((types, workout, workoutIndex) => {
@@ -3322,25 +3344,50 @@ export default function PlansView({
           zIndex: 20,
         }}
       >
-        <h2
-          style={{
-            fontSize: "18px",
-            margin: 0,
-          }}
-        >
-          {generationMode === "workout"
-            ? getWorkoutTypeLabel(workoutType)
-            : getPlanTypeLabel(planType)}
-        </h2>
-
-        <label
+        <div
           style={{
             display: "grid",
             gap: "4px",
+            textAlign: "left",
           }}
         >
-          {generationMode === "workout" ? "Workout name" : "Plan name"}
+          <span
+            style={{
+              alignItems: "center",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+            }}
+          >
+            <span>
+              {generationMode === "workout" ? "Workout name" : "Plan name"}
+            </span>
+            {generationMode === "plan" && (
+              <button
+                aria-label={`${planName || "Plan"} summary`}
+                disabled={orderedPreviewWorkouts.length === 0}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setPlanSummaryOpen(true);
+                }}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "34px",
+                  minWidth: "38px",
+                  padding: "4px 8px",
+                }}
+                type="button"
+              >
+                <BarChart3 size={18} />
+              </button>
+            )}
+          </span>
           <input
+            aria-label={
+              generationMode === "workout" ? "Workout name" : "Plan name"
+            }
             value={generationMode === "workout" ? workoutName : planName}
             onChange={(event) => {
               if (generationMode === "workout") {
@@ -3363,7 +3410,7 @@ export default function PlansView({
               width: "100%",
             }}
           />
-        </label>
+        </div>
 
         <div
           style={{
@@ -3509,6 +3556,7 @@ export default function PlansView({
             style={{
               display: "grid",
               gap: "4px",
+              textAlign: "left",
             }}
           >
             Create
@@ -3542,6 +3590,7 @@ export default function PlansView({
             style={{
               display: "grid",
               gap: "4px",
+              textAlign: "left",
             }}
           >
             Plan type
@@ -3562,6 +3611,7 @@ export default function PlansView({
                 );
                 setReps(nextDefaults.reps);
                 setRir(nextDefaults.rir);
+                setSets(nextDefaults.sets || "3");
                 if (!isPlanNameCustom) {
                   setPlanName(
                     getDefaultPlanName(
@@ -3635,6 +3685,7 @@ export default function PlansView({
           style={{
             display: "grid",
             gap: "4px",
+            textAlign: "left",
           }}
         >
           Goal
@@ -3701,6 +3752,14 @@ export default function PlansView({
               </label>
             </div>
           </>
+        )}
+
+        {showPlanSetPicker && (
+          <PlanPickerButton
+            label="Sets"
+            value={sets}
+            onClick={() => setActiveValuePicker("sets")}
+          />
         )}
 
         <PlanPickerButton
@@ -4094,6 +4153,17 @@ export default function PlansView({
         />
       )}
 
+      {planSummaryOpen && (
+        <WorkoutSummarySheet
+          initialScope="plan"
+          lockScope
+          planTitle={planName || "Plan"}
+          selectedWorkout={displayedWorkout || orderedPreviewWorkouts[0]}
+          workouts={orderedPreviewWorkouts}
+          onClose={() => setPlanSummaryOpen(false)}
+        />
+      )}
+
       {weeklyPrescriptionTarget && weeklyPrescriptionExercise && (
         <WeeklyPrescriptionSheet
           exercise={weeklyPrescriptionExercise}
@@ -4188,6 +4258,22 @@ export default function PlansView({
             regeneratePlanPreview();
           }
           setWorkoutNameBySlot({});
+          setSaveStatus("");
+        }}
+      />
+
+      <WeightPickerModal
+        isOpen={activeValuePicker === "sets"}
+        onClose={() => setActiveValuePicker(null)}
+        value={sets}
+        increment={1}
+        title="Select Sets"
+        values={WEEKLY_SET_VALUES}
+        onSelect={(value) => {
+          setSets(String(value));
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
           setSaveStatus("");
         }}
       />

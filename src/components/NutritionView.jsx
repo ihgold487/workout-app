@@ -403,6 +403,18 @@ function readDailyCreatineReminderEnabled(
   }
 }
 
+function hasStoredDailyCreatineReminderEnabled(storageKey) {
+  try {
+    const value = localStorage.getItem(storageKey);
+
+    return value === "true" || value === "false";
+  } catch (error) {
+    console.error("Failed to check daily creatine reminder:", error);
+
+    return false;
+  }
+}
+
 function saveDailyCreatineReminderEnabled(enabled, storageKey) {
   localStorage.setItem(storageKey, enabled ? "true" : "false");
 }
@@ -2238,7 +2250,13 @@ function CalorieHistoryChart({ rows }) {
   );
 }
 
-function CalorieHistorySheet({ calorieGoal, entries, goalHistory, onClose }) {
+function CalorieHistorySheet({
+  calorieGoal,
+  entries,
+  goalHistory,
+  onClose,
+  onSelectDate,
+}) {
   const rows = useMemo(
     () => buildDailyCalorieRows(entries, goalHistory, calorieGoal),
     [calorieGoal, entries, goalHistory]
@@ -2340,16 +2358,28 @@ function CalorieHistorySheet({ calorieGoal, entries, goalHistory, onClose }) {
             const remaining = row.goal ? row.goal - row.calories : 0;
 
             return (
-              <div
+              <button
                 key={row.date}
+                onClick={() => onSelectDate?.(row.date)}
                 style={{
                   alignItems: "center",
+                  background: "transparent",
                   borderBottom: "1px solid var(--border)",
+                  borderLeft: 0,
+                  borderRight: 0,
+                  borderTop: 0,
+                  borderRadius: 0,
+                  color: "inherit",
+                  cursor: "pointer",
                   display: "grid",
+                  font: "inherit",
                   gap: "8px",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
                   padding: "9px 0",
+                  textAlign: "left",
+                  width: "100%",
                 }}
+                type="button"
               >
                 <div style={{ minWidth: 0 }}>
                   <strong>{row.date}</strong>
@@ -2375,7 +2405,7 @@ function CalorieHistorySheet({ calorieGoal, entries, goalHistory, onClose }) {
                 >
                   {formatMacro(row.calories, "cal")} cal
                 </strong>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -2754,6 +2784,13 @@ export default function NutritionView({ session = null }) {
   const [recipeStatus, setRecipeStatus] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
   const [recipeCreatineById, setRecipeCreatineById] = useState({});
+  const [expandedRecipeEntries, setExpandedRecipeEntries] = useState({});
+  const [recipeIngredientsByRecipeId, setRecipeIngredientsByRecipeId] =
+    useState({});
+  const [recipeIngredientLoadingByRecipeId, setRecipeIngredientLoadingByRecipeId] =
+    useState({});
+  const [recipeIngredientErrorByRecipeId, setRecipeIngredientErrorByRecipeId] =
+    useState({});
   const entryFormRef = useRef(null);
   const foodNameInputRef = useRef(null);
   const barcodeVideoRef = useRef(null);
@@ -2981,16 +3018,21 @@ export default function NutritionView({ session = null }) {
   }, [dailyCreatineLogStorageKey, signedInUserId]);
 
   useEffect(() => {
-    const scopedReminder = readDailyCreatineReminderEnabled(
+    const hasScopedReminder = hasStoredDailyCreatineReminderEnabled(
       dailyCreatineReminderStorageKey
     );
+    const scopedReminder = hasScopedReminder
+      ? readDailyCreatineReminderEnabled(dailyCreatineReminderStorageKey)
+      : signedInUserId
+        ? readDailyCreatineReminderEnabled(DAILY_CREATINE_REMINDER_KEY)
+        : false;
 
     setDailyCreatineReminderEnabled(scopedReminder);
     saveDailyCreatineReminderEnabled(
       scopedReminder,
       dailyCreatineReminderStorageKey
     );
-  }, [dailyCreatineReminderStorageKey]);
+  }, [dailyCreatineReminderStorageKey, signedInUserId]);
 
   useEffect(() => {
     const scopedReminderTime = readDailyCreatineReminderTime(
@@ -4797,6 +4839,55 @@ export default function NutritionView({ session = null }) {
     }));
   }
 
+  async function toggleRecipeEntryExpanded(entry) {
+    if (!entry?.id || !entry.recipeId) {
+      return;
+    }
+
+    const entryId = String(entry.id);
+    const recipeId = String(entry.recipeId);
+    const willExpand = !expandedRecipeEntries[entryId];
+
+    setExpandedRecipeEntries((current) => ({
+      ...current,
+      [entryId]: willExpand,
+    }));
+
+    if (!willExpand || recipeIngredientsByRecipeId[recipeId]) {
+      return;
+    }
+
+    setRecipeIngredientLoadingByRecipeId((current) => ({
+      ...current,
+      [recipeId]: true,
+    }));
+    setRecipeIngredientErrorByRecipeId((current) => ({
+      ...current,
+      [recipeId]: "",
+    }));
+
+    try {
+      const ingredients = await fetchSupplementalRecipeIngredients(recipeId);
+      setRecipeIngredientsByRecipeId((current) => ({
+        ...current,
+        [recipeId]: ingredients.map((ingredient) =>
+          createRecipeIngredientFromSavedIngredient(ingredient)
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to load recipe ingredients:", error);
+      setRecipeIngredientErrorByRecipeId((current) => ({
+        ...current,
+        [recipeId]: `Ingredients unavailable: ${error.message}`,
+      }));
+    } finally {
+      setRecipeIngredientLoadingByRecipeId((current) => ({
+        ...current,
+        [recipeId]: false,
+      }));
+    }
+  }
+
   function editEntry(entry) {
     const savedServingAmount = parseMacroValue(entry.servingAmount);
     const hasSavedServing =
@@ -5489,6 +5580,10 @@ export default function NutritionView({ session = null }) {
           entries={entries}
           goalHistory={dailyCalorieGoalHistory}
           onClose={() => setCalorieHistorySheetOpen(false)}
+          onSelectDate={(date) => {
+            setSelectedDate(date);
+            setCalorieHistorySheetOpen(false);
+          }}
         />
       )}
 
@@ -7438,7 +7533,22 @@ export default function NutritionView({ session = null }) {
 	                        padding: "0 10px",
 	                      }}
 	                    >
-	                      {group.entries.map((entry) => (
+	                      {group.entries.map((entry) => {
+	                        const recipeId = entry.recipeId
+	                          ? String(entry.recipeId)
+	                          : "";
+	                        const recipeExpanded = Boolean(
+	                          expandedRecipeEntries[String(entry.id)]
+	                        );
+	                        const recipeIngredients =
+	                          recipeIngredientsByRecipeId[recipeId] || [];
+	                        const recipeIngredientsLoading = Boolean(
+	                          recipeIngredientLoadingByRecipeId[recipeId]
+	                        );
+	                        const recipeIngredientsError =
+	                          recipeIngredientErrorByRecipeId[recipeId] || "";
+
+	                        return (
 	                        <div
 	                          key={entry.id}
 	                          onClick={() => editEntry(entry)}
@@ -7461,17 +7571,56 @@ export default function NutritionView({ session = null }) {
 		                          }}
 		                          tabIndex={0}
 		                        >
-		                          <strong
+		                          <div
 		                            style={{
-		                              display: "block",
+		                              alignItems: "center",
+		                              display: "grid",
+		                              gap: "8px",
 		                              gridColumn: "1 / -1",
-		                              overflow: "hidden",
-		                              textOverflow: "ellipsis",
-		                              whiteSpace: "nowrap",
+		                              gridTemplateColumns: entry.recipeId
+		                                ? "minmax(0, 1fr) auto"
+		                                : "minmax(0, 1fr)",
 		                            }}
 		                          >
-		                            {entry.name}
-		                          </strong>
+		                            <strong
+		                              style={{
+		                                display: "block",
+		                                overflow: "hidden",
+		                                textOverflow: "ellipsis",
+		                                whiteSpace: "nowrap",
+		                              }}
+		                            >
+		                              {entry.name}
+		                            </strong>
+		                            {entry.recipeId && (
+		                              <button
+		                                aria-expanded={recipeExpanded}
+		                                aria-label={`${recipeExpanded ? "Hide" : "Show"} ${entry.name} ingredients`}
+		                                onClick={(event) => {
+		                                  event.stopPropagation();
+		                                  toggleRecipeEntryExpanded(entry);
+		                                }}
+		                                onKeyDown={(event) =>
+		                                  event.stopPropagation()
+		                                }
+		                                style={{
+		                                  alignItems: "center",
+		                                  display: "inline-flex",
+		                                  justifyContent: "center",
+		                                  minHeight: "30px",
+		                                  minWidth: "34px",
+		                                  padding: "3px 7px",
+		                                }}
+		                                type="button"
+		                              >
+		                                {recipeExpanded ? (
+		                                  <ChevronUp size={16} />
+		                                ) : (
+		                                  <ChevronDown size={16} />
+		                                )}
+		                              </button>
+		                            )}
+		                          </div>
 		                          <span
 		                            style={{
 		                              color: "var(--text-muted)",
@@ -7527,8 +7676,90 @@ export default function NutritionView({ session = null }) {
 	                          >
 	                            <Trash2 size={17} />
 	                          </button>
+	                          {entry.recipeId && recipeExpanded && (
+	                            <div
+	                              style={{
+	                                background: "var(--surface-muted)",
+	                                border: "1px solid var(--border)",
+	                                borderRadius: "8px",
+	                                display: "grid",
+	                                gap: "6px",
+	                                gridColumn: "1 / -1",
+	                                padding: "8px",
+	                              }}
+	                            >
+	                              {recipeIngredientsLoading ? (
+	                                <div
+	                                  style={{
+	                                    color: "var(--text-muted)",
+	                                    fontSize: "12px",
+	                                  }}
+	                                >
+	                                  Loading ingredients...
+	                                </div>
+	                              ) : recipeIngredientsError ? (
+	                                <div
+	                                  role="status"
+	                                  style={{
+	                                    color: "var(--danger-text)",
+	                                    fontSize: "12px",
+	                                  }}
+	                                >
+	                                  {recipeIngredientsError}
+	                                </div>
+	                              ) : recipeIngredients.length === 0 ? (
+	                                <div
+	                                  style={{
+	                                    color: "var(--text-muted)",
+	                                    fontSize: "12px",
+	                                  }}
+	                                >
+	                                  No ingredients found.
+	                                </div>
+	                              ) : (
+	                                recipeIngredients.map((ingredient) => (
+	                                  <div
+	                                    key={ingredient.id}
+	                                    style={{
+	                                      display: "grid",
+	                                      gap: "2px",
+	                                    }}
+	                                  >
+	                                    <strong
+	                                      style={{
+	                                        display: "block",
+	                                        fontSize: "13px",
+	                                        overflow: "hidden",
+	                                        textOverflow: "ellipsis",
+	                                        whiteSpace: "nowrap",
+	                                      }}
+	                                    >
+	                                      {ingredient.name}
+	                                    </strong>
+	                                    <span
+	                                      style={{
+	                                        color: "var(--text-muted)",
+	                                        fontSize: "12px",
+	                                      }}
+	                                    >
+	                                      {ingredient.amount}{" "}
+	                                      {getPortionUnitLabel(ingredient.unit)} ·{" "}
+	                                      {formatMacro(
+	                                        ingredient.calories,
+	                                        "cal"
+	                                      )}{" "}
+	                                      cal · {formatMacro(ingredient.protein)}{" "}
+	                                      protein · {formatMacro(ingredient.carbs)}{" "}
+	                                      carbs · {formatMacro(ingredient.fat)} fat
+	                                    </span>
+	                                  </div>
+	                                ))
+	                              )}
+	                            </div>
+	                          )}
 	                        </div>
-	                      ))}
+	                        );
+	                      })}
 	                    </div>
 	                  )}
 	                </section>
