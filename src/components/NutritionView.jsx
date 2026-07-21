@@ -58,6 +58,7 @@ const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
 const DAILY_CREATINE_LOG_KEY = "dailyCreatineLog";
 const DAILY_CREATINE_REMINDER_KEY = "dailyCreatineReminder";
 const DAILY_CREATINE_REMINDER_TIME_KEY = "dailyCreatineReminderTime";
+const NUTRITION_ADD_MEAL_KEY = "nutritionAddMeal";
 const DEFAULT_DAILY_CREATINE_REMINDER_TIME = "16:00";
 const LONG_PRESS_DURATION_MS = 550;
 const FDC_API_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
@@ -175,8 +176,43 @@ function getTodayKey() {
   return `${year}-${month}-${day}`;
 }
 
+function getLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDateKey(dateKey) {
+  const [year, month, day] = String(dateKey || "")
+    .split("-")
+    .map((part) => Number(part));
+
+  if (!year || !month || !day) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function startOfMondayWeek(date) {
+  const start = new Date(date);
+  const day = start.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+
+  start.setDate(start.getDate() + mondayOffset);
+  start.setHours(0, 0, 0, 0);
+
+  return start;
+}
+
 function getNutritionLogStorageKey(userId) {
   return userId ? `${NUTRITION_LOG_KEY}:${userId}` : NUTRITION_LOG_KEY;
+}
+
+function getNutritionAddMealStorageKey(userId) {
+  return userId ? `${NUTRITION_ADD_MEAL_KEY}:${userId}` : NUTRITION_ADD_MEAL_KEY;
 }
 
 function getDailyCalorieGoalStorageKey(userId) {
@@ -302,6 +338,24 @@ function readBodyWeightEntries() {
 
 function saveBodyWeightEntries(entries) {
   localStorage.setItem(BODY_WEIGHT_LOG_KEY, JSON.stringify(entries));
+}
+
+function readNutritionAddMeal(storageKey = NUTRITION_ADD_MEAL_KEY) {
+  try {
+    return normalizeMeal(localStorage.getItem(storageKey) || DEFAULT_MEAL);
+  } catch (error) {
+    console.error("Failed to load nutrition add meal:", error);
+
+    return DEFAULT_MEAL;
+  }
+}
+
+function saveNutritionAddMeal(meal, storageKey = NUTRITION_ADD_MEAL_KEY) {
+  try {
+    localStorage.setItem(storageKey, normalizeMeal(meal));
+  } catch (error) {
+    console.error("Failed to save nutrition add meal:", error);
+  }
 }
 
 function readDailyCalorieGoal(storageKey = DAILY_CALORIE_GOAL_KEY) {
@@ -2414,6 +2468,357 @@ function CalorieHistorySheet({
   );
 }
 
+function NutritionDateCalendar({ entries, onSelectDate, selectedDate }) {
+  const selectedDateObject = parseLocalDateKey(selectedDate);
+  const today = new Date();
+  const [expanded, setExpanded] = useState(false);
+  const [displayedMonth, setDisplayedMonth] = useState(
+    () =>
+      new Date(
+        selectedDateObject.getFullYear(),
+        selectedDateObject.getMonth(),
+        1
+      )
+  );
+  const todayKey = getTodayKey();
+  const selectedDateKey = selectedDate || todayKey;
+  const entryDates = useMemo(
+    () => new Set(entries.map((entry) => entry.date).filter(Boolean)),
+    [entries]
+  );
+  const weekStart = startOfMondayWeek(today);
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+
+    date.setDate(weekStart.getDate() + index);
+
+    return date;
+  });
+  const firstDay = new Date(
+    displayedMonth.getFullYear(),
+    displayedMonth.getMonth(),
+    1
+  );
+  const lastDay = new Date(
+    displayedMonth.getFullYear(),
+    displayedMonth.getMonth() + 1,
+    0
+  );
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const monthCells = [
+    ...Array.from({ length: startOffset }, () => null),
+    ...Array.from({ length: lastDay.getDate() }, (_, index) => {
+      const date = new Date(
+        displayedMonth.getFullYear(),
+        displayedMonth.getMonth(),
+        index + 1
+      );
+
+      return date;
+    }),
+  ];
+
+  function selectDate(date) {
+    onSelectDate(getLocalDateKey(date));
+  }
+
+  return (
+    <section
+      aria-label="Nutrition date"
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        display: "grid",
+        gap: expanded ? "12px" : 0,
+        overflow: "hidden",
+      }}
+    >
+      <button
+        aria-expanded={expanded}
+        onClick={() => {
+          setDisplayedMonth(
+            new Date(
+              selectedDateObject.getFullYear(),
+              selectedDateObject.getMonth(),
+              1
+            )
+          );
+          setExpanded((open) => !open);
+        }}
+        style={{
+          background: "transparent",
+          border: 0,
+          borderRadius: 0,
+          display: "grid",
+          gap: "8px",
+          padding: "10px",
+          textAlign: "center",
+          width: "100%",
+        }}
+        type="button"
+      >
+        <span
+          style={{
+            alignItems: "baseline",
+            display: "flex",
+            gap: "8px",
+            justifyContent: "space-between",
+            textAlign: "left",
+          }}
+        >
+          <strong>Day</strong>
+          <span
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "12px",
+            }}
+          >
+            {selectedDateKey}
+          </span>
+        </span>
+        <span
+          style={{
+            display: "grid",
+            gap: "4px",
+            gridTemplateColumns: "repeat(7, 1fr)",
+          }}
+        >
+          {weekDays.map((date) => {
+            const dateKey = getLocalDateKey(date);
+            const selected = dateKey === selectedDateKey;
+            const isToday = dateKey === todayKey;
+
+            return (
+              <span key={dateKey}>
+                <span
+                  style={{
+                    color: "var(--text-muted)",
+                    display: "block",
+                    fontSize: "12px",
+                  }}
+                >
+                  {date
+                    .toLocaleDateString(undefined, { weekday: "short" })
+                    .slice(0, 2)}
+                </span>
+                <span
+                  style={{
+                    alignItems: "center",
+                    border: selected
+                      ? "2px solid var(--text-h)"
+                      : isToday
+                        ? "2px solid #1976d2"
+                        : "2px solid transparent",
+                    borderRadius: "999px",
+                    color: "var(--text-h)",
+                    display: "flex",
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    height: "32px",
+                    justifyContent: "center",
+                    margin: "0 auto",
+                    width: "32px",
+                  }}
+                >
+                  {date.getDate()}
+                </span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    height: "9px",
+                    justifyContent: "center",
+                    marginTop: "2px",
+                  }}
+                >
+                  {entryDates.has(dateKey) && (
+                    <span
+                      style={{
+                        background: "#fbc02d",
+                        borderRadius: "999px",
+                        height: "8px",
+                        width: "8px",
+                      }}
+                    />
+                  )}
+                </span>
+              </span>
+            );
+          })}
+        </span>
+      </button>
+
+      {expanded && (
+        <div
+          style={{
+            borderTop: "1px solid var(--border)",
+            display: "grid",
+            gap: "12px",
+            padding: "12px 10px 10px",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <button
+              onClick={() =>
+                setDisplayedMonth(
+                  new Date(
+                    displayedMonth.getFullYear(),
+                    displayedMonth.getMonth() - 1,
+                    1
+                  )
+                )
+              }
+              type="button"
+            >
+              ←
+            </button>
+            <strong>
+              {displayedMonth.toLocaleDateString(undefined, {
+                month: "long",
+                year: "numeric",
+              })}
+            </strong>
+            <button
+              onClick={() =>
+                setDisplayedMonth(
+                  new Date(
+                    displayedMonth.getFullYear(),
+                    displayedMonth.getMonth() + 1,
+                    1
+                  )
+                )
+              }
+              type="button"
+            >
+              →
+            </button>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: "6px",
+              gridTemplateColumns: "repeat(7, 1fr)",
+              textAlign: "center",
+            }}
+          >
+            {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
+              <div
+                key={day}
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                }}
+              >
+                {day}
+              </div>
+            ))}
+            {monthCells.map((date, index) => {
+              const dateKey = date ? getLocalDateKey(date) : "";
+              const selected = dateKey === selectedDateKey;
+              const isToday = dateKey === todayKey;
+
+              return (
+                <button
+                  key={dateKey || `empty-${index}`}
+                  disabled={!date}
+                  onClick={() => {
+                    if (!date) {
+                      return;
+                    }
+
+                    selectDate(date);
+                    setExpanded(false);
+                  }}
+                  style={{
+                    alignItems: "center",
+                    background: selected ? "var(--text-h)" : "transparent",
+                    border: selected
+                      ? "2px solid var(--text-h)"
+                      : isToday
+                        ? "2px solid #1976d2"
+                        : "2px solid transparent",
+                    borderRadius: "8px",
+                    color: selected ? "var(--surface)" : "var(--text-h)",
+                    cursor: date ? "pointer" : "default",
+                    display: "grid",
+                    font: "inherit",
+                    gap: "0",
+                    justifyItems: "center",
+                    minHeight: "42px",
+                    opacity: date ? 1 : 0,
+                    padding: "2px",
+                  }}
+                  type="button"
+                >
+                  <span
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      fontWeight: "normal",
+                      height: "24px",
+                      justifyContent: "center",
+                      width: "24px",
+                    }}
+                  >
+                    {date ? date.getDate() : ""}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      height: "8px",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {date && entryDates.has(dateKey) ? (
+                      <span
+                        style={{
+                          background: "#fbc02d",
+                          borderRadius: "999px",
+                          display: "inline-block",
+                          height: "8px",
+                          width: "8px",
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => {
+              const nextToday = new Date();
+
+              setDisplayedMonth(
+                new Date(nextToday.getFullYear(), nextToday.getMonth(), 1)
+              );
+              selectDate(nextToday);
+              setExpanded(false);
+            }}
+            style={{
+              minHeight: "40px",
+              width: "100%",
+            }}
+            type="button"
+          >
+            Today
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function normalizeMeal(value) {
   const normalized = String(value || "").toLowerCase().trim();
   const legacyMealAliases = {
@@ -2649,6 +3054,10 @@ export default function NutritionView({ session = null }) {
     () => getNutritionLogStorageKey(signedInUserId),
     [signedInUserId]
   );
+  const nutritionAddMealStorageKey = useMemo(
+    () => getNutritionAddMealStorageKey(signedInUserId),
+    [signedInUserId]
+  );
   const dailyCalorieGoalStorageKey = useMemo(
     () => getDailyCalorieGoalStorageKey(signedInUserId),
     [signedInUserId]
@@ -2711,6 +3120,9 @@ export default function NutritionView({ session = null }) {
   );
   const [creatineReminderTimePickerOpen, setCreatineReminderTimePickerOpen] =
     useState(false);
+  const [preferredAddMeal, setPreferredAddMeal] = useState(() =>
+    readNutritionAddMeal(nutritionAddMealStorageKey)
+  );
   const [entryDraft, setEntryDraft] = useState(emptyEntry);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [expandedMealGroups, setExpandedMealGroups] = useState({});
@@ -2802,10 +3214,18 @@ export default function NutritionView({ session = null }) {
   const latestDailyCalorieGoalHistoryRef = useRef(dailyCalorieGoalHistory);
   const creatineReminderLongPressTimerRef = useRef(null);
   const suppressCreatineReminderClickRef = useRef(false);
+  const entryDraftMealContextRef = useRef({
+    dayEntryCount: 0,
+    selectedDate,
+  });
 
   useEffect(() => {
     nutritionStorageKeyRef.current = nutritionStorageKey;
   }, [nutritionStorageKey]);
+
+  useEffect(() => {
+    setPreferredAddMeal(readNutritionAddMeal(nutritionAddMealStorageKey));
+  }, [nutritionAddMealStorageKey]);
 
   useEffect(() => {
     dailyCalorieGoalStorageKeyRef.current = dailyCalorieGoalStorageKey;
@@ -2863,6 +3283,41 @@ export default function NutritionView({ session = null }) {
     () => entries.filter((entry) => entry.date === selectedDate),
     [entries, selectedDate]
   );
+  useEffect(() => {
+    const previousContext = entryDraftMealContextRef.current;
+    const dayEntryCount = dayEntries.length;
+    const dateChanged = previousContext.selectedDate !== selectedDate;
+    const becameEmpty =
+      previousContext.selectedDate === selectedDate &&
+      previousContext.dayEntryCount > 0 &&
+      dayEntryCount === 0;
+    const becamePopulated =
+      previousContext.selectedDate === selectedDate &&
+      previousContext.dayEntryCount === 0 &&
+      dayEntryCount > 0;
+
+    entryDraftMealContextRef.current = {
+      dayEntryCount,
+      selectedDate,
+    };
+
+    if (editingEntryId || (!dateChanged && !becameEmpty && !becamePopulated)) {
+      return;
+    }
+
+    const nextMeal = dayEntryCount > 0 ? preferredAddMeal : DEFAULT_MEAL;
+
+    setEntryDraft((current) => {
+      const normalizedCurrentMeal = normalizeMeal(current.meal);
+
+      return normalizedCurrentMeal === nextMeal
+        ? current
+        : {
+            ...current,
+            meal: nextMeal,
+          };
+    });
+  }, [dayEntries.length, editingEntryId, preferredAddMeal, selectedDate]);
   const dayRecipeIds = useMemo(
     () =>
       [
@@ -3803,8 +4258,15 @@ export default function NutritionView({ session = null }) {
     };
   }
 
-  function resetEntryForm() {
-    setEntryDraft(emptyEntry);
+  function resetEntryForm(nextMeal) {
+    const resetMeal = normalizeMeal(
+      nextMeal || (dayEntries.length > 0 ? preferredAddMeal : DEFAULT_MEAL)
+    );
+
+    setEntryDraft({
+      ...emptyEntry,
+      meal: resetMeal,
+    });
     setEditingEntryId(null);
     setSelectedFood(emptySelectedFood);
     setEditingServingBasis(null);
@@ -3833,7 +4295,9 @@ export default function NutritionView({ session = null }) {
       updateEntries([...entries, entry], [entry]);
     }
 
-    resetEntryForm();
+    setPreferredAddMeal(entry.meal);
+    saveNutritionAddMeal(entry.meal, nutritionAddMealStorageKey);
+    resetEntryForm(entry.meal);
   }
 
   function clearFoodSearch() {
@@ -4833,6 +5297,8 @@ export default function NutritionView({ session = null }) {
     const normalizedMeal =
       meal === ADD_SNACK_VALUE ? getNextSnackMeal(dayEntries) : normalizeMeal(meal);
 
+    setPreferredAddMeal(normalizedMeal);
+    saveNutritionAddMeal(normalizedMeal, nutritionAddMealStorageKey);
     setEntryDraft((current) => ({
       ...current,
       meal: normalizedMeal,
@@ -5684,26 +6150,11 @@ export default function NutritionView({ session = null }) {
               padding: "0 12px 12px",
             }}
           >
-            <label
-              style={{
-                display: "grid",
-                gap: "5px",
-              }}
-            >
-              Date
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                style={{
-                  boxSizing: "border-box",
-                  font: "inherit",
-                  minHeight: "42px",
-                  padding: "7px 10px",
-                  width: "100%",
-                }}
-              />
-            </label>
+            <NutritionDateCalendar
+              entries={entries}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
 
             <section
               aria-label="Daily macro totals"

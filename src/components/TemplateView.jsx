@@ -241,6 +241,7 @@ export default function TemplateView({
   setExerciseMetadata,
   history,
   plans = [],
+  planWeekOverride = null,
   sessions,
   setSessions,
   setSelectedSessionId,
@@ -281,7 +282,7 @@ export default function TemplateView({
     addToWorkoutsState.added &&
     String(addToWorkoutsState.templateId) === String(template.id);
   const linkedPlan = plans.find((item) => item.id === template.planId);
-  const currentPlanWeek = linkedPlan?.currentWeek || 1;
+  const currentPlanWeek = Number(planWeekOverride) || linkedPlan?.currentWeek || 1;
   const planWorkoutCompleteThisWeek = Boolean(
     linkedPlan?.completions?.some(
       (completion) =>
@@ -366,7 +367,7 @@ export default function TemplateView({
     return plan?.goal === "progress" ? "progress" : "maintenance";
   }
 
-  function getPlanWeekRir(plan, fallbackRir = "") {
+  function getPlanWeekRir(plan, weekNumber, fallbackRir = "") {
     if (!plan) {
       return fallbackRir;
     }
@@ -375,18 +376,18 @@ export default function TemplateView({
       durationWeeks: plan.durationWeeks,
       initialRir: plan.config?.rir ?? fallbackRir,
       mode: plan.config?.rirPeriodization,
-      weekNumber: plan.currentWeek || 1,
+      weekNumber,
     });
   }
 
-  function getExerciseWeekPrescription(exercise, plan) {
+  function getExerciseWeekPrescription(exercise, plan, weekNumber) {
     if (!plan) {
       return null;
     }
 
     return (
       exercise.weeklyPrescriptions?.find(
-        (week) => Number(week.weekNumber) === Number(plan.currentWeek || 1)
+        (week) => Number(week.weekNumber) === Number(weekNumber)
       ) || null
     );
   }
@@ -588,7 +589,11 @@ export default function TemplateView({
       weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
     const targetRir =
       weekPrescription?.rir ??
-      getPlanWeekRir(plan, set.targetRir ?? set.rir ?? plan?.config?.rir ?? "");
+      getPlanWeekRir(
+        plan,
+        currentPlanWeek,
+        set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
+      );
     const recommendationExercise = {
       ...(libraryExercise || {}),
       ...exercise,
@@ -610,6 +615,69 @@ export default function TemplateView({
     return recommendation.result?.recommendation || null;
   }
 
+  function getEffectivePlanExercise(exercise, plan) {
+    const libraryExercise = exerciseLibrary.find(
+      (ex) => ex.id === exercise.exerciseId
+    );
+    const weekPrescription = getExerciseWeekPrescription(
+      exercise,
+      plan,
+      currentPlanWeek
+    );
+
+    return {
+      ...exercise,
+      sets: getExerciseSetsForPlanWeek(exercise, weekPrescription).map(
+        (set, setIndex) => {
+          const dynamicTarget = getDynamicTargetPrescription({
+            exercise,
+            libraryExercise,
+            plan,
+            set,
+            setIndex,
+            weekPrescription,
+          });
+
+          return {
+            ...set,
+            targetWeight: formatTargetValue(
+              dynamicTarget?.weight,
+              set.targetWeight || ""
+            ),
+            targetReps: formatTargetValue(
+              dynamicTarget?.reps,
+              weekPrescription?.reps ??
+                set.targetReps ??
+                set.reps ??
+                plan?.config?.reps ??
+                ""
+            ),
+            targetRir: formatTargetValue(
+              dynamicTarget?.rir,
+              weekPrescription?.rir ??
+                getPlanWeekRir(
+                  plan,
+                  currentPlanWeek,
+                  set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
+                )
+            ),
+          };
+        }
+      ),
+    };
+  }
+
+  const previewExercises =
+    linkedPlan && !isEditMode
+      ? template.exercises.map((exercise) =>
+          getEffectivePlanExercise(exercise, linkedPlan)
+        )
+      : template.exercises;
+  const previewTemplate = {
+    ...template,
+    exercises: previewExercises,
+  };
+
   function startWorkout() {
     if (!canStartWorkout) {
       return;
@@ -630,7 +698,7 @@ export default function TemplateView({
       workoutTimerPaused: false,
       workoutTimerResumedAtIso: startedAtIso,
       planId: template.planId || null,
-      planWeek: plan?.currentWeek || null,
+      planWeek: plan ? currentPlanWeek : null,
       planWorkoutId: template.planWorkoutId || null,
 
       exercises: template.exercises.map((exercise) => {
@@ -645,9 +713,13 @@ export default function TemplateView({
 
           sets: getExerciseSetsForPlanWeek(
             exercise,
-            getExerciseWeekPrescription(exercise, plan)
+            getExerciseWeekPrescription(exercise, plan, currentPlanWeek)
           ).map((set, setIndex) => {
-            const weekPrescription = getExerciseWeekPrescription(exercise, plan);
+            const weekPrescription = getExerciseWeekPrescription(
+              exercise,
+              plan,
+              currentPlanWeek
+            );
             const dynamicTarget = getDynamicTargetPrescription({
               exercise,
               libraryExercise,
@@ -672,7 +744,11 @@ export default function TemplateView({
               targetRir: formatTargetValue(
                 dynamicTarget?.rir,
                 weekPrescription?.rir ??
-                  getPlanWeekRir(plan, set.targetRir ?? set.rir ?? plan?.config?.rir ?? "")
+                  getPlanWeekRir(
+                    plan,
+                    currentPlanWeek,
+                    set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
+                  )
               ),
             };
             const actualDefaults = getActualDefaultsForSet(
@@ -1231,15 +1307,18 @@ export default function TemplateView({
           }}
         >
           <SortableContext
-            items={template.exercises.map((exercise) => exercise.id)}
+            items={previewExercises.map((exercise) => exercise.id)}
             strategy={verticalListSortingStrategy}
           >
-            {getGroupedPreviewExercises(template.exercises).map((group) => (
+            {getGroupedPreviewExercises(previewExercises).map((group) => (
               <WorkoutExercisePreviewGroup
                 key={group.group || group.exercises[0].id}
                 group={group.group}
               >
                 {group.exercises.map((exercise) => {
+                  const templateExercise =
+                    template.exercises.find((item) => item.id === exercise.id) ||
+                    exercise;
                   const exerciseDetail = getExerciseDetailRecord(exercise);
                   const note = exerciseMetadata?.[exercise.exerciseId]?.note;
 
@@ -1267,9 +1346,9 @@ export default function TemplateView({
                           onSetClick={() => {
                             enterEditMode();
 
-                            setEditingExercise(exercise);
+                            setEditingExercise(templateExercise);
 
-                            setEditingExerciseDraft(structuredClone(exercise));
+                            setEditingExerciseDraft(structuredClone(templateExercise));
                           }}
                           leadingControl={
                             <IconButton
@@ -1771,7 +1850,7 @@ export default function TemplateView({
       )}
       {showTemplateMuscleMap && (
         <TemplateMuscleMapSheet
-          template={template}
+          template={previewTemplate}
           onClose={() => setShowTemplateMuscleMap(false)}
         />
       )}

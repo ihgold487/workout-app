@@ -713,6 +713,31 @@ function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
   );
 }
 
+function getCompletedPlanWorkoutHistory(plan, planWorkoutId, weekNumber, history) {
+  const completion = getPlanCompletionsForWeek(plan, weekNumber).find(
+    (item) => item.planWorkoutId === planWorkoutId
+  );
+
+  if (!completion) {
+    return null;
+  }
+
+  const sessionMatch = history.find(
+    (workout) => String(workout.id) === String(completion.sessionId)
+  );
+
+  if (sessionMatch) {
+    return sessionMatch;
+  }
+
+  return history.find(
+    (workout) =>
+      String(workout.planId) === String(plan.id) &&
+      String(workout.planWorkoutId) === String(planWorkoutId) &&
+      Number(workout.planWeek) === Number(weekNumber)
+  ) || null;
+}
+
 function getMissingPlanWorkouts(plan, templates) {
   return (plan.workouts || []).filter(
     (workout) =>
@@ -723,8 +748,14 @@ function getMissingPlanWorkouts(plan, templates) {
   );
 }
 
-function getPlanWeekStatus(plan) {
-  const currentWeek = plan.currentWeek || 1;
+function getPlanWeekLabel(plan, weekNumber) {
+  return plan.config?.deload && weekNumber > Number(plan.durationWeeks || 0)
+    ? "Deload"
+    : `Week ${weekNumber}`;
+}
+
+function getPlanWeekStatus(plan, displayWeek = plan.currentWeek || 1) {
+  const currentWeek = displayWeek;
   const completedThisWeek = getPlanCompletionsForWeek(plan, currentWeek).length;
   const totalThisWeek = plan.workouts?.length || 0;
   const totalWeeks = getPlanTotalWeeks(plan);
@@ -740,6 +771,29 @@ function getPlanWeekStatus(plan) {
     totalThisWeek,
     totalWeeks,
   };
+}
+
+function isPlanWeekComplete(plan, weekNumber) {
+  const totalThisWeek = plan.workouts?.length || 0;
+
+  return (
+    totalThisWeek > 0 &&
+    getPlanCompletionsForWeek(plan, weekNumber).length >= totalThisWeek
+  );
+}
+
+function getPlanWeekOptions(plan) {
+  const totalWeeks = getPlanTotalWeeks(plan);
+
+  return Array.from({ length: totalWeeks }, (_, index) => {
+    const weekNumber = index + 1;
+
+    return {
+      completed: isPlanWeekComplete(plan, weekNumber),
+      label: getPlanWeekLabel(plan, weekNumber),
+      weekNumber,
+    };
+  });
 }
 
 function getInitialBuildNotice() {
@@ -858,6 +912,7 @@ export default function App() {
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [selectedTemplatePlanWeek, setSelectedTemplatePlanWeek] = useState(null);
   const [templatePreviewEditActive, setTemplatePreviewEditActive] =
     useState(false);
 
@@ -882,6 +937,8 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [expandedPlanIds, setExpandedPlanIds] = useState({});
+  const [planDisplayWeeks, setPlanDisplayWeeks] = useState({});
+  const [weekPickerPlanId, setWeekPickerPlanId] = useState(null);
   const [plansExpanded, setPlansExpanded] = useState(true);
   const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
   const [completedPlanActions, setCompletedPlanActions] = useState(null);
@@ -1520,6 +1577,7 @@ export default function App() {
     setSelectedSessionId(null);
     setLocalOwnerUserId(userId);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
     setSelectedHistory(null);
     setSelectedHistoryList(null);
   }
@@ -2100,6 +2158,7 @@ export default function App() {
       setSessions([]);
       setExerciseMetadata({});
       setSelectedTemplateId(null);
+      setSelectedTemplatePlanWeek(null);
       setSelectedSessionId(null);
       setSelectedHistory(null);
       setSelectedHistoryList(null);
@@ -2813,7 +2872,8 @@ export default function App() {
   }
 
   function renderPlanCard(plan) {
-    const weekStatus = getPlanWeekStatus(plan);
+    const displayWeek = planDisplayWeeks[plan.id] || plan.currentWeek || 1;
+    const weekStatus = getPlanWeekStatus(plan, displayWeek);
     const active = plan.status === "active";
     const completed = plan.status === "completed";
     const expanded = expandedPlanIds[plan.id] ?? (isHomeView && active);
@@ -2965,14 +3025,35 @@ export default function App() {
           <>
             <div
               style={{
+                alignItems: "center",
                 color: "var(--text-muted)",
+                display: "flex",
                 fontSize: "12px",
+                gap: "8px",
+                justifyContent: "space-between",
                 marginTop: "8px",
               }}
             >
-              {plan.goal === "progress" ? "Progress" : "Maintain"} · Week{" "}
-              {weekStatus.currentWeekLabel} of {weekStatus.totalWeeks} ·{" "}
-              {weekStatus.completedThisWeek}/{weekStatus.totalThisWeek} this week
+              <span
+                style={{
+                  minWidth: 0,
+                }}
+              >
+                {plan.goal === "progress" ? "Progress" : "Maintain"} · Week{" "}
+                {weekStatus.currentWeekLabel} of {weekStatus.totalWeeks} ·{" "}
+                {weekStatus.completedThisWeek}/{weekStatus.totalThisWeek} this week
+              </span>
+              <button
+                onClick={() => setWeekPickerPlanId(plan.id)}
+                style={{
+                  minHeight: "30px",
+                  padding: "3px 9px",
+                  whiteSpace: "nowrap",
+                }}
+                type="button"
+              >
+                Week
+              </button>
             </div>
 
             <div
@@ -3023,12 +3104,32 @@ export default function App() {
                   planWorkout.planWorkoutId,
                   weekStatus.currentWeek
                 );
+                const completedWorkout = done
+                  ? getCompletedPlanWorkoutHistory(
+                      plan,
+                      planWorkout.planWorkoutId,
+                      weekStatus.currentWeek,
+                      history
+                    )
+                  : null;
 
                 return (
                   <button
                     key={planWorkout.planWorkoutId}
                     disabled={!template}
-                    onClick={() => template && setSelectedTemplateId(template.id)}
+                    onClick={() => {
+                      if (!template) {
+                        return;
+                      }
+
+                      if (completedWorkout) {
+                        setSelectedHistory(completedWorkout);
+                        return;
+                      }
+
+                      setSelectedTemplatePlanWeek(weekStatus.currentWeek);
+                      setSelectedTemplateId(template.id);
+                    }}
                     style={{
                       alignItems: "center",
                       background: template
@@ -3124,6 +3225,140 @@ export default function App() {
     );
   }
 
+  function renderWeekPicker() {
+    const plan = plans.find((item) => String(item.id) === String(weekPickerPlanId));
+
+    if (!plan) {
+      return null;
+    }
+
+    const selectedWeek = planDisplayWeeks[plan.id] || plan.currentWeek || 1;
+
+    return (
+      <div
+        aria-label={`${plan.name} week selector`}
+        aria-modal="true"
+        onClick={() => setWeekPickerPlanId(null)}
+        role="dialog"
+        style={{
+          alignItems: "center",
+          background: "rgba(0,0,0,.48)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          padding: "18px",
+          position: "fixed",
+          zIndex: 2300,
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
+            boxShadow: "0 18px 48px rgba(0,0,0,.28)",
+            boxSizing: "border-box",
+            display: "grid",
+            gap: "10px",
+            maxHeight: "80vh",
+            maxWidth: "360px",
+            overflowY: "auto",
+            padding: "16px",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "grid",
+              gap: "10px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+            }}
+          >
+            <strong
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {plan.name}
+            </strong>
+            <button
+              aria-label="Close week selector"
+              onClick={() => setWeekPickerPlanId(null)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "34px",
+                minWidth: "34px",
+                padding: "5px",
+              }}
+              type="button"
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "6px",
+            }}
+          >
+            {getPlanWeekOptions(plan).map((week) => {
+              const selected = Number(selectedWeek) === Number(week.weekNumber);
+
+              return (
+                <button
+                  key={week.weekNumber}
+                  onClick={() => {
+                    setPlanDisplayWeeks((current) => ({
+                      ...current,
+                      [plan.id]: week.weekNumber,
+                    }));
+                    setExpandedPlanIds((current) => ({
+                      ...current,
+                      [plan.id]: true,
+                    }));
+                    setWeekPickerPlanId(null);
+                  }}
+                  style={{
+                    alignItems: "center",
+                    background: selected
+                      ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
+                      : "var(--surface)",
+                    border: selected
+                      ? "1px solid var(--accent)"
+                      : "1px solid var(--border)",
+                    borderRadius: "8px",
+                    color: "var(--text)",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "auto minmax(0, 1fr)",
+                    minHeight: "42px",
+                    padding: "8px 10px",
+                    textAlign: "left",
+                  }}
+                  type="button"
+                >
+                  {week.completed ? (
+                    <CheckCircle2 size={17} color="var(--success-text)" />
+                  ) : (
+                    <Circle size={17} color="var(--text-muted)" />
+                  )}
+                  <span>{week.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function goHome() {
     if (templatePreviewEditActive) {
       return;
@@ -3146,6 +3381,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function goExercises() {
@@ -3161,6 +3397,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function goPlans() {
@@ -3176,6 +3413,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function goNutrition() {
@@ -3191,6 +3429,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function goSettings() {
@@ -3206,6 +3445,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function openPlanEditor(plan) {
@@ -3225,6 +3465,7 @@ export default function App() {
     setSelectedHistory(null);
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
+    setSelectedTemplatePlanWeek(null);
   }
 
   function renderBottomNav(activeView) {
@@ -4620,6 +4861,7 @@ export default function App() {
         setExerciseMetadata={setExerciseMetadata}
         history={history}
         plans={plans}
+        planWeekOverride={selectedTemplatePlanWeek}
       />,
       "home"
     );
@@ -4751,6 +4993,7 @@ export default function App() {
           )}
           {renderCompletedPlanActions()}
           {renderExtendPlanPicker()}
+          {renderWeekPicker()}
           <hr />
         </>
       )}
@@ -4871,7 +5114,10 @@ export default function App() {
                     textAlign: "left",
                     width: "100%",
                   }}
-                  onClick={() => setSelectedTemplateId(template.id)}
+                  onClick={() => {
+                    setSelectedTemplatePlanWeek(null);
+                    setSelectedTemplateId(template.id);
+                  }}
                 >
                   <strong
                     style={{
