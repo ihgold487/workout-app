@@ -10,6 +10,7 @@ import {
   BicepsFlexed,
   BookPlus,
   CalendarPlus,
+  Camera,
   ChefHat,
   ChevronDown,
   ChevronUp,
@@ -96,6 +97,7 @@ const FOOD_BARCODE_FORMATS = [
   BarcodeFormat.UPC_E,
 ];
 const NATIVE_BARCODE_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e"];
+const RECIPE_OCR_IMPORT_TIMEOUT_MS = 90000;
 const BARCODE_VIDEO_CONSTRAINTS = {
   audio: false,
   video: {
@@ -114,6 +116,73 @@ const BARCODE_VIDEO_CONSTRAINTS = {
       ideal: 1920,
     },
   },
+};
+const RECIPE_CAMERA_VIDEO_CONSTRAINTS = {
+  audio: false,
+  video: {
+    advanced: [
+      {
+        focusMode: "continuous",
+      },
+    ],
+    facingMode: {
+      ideal: "environment",
+    },
+    height: {
+      ideal: 1440,
+    },
+    width: {
+      ideal: 1920,
+    },
+  },
+};
+const RECIPE_OCR_INGREDIENT_UNITS = new Set([
+  "bag",
+  "bags",
+  "bunch",
+  "bunches",
+  "can",
+  "cans",
+  "clove",
+  "cloves",
+  "cup",
+  "cups",
+  "g",
+  "gram",
+  "grams",
+  "lb",
+  "lbs",
+  "ml",
+  "ounce",
+  "ounces",
+  "oz",
+  "package",
+  "packages",
+  "packet",
+  "packets",
+  "pinch",
+  "pound",
+  "pounds",
+  "slice",
+  "slices",
+  "sprig",
+  "sprigs",
+  "tablespoon",
+  "tablespoons",
+  "tbsp",
+  "teaspoon",
+  "teaspoons",
+  "tsp",
+]);
+const RECIPE_OCR_SKIP_LINE_PATTERN =
+  /^(add|bake|bring|cook|directions?|divide|for serving|garnish|heat|instructions?|method|notes?|prepare|preparation|recipe|serve|serves|step|steps|stir|yield)s?\b/i;
+const RECIPE_OCR_UNIT_PATTERN =
+  "(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)";
+const DEFAULT_RECIPE_CROP = {
+  height: 0.78,
+  width: 0.44,
+  x: 0.04,
+  y: 0.08,
 };
 const BASE_MEAL_OPTIONS = [
   ["breakfast", "Breakfast"],
@@ -1701,6 +1770,588 @@ function scaleRecipeIngredient(ingredient, amount, unit) {
   };
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error("Could not read the recipe image."));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+function cropImageDataUrl(imageDataUrl, crop) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onerror = () => reject(new Error("Could not crop the recipe image."));
+    image.onload = () => {
+      const sourceX = Math.max(0, Math.round(image.naturalWidth * crop.x));
+      const sourceY = Math.max(0, Math.round(image.naturalHeight * crop.y));
+      const sourceWidth = Math.max(
+        1,
+        Math.round(image.naturalWidth * crop.width)
+      );
+      const sourceHeight = Math.max(
+        1,
+        Math.round(image.naturalHeight * crop.height)
+      );
+      const canvas = document.createElement("canvas");
+
+      canvas.width = sourceWidth;
+      canvas.height = sourceHeight;
+      canvas
+        .getContext("2d")
+        ?.drawImage(
+          image,
+          sourceX,
+          sourceY,
+          sourceWidth,
+          sourceHeight,
+          0,
+          0,
+          sourceWidth,
+          sourceHeight
+        );
+
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    image.src = imageDataUrl;
+  });
+}
+
+function normalizeOcrFractionArtifacts(line) {
+  return String(line || "")
+    .replace(/^for[’']?\s*/i, "")
+    .replace(
+      new RegExp(`^2\\s+(?=cup\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^15\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^145\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^12\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^Y2\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^¥2\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^V4\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/4 "
+    )
+    .replace(
+      new RegExp(`^Ys\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/4 "
+    )
+    .replace(
+      new RegExp(`^¥s\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/4 "
+    )
+    .replace(
+      new RegExp(`^[\\\"'>]+\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    )
+    .replace(
+      new RegExp(`^3\\s+(?=cup\\b)`, "i"),
+      "3/4 "
+    )
+    .replace(
+      new RegExp(`^1\\s+%\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1 1/4 "
+    )
+    .replace(
+      new RegExp(`^(?:1\\s+)?%\\s+(?=${RECIPE_OCR_UNIT_PATTERN}\\b)`, "i"),
+      "1/2 "
+    );
+}
+
+function normalizeOcrTextLine(line) {
+  const normalized = String(line || "")
+    .replace(/[•·]/g, "")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .replace(/^\s*\|\s*/i, "")
+    .replace(/^\s*(?:\[\s*\||\[\s*\]|\|\s*\]|\(\s*\)|☐|□|0)\s*/i, "")
+    .replace(/(\d)([¼½¾⅓⅔⅛⅜⅝⅞])/g, "$1 $2")
+    .replace(/(\d+)-(\d+\/\d+)/g, "$1 $2")
+    .replace(/^[¥%yY]\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "1/2 ")
+    .replace(/\b[¥%]\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "1/2 ")
+    .replace(/\b[VvYy]4\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "1/4 ")
+    .replace(/\b[¥Yy]2\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "1/2 ")
+    .replace(/\b[¥Yy]s\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "1/4 ")
+    .replace(/\b3[¥%]\s+(?=(?:cup|cups|teaspoon|teaspoons|tsp|tablespoon|tablespoons|tbsp)\b)/i, "3/4 ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalizeOcrFractionArtifacts(normalized);
+}
+
+function parseOcrAmountText(value) {
+  const normalized = String(value || "")
+    .replace(/[¼]/g, " 1/4")
+    .replace(/[½]/g, " 1/2")
+    .replace(/[¾]/g, " 3/4")
+    .replace(/[⅓]/g, " 1/3")
+    .replace(/[⅔]/g, " 2/3")
+    .replace(/[⅛]/g, " 1/8")
+    .replace(/[⅜]/g, " 3/8")
+    .replace(/[⅝]/g, " 5/8")
+    .replace(/[⅞]/g, " 7/8")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const total = normalized.split(/\s+/).reduce((sum, part) => {
+    if (/^\d+\/\d+$/.test(part)) {
+      const [numerator, denominator] = part.split("/").map(Number);
+
+      return denominator ? sum + numerator / denominator : sum;
+    }
+
+    const parsed = Number(part);
+
+    return Number.isFinite(parsed) ? sum + parsed : sum;
+  }, 0);
+
+  return total ? String(Number(total.toFixed(3))) : normalized;
+}
+
+function extractRecipeServingsFromOcrLine(line) {
+  const match = line.match(/\b(?:serves|servings|yield|makes)\s*:?\s*(\d+(?:\.\d+)?)/i);
+
+  return match ? match[1] : "";
+}
+
+function stripOcrIngredientNotes(value) {
+  return String(value || "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\bsee\s+tip\b.*$/i, "")
+    .replace(/^(?:(?:fine|finely|freshly|roughly|coarsely|shelled|chopped|diced|minced|sliced|ground|large|ripe|ey)\s+)+/i, "")
+    .replace(/,\s*(?:chopped|diced|minced|sliced|thinly sliced|divided|plus more.*|to taste).*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function simplifyOcrSearchIngredient(value) {
+  const stripped = stripOcrIngredientNotes(removeOcrSuchAsClause(value));
+
+  if (/,/.test(stripped)) {
+    return stripped.split(",")[0].trim();
+  }
+
+  return stripped.replace(/\s+\bor\b\s+.+$/i, "").trim();
+}
+
+function removeOcrSuchAsClause(value) {
+  return String(value || "")
+    .replace(/\s*\(optional\).*$/i, "")
+    .replace(/,\s*such as\s+.*$/i, "")
+    .replace(/\s+such as\s+.*$/i, "")
+    .trim();
+}
+
+function isLikelyOcrJunkLine(line) {
+  const normalized = String(line || "").trim();
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (/^[^\w¼½¾⅓⅔⅛⅜⅝⅞]+$/.test(normalized)) {
+    return true;
+  }
+
+  if (/^[A-Z£$€¥]{1,3}\)?$/i.test(normalized) && normalized.length <= 4) {
+    return true;
+  }
+
+  if (/^[£$€¥]?\d{1,3}$/.test(normalized)) {
+    return true;
+  }
+
+  if (/^re\)?$/i.test(normalized)) {
+    return true;
+  }
+
+  if (/^j$/i.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
+function shouldMergeOcrLineWithPrevious(line, previousLine) {
+  if (!previousLine) {
+    return false;
+  }
+
+  if (/^(ingredients?|yield|scale|convert)\b/i.test(line)) {
+    return false;
+  }
+
+  if (/^(?:\d+(?:\.\d+)?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\b/.test(line)) {
+    return /(?:\bor\b|,|\(|-)$/.test(previousLine);
+  }
+
+  return (
+    /^[a-z(]/.test(line) ||
+    /^(?:as|or|such as)\b/i.test(line) ||
+    /^(?:black|white|red|fine|fresh|freshly|ground|pumpkin)\b/i.test(line)
+  );
+}
+
+function mergeOcrIngredientLines(lines) {
+  return lines.reduce((merged, line) => {
+    const previous = merged[merged.length - 1] || "";
+
+    if (shouldMergeOcrLineWithPrevious(line, previous)) {
+      const separator = previous.endsWith("-") ? "" : " ";
+      merged[merged.length - 1] = `${previous}${separator}${line}`.replace(
+        /-\s+/g,
+        ""
+      );
+      return merged;
+    }
+
+    merged.push(line);
+    return merged;
+  }, []);
+}
+
+function extractPreferredGramIngredient(line) {
+  const gramsMatch = line.match(
+    /(?:^|[\s/])(\d+(?:\.\d+)?)\s*(?:g|grams?)\s+(.+)$/i
+  );
+
+  if (!gramsMatch) {
+    return null;
+  }
+
+  const ingredient = simplifyOcrSearchIngredient(
+    gramsMatch[2]
+      .replace(/\s+\bor\b\s+(?:\d+(?:\.\d+)?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]).*$/i, "")
+      .replace(/\s+\(.*$/i, "")
+  );
+
+  return ingredient
+    ? {
+        amount: gramsMatch[1],
+        ingredient,
+        originalLine: line,
+        unit: "g",
+      }
+    : null;
+}
+
+function extractPreferredOunceIngredient(line) {
+  const ounceMatch = line.match(
+    /^(?:(?:\d+(?:\.\d+)?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s+(?:\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))?\s+\w+\s+)?\((\d+(?:\.\d+)?)\s*(?:oz|ounces?)\)\s+(.+)$/i
+  );
+
+  if (!ounceMatch) {
+    return null;
+  }
+
+  const ingredient = simplifyOcrSearchIngredient(ounceMatch[2]);
+
+  return ingredient
+    ? {
+        amount: ounceMatch[1],
+        ingredient,
+        originalLine: line,
+        unit: "oz",
+      }
+    : null;
+}
+
+function extractCountIngredient(line) {
+  const countMatch = line.match(/^(\d+(?:\.\d+)?)\s+(?:large|medium|small)?\s*(eggs?)\b/i);
+
+  if (!countMatch) {
+    return null;
+  }
+
+  return {
+    amount: countMatch[1],
+    ingredient: countMatch[2].toLowerCase(),
+    originalLine: line,
+    unit: "serving",
+  };
+}
+
+function extractGarlicCloveIngredient(line) {
+  const garlicMatch = line.match(/^(\d+(?:\.\d+)?)\s+(?:garlic\s+cloves?|cloves?\s+garlic)\b/i);
+
+  if (!garlicMatch) {
+    return null;
+  }
+
+  return {
+    amount: garlicMatch[1],
+    ingredient: "garlic",
+    originalLine: line,
+    unit: "clove",
+  };
+}
+
+function extractSliceIngredient(line) {
+  const sliceMatch = line.match(
+    /^(\d+(?:\.\d+)?)\s+\([^)]*\)\s+slices?\s+(?:from\s+)?(?:an?\s+)?(.+)$/i
+  );
+
+  if (!sliceMatch) {
+    return null;
+  }
+
+  const ingredient = simplifyOcrSearchIngredient(sliceMatch[2]);
+
+  return ingredient
+    ? {
+        amount: sliceMatch[1],
+        ingredient,
+        originalLine: line,
+        unit: "slice",
+      }
+    : null;
+}
+
+function parseOcrIngredientLine(line) {
+  const normalizedLine = normalizeOcrTextLine(line);
+
+  if (
+    normalizedLine.length < 3 ||
+    normalizedLine.length > 140 ||
+    RECIPE_OCR_SKIP_LINE_PATTERN.test(normalizedLine) ||
+    /\(optional\)/i.test(normalizedLine)
+  ) {
+    return null;
+  }
+
+  const gramIngredient = extractPreferredGramIngredient(normalizedLine);
+
+  if (gramIngredient) {
+    return gramIngredient;
+  }
+
+  const ounceIngredient = extractPreferredOunceIngredient(normalizedLine);
+
+  if (ounceIngredient) {
+    return ounceIngredient;
+  }
+
+  const countIngredient = extractCountIngredient(normalizedLine);
+
+  if (countIngredient) {
+    return countIngredient;
+  }
+
+  const garlicCloveIngredient = extractGarlicCloveIngredient(normalizedLine);
+
+  if (garlicCloveIngredient) {
+    return garlicCloveIngredient;
+  }
+
+  const sliceIngredient = extractSliceIngredient(normalizedLine);
+
+  if (sliceIngredient) {
+    return sliceIngredient;
+  }
+
+  const amountMatch = normalizedLine.match(
+    /^((?:\d+(?:\.\d+)?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s+(?:\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))?)\s+([a-zA-Z-]+)?\s*(.+)$/
+  );
+
+  if (amountMatch) {
+    const possibleUnit = String(amountMatch[2] || "").toLowerCase();
+    const hasUnit = RECIPE_OCR_INGREDIENT_UNITS.has(possibleUnit);
+    const ingredient = stripOcrIngredientNotes(
+      hasUnit ? amountMatch[3] : [amountMatch[2], amountMatch[3]].filter(Boolean).join(" ")
+    );
+
+    return ingredient
+      ? {
+          amount: parseOcrAmountText(amountMatch[1]),
+          ingredient,
+          originalLine: normalizedLine,
+          unit: hasUnit ? possibleUnit : "",
+        }
+      : null;
+  }
+
+  if (/^(kosher|fine|fresh|freshly|ground|black|white|red)\s/i.test(normalizedLine)) {
+    return {
+      amount: "",
+      ingredient: stripOcrIngredientNotes(normalizedLine),
+      originalLine: normalizedLine,
+      unit: "",
+    };
+  }
+
+  if (/^[a-z][a-z\s,'-]{3,80}$/i.test(normalizedLine)) {
+    const ingredient = simplifyOcrSearchIngredient(normalizedLine);
+
+    return ingredient
+      ? {
+          amount: "",
+          ingredient,
+          originalLine: normalizedLine,
+          unit: "",
+        }
+      : null;
+  }
+
+  return null;
+}
+
+function parseRecipeFromOcrText(text) {
+  const rawLines = String(text || "")
+    .split(/\r?\n/)
+    .map(normalizeOcrTextLine)
+    .filter((line) => !isLikelyOcrJunkLine(line));
+  const lines = mergeOcrIngredientLines(rawLines);
+  const ingredients = [];
+  let recipeName = "";
+  let servings = "";
+
+  lines.forEach((line, index) => {
+    if (!servings) {
+      servings = extractRecipeServingsFromOcrLine(line);
+    }
+
+    const ingredient = parseOcrIngredientLine(line);
+
+    if (ingredient) {
+      ingredients.push(ingredient);
+    } else if (!recipeName && index < 5 && line.length > 4 && line.length < 80) {
+      recipeName = line;
+    }
+  });
+
+  return {
+    ingredients,
+    recipeName,
+    servings,
+  };
+}
+
+async function recognizeRecipeTextFromImage(imageDataUrl, onProgress) {
+  const tesseract = await import("tesseract.js");
+  const createWorker = tesseract.createWorker || tesseract.default?.createWorker;
+  const psm = tesseract.PSM || tesseract.default?.PSM || {};
+
+  if (!createWorker) {
+    throw new Error("Local OCR could not be loaded.");
+  }
+
+  const worker = await createWorker("eng", 1, {
+    logger: (message) => {
+      if (message?.status) {
+        const percent = Number.isFinite(message.progress)
+          ? Math.round(message.progress * 100)
+          : null;
+
+        onProgress?.(
+          percent === null
+            ? `OCR: ${message.status}...`
+            : `OCR: ${message.status} ${percent}%...`
+        );
+      }
+    },
+  });
+
+  try {
+    await worker.setParameters({
+      preserve_interword_spaces: "1",
+      tessedit_pageseg_mode: psm.SPARSE_TEXT || "11",
+    });
+
+    const {
+      data: { text },
+    } = await worker.recognize(imageDataUrl);
+
+    return text || "";
+  } finally {
+    await worker.terminate();
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
+function formatRecipeImageImportError(error) {
+  return error?.message || "Recipe image import failed.";
+}
+
+function normalizeImportedIngredientUnit(unit) {
+  const normalized = String(unit || "").toLowerCase().replace(/\./g, "").trim();
+  const aliases = {
+    c: "cup",
+    cups: "cup",
+    fluidounce: "fl-oz",
+    fluidounces: "fl-oz",
+    floz: "fl-oz",
+    gram: "g",
+    grams: "g",
+    lbs: "lb",
+    milliliter: "ml",
+    milliliters: "ml",
+    ounce: "oz",
+    ounces: "oz",
+    tablespoon: "tbsp",
+    tablespoons: "tbsp",
+    teaspoon: "tsp",
+    teaspoons: "tsp",
+  };
+
+  return aliases[normalized.replace(/\s+/g, "")] || normalized;
+}
+
+function applyImportedIngredientAmount(ingredient, importedIngredient) {
+  const amount = String(importedIngredient.amount || "").trim();
+  const normalizedUnit = normalizeImportedIngredientUnit(importedIngredient.unit);
+  const matchingOption = ingredient.portionOptions?.find(
+    (option) => option.key === normalizedUnit
+  );
+
+  if (!amount) {
+    return ingredient;
+  }
+
+  if (matchingOption) {
+    return scaleRecipeIngredient(ingredient, amount, matchingOption.key);
+  }
+
+  return {
+    ...ingredient,
+    importOriginalLine: importedIngredient.originalLine || "",
+    importUnitWarning: importedIngredient.unit
+      ? `Check unit: parsed "${importedIngredient.unit}", matched serving "${ingredient.servingDescription}".`
+      : "",
+  };
+}
+
 function totalEntries(entries) {
   return entries.reduce(
     (totals, entry) => ({
@@ -3193,6 +3844,18 @@ export default function NutritionView({ session = null }) {
     useState([]);
   const [recipeSearchStatus, setRecipeSearchStatus] = useState("");
   const [recipeSearchLoading, setRecipeSearchLoading] = useState(false);
+  const [recipeImageImportLoading, setRecipeImageImportLoading] =
+    useState(false);
+  const [recipeCameraOpen, setRecipeCameraOpen] = useState(false);
+  const [recipeCameraStatus, setRecipeCameraStatus] = useState("");
+  const [recipeCrop, setRecipeCrop] = useState(DEFAULT_RECIPE_CROP);
+  const [recipeCropImageDataUrl, setRecipeCropImageDataUrl] = useState("");
+  const [recipeCropOpen, setRecipeCropOpen] = useState(false);
+  const [recipeImageImportRows, setRecipeImageImportRows] = useState([]);
+  const [recipeImageImportRawText, setRecipeImageImportRawText] = useState("");
+  const [recipeImageImportRawTextOpen, setRecipeImageImportRawTextOpen] =
+    useState(false);
+  const [recipeImageImportStatus, setRecipeImageImportStatus] = useState("");
   const [recipeStatus, setRecipeStatus] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
   const [recipeCreatineById, setRecipeCreatineById] = useState({});
@@ -3205,6 +3868,10 @@ export default function NutritionView({ session = null }) {
     useState({});
   const entryFormRef = useRef(null);
   const foodNameInputRef = useRef(null);
+  const recipeImageInputRef = useRef(null);
+  const recipeCameraVideoRef = useRef(null);
+  const recipeCameraStreamRef = useRef(null);
+  const recipeCropImageRef = useRef(null);
   const barcodeVideoRef = useRef(null);
   const barcodeControlsRef = useRef(null);
   const barcodeSearchHandlerRef = useRef(null);
@@ -3772,6 +4439,66 @@ export default function NutritionView({ session = null }) {
       cancelled = true;
     };
   }, [session]);
+
+  useEffect(() => {
+    if (!recipeCameraOpen) {
+      recipeCameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recipeCameraStreamRef.current = null;
+
+      if (recipeCameraVideoRef.current) {
+        recipeCameraVideoRef.current.srcObject = null;
+      }
+
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function startRecipeCamera() {
+      const video = recipeCameraVideoRef.current;
+
+      if (!video) {
+        return;
+      }
+
+      setRecipeCameraStatus("Opening camera...");
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(
+          RECIPE_CAMERA_VIDEO_CONSTRAINTS
+        );
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        recipeCameraStreamRef.current = stream;
+        video.srcObject = stream;
+        await video.play();
+        setRecipeCameraStatus(
+          "Frame the recipe name, yield, and ingredients. Keep the text sharp."
+        );
+      } catch (error) {
+        console.error("Recipe camera failed:", error);
+        setRecipeCameraStatus(
+          "Camera scanning is not available. Use Choose image instead."
+        );
+      }
+    }
+
+    startRecipeCamera();
+
+    return () => {
+      cancelled = true;
+      recipeCameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recipeCameraStreamRef.current = null;
+
+      if (recipeCameraVideoRef.current) {
+        recipeCameraVideoRef.current.srcObject = null;
+      }
+    };
+  }, [recipeCameraOpen]);
 
   useEffect(() => {
     if (!showBarcodeScanner) {
@@ -4976,6 +5703,10 @@ export default function NutritionView({ session = null }) {
       setRecipeIngredientResults([]);
       setRecipeLibraryIngredientResults([]);
       setRecipeSearchStatus("");
+      setRecipeImageImportRows([]);
+      setRecipeImageImportRawText("");
+      setRecipeImageImportRawTextOpen(false);
+      setRecipeImageImportStatus("");
       setRecipeStatus("");
       setLibraryManagerOpen(false);
       setRecipeSheetOpen(true);
@@ -4997,6 +5728,10 @@ export default function NutritionView({ session = null }) {
     setRecipeIngredientResults([]);
     setRecipeLibraryIngredientResults([]);
     setRecipeSearchStatus("");
+    setRecipeImageImportRows([]);
+    setRecipeImageImportRawText("");
+    setRecipeImageImportRawTextOpen(false);
+    setRecipeImageImportStatus("");
     setRecipeStatus("");
     setRecipeSheetOpen(true);
   }
@@ -5004,6 +5739,314 @@ export default function NutritionView({ session = null }) {
   function closeRecipeSheet() {
     setRecipeSheetOpen(false);
     setRecipeStatus("");
+  }
+
+  function updateRecipeImageImportRow(index, updates) {
+    setRecipeImageImportRows((current) =>
+      current.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              ...updates,
+            }
+          : row
+      )
+    );
+  }
+
+  function openRecipeCropper(imageDataUrl) {
+    setRecipeCrop(DEFAULT_RECIPE_CROP);
+    setRecipeCropImageDataUrl(imageDataUrl);
+    setRecipeCropOpen(true);
+  }
+
+  function getRecipeCropPointerPosition(event) {
+    const image = recipeCropImageRef.current;
+    const bounds = image?.getBoundingClientRect();
+
+    if (!bounds?.width || !bounds?.height) {
+      return null;
+    }
+
+    return {
+      x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+    };
+  }
+
+  function startRecipeCropInteraction(event, mode) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startPoint = getRecipeCropPointerPosition(event);
+
+    if (!startPoint) {
+      return;
+    }
+
+    const startCrop = recipeCrop;
+    const target = event.currentTarget;
+
+    target.setPointerCapture?.(event.pointerId);
+
+    const handlePointerMove = (moveEvent) => {
+      const point = getRecipeCropPointerPosition(moveEvent);
+
+      if (!point) {
+        return;
+      }
+
+      const deltaX = point.x - startPoint.x;
+      const deltaY = point.y - startPoint.y;
+
+      setRecipeCrop(() => {
+        if (mode === "resize") {
+          const width = Math.min(
+            1 - startCrop.x,
+            Math.max(0.18, startCrop.width + deltaX)
+          );
+          const height = Math.min(
+            1 - startCrop.y,
+            Math.max(0.18, startCrop.height + deltaY)
+          );
+
+          return {
+            ...startCrop,
+            height,
+            width,
+          };
+        }
+
+        if (mode === "resize-start") {
+          const maxX = startCrop.x + startCrop.width - 0.18;
+          const maxY = startCrop.y + startCrop.height - 0.18;
+          const x = Math.min(maxX, Math.max(0, startCrop.x + deltaX));
+          const y = Math.min(maxY, Math.max(0, startCrop.y + deltaY));
+
+          return {
+            ...startCrop,
+            height: startCrop.y + startCrop.height - y,
+            width: startCrop.x + startCrop.width - x,
+            x,
+            y,
+          };
+        }
+
+        return {
+          ...startCrop,
+          x: Math.min(1 - startCrop.width, Math.max(0, startCrop.x + deltaX)),
+          y: Math.min(1 - startCrop.height, Math.max(0, startCrop.y + deltaY)),
+        };
+      });
+    };
+
+    const stopInteraction = (upEvent) => {
+      target.releasePointerCapture?.(upEvent.pointerId);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopInteraction);
+      window.removeEventListener("pointercancel", stopInteraction);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopInteraction);
+    window.addEventListener("pointercancel", stopInteraction);
+  }
+
+  async function matchParsedRecipeIngredients(parsedRecipe) {
+    const parsedIngredients = parsedRecipe.ingredients
+      .map((ingredient) => ({
+        amount: String(ingredient.amount || "").trim(),
+        ingredient: String(ingredient.ingredient || "").trim(),
+        originalLine: String(ingredient.originalLine || "").trim(),
+        status: "Pending",
+        unit: String(ingredient.unit || "").trim(),
+      }))
+      .filter((ingredient) => ingredient.ingredient);
+
+    if (parsedRecipe.recipeName && !recipeDraft.name.trim()) {
+      setRecipeDraft((current) => ({
+        ...current,
+        name: parsedRecipe.recipeName,
+      }));
+    }
+
+    if (parsedRecipe.servings && parseMacroValue(parsedRecipe.servings) > 0) {
+      setRecipeDraft((current) => ({
+        ...current,
+        servingsPerRecipe: String(parseMacroValue(parsedRecipe.servings)),
+      }));
+    }
+
+    setRecipeImageImportRows(parsedIngredients);
+
+    if (parsedIngredients.length === 0) {
+      setRecipeImageImportStatus("No ingredients were detected.");
+      return;
+    }
+
+    setRecipeImageImportStatus(
+      `Detected ${parsedIngredients.length} ingredients. Matching FatSecret foods...`
+    );
+
+    const importedIngredients = [];
+
+    for (const [index, ingredient] of parsedIngredients.entries()) {
+      updateRecipeImageImportRow(index, {
+        status: "Searching FatSecret...",
+      });
+
+      try {
+        const searchResult = await searchFatSecretFoods(ingredient.ingredient);
+        const [match] = Array.isArray(searchResult.foods)
+          ? searchResult.foods
+          : [];
+
+        if (!match) {
+          updateRecipeImageImportRow(index, {
+            status: "No FatSecret match",
+          });
+          continue;
+        }
+
+        let detailedMatch = match;
+
+        if (match.fatsecretFoodId) {
+          detailedMatch = await fetchFatSecretFoodDetails(match.fatsecretFoodId);
+          setFatSecretDetailsById((current) => ({
+            ...current,
+            ...storeHydratedFatSecretFood(detailedMatch),
+          }));
+        }
+
+        const importedIngredient = applyImportedIngredientAmount(
+          createRecipeIngredientFromFatSecretFood(detailedMatch || match),
+          ingredient
+        );
+
+        importedIngredients.push(importedIngredient);
+        updateRecipeImageImportRow(index, {
+          matchName: importedIngredient.name,
+          status: importedIngredient.importUnitWarning || "Matched",
+        });
+      } catch (error) {
+        console.error("Recipe image ingredient match failed:", error);
+        updateRecipeImageImportRow(index, {
+          status: error.message || "Match failed",
+        });
+      }
+    }
+
+    if (importedIngredients.length > 0) {
+      setRecipeIngredients((current) => [...current, ...importedIngredients]);
+    }
+
+    setRecipeImageImportStatus(
+      importedIngredients.length
+        ? `Added ${importedIngredients.length} matched ingredients. Review amounts before saving.`
+        : "No ingredients were added. Try manual search for the parsed rows."
+    );
+  }
+
+  async function processRecipeImageWithOcr(imageDataUrl) {
+    setRecipeImageImportLoading(true);
+    setRecipeImageImportRows([]);
+    setRecipeImageImportRawText("");
+    setRecipeImageImportRawTextOpen(false);
+    setRecipeImageImportStatus("Loading local OCR...");
+    setRecipeSearchStatus("");
+
+    const slowParseStatusId = window.setTimeout(() => {
+      setRecipeImageImportStatus(
+        "Still scanning text. Clear, cropped ingredient images work best."
+      );
+    }, 10000);
+
+    try {
+      const ocrText = await withTimeout(
+        recognizeRecipeTextFromImage(imageDataUrl, setRecipeImageImportStatus),
+        RECIPE_OCR_IMPORT_TIMEOUT_MS,
+        "Recipe OCR timed out. Try a sharper, closer image of only the yield and ingredients."
+      );
+      window.clearTimeout(slowParseStatusId);
+      setRecipeImageImportRawText(ocrText.trim());
+
+      const parsedRecipe = parseRecipeFromOcrText(ocrText);
+
+      await matchParsedRecipeIngredients(parsedRecipe);
+    } catch (error) {
+      window.clearTimeout(slowParseStatusId);
+      console.error("Recipe OCR import failed:", error);
+      setRecipeImageImportStatus(formatRecipeImageImportError(error));
+    } finally {
+      setRecipeImageImportLoading(false);
+    }
+  }
+
+  async function handleRecipeImageSelected(event) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setRecipeImageImportStatus("Choose a recipe image.");
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setRecipeImageImportStatus("Choose an image smaller than 8 MB.");
+      return;
+    }
+
+    const imageDataUrl = await readFileAsDataUrl(file);
+
+    openRecipeCropper(imageDataUrl);
+  }
+
+  async function captureRecipeCameraImage() {
+    const video = recipeCameraVideoRef.current;
+
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setRecipeCameraStatus("Camera is still getting ready.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 960;
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, width, height);
+
+    const imageDataUrl = canvas.toDataURL("image/jpeg", 0.88);
+
+    setRecipeCameraOpen(false);
+    openRecipeCropper(imageDataUrl);
+  }
+
+  async function processRecipeCrop() {
+    if (!recipeCropImageDataUrl) {
+      return;
+    }
+
+    setRecipeCropOpen(false);
+    setRecipeImageImportStatus("Cropping recipe image...");
+
+    try {
+      const croppedImageDataUrl = await cropImageDataUrl(
+        recipeCropImageDataUrl,
+        recipeCrop
+      );
+
+      await processRecipeImageWithOcr(croppedImageDataUrl);
+    } catch (error) {
+      console.error("Recipe crop failed:", error);
+      setRecipeImageImportStatus(formatRecipeImageImportError(error));
+    }
   }
 
   async function searchRecipeIngredients(event) {
@@ -6911,6 +7954,353 @@ export default function NutritionView({ session = null }) {
                   type="button"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {recipeCropOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Crop recipe image"
+            onClick={() => setRecipeCropOpen(false)}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: 2750,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxHeight: "90vh",
+                maxWidth: "560px",
+                overflowY: "auto",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      lineHeight: 1.15,
+                      margin: 0,
+                    }}
+                  >
+                    Crop Ingredients
+                  </h2>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "3px",
+                    }}
+                  >
+                    Move and resize the box around the yield and ingredients.
+                  </div>
+                </div>
+                <button
+                  aria-label="Close cropper"
+                  onClick={() => setRecipeCropOpen(false)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "36px",
+                    minWidth: "36px",
+                    padding: 0,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  position: "relative",
+                  touchAction: "none",
+                  width: "100%",
+                }}
+              >
+                <img
+                  alt=""
+                  ref={recipeCropImageRef}
+                  src={recipeCropImageDataUrl}
+                  style={{
+                    display: "block",
+                    height: "auto",
+                    userSelect: "none",
+                    width: "100%",
+                  }}
+                />
+                <div
+                  aria-label="Selected recipe crop"
+                  onPointerDown={(event) =>
+                    startRecipeCropInteraction(event, "move")
+                  }
+                  role="button"
+                  style={{
+                    border: "2px solid rgba(255,255,255,.96)",
+                    borderRadius: "8px",
+                    boxShadow: "0 0 0 999px rgba(0,0,0,.34)",
+                    boxSizing: "border-box",
+                    cursor: "move",
+                    height: `${recipeCrop.height * 100}%`,
+                    left: `${recipeCrop.x * 100}%`,
+                    position: "absolute",
+                    top: `${recipeCrop.y * 100}%`,
+                    width: `${recipeCrop.width * 100}%`,
+                  }}
+                  tabIndex={0}
+                >
+                  <div
+                    aria-hidden="true"
+                    onPointerDown={(event) =>
+                      startRecipeCropInteraction(event, "resize-start")
+                    }
+                    style={{
+                      background: "var(--accent)",
+                      border: "2px solid var(--surface-raised)",
+                      borderRadius: "999px",
+                      cursor: "nwse-resize",
+                      height: "24px",
+                      left: "-12px",
+                      position: "absolute",
+                      top: "-12px",
+                      width: "24px",
+                    }}
+                  />
+                  <div
+                    aria-hidden="true"
+                    onPointerDown={(event) =>
+                      startRecipeCropInteraction(event, "resize")
+                    }
+                    style={{
+                      background: "var(--accent)",
+                      border: "2px solid var(--surface-raised)",
+                      borderRadius: "999px",
+                      bottom: "-12px",
+                      cursor: "nwse-resize",
+                      height: "24px",
+                      position: "absolute",
+                      right: "-12px",
+                      width: "24px",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+                }}
+              >
+                <button
+                  onClick={() => setRecipeCrop(DEFAULT_RECIPE_CROP)}
+                  type="button"
+                  style={{
+                    minHeight: "42px",
+                    padding: "7px 12px",
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => setRecipeCropOpen(false)}
+                  type="button"
+                  style={{
+                    minHeight: "42px",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={recipeImageImportLoading}
+                  onClick={processRecipeCrop}
+                  type="button"
+                  style={{
+                    minHeight: "42px",
+                    padding: "7px 12px",
+                  }}
+                >
+                  Use crop
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {recipeCameraOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Scan recipe"
+            onClick={() => setRecipeCameraOpen(false)}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: 2700,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxHeight: "86vh",
+                maxWidth: "520px",
+                overflowY: "auto",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      lineHeight: 1.15,
+                      margin: 0,
+                    }}
+                  >
+                    Scan Recipe
+                  </h2>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "3px",
+                    }}
+                  >
+                    Capture a sharp still image of the yield and ingredients.
+                  </div>
+                </div>
+                <button
+                  aria-label="Close recipe scanner"
+                  onClick={() => setRecipeCameraOpen(false)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    minHeight: "36px",
+                    minWidth: "36px",
+                    padding: 0,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  aspectRatio: "3 / 4",
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                <video
+                  ref={recipeCameraVideoRef}
+                  muted
+                  playsInline
+                  style={{
+                    height: "100%",
+                    objectFit: "cover",
+                    width: "100%",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    border: "2px solid rgba(255,255,255,.92)",
+                    borderRadius: "10px",
+                    boxShadow: "0 0 0 999px rgba(0,0,0,.16)",
+                    inset: "8%",
+                    position: "absolute",
+                  }}
+                />
+              </div>
+
+              {recipeCameraStatus && (
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "13px",
+                  }}
+                >
+                  {recipeCameraStatus}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                }}
+              >
+                <button
+                  onClick={() => setRecipeCameraOpen(false)}
+                  type="button"
+                  style={{
+                    minHeight: "42px",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={recipeImageImportLoading}
+                  onClick={captureRecipeCameraImage}
+                  type="button"
+                  style={{
+                    minHeight: "42px",
+                    padding: "7px 12px",
+                  }}
+                >
+                  Capture
                 </button>
               </div>
             </div>
@@ -9078,6 +10468,146 @@ export default function NutritionView({ session = null }) {
                 padding: "10px",
               }}
             >
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "flex-start",
+                  }}
+                >
+                  <button
+                    disabled={recipeImageImportLoading}
+                    onClick={() => {
+                      setRecipeCameraStatus("");
+                      setRecipeCameraOpen(true);
+                    }}
+                    type="button"
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      minHeight: "40px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Camera size={16} />
+                    {recipeImageImportLoading ? "Importing..." : "Scan recipe"}
+                  </button>
+                </div>
+                <input
+                  accept="image/*"
+                  onChange={handleRecipeImageSelected}
+                  ref={recipeImageInputRef}
+                  style={{ display: "none" }}
+                  type="file"
+                />
+                {recipeImageImportStatus && (
+                  <div
+                    style={{
+                      color: recipeImageImportStatus.includes("failed")
+                        ? "var(--danger-text)"
+                        : "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {recipeImageImportStatus}
+                  </div>
+                )}
+                {recipeImageImportRawText && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "6px",
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        setRecipeImageImportRawTextOpen((current) => !current)
+                      }
+                      type="button"
+                      style={{
+                        minHeight: "34px",
+                        padding: "5px 8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      {recipeImageImportRawTextOpen ? "Hide" : "Show"} OCR text
+                    </button>
+                    {recipeImageImportRawTextOpen && (
+                      <pre
+                        style={{
+                          background: "var(--surface-raised)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          color: "var(--text-muted)",
+                          font: "12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace",
+                          margin: 0,
+                          maxHeight: "180px",
+                          overflow: "auto",
+                          padding: "8px",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        {recipeImageImportRawText}
+                      </pre>
+                    )}
+                  </div>
+                )}
+                {recipeImageImportRows.length > 0 && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "6px",
+                      maxHeight: "220px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    {recipeImageImportRows.map((row, index) => (
+                      <div
+                        key={`${row.originalLine || row.ingredient}-${index}`}
+                        style={{
+                          background: "var(--surface-raised)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          display: "grid",
+                          gap: "4px",
+                          padding: "8px",
+                        }}
+                      >
+                        <strong>{row.originalLine || row.ingredient}</strong>
+                        <span
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "12px",
+                          }}
+                        >
+                          {[row.amount, row.unit, row.ingredient]
+                            .filter(Boolean)
+                            .join(" ")}
+                        </span>
+                        <span
+                          style={{
+                            color: row.status?.includes("No ")
+                              ? "var(--danger-text)"
+                              : "var(--text-muted)",
+                            fontSize: "12px",
+                          }}
+                        >
+                          {row.matchName ? `${row.matchName} · ` : ""}
+                          {row.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <label
                 style={{
                   display: "grid",

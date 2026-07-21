@@ -10,6 +10,22 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toLocaleString()),
   },
 
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "recipe-ocr",
+              priority: 20,
+              test: /node_modules[\\/](?:tesseract\.js|tesseract\.js-core|bmp-js|idb-keyval|is-electron|regenerator-runtime|wasm-feature-detect|zlibjs)[\\/]/,
+            },
+          ],
+        },
+      },
+    },
+  },
+
   plugins: [
     react(),
 
