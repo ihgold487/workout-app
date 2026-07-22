@@ -54,6 +54,49 @@ import {
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
 
+function getSessionSet(session, activeSet) {
+  if (!activeSet?.exerciseId || !activeSet?.setId) {
+    return null;
+  }
+
+  const exercise = session.exercises?.find(
+    (item) => item.id === activeSet.exerciseId
+  );
+  const set = exercise?.sets?.find((item) => item.id === activeSet.setId);
+
+  return exercise && set ? { exercise, set } : null;
+}
+
+function getInitialSessionActiveSet(session) {
+  if (getSessionSet(session, session.activeSet)) {
+    return session.activeSet;
+  }
+
+  const activeExercise = session.activeExerciseId
+    ? session.exercises?.find((exercise) => exercise.id === session.activeExerciseId)
+    : null;
+  const activeExerciseSet =
+    activeExercise?.sets?.find((set) => !set.completed) ||
+    activeExercise?.sets?.[0];
+
+  if (activeExercise && activeExerciseSet) {
+    return {
+      exerciseId: activeExercise.id,
+      setId: activeExerciseSet.id,
+    };
+  }
+
+  const firstExercise = session.exercises?.[0];
+  const firstSet = firstExercise?.sets?.[0];
+
+  return firstExercise && firstSet
+    ? {
+        exerciseId: firstExercise.id,
+        setId: firstSet.id,
+      }
+    : null;
+}
+
 function IconButton({
   children,
   disabled = false,
@@ -768,11 +811,16 @@ export default function SessionView({
 
   const [selectedMuscle, setSelectedMuscle] = useState("");
 
-  const [activeSet, setActiveSet] = useState({
-    exerciseId: session.exercises[0]?.id,
-
-    setId: session.exercises[0]?.sets[0]?.id,
-  });
+  const initialActiveSet = getInitialSessionActiveSet(session);
+  const initialActiveExerciseId =
+    session.activeExerciseId ||
+    initialActiveSet?.exerciseId ||
+    session.exercises[0]?.id ||
+    null;
+  const [activeSet, setActiveSet] = useState(initialActiveSet);
+  const [activeExerciseId, setActiveExerciseId] = useState(
+    initialActiveExerciseId
+  );
 
   const setRowRefs = useRef({});
   const completeWorkoutButtonRef = useRef(null);
@@ -799,6 +847,19 @@ export default function SessionView({
     },
     [session.id, setSessions]
   );
+
+  function setActiveWorkoutFocus(nextActiveSet, nextActiveExerciseId) {
+    const resolvedExerciseId =
+      nextActiveExerciseId || nextActiveSet?.exerciseId || null;
+
+    setActiveSet(nextActiveSet || null);
+    setActiveExerciseId(resolvedExerciseId);
+    updateSession((s) => ({
+      ...s,
+      activeExerciseId: resolvedExerciseId,
+      activeSet: nextActiveSet || null,
+    }));
+  }
 
   useEffect(() => {
     let hasUpdates = false;
@@ -1518,7 +1579,7 @@ export default function SessionView({
     const nextSet = exercise.sets[currentIndex + 1];
 
     if (nextSet) {
-      setActiveSet({
+      setActiveWorkoutFocus({
         exerciseId,
         setId: nextSet.id,
       });
@@ -1533,12 +1594,12 @@ export default function SessionView({
     const nextExercise = session.exercises[exerciseIndex + 1];
 
     if (nextExercise?.sets?.[0]) {
-      setActiveSet({
+      setActiveWorkoutFocus({
         exerciseId: nextExercise.id,
         setId: nextExercise.sets[0].id,
       });
     } else {
-      setActiveSet(null);
+      setActiveWorkoutFocus(null);
     }
   }
 
@@ -2060,7 +2121,7 @@ export default function SessionView({
       setLastCompletedExerciseId((currentExerciseId) =>
         currentExerciseId === exerciseId ? null : currentExerciseId
       );
-      setActiveSet({ exerciseId, setId });
+      setActiveWorkoutFocus({ exerciseId, setId });
       return;
     }
 
@@ -2084,9 +2145,16 @@ export default function SessionView({
       completedAt
     );
 
-    setActiveSet(nextActiveSet);
+    setActiveWorkoutFocus(nextActiveSet);
   }
   function deleteExercise(exerciseId) {
+    const deletingActiveExercise = activeExerciseId === exerciseId;
+    const nextExercise = deletingActiveExercise
+      ? session.exercises.find((exercise) => exercise.id !== exerciseId)
+      : null;
+    const nextSet = nextExercise?.sets?.find((set) => !set.completed) ||
+      nextExercise?.sets?.[0];
+
     updateSession((s) => ({
       ...s,
 
@@ -2097,6 +2165,18 @@ export default function SessionView({
     setLastCompletedExerciseId((currentExerciseId) =>
       currentExerciseId === exerciseId ? null : currentExerciseId
     );
+
+    if (deletingActiveExercise) {
+      setActiveWorkoutFocus(
+        nextExercise && nextSet
+          ? {
+              exerciseId: nextExercise.id,
+              setId: nextSet.id,
+            }
+          : null,
+        nextExercise?.id || null
+      );
+    }
   }
 
   function updateExerciseSupersetGroup(exerciseId, supersetGroup) {
@@ -2208,11 +2288,7 @@ export default function SessionView({
     }));
 
     if (activeSet?.exerciseId === oldExerciseId) {
-      setActiveSet((s) => ({
-        ...s,
-
-        exerciseId: oldExerciseId,
-      }));
+      setActiveWorkoutFocus(activeSet, oldExerciseId);
     }
 
     setReplacingExerciseId(null);
@@ -2362,6 +2438,7 @@ export default function SessionView({
     );
 
   const currentExercise =
+    session.exercises.find((exercise) => exercise.id === activeExerciseId) ||
     session.exercises.find(
       (exercise) => exercise.id === activeSet?.exerciseId
     ) ||
@@ -2491,7 +2568,7 @@ export default function SessionView({
       lockSupersetOrderForSet(exercise.id, nextSet.id);
     }
 
-    setActiveSet({
+    setActiveWorkoutFocus({
       exerciseId: exercise.id,
       setId: nextSet.id,
     });
@@ -4046,7 +4123,7 @@ export default function SessionView({
                               onClick={() => {
                                 if (canActivate) {
                                   lockSupersetOrderForSet(exercise.id, set.id);
-                                  setActiveSet({
+                                  setActiveWorkoutFocus({
                                     exerciseId: exercise.id,
 
                                     setId: set.id,

@@ -1,5 +1,5 @@
 /* global __BUILD_TIME__ */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useDeferredValue } from "react";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -13,6 +13,7 @@ import {
   Home,
   Pencil,
   Play,
+  Plus,
   RotateCcw,
   Settings,
   Trash2,
@@ -25,6 +26,7 @@ import SessionView from "./components/SessionView";
 import ExerciseView from "./components/ExerciseView";
 import PlansView from "./components/PlansView";
 import NutritionView from "./components/NutritionView";
+import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import {
   createWorkoutBackup,
@@ -63,6 +65,10 @@ import {
 } from "./sync/sessionCloudSync";
 import { downloadPlans, uploadPlans } from "./sync/planCloudSync";
 import {
+  downloadPlateInventory,
+  uploadPlateInventory,
+} from "./sync/plateInventoryCloudSync";
+import {
   downloadNutritionEntries,
   filterPendingDeletedNutritionEntries,
   retryPendingNutritionDeletes,
@@ -92,6 +98,8 @@ const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
 const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
 const BENCH_HISTORY_TEST_BACKUP_KEY = "benchHistoryTestBackup";
+const PLATE_INVENTORY_KEY = "equipmentPlateInventory";
+const PLATE_INVENTORY_OWNER_KEY = "equipmentPlateInventoryOwner";
 const APP_APPROVAL_CACHE_KEY_PREFIX = "appUserApproval:";
 const APP_OWNER_EMAIL = "ihgold@comcast.net";
 const BENCH_HISTORY_TEST_ID_PREFIX = "bench-history-test";
@@ -101,6 +109,7 @@ const NORMALIZED_SYNC_DOMAINS = [
   "workouts",
   "history",
   "plans",
+  "plateInventory",
 ];
 const NORMALIZED_WORKOUT_RESET_TABLES = [
   "session_sets",
@@ -127,6 +136,305 @@ const UPDATE_STATUS_COPY = {
 const BUILD_NOTICE_COPY = {
   updated: "Updated to the latest build.",
 };
+
+const DEFAULT_PLATE_INVENTORY = {
+  oneInch: [
+    { count: 0, id: "one-inch-10", weight: 10 },
+    { count: 0, id: "one-inch-7-5", weight: 7.5 },
+    { count: 0, id: "one-inch-5", weight: 5 },
+    { count: 0, id: "one-inch-2-5", weight: 2.5 },
+    { count: 0, id: "one-inch-1-25", weight: 1.25 },
+  ],
+  twoInch: [
+    { count: 0, id: "two-inch-55", weight: 55 },
+    { count: 0, id: "two-inch-45", weight: 45 },
+    { count: 0, id: "two-inch-35", weight: 35 },
+    { count: 0, id: "two-inch-25", weight: 25 },
+    { count: 0, id: "two-inch-10", weight: 10 },
+    { count: 0, id: "two-inch-5", weight: 5 },
+    { count: 0, id: "two-inch-2-5", weight: 2.5 },
+    { count: 0, id: "two-inch-1-25", weight: 1.25 },
+  ],
+};
+const PLATE_COUNT_PICKER_VALUES = Array.from({ length: 41 }, (_, index) => index);
+const LOAD_CALCULATOR_EQUIPMENT = [
+  {
+    categoryKey: "oneInch",
+    id: "dumbbell",
+    label: "Dumbbell",
+    loadMode: "balanced",
+    weight: 5,
+  },
+  {
+    categoryKey: "twoInch",
+    id: "ezBar",
+    label: "EZ bar",
+    loadMode: "balanced",
+    weight: 15,
+  },
+  {
+    categoryKey: "twoInch",
+    id: "barbell",
+    label: "Barbell",
+    loadMode: "balanced",
+    weight: 45,
+  },
+  {
+    categoryKey: "twoInch",
+    id: "landmine",
+    label: "Landmine",
+    loadMode: "singleEnd",
+    weight: 0,
+  },
+  {
+    categoryKey: "twoInch",
+    id: "trapBar",
+    label: "Trap bar",
+    loadMode: "balanced",
+    weight: 50,
+  },
+  {
+    categoryKey: "twoInch",
+    id: "machine",
+    label: "Machine",
+    loadMode: "stack",
+    weight: 0,
+  },
+];
+const PLATE_WEIGHT_UNIT = 4;
+const TWO_INCH_PLATE_STYLES = {
+  "55": { background: "#d32f2f", border: "#9a1b1b", color: "#fff" },
+  "45": { background: "#1565c0", border: "#0d47a1", color: "#fff" },
+  "35": { background: "#fdd835", border: "#c6a700", color: "#111" },
+  "23.75": { background: "#2e7d32", border: "#1b5e20", color: "#fff" },
+  "25": { background: "#cfd8dc", border: "#90a4ae", color: "#111" },
+  "15": { background: "#ef6c00", border: "#bf4f00", color: "#fff" },
+  "10": { background: "#8e8e8e", border: "#6a6a6a", color: "#fff" },
+  "5": { background: "#111", border: "#000", color: "#fff" },
+  "2.5": { background: "#3f3f3f", border: "#262626", color: "#fff" },
+  "1.25": { background: "#fff", border: "#d0d0d0", color: "#111" },
+};
+const LOAD_CALCULATOR_BAR_WIDTHS = {
+  barbell: "100%",
+  landmine: "100%",
+  trapBar: "100%",
+  ezBar: "100%",
+  dumbbell: "100%",
+  machine: "0%",
+};
+const LOAD_CALCULATOR_BAR_COLUMNS = {
+  barbell: "74px",
+  landmine: "74px",
+  trapBar: "74px",
+  ezBar: "56px",
+  dumbbell: "37px",
+  machine: "1px",
+};
+const MAX_PLATE_LOADING_OPTIONS_PER_SUM = 4;
+
+function formatPlateNumber(value) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+}
+
+function comparePlateCombinations(a, b) {
+  if (a.length !== b.length) {
+    return a.length - b.length;
+  }
+
+  const aSorted = [...a].sort((first, second) => second - first);
+  const bSorted = [...b].sort((first, second) => second - first);
+
+  for (let index = 0; index < Math.max(aSorted.length, bSorted.length); index += 1) {
+    const weightDifference = (bSorted[index] || 0) - (aSorted[index] || 0);
+
+    if (weightDifference !== 0) {
+      return weightDifference;
+    }
+  }
+
+  return 0;
+}
+
+function rankPlateCombinations(combinations) {
+  const uniqueCombinations = new Map();
+
+  combinations.forEach((plates) => {
+    const sortedPlates = [...plates].sort((a, b) => b - a);
+    const key = sortedPlates.join("|");
+
+    if (!uniqueCombinations.has(key)) {
+      uniqueCombinations.set(key, sortedPlates);
+    }
+  });
+
+  return Array.from(uniqueCombinations.values())
+    .sort(comparePlateCombinations)
+    .slice(0, MAX_PLATE_LOADING_OPTIONS_PER_SUM);
+}
+
+function calculatePlateLoading(totalWeight, equipmentId, inventory) {
+  const equipment =
+    LOAD_CALCULATOR_EQUIPMENT.find((option) => option.id === equipmentId) ||
+    LOAD_CALCULATOR_EQUIPMENT[0];
+  const requestedWeight = Number(totalWeight);
+
+  if (!Number.isFinite(requestedWeight) || requestedWeight <= 0) {
+    return {
+      equipment,
+      status: "empty",
+    };
+  }
+
+  const isBalancedLoad = equipment.loadMode === "balanced";
+  const loadedWeight = isBalancedLoad
+    ? requestedWeight - equipment.weight
+    : requestedWeight;
+
+  if (loadedWeight < 0) {
+    return {
+      equipment,
+      requestedWeight,
+      status: "underBar",
+    };
+  }
+
+  const targetLoad = isBalancedLoad ? loadedWeight / 2 : loadedWeight;
+  const targetLoadUnits = Math.round(targetLoad * PLATE_WEIGHT_UNIT);
+  const availablePlates = (inventory[equipment.categoryKey] || [])
+    .filter((plate) =>
+      isBalancedLoad
+        ? Number(plate.count) >= 2 && Number(plate.weight) > 0
+        : Number(plate.count) >= 1 && Number(plate.weight) > 0
+    )
+    .sort((a, b) => b.weight - a.weight);
+  const sums = new Map([[0, [[]]]]);
+
+  availablePlates.forEach((plate) => {
+    const plateUnits = Math.round(Number(plate.weight) * PLATE_WEIGHT_UNIT);
+    const availableCount = isBalancedLoad
+      ? Math.floor(Number(plate.count) / 2)
+      : Number(plate.count);
+
+    for (let plateIndex = 0; plateIndex < availableCount; plateIndex += 1) {
+      Array.from(sums.entries()).forEach(([sum, combinations]) => {
+        const nextSum = sum + plateUnits;
+
+        if (nextSum <= targetLoadUnits) {
+          const nextCombinations = sums.get(nextSum) || [];
+
+          sums.set(
+            nextSum,
+            rankPlateCombinations([
+              ...nextCombinations,
+              ...combinations.map((plates) => [
+                ...plates,
+                Number(plate.weight),
+              ]),
+            ])
+          );
+        }
+      });
+    }
+  });
+
+  const bestSumUnits = Math.max(...sums.keys());
+  const loadingOptions = rankPlateCombinations(sums.get(bestSumUnits) || [[]]);
+  const platesPerSide = loadingOptions[0] || [];
+  const achievedPlateLoad = bestSumUnits / PLATE_WEIGHT_UNIT;
+  const achievedTotal = isBalancedLoad
+    ? equipment.weight + achievedPlateLoad * 2
+    : achievedPlateLoad;
+  const leftPlates =
+    equipment.loadMode === "balanced" ? platesPerSide : [];
+  const rightPlates =
+    equipment.loadMode === "balanced" || equipment.loadMode === "singleEnd"
+      ? platesPerSide
+      : [];
+  const machinePlates = equipment.loadMode === "stack" ? platesPerSide : [];
+
+  return {
+    achievedTotal,
+    difference: requestedWeight - achievedTotal,
+    equipment,
+    exact: bestSumUnits === targetLoadUnits,
+    leftPlates,
+    loadedWeight,
+    loadingOptions,
+    machinePlates,
+    platesPerSide,
+    rightPlates,
+    requestedWeight,
+    status: "ready",
+    targetLoad,
+  };
+}
+
+function normalizePlateInventory(value) {
+  const normalizeCategory = (categoryKey) => {
+    const byWeight = new Map(
+      (Array.isArray(value?.[categoryKey]) ? value[categoryKey] : [])
+        .map((plate) => {
+          const weight = Number(plate?.weight);
+          const count = Math.max(0, Number.parseInt(plate?.count, 10) || 0);
+
+          return Number.isFinite(weight) && weight > 0
+            ? [String(weight), { count, id: plate.id || `${categoryKey}-${weight}`, weight }]
+            : null;
+        })
+        .filter(Boolean)
+    );
+
+    DEFAULT_PLATE_INVENTORY[categoryKey].forEach((plate) => {
+      if (!byWeight.has(String(plate.weight))) {
+        byWeight.set(String(plate.weight), plate);
+      }
+    });
+
+    return Array.from(byWeight.values()).sort((a, b) => b.weight - a.weight);
+  };
+
+  return {
+    oneInch: normalizeCategory("oneInch"),
+    twoInch: normalizeCategory("twoInch"),
+  };
+}
+
+function hasConfiguredPlateInventory(inventory) {
+  return ["oneInch", "twoInch"].some((categoryKey) =>
+    (inventory?.[categoryKey] || []).some((plate) => Number(plate.count) > 0)
+  );
+}
+
+function readPlateInventory() {
+  try {
+    return normalizePlateInventory(
+      JSON.parse(localStorage.getItem(PLATE_INVENTORY_KEY) || "null")
+    );
+  } catch (error) {
+    console.error("Failed to read plate inventory:", error);
+    return normalizePlateInventory(null);
+  }
+}
+
+function readPlateInventoryOwner() {
+  return localStorage.getItem(PLATE_INVENTORY_OWNER_KEY) || null;
+}
+
+function savePlateInventory(inventory) {
+  safeSetLocalStorage(
+    PLATE_INVENTORY_KEY,
+    JSON.stringify(normalizePlateInventory(inventory))
+  );
+}
+
+function savePlateInventoryOwner(userId) {
+  if (userId) {
+    safeSetLocalStorage(PLATE_INVENTORY_OWNER_KEY, userId);
+    return;
+  }
+
+  localStorage.removeItem(PLATE_INVENTORY_OWNER_KEY);
+}
 
 function safeSetLocalStorage(key, value) {
   try {
@@ -188,8 +496,10 @@ function formatNormalizedSummary(summary) {
     : "";
   const maxE1RM =
     summary.maxE1RM == null ? "" : ` Max e1RM stored: ${summary.maxE1RM.toFixed(1)}.`;
+  const plateInventory =
+    summary.plateInventory > 0 ? ` Plate inventory saved.` : "";
 
-  return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}`;
+  return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}${plateInventory}`;
 }
 
 function formatHistoryTimestamp(workout) {
@@ -581,7 +891,8 @@ function hasNormalizedCloudData(summary) {
       (summary.workouts > 0 ||
         summary.trainingPlans > 0 ||
         summary.workoutSessions > 0 ||
-        summary.exercisePreferences > 0)
+        summary.exercisePreferences > 0 ||
+        summary.plateInventory > 0)
   );
 }
 
@@ -695,6 +1006,7 @@ function getAutoSyncSummary({
   domains = [],
   history,
   mode,
+  plateInventory,
   plans,
   workouts,
 }) {
@@ -703,7 +1015,7 @@ function getAutoSyncSummary({
   const domainSummary =
     domains.length > 0 ? ` Pushed: ${domains.join(", ")}.` : "";
 
-  return `${verb}: ${workouts.downloaded} workouts, ${plans.downloaded} plans, ${history.downloaded} completed workouts, ${exercisePreferences.updated} exercise preferences.${domainSummary}`;
+  return `${verb}: ${workouts.downloaded} workouts, ${plans.downloaded} plans, ${history.downloaded} completed workouts, ${exercisePreferences.updated} exercise preferences, ${plateInventory.downloaded} plate inventory.${domainSummary}`;
 }
 
 function readNormalizedSyncDirtyDomains() {
@@ -1025,6 +1337,25 @@ export default function App() {
   const [showNutrition, setShowNutrition] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [plateInventory, setPlateInventory] = useState(readPlateInventory);
+  const [plateInventoryOwnerUserId, setPlateInventoryOwnerUserId] = useState(
+    readPlateInventoryOwner
+  );
+  const [newPlateDrafts, setNewPlateDrafts] = useState({
+    oneInch: "",
+    twoInch: "",
+  });
+  const [plateCategoryExpanded, setPlateCategoryExpanded] = useState({
+    oneInch: false,
+    twoInch: false,
+  });
+  const [plateCountPicker, setPlateCountPicker] = useState(null);
+  const [loadCalculatorDraft, setLoadCalculatorDraft] = useState({
+    equipmentId: "barbell",
+    optionIndex: 0,
+    weight: "",
+  });
+  const deferredLoadCalculatorDraft = useDeferredValue(loadCalculatorDraft);
   const [expandedPlanIds, setExpandedPlanIds] = useState({});
   const [planDisplayWeeks, setPlanDisplayWeeks] = useState({});
   const [weekPickerPlanId, setWeekPickerPlanId] = useState(null);
@@ -1116,6 +1447,10 @@ export default function App() {
   const checkpointSyncTimeoutRef = useRef(null);
 
   const localDataRevisionRef = useRef(0);
+
+  const plateInventoryRef = useRef(plateInventory);
+
+  const plateInventoryRevisionRef = useRef(0);
 
   const normalizedSyncDirtyDomainsRef = useRef(
     new Set(readNormalizedSyncDirtyDomains())
@@ -1699,6 +2034,10 @@ export default function App() {
   }, [authSession]);
 
   useEffect(() => {
+    plateInventoryRef.current = plateInventory;
+  }, [plateInventory]);
+
+  useEffect(() => {
     if (!indexedDbReady) {
       return;
     }
@@ -1709,6 +2048,10 @@ export default function App() {
       previousUserId && nextUserId && previousUserId !== nextUserId;
     const storedOwnerMismatch =
       nextUserId && localOwnerUserId && localOwnerUserId !== nextUserId;
+    const plateOwnerMismatch =
+      nextUserId &&
+      plateInventoryOwnerUserId &&
+      plateInventoryOwnerUserId !== nextUserId;
     const unownedSignedInData =
       nextUserId &&
       !localOwnerUserId &&
@@ -1716,17 +2059,34 @@ export default function App() {
         currentWorkoutDataRef.current || getCurrentWorkoutData()
       );
 
-    if (switchedSignedInUsers || storedOwnerMismatch || unownedSignedInData) {
+    if (
+      switchedSignedInUsers ||
+      storedOwnerMismatch ||
+      plateOwnerMismatch ||
+      unownedSignedInData
+    ) {
+      const defaultPlateInventory = normalizePlateInventory(null);
+
       automaticSyncHydratedUserRef.current = null;
       automaticSyncSuppressUntilRef.current = getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       normalizedSyncDirtyDomainsRef.current = new Set();
       writeNormalizedSyncDirtyDomains([]);
       resetLocalWorkoutDataForUser(nextUserId);
+      setPlateInventory(defaultPlateInventory);
+      plateInventoryRef.current = defaultPlateInventory;
+      savePlateInventory(defaultPlateInventory);
+      setPlateInventoryOwnerUserId(nextUserId);
+      savePlateInventoryOwner(nextUserId);
       setSyncStatus("Account changed. Local data cleared before syncing this user.");
     }
 
     previousAuthUserIdRef.current = nextUserId;
-  }, [authSession?.user?.id, indexedDbReady, localOwnerUserId]);
+  }, [
+    authSession?.user?.id,
+    indexedDbReady,
+    localOwnerUserId,
+    plateInventoryOwnerUserId,
+  ]);
 
   useEffect(
     () => () => {
@@ -1826,6 +2186,10 @@ export default function App() {
         }
       );
     }
+
+    if (domainSet.has("plateInventory")) {
+      await uploadPlateInventory(plateInventoryRef.current, session);
+    }
   }
 
   async function downloadNormalizedWorkoutData(data, session, dirtyDomains = []) {
@@ -1860,6 +2224,7 @@ export default function App() {
         keepLocalOnly: dirtyDomainSet.has("plans"),
       }
     );
+    const plateInventoryData = await downloadPlateInventory(session);
     const resolvedPlans = resolvePlanWorkoutTemplateIds(
       planData.plans,
       workoutData.templates
@@ -1882,6 +2247,12 @@ export default function App() {
       exercisePreferences,
       history: historyData,
       nextData,
+      plateInventory: {
+        downloaded: plateInventoryData.inventory ? 1 : 0,
+        inventory: plateInventoryData.inventory
+          ? normalizePlateInventory(plateInventoryData.inventory)
+          : null,
+      },
       plans: planData,
       workouts: workoutData,
     };
@@ -1897,12 +2268,20 @@ export default function App() {
       automaticSyncSuppressUntilRef.current =
         getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       replaceWorkoutData(downloaded.nextData);
+      if (downloaded.plateInventory.inventory) {
+        setPlateInventory(downloaded.plateInventory.inventory);
+        plateInventoryRef.current = downloaded.plateInventory.inventory;
+        savePlateInventory(downloaded.plateInventory.inventory);
+        setPlateInventoryOwnerUserId(authSession.user.id);
+        savePlateInventoryOwner(authSession.user.id);
+      }
       markNormalizedSyncClean();
       setSyncStatus(
         `${getAutoSyncSummary({
           exercisePreferences: downloaded.exercisePreferences,
           history: downloaded.history,
           mode: "check",
+          plateInventory: downloaded.plateInventory,
           plans: downloaded.plans,
           workouts: downloaded.workouts,
         })} Pulled latest cloud data.`
@@ -1969,13 +2348,22 @@ export default function App() {
     try {
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
       const syncStartRevision = localDataRevisionRef.current;
+      const plateInventoryStartRevision = plateInventoryRevisionRef.current;
       const forceUpload = reason === "workout completion";
       const dirtyDomains = [...normalizedSyncDirtyDomainsRef.current];
-      const uploadDomains = forceUpload ? [...NORMALIZED_SYNC_DOMAINS] : dirtyDomains;
       const cloudSummary = await getNormalizedCloudSummary(session);
+      const shouldSeedPlateInventory =
+        cloudSummary.plateInventory === 0 &&
+        hasConfiguredPlateInventory(plateInventoryRef.current);
+      const uploadDomains = forceUpload
+        ? [...NORMALIZED_SYNC_DOMAINS]
+        : shouldSeedPlateInventory
+          ? [...new Set([...dirtyDomains, "plateInventory"])]
+          : dirtyDomains;
       const shouldHydrateFirst =
         !hasLocalNormalizedUserData(data) &&
-        hasNormalizedCloudData(cloudSummary);
+        hasNormalizedCloudData(cloudSummary) &&
+        !shouldSeedPlateInventory;
       const shouldUpload =
         !shouldHydrateFirst && uploadDomains.length > 0;
       const mode = shouldHydrateFirst
@@ -1994,7 +2382,10 @@ export default function App() {
         uploadDomains
       );
 
-      if (localDataRevisionRef.current !== syncStartRevision) {
+      if (
+        localDataRevisionRef.current !== syncStartRevision ||
+        plateInventoryRevisionRef.current !== plateInventoryStartRevision
+      ) {
         automaticSyncQueuedRef.current = true;
         setSyncStatus(
           "Sync finished, but newer local changes were detected. They will sync at the next checkpoint."
@@ -2005,6 +2396,13 @@ export default function App() {
       automaticSyncSuppressUntilRef.current =
         getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       replaceWorkoutData(downloaded.nextData);
+      if (downloaded.plateInventory.inventory) {
+        setPlateInventory(downloaded.plateInventory.inventory);
+        plateInventoryRef.current = downloaded.plateInventory.inventory;
+        savePlateInventory(downloaded.plateInventory.inventory);
+        setPlateInventoryOwnerUserId(session.user.id);
+        savePlateInventoryOwner(session.user.id);
+      }
       automaticSyncHydratedUserRef.current = session.user.id;
       markNormalizedSyncClean();
       setSyncStatus(
@@ -2013,6 +2411,7 @@ export default function App() {
           domains: shouldUpload ? uploadDomains : [],
           history: downloaded.history,
           mode,
+          plateInventory: downloaded.plateInventory,
           plans: downloaded.plans,
           workouts: downloaded.workouts,
         })} Last auto sync: ${new Date().toLocaleTimeString()}.`
@@ -3795,6 +4194,677 @@ export default function App() {
     );
   }
 
+  function updatePlateInventory(updater) {
+    const updatedInventory = normalizePlateInventory(updater(plateInventoryRef.current));
+
+    plateInventoryRef.current = updatedInventory;
+    plateInventoryRevisionRef.current += 1;
+    savePlateInventory(updatedInventory);
+    if (authSessionRef.current?.user?.id) {
+      setPlateInventoryOwnerUserId(authSessionRef.current.user.id);
+      savePlateInventoryOwner(authSessionRef.current.user.id);
+    }
+    setPlateInventory(updatedInventory);
+    requestSyncCheckpoint(["plateInventory"], "plate inventory");
+  }
+
+  function setPlateCount(categoryKey, plateId, count) {
+    updatePlateInventory((currentInventory) => ({
+      ...currentInventory,
+      [categoryKey]: currentInventory[categoryKey].map((plate) =>
+        plate.id === plateId
+          ? {
+              ...plate,
+              count: Math.max(0, Number.parseInt(count, 10) || 0),
+            }
+          : plate
+      ),
+    }));
+  }
+
+  function addPlateSize(categoryKey) {
+    const weight = Number.parseFloat(newPlateDrafts[categoryKey]);
+
+    if (!Number.isFinite(weight) || weight <= 0) {
+      return;
+    }
+
+    updatePlateInventory((currentInventory) => {
+      const existingPlate = currentInventory[categoryKey].find(
+        (plate) => Number(plate.weight) === weight
+      );
+
+      if (existingPlate) {
+        return {
+          ...currentInventory,
+          [categoryKey]: currentInventory[categoryKey].map((plate) =>
+            plate.id === existingPlate.id
+              ? {
+                  ...plate,
+                  count: plate.count + 2,
+                }
+              : plate
+          ),
+        };
+      }
+
+      return {
+        ...currentInventory,
+        [categoryKey]: [
+          ...currentInventory[categoryKey],
+          {
+            count: 2,
+            id: `${categoryKey}-${weight}-${Date.now()}`,
+            weight,
+          },
+        ],
+      };
+    });
+    setNewPlateDrafts((drafts) => ({
+      ...drafts,
+      [categoryKey]: "",
+    }));
+  }
+
+  function removePlateSize(categoryKey, plateId) {
+    updatePlateInventory((currentInventory) => ({
+      ...currentInventory,
+      [categoryKey]: currentInventory[categoryKey].filter(
+        (plate) => plate.id !== plateId
+      ),
+    }));
+  }
+
+  function resetPlateInventory() {
+    const defaults = normalizePlateInventory(null);
+
+    setPlateInventory(defaults);
+    plateInventoryRef.current = defaults;
+    plateInventoryRevisionRef.current += 1;
+    savePlateInventory(defaults);
+    if (authSessionRef.current?.user?.id) {
+      setPlateInventoryOwnerUserId(authSessionRef.current.user.id);
+      savePlateInventoryOwner(authSessionRef.current.user.id);
+    }
+    requestSyncCheckpoint(["plateInventory"], "plate inventory");
+    setNewPlateDrafts({
+      oneInch: "",
+      twoInch: "",
+    });
+  }
+
+  function renderPlateInventoryCategory(categoryKey, label, description) {
+    const plates = plateInventory[categoryKey] || [];
+    const expanded = plateCategoryExpanded[categoryKey] !== false;
+
+    return (
+      <div
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "8px",
+          padding: "10px",
+        }}
+      >
+        <button
+          aria-expanded={expanded}
+          onClick={() =>
+            setPlateCategoryExpanded((current) => ({
+              ...current,
+              [categoryKey]: !expanded,
+            }))
+          }
+          style={{
+            alignItems: "center",
+            background: "transparent",
+            border: "none",
+            color: "var(--text)",
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "auto minmax(0, 1fr)",
+            padding: 0,
+            textAlign: "left",
+          }}
+          type="button"
+        >
+          {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          <span>
+            <strong>{label}</strong>
+            <span
+              style={{
+                color: "var(--text-muted)",
+                display: "block",
+                fontSize: "12px",
+                marginTop: "2px",
+              }}
+            >
+              {description}
+            </span>
+          </span>
+        </button>
+
+        {expanded && (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gap: "6px",
+              }}
+            >
+              {plates.map((plate) => (
+                <div
+                  key={plate.id}
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(64px, 1fr) auto auto auto",
+                    padding: "8px",
+                  }}
+                >
+                  <strong>{plate.weight} lb</strong>
+                  <button
+                    aria-label={`Remove one ${plate.weight} lb plate`}
+                    onClick={() =>
+                      setPlateCount(categoryKey, plate.id, plate.count - 1)
+                    }
+                    style={{
+                      minHeight: "32px",
+                      minWidth: "32px",
+                      padding: "4px 8px",
+                    }}
+                    type="button"
+                  >
+                    -
+                  </button>
+                  <button
+                    aria-label={`${label} ${plate.weight} lb plate count`}
+                    onClick={() =>
+                      setPlateCountPicker({
+                        categoryKey,
+                        count: plate.count,
+                        plateId: plate.id,
+                        weight: plate.weight,
+                      })
+                    }
+                    style={{
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      font: "inherit",
+                      minHeight: "32px",
+                      minWidth: "54px",
+                      padding: "4px 8px",
+                      textAlign: "center",
+                    }}
+                    type="button"
+                  >
+                    {plate.count}
+                  </button>
+                  <button
+                    aria-label={`Add one ${plate.weight} lb plate`}
+                    onClick={() =>
+                      setPlateCount(categoryKey, plate.id, plate.count + 1)
+                    }
+                    style={{
+                      minHeight: "32px",
+                      minWidth: "32px",
+                      padding: "4px 8px",
+                    }}
+                    type="button"
+                  >
+                    +
+                  </button>
+                  <button
+                    aria-label={`Delete ${plate.weight} lb plate size`}
+                    onClick={() => removePlateSize(categoryKey, plate.id)}
+                    style={{
+                      color: "var(--danger-text)",
+                      gridColumn: "1 / -1",
+                      justifySelf: "end",
+                      minHeight: "30px",
+                      padding: "4px 8px",
+                    }}
+                    type="button"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+              }}
+            >
+              <input
+                aria-label={`New ${label} plate weight`}
+                inputMode="decimal"
+                min="0"
+                onChange={(event) =>
+                  setNewPlateDrafts((drafts) => ({
+                    ...drafts,
+                    [categoryKey]: event.target.value,
+                  }))
+                }
+                placeholder="weight"
+                style={{
+                  boxSizing: "border-box",
+                  font: "inherit",
+                  minWidth: 0,
+                }}
+                type="number"
+                value={newPlateDrafts[categoryKey]}
+              />
+              <button
+                onClick={() => addPlateSize(categoryKey)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  justifyContent: "center",
+                  minHeight: "38px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                <Plus size={16} />
+                Add
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function renderPlateLoadingDiagram(loading, optionCount) {
+    const leftPlates = loading.leftPlates || [];
+    const rightPlates = loading.rightPlates || [];
+    const machinePlates = loading.machinePlates || [];
+    const allPlates = [...leftPlates, ...rightPlates, ...machinePlates];
+    const maxPlateWeight = Math.max(55, ...allPlates);
+    const leftTotal = leftPlates.reduce((total, plate) => total + plate, 0);
+    const rightTotal = rightPlates.reduce((total, plate) => total + plate, 0);
+    const machineTotal = machinePlates.reduce((total, plate) => total + plate, 0);
+    const canCycleOptions = optionCount > 1;
+    const showMachineStack = loading.equipment.loadMode === "stack";
+    const barWidth =
+      LOAD_CALCULATOR_BAR_WIDTHS[loading.equipment.id] ||
+      LOAD_CALCULATOR_BAR_WIDTHS.barbell;
+    const barColumnWidth =
+      LOAD_CALCULATOR_BAR_COLUMNS[loading.equipment.id] ||
+      LOAD_CALCULATOR_BAR_COLUMNS.barbell;
+    const diagramColumns = `minmax(0, 1fr) ${barColumnWidth} minmax(0, 1fr)`;
+    const getPlateStyle = (plate) =>
+      loading.equipment.categoryKey === "twoInch"
+        ? TWO_INCH_PLATE_STYLES[formatPlateNumber(plate)] || {
+            background: "#d7e7f5",
+            border: "#7da4c3",
+            color: "#17324a",
+          }
+        : {
+            background: "#d7e7f5",
+            border: "#7da4c3",
+            color: "#17324a",
+          };
+    const renderPlate = (plate, index, side) => {
+      const height = 32 + (plate / maxPlateWeight) * 36;
+      const plateStyle = getPlateStyle(plate);
+
+      return (
+        <div
+          key={`${side}-${plate}-${index}`}
+          title={`${formatPlateNumber(plate)} lb`}
+          style={{
+            alignItems: "center",
+            background: plateStyle.background,
+            border: `1px solid ${plateStyle.border}`,
+            borderRadius: "5px",
+            color: plateStyle.color,
+            display: "flex",
+            flex: "0 0 clamp(12px, 3.4vw, 15px)",
+            fontSize: "10px",
+            fontWeight: 700,
+            height: `${height}px`,
+            justifyContent: "center",
+            lineHeight: 1,
+            padding: "2px",
+            writingMode: "vertical-rl",
+          }}
+        >
+          {formatPlateNumber(plate)}
+        </div>
+      );
+    };
+
+    return (
+      <button
+        aria-label="Plate loading diagram"
+        aria-disabled={!canCycleOptions}
+        onClick={() => {
+          if (!canCycleOptions) {
+            return;
+          }
+
+          setLoadCalculatorDraft((draft) => ({
+            ...draft,
+            optionIndex: (draft.optionIndex + 1) % optionCount,
+          }));
+        }}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "inherit",
+          cursor: canCycleOptions ? "pointer" : "default",
+          display: "grid",
+          gap: "8px",
+          marginTop: "12px",
+          overflow: "hidden",
+          padding: 0,
+          textAlign: "inherit",
+          width: "100%",
+        }}
+        type="button"
+      >
+        {showMachineStack ? (
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "3px",
+              justifyContent: "center",
+              minWidth: 0,
+            }}
+          >
+            {machinePlates.map((plate, index) =>
+              renderPlate(plate, index, "machine")
+            )}
+          </div>
+        ) : (
+          <div
+            style={{
+              alignItems: "center",
+              display: "grid",
+              gap: "3px",
+              gridTemplateColumns: diagramColumns,
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexDirection: "row-reverse",
+                gap: "3px",
+                justifyContent: "end",
+                minWidth: 0,
+              }}
+            >
+              {leftPlates.map((plate, index) => renderPlate(plate, index, "left"))}
+            </div>
+
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                height: "72px",
+                justifyContent: "center",
+                minWidth: 0,
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  background: "#67717c",
+                  borderRadius: "999px",
+                  height: "8px",
+                  width: barWidth,
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: "3px",
+                justifyContent: "start",
+                minWidth: 0,
+              }}
+            >
+              {rightPlates.map((plate, index) =>
+                renderPlate(plate, index, "right")
+              )}
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            color: "var(--text-muted)",
+            display: "grid",
+            fontSize: "12px",
+            gap: "3px",
+            gridTemplateColumns: showMachineStack ? "1fr" : diagramColumns,
+            textAlign: "center",
+          }}
+        >
+          {showMachineStack ? (
+            <strong
+              style={{
+                color: "var(--text)",
+                fontSize: "12px",
+              }}
+            >
+              {formatPlateNumber(machineTotal)} lb {loading.equipment.label}
+            </strong>
+          ) : (
+            <>
+              <span>{leftTotal > 0 ? `${formatPlateNumber(leftTotal)} lb` : ""}</span>
+              <strong
+                style={{
+                  color: "var(--text)",
+                  fontSize: "12px",
+                }}
+              >
+                {loading.equipment.weight > 0
+                  ? `${formatPlateNumber(loading.equipment.weight)} lb `
+                  : ""}
+                {loading.equipment.label}
+              </strong>
+              <span>
+                {rightTotal > 0 ? `${formatPlateNumber(rightTotal)} lb` : ""}
+              </span>
+            </>
+          )}
+        </div>
+      </button>
+    );
+  }
+
+  function renderPlateLoadCalculator() {
+    const calculatedLoading = calculatePlateLoading(
+      deferredLoadCalculatorDraft.weight,
+      deferredLoadCalculatorDraft.equipmentId,
+      plateInventory
+    );
+    const optionCount = calculatedLoading.loadingOptions?.length || 0;
+    const selectedOptionIndex = optionCount
+      ? loadCalculatorDraft.optionIndex % optionCount
+      : 0;
+    const loading =
+      calculatedLoading.status === "ready"
+        ? (() => {
+            const selectedPlates =
+              calculatedLoading.loadingOptions[selectedOptionIndex] ||
+              calculatedLoading.platesPerSide;
+
+            return {
+              ...calculatedLoading,
+              leftPlates:
+                calculatedLoading.equipment.loadMode === "balanced"
+                  ? selectedPlates
+                  : [],
+              machinePlates:
+                calculatedLoading.equipment.loadMode === "stack"
+                  ? selectedPlates
+                  : [],
+              optionIndex: selectedOptionIndex,
+              platesPerSide: selectedPlates,
+              rightPlates:
+                calculatedLoading.equipment.loadMode === "balanced" ||
+                calculatedLoading.equipment.loadMode === "singleEnd"
+                  ? selectedPlates
+                  : [],
+            };
+          })()
+        : calculatedLoading;
+    return (
+      <section
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          margin: "18px auto",
+          maxWidth: "520px",
+          padding: "10px",
+        }}
+      >
+        <h3
+          style={{
+            margin: "0 0 10px",
+          }}
+        >
+          Plate Loading Calculator
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(118px, auto)",
+          }}
+        >
+          <input
+            aria-label="Target loaded weight"
+            inputMode="decimal"
+            min="0"
+            onChange={(event) =>
+              setLoadCalculatorDraft((draft) => ({
+                ...draft,
+                optionIndex: 0,
+                weight: event.target.value,
+              }))
+            }
+            placeholder="weight"
+            style={{
+              boxSizing: "border-box",
+              font: "inherit",
+              minWidth: 0,
+            }}
+            type="number"
+            value={loadCalculatorDraft.weight}
+          />
+          <select
+            aria-label="Equipment"
+            onChange={(event) =>
+              setLoadCalculatorDraft((draft) => ({
+                ...draft,
+                equipmentId: event.target.value,
+                optionIndex: 0,
+              }))
+            }
+            style={{
+              font: "inherit",
+              minHeight: "38px",
+              minWidth: 0,
+            }}
+            value={loadCalculatorDraft.equipmentId}
+          >
+            {LOAD_CALCULATOR_EQUIPMENT.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface-muted)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            display: "grid",
+            gap: "8px",
+            marginTop: "10px",
+            padding: "10px",
+            textAlign: "left",
+          }}
+        >
+          {loading.status === "empty" && (
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+              }}
+            >
+              Enter a target weight to calculate the loading.
+            </div>
+          )}
+
+          {loading.status === "underBar" && (
+            <div
+              style={{
+                color: "var(--danger-text)",
+                fontSize: "12px",
+              }}
+            >
+              {formatPlateNumber(loading.requestedWeight)} lb is below the{" "}
+              {formatPlateNumber(loading.equipment.weight)} lb{" "}
+              {loading.equipment.label} weight.
+            </div>
+          )}
+
+          {loading.status === "ready" && (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "4px",
+                }}
+              >
+                <strong>
+                  {loading.exact ? "Load" : "Closest load"}{" "}
+                  {formatPlateNumber(loading.achievedTotal)} lb
+                </strong>
+              </div>
+
+              {loading.platesPerSide.length > 0 ? (
+                renderPlateLoadingDiagram(loading, optionCount)
+              ) : (
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                  }}
+                >
+                  No plates needed.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   function renderSettings() {
     return (
       <div
@@ -4669,6 +5739,92 @@ export default function App() {
             </>
           )}
         </section>
+
+        <section
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            margin: "18px auto",
+            maxWidth: "520px",
+            padding: "10px",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "start",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  margin: "0 0 4px",
+                }}
+              >
+                Plate Inventory
+              </h3>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                Track available plates by sleeve size. Equipment matching will
+                use these categories later.
+              </div>
+            </div>
+            <button onClick={resetPlateInventory} type="button">
+              Reset
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "10px",
+              marginTop: "12px",
+            }}
+          >
+            {renderPlateInventoryCategory(
+              "oneInch",
+              "1 inch plates",
+              "For adjustable dumbbells and standard 1 inch equipment."
+            )}
+            {renderPlateInventoryCategory(
+              "twoInch",
+              "2 inch plates",
+              "For Olympic bars, plate-loaded machines, and 2 inch equipment."
+            )}
+          </div>
+        </section>
+
+        {renderPlateLoadCalculator()}
+
+        <WeightPickerModal
+          isOpen={Boolean(plateCountPicker)}
+          onClose={() => setPlateCountPicker(null)}
+          title={
+            plateCountPicker
+              ? `${plateCountPicker.weight} lb plate count`
+              : "Plate count"
+          }
+          value={plateCountPicker?.count}
+          values={PLATE_COUNT_PICKER_VALUES}
+          onSelect={(value) => {
+            if (!plateCountPicker) {
+              return;
+            }
+
+            setPlateCount(
+              plateCountPicker.categoryKey,
+              plateCountPicker.plateId,
+              value
+            );
+          }}
+          zIndex={2400}
+        />
       </div>
     );
   }

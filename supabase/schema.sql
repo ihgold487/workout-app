@@ -1727,6 +1727,28 @@ for all
 using (auth.uid() = user_id and public.is_app_user_approved())
 with check (auth.uid() = user_id and public.is_app_user_approved());
 
+create table if not exists public.equipment_plate_inventories (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  inventory jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists equipment_plate_inventories_set_updated_at on public.equipment_plate_inventories;
+create trigger equipment_plate_inventories_set_updated_at
+before update on public.equipment_plate_inventories
+for each row
+execute function public.set_updated_at();
+
+alter table public.equipment_plate_inventories enable row level security;
+
+drop policy if exists "Users can manage their plate inventory" on public.equipment_plate_inventories;
+create policy "Users can manage their plate inventory"
+on public.equipment_plate_inventories
+for all
+using (auth.uid() = user_id and public.is_app_user_approved())
+with check (auth.uid() = user_id and public.is_app_user_approved());
+
 -- Nutrition model.
 --
 -- Start with manual daily tracking and keep the shape ready for food lookup,
