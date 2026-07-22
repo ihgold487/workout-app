@@ -15,6 +15,7 @@ import {
 import BodyWeightSheet from "./BodyWeightSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import WeightPickerModal from "./WeightPickerModal";
 import {
   deleteBodyWeightEntry,
   upsertBodyWeightEntry,
@@ -30,6 +31,7 @@ const BASE_MEAL_OPTIONS = [
 ];
 const DEFAULT_MEAL = "breakfast";
 const DEFAULT_SNACK_MEAL = "snack-1";
+const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 
 function getLocalDateKey(date) {
   const year = date.getFullYear();
@@ -357,12 +359,16 @@ function IncreaseBadge({ color, count, label }) {
 export function CompletedWorkoutSheet({
   history = [],
   onClose,
+  onUpdateSet,
   workout,
   zIndex = 2200,
 }) {
   const [selectedWorkoutExercise, setSelectedWorkoutExercise] = useState(null);
   const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
     useState(null);
+  const [weightPickerData, setWeightPickerData] = useState(null);
+  const [repsPickerData, setRepsPickerData] = useState(null);
+  const [rirPickerData, setRirPickerData] = useState(null);
 
   if (!workout) {
     return null;
@@ -371,7 +377,36 @@ export function CompletedWorkoutSheet({
   const closeSheet = () => {
     setSelectedWorkoutExerciseDetail(null);
     setSelectedWorkoutExercise(null);
+    setWeightPickerData(null);
+    setRepsPickerData(null);
+    setRirPickerData(null);
     onClose?.();
+  };
+
+  const updateWorkoutSet = ({ exerciseId, field, setId, value }) => {
+    onUpdateSet?.({
+      exerciseId,
+      field,
+      setId,
+      value: String(value),
+      workoutId: workout.id,
+    });
+
+    setSelectedWorkoutExercise((current) =>
+      current && String(current.id) === String(exerciseId)
+        ? {
+            ...current,
+            sets: (current.sets || []).map((set) =>
+              String(set.id) === String(setId)
+                ? {
+                    ...set,
+                    [field]: String(value),
+                  }
+                : set
+            ),
+          }
+        : current
+    );
   };
 
   return (
@@ -472,14 +507,22 @@ export function CompletedWorkoutSheet({
             });
 
             return (
-              <button
+              <div
                 key={exercise.id}
                 onClick={() => setSelectedWorkoutExercise(exercise)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedWorkoutExercise(exercise);
+                  }
+                }}
+                role="button"
                 style={{
                   background: "var(--surface-raised)",
                   border: "1px solid var(--border)",
                   borderRadius: "8px",
                   color: "var(--text-h)",
+                  cursor: "pointer",
                   display: "grid",
                   gap: "10px",
                   font: "inherit",
@@ -487,7 +530,7 @@ export function CompletedWorkoutSheet({
                   textAlign: "left",
                   width: "100%",
                 }}
-                type="button"
+                tabIndex={0}
               >
                 <div
                   style={{
@@ -580,19 +623,97 @@ export function CompletedWorkoutSheet({
                           display: "grid",
                           fontSize: "13px",
                           gap: "8px",
-                          gridTemplateColumns: "42px 1fr 1fr 1fr",
+                          gridTemplateColumns: "42px 1fr 1fr 1fr 1fr",
                           padding: "8px",
                         }}
                       >
                         <strong>Set {setIndex + 1}</strong>
-                        <span>{actualWeight || "-"} lb</span>
-                        <span>{actualReps || "-"} reps</span>
-                        <span>RIR {actualRir ?? "-"}</span>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setWeightPickerData({
+                              exerciseId: exercise.id,
+                              setId: set.id,
+                              value: Number(actualWeight || 0),
+                            });
+                          }}
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            color: "var(--text-h)",
+                            font: "inherit",
+                            minHeight: "30px",
+                            padding: "4px 6px",
+                            textAlign: "center",
+                          }}
+                          type="button"
+                        >
+                          {actualWeight || "-"} lb
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setRepsPickerData({
+                              exerciseId: exercise.id,
+                              setId: set.id,
+                              value: Number(actualReps || 0),
+                            });
+                          }}
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            color: "var(--text-h)",
+                            font: "inherit",
+                            minHeight: "30px",
+                            padding: "4px 6px",
+                            textAlign: "center",
+                          }}
+                          type="button"
+                        >
+                          {actualReps || "-"} reps
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setRirPickerData({
+                              exerciseId: exercise.id,
+                              setId: set.id,
+                              value: Number(actualRir || 0),
+                            });
+                          }}
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            color: "var(--text-h)",
+                            font: "inherit",
+                            minHeight: "30px",
+                            padding: "4px 6px",
+                            textAlign: "center",
+                          }}
+                          type="button"
+                        >
+                          RIR {actualRir ?? "-"}
+                        </button>
+                        <span>
+                          e1RM{" "}
+                          {formatMetricValue(
+                            getSetMetrics({
+                              ...set,
+                              actualReps,
+                              actualRir,
+                              actualWeight,
+                            }).e1rm,
+                            1
+                          )}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -842,6 +963,69 @@ export function CompletedWorkoutSheet({
           zIndex={zIndex + 200}
         />
       )}
+
+      <WeightPickerModal
+        isOpen={Boolean(weightPickerData)}
+        onClose={() => setWeightPickerData(null)}
+        value={weightPickerData?.value}
+        title="Select Weight"
+        onSelect={(value) => {
+          if (!weightPickerData) {
+            return;
+          }
+
+          updateWorkoutSet({
+            exerciseId: weightPickerData.exerciseId,
+            field: "actualWeight",
+            setId: weightPickerData.setId,
+            value,
+          });
+        }}
+        zIndex={zIndex + 300}
+      />
+
+      <WeightPickerModal
+        isOpen={Boolean(repsPickerData)}
+        onClose={() => setRepsPickerData(null)}
+        value={repsPickerData?.value}
+        increment={1}
+        title="Select Reps"
+        values={Array.from({ length: 20 }, (_, i) => i + 1)}
+        onSelect={(value) => {
+          if (!repsPickerData) {
+            return;
+          }
+
+          updateWorkoutSet({
+            exerciseId: repsPickerData.exerciseId,
+            field: "actualReps",
+            setId: repsPickerData.setId,
+            value,
+          });
+        }}
+        zIndex={zIndex + 300}
+      />
+
+      <WeightPickerModal
+        isOpen={Boolean(rirPickerData)}
+        onClose={() => setRirPickerData(null)}
+        value={rirPickerData?.value}
+        title="Select RIR"
+        values={RIR_PICKER_VALUES}
+        onSelect={(value) => {
+          if (!rirPickerData) {
+            return;
+          }
+
+          updateWorkoutSet({
+            exerciseId: rirPickerData.exerciseId,
+            field: "actualRir",
+            setId: rirPickerData.setId,
+            value,
+          });
+        }}
+        zIndex={zIndex + 300}
+      />
     </>
   );
 }
@@ -850,6 +1034,7 @@ export default function WorkoutCalendar({
   bodyWeightEntries = [],
   history,
   nutritionEntries = [],
+  onUpdateWorkoutSet,
   session = null,
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -863,11 +1048,33 @@ export default function WorkoutCalendar({
   const [expandedFoodMeals, setExpandedFoodMeals] = useState({});
   const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
-  const [selectedWorkoutExerciseDetail, setSelectedWorkoutExerciseDetail] =
-    useState(null);
-  const [selectedWorkoutExercise, setSelectedWorkoutExercise] = useState(null);
 
   const today = new Date();
+
+  const updateSelectedWorkoutSet = ({ exerciseId, field, setId, value }) => {
+    setSelectedWorkout((current) =>
+      current
+        ? {
+            ...current,
+            exercises: (current.exercises || []).map((exercise) =>
+              String(exercise.id) === String(exerciseId)
+                ? {
+                    ...exercise,
+                    sets: (exercise.sets || []).map((set) =>
+                      String(set.id) === String(setId)
+                        ? {
+                            ...set,
+                            [field]: value,
+                          }
+                        : set
+                    ),
+                  }
+                : exercise
+            ),
+          }
+        : current
+    );
+  };
 
   const updateBodyWeightEntries = (nextEntries) => {
     setLocalBodyWeightEntries(nextEntries);
@@ -1054,8 +1261,6 @@ export default function WorkoutCalendar({
             setSelectedFoods(null);
             setSelectedWeight(null);
             setSelectedWorkout(null);
-            setSelectedWorkoutExerciseDetail(null);
-            setSelectedWorkoutExercise(null);
           }
 
           return !current;
@@ -1254,8 +1459,6 @@ export default function WorkoutCalendar({
                           setSelectedFoods(null);
                           setSelectedWeight(null);
                           setSelectedWorkout(null);
-                          setSelectedWorkoutExerciseDetail(null);
-                          setSelectedWorkoutExercise(null);
                           setSelectedDate(
                             selectedDate &&
                               selectedDate.toDateString() === date.toDateString()
@@ -1315,8 +1518,6 @@ export default function WorkoutCalendar({
                   setSelectedFoods(null);
                   setSelectedWeight(null);
                   setSelectedWorkout(null);
-                  setSelectedWorkoutExerciseDetail(null);
-                  setSelectedWorkoutExercise(null);
                   setSelectedDate(nextToday);
                 }}
                 style={{
@@ -1377,8 +1578,6 @@ export default function WorkoutCalendar({
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setSelectedWorkout(workout);
-                                  setSelectedWorkoutExerciseDetail(null);
-                                  setSelectedWorkoutExercise(null);
                                 }}
                                 style={{
                                   background: "var(--surface-muted)",
@@ -1923,479 +2122,16 @@ export default function WorkoutCalendar({
       )}
 
       {selectedWorkout && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Workout details"
-          onClick={(event) => {
-            event.stopPropagation();
-            setSelectedWorkout(null);
-            setSelectedWorkoutExerciseDetail(null);
-            setSelectedWorkoutExercise(null);
-          }}
-          style={{
-            alignItems: "flex-end",
-            background: "rgba(0,0,0,.45)",
-            display: "flex",
-            inset: 0,
-            justifyContent: "center",
-            position: "fixed",
-            zIndex: 2200,
-          }}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              background: "var(--surface-raised)",
-              borderRadius: "18px 18px 0 0",
-              boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
-              boxSizing: "border-box",
-              display: "grid",
-              gap: "12px",
-              maxHeight: "86vh",
-              maxWidth: "680px",
-              overflowY: "auto",
-              padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
-              width: "100%",
-            }}
-          >
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-            >
-              <div
-                style={{
-                  minWidth: 0,
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: "18px",
-                    lineHeight: 1.15,
-                    margin: 0,
-                  }}
-                >
-                  {selectedWorkout.templateName ||
-                    selectedWorkout.workout_name ||
-                    "Workout"}
-                </h2>
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    marginTop: "3px",
-                  }}
-                >
-                  Completed{" "}
-                  {selectedWorkout.completedAtIso
-                    ? new Date(selectedWorkout.completedAtIso).toLocaleString([], {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
-                    : selectedWorkout.completedAt || "on selected date"}
-                </div>
-              </div>
-              <button
-                aria-label="Close workout details"
-                onClick={() => {
-                  setSelectedWorkout(null);
-                  setSelectedWorkoutExerciseDetail(null);
-                  setSelectedWorkoutExercise(null);
-                }}
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  justifyContent: "center",
-                  minHeight: "36px",
-                  minWidth: "36px",
-                  padding: 0,
-                }}
-                type="button"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {(selectedWorkout.exercises || []).map((exercise) => {
-              const increaseFlags = getExerciseIncreaseFlags({
-                exercise,
-                history,
-                selectedWorkout,
-              });
-
-              return (
-                <button
-                  key={exercise.id}
-                  onClick={() => setSelectedWorkoutExercise(exercise)}
-                  style={{
-                    background: "var(--surface-raised)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    color: "var(--text-h)",
-                    display: "grid",
-                    gap: "10px",
-                    font: "inherit",
-                    padding: "10px",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                  type="button"
-                >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "grid",
-                    gap: "10px",
-                    gridTemplateColumns: "52px minmax(0, 1fr)",
-                  }}
-                >
-                  <ExerciseThumbnail
-                    alt={exercise.imageAlt || exercise.name || "Exercise"}
-                    imageUrl={exercise.imageUrl}
-                    size={52}
-                  />
-                  <div
-                    style={{
-                      minWidth: 0,
-                    }}
-                  >
-                    <div
-                      style={{
-                        alignItems: "center",
-                        display: "flex",
-                        gap: "6px",
-                        minWidth: 0,
-                      }}
-                    >
-                      <strong
-                        style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {exercise.name}
-                      </strong>
-                      <IncreaseBadge
-                        color="#c62828"
-                        count={increaseFlags.previousCount}
-                        label="improvements from previous workout"
-                      />
-                      <IncreaseBadge
-                        color="#1565c0"
-                        count={increaseFlags.allTimeCount}
-                        label="new all-time highs"
-                      />
-                    </div>
-                    {exercise.note && (
-                      <div
-                        style={{
-                          color: "var(--text-muted)",
-                          fontSize: "12px",
-                          marginTop: "3px",
-                        }}
-                      >
-                        {exercise.note}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "6px",
-                  }}
-                >
-                  {(exercise.sets || []).map((set, setIndex) => {
-                    const actualWeight = firstPresentValue(
-                      set.actualWeight,
-                      set.actual_weight
-                    );
-                    const actualReps = firstPresentValue(
-                      set.actualReps,
-                      set.actual_reps
-                    );
-                    const actualRir = firstPresentValue(
-                      set.actualRir,
-                      set.actual_rir
-                    );
-
-                    return (
-                      <div
-                        key={set.id || setIndex}
-                        style={{
-                          alignItems: "center",
-                          background: "var(--surface-muted)",
-                          borderRadius: "8px",
-                          display: "grid",
-                          fontSize: "13px",
-                          gap: "8px",
-                          gridTemplateColumns: "42px 1fr 1fr 1fr",
-                          padding: "8px",
-                        }}
-                      >
-                        <strong>Set {setIndex + 1}</strong>
-                        <span>{actualWeight || "-"} lb</span>
-                        <span>{actualReps || "-"} reps</span>
-                        <span>RIR {actualRir ?? "-"}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {selectedWorkout && selectedWorkoutExercise && (() => {
-        const summary = calculateExerciseSummary(selectedWorkoutExercise);
-        const comparisons = buildExerciseComparisons({
-          exercise: selectedWorkoutExercise,
-          history,
-          selectedWorkout,
-        });
-        const metrics = [
-          ["volume", "Volume", "Total weight x reps across all sets", 0],
-          ["volumeMax", "Volume Max", "Highest weight x reps for one set", 0],
-          ["e1rmMax", "1 Rep Max", "Best estimated 1RM set", 1],
-          ["e1rmAverage", "1 Rep Max Average", "Average estimated 1RM", 1],
-          ["weightMax", "Weight Max", "Highest set weight", 1],
-          ["weightAverage", "Weight Average", "Average set weight", 1],
-        ];
-
-        return (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selectedWorkoutExercise.name} workout summary`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedWorkoutExerciseDetail(null);
-              setSelectedWorkoutExercise(null);
-            }}
-            style={{
-              alignItems: "flex-end",
-              background: "rgba(0,0,0,.45)",
-              display: "flex",
-              inset: 0,
-              justifyContent: "center",
-              position: "fixed",
-              zIndex: 2300,
-            }}
-          >
-            <div
-              onClick={(event) => event.stopPropagation()}
-              style={{
-                background: "var(--surface-raised)",
-                borderRadius: "18px 18px 0 0",
-                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
-                boxSizing: "border-box",
-                display: "grid",
-                gap: "12px",
-                maxHeight: "82vh",
-                maxWidth: "600px",
-                overflowY: "auto",
-                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
-                width: "100%",
-              }}
-            >
-              <div
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "grid",
-                    gap: "10px",
-                    gridTemplateColumns: "40px minmax(0, 1fr)",
-                    minWidth: 0,
-                  }}
-                >
-                  <ExerciseThumbnail
-                    alt={selectedWorkoutExercise.name || "Exercise"}
-                    imageUrl={selectedWorkoutExercise.imageUrl}
-                    size={40}
-                  />
-                  <div
-                    style={{
-                      minWidth: 0,
-                    }}
-                  >
-                    <button
-                      onClick={() =>
-                        setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
-                      }
-                      style={{
-                        background: "transparent",
-                        border: 0,
-                        color: "var(--text-h)",
-                        fontSize: "18px",
-                        fontWeight: "bold",
-                        lineHeight: 1.15,
-                        margin: 0,
-                        padding: 0,
-                        textAlign: "left",
-                      }}
-                      type="button"
-                    >
-                      {selectedWorkoutExercise.name}
-                    </button>
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                        marginTop: "3px",
-                      }}
-                    >
-                      Workout performance summary
-                    </div>
-                  </div>
-                </div>
-                <button
-                  aria-label="Close exercise summary"
-                  onClick={() => {
-                    setSelectedWorkoutExerciseDetail(null);
-                    setSelectedWorkoutExercise(null);
-                  }}
-                  style={{
-                    alignItems: "center",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    minHeight: "36px",
-                    minWidth: "36px",
-                    padding: 0,
-                  }}
-                  type="button"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: "8px",
-                }}
-              >
-                {metrics.map(([key, label, description, decimals]) => {
-                  const value = summary[key];
-                  const previousValue = comparisons.previousSummary?.[key];
-                  const allTimeValue = comparisons.allTimeHighs[key];
-                  const previousIncrease = formatPercentIncrease(
-                    value,
-                    previousValue
-                  );
-                  const allTimeIncrease = formatPercentIncrease(value, allTimeValue);
-
-                  return (
-                    <div
-                      key={key}
-                      style={{
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        display: "grid",
-                        gap: "6px",
-                        padding: "10px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          alignItems: "start",
-                          display: "grid",
-                          gap: "8px",
-                          gridTemplateColumns: "minmax(0, 1fr) auto",
-                        }}
-                      >
-                        <div>
-                          <strong>{label}</strong>
-                          <div
-                            style={{
-                              color: "var(--text-muted)",
-                              fontSize: "12px",
-                              marginTop: "2px",
-                            }}
-                          >
-                            {description}
-                          </div>
-                        </div>
-                        <strong
-                          style={{
-                            fontSize: "18px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {formatMetricValue(value, decimals)}
-                        </strong>
-                      </div>
-
-                      {(previousIncrease || allTimeIncrease) && (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "6px",
-                          }}
-                        >
-                          {previousIncrease && (
-                            <span
-                              style={{
-                                background:
-                                  "color-mix(in srgb, #c62828 14%, var(--surface))",
-                                border: "1px solid #c62828",
-                                borderRadius: "999px",
-                                color: "#c62828",
-                                fontSize: "12px",
-                                fontWeight: "bold",
-                                padding: "3px 8px",
-                              }}
-                            >
-                              Previous {previousIncrease}
-                            </span>
-                          )}
-                          {allTimeIncrease && (
-                            <span
-                              style={{
-                                background:
-                                  "color-mix(in srgb, #1565c0 14%, var(--surface))",
-                                border: "1px solid #1565c0",
-                                borderRadius: "999px",
-                                color: "#1565c0",
-                                fontSize: "12px",
-                                fontWeight: "bold",
-                                padding: "3px 8px",
-                              }}
-                            >
-                              All-time {allTimeIncrease}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {selectedWorkoutExerciseDetail && (
-        <ExerciseDetailDialog
-          exercise={selectedWorkoutExerciseDetail}
+        <CompletedWorkoutSheet
           history={history}
-          onClose={() => setSelectedWorkoutExerciseDetail(null)}
-          zIndex={2400}
+          onClose={() => {
+            setSelectedWorkout(null);
+          }}
+          onUpdateSet={(payload) => {
+            updateSelectedWorkoutSet(payload);
+            onUpdateWorkoutSet?.(payload);
+          }}
+          workout={selectedWorkout}
         />
       )}
     </div>

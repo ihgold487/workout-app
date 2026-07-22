@@ -7,6 +7,7 @@ import {
   Copy,
   GripVertical,
   Link2,
+  Plus,
   RefreshCw,
   Replace,
   Save,
@@ -918,6 +919,8 @@ function hasPlanUpdateChanges(editingPlan, nextPlan, previousWorkouts, nextWorko
 function PlanWorkoutPreview({
   enableWeeklyPrescriptions = false,
   exerciseLibrary,
+  onAddExercise,
+  onDeleteExercise,
   onEditSuperset,
   onEditWeeklyPrescription,
   onRenameWorkout,
@@ -1090,6 +1093,23 @@ function PlanWorkoutPreview({
                             >
                               <Replace size={17} />
                             </button>
+
+                            <button
+                              aria-label={`Delete ${exercise.name}`}
+                              onClick={() => onDeleteExercise(workout, exercise)}
+                              style={{
+                                alignItems: "center",
+                                color: "var(--danger-text)",
+                                display: "inline-flex",
+                                justifyContent: "center",
+                                minHeight: "32px",
+                                minWidth: "34px",
+                                padding: "4px 6px",
+                              }}
+                              type="button"
+                            >
+                              <Trash2 size={17} />
+                            </button>
                           </>
                         }
                       />
@@ -1100,6 +1120,23 @@ function PlanWorkoutPreview({
               </WorkoutExercisePreviewGroup>
             </PlanSupersetDropZone>
           ))}
+          <button
+            onClick={() => onAddExercise(workout)}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              gap: "6px",
+              justifyContent: "center",
+              marginTop: "10px",
+              minHeight: "42px",
+              padding: "8px 12px",
+              width: "100%",
+            }}
+            type="button"
+          >
+            <Plus size={17} />
+            Add Exercise
+          </button>
         </div>
       </PlanWorkoutDropZone>
     </section>
@@ -2213,8 +2250,10 @@ export default function PlansView({
   );
   const [workoutTypePickerTarget, setWorkoutTypePickerTarget] = useState(null);
   const [confirmDeleteDay, setConfirmDeleteDay] = useState(null);
+  const [confirmDeleteExercise, setConfirmDeleteExercise] = useState(null);
   const [workoutNameBySlot, setWorkoutNameBySlot] = useState({});
   const [pickerTarget, setPickerTarget] = useState(null);
+  const [addExerciseTarget, setAddExerciseTarget] = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState("");
   const [summaryWorkout, setSummaryWorkout] = useState(null);
@@ -2379,7 +2418,7 @@ export default function PlansView({
 
   const generatedPlan = useMemo(
     () => {
-      if (generationMode === "plan" && editPreviewWorkouts) {
+      if (editPreviewWorkouts) {
         return {
           gaps: [],
           workouts: editPreviewWorkouts,
@@ -2815,6 +2854,9 @@ export default function PlansView({
     setWeeklyPrescriptionPicker(null);
     setWorkoutTypeByDay({});
     setWorkoutTypePickerTarget(null);
+    setConfirmDeleteExercise(null);
+    setAddExerciseTarget(null);
+    setPickerTarget(null);
     setSupersetGroupBySlot({});
     setDayOrder(null);
   }
@@ -2920,6 +2962,106 @@ export default function PlansView({
     setWorkoutTypePickerTarget(null);
     setConfirmDeleteDay(null);
     setSaveStatus("");
+  }
+
+  function commitPreviewWorkoutExerciseEdit(nextWorkouts, activeIndex) {
+    const normalizedWorkouts = nextWorkouts.map((workout, index) => ({
+      ...workout,
+      dayNumber: index + 1,
+      previewWorkoutKey: index,
+    }));
+
+    enterPlanDraftEditMode(normalizedWorkouts);
+    setEditPreviewWorkouts(normalizedWorkouts);
+    setActiveWorkoutIndex(
+      Math.min(Math.max(0, activeIndex || 0), normalizedWorkouts.length - 1)
+    );
+    setDayOrder(null);
+    setReplacementBySlot({});
+    setExerciseLayoutByWorkout(null);
+    setSupersetGroupBySlot({});
+    setWeeklyPrescriptionBySlot({});
+    setSaveStatus("");
+  }
+
+  function deletePlanExercise(target) {
+    if (!target?.workout || !target?.exercise) {
+      setConfirmDeleteExercise(null);
+      return;
+    }
+
+    const workoutIndex = orderedPreviewWorkouts.findIndex(
+      (workout) =>
+        workout.previewWorkoutKey === target.workout.previewWorkoutKey
+    );
+
+    if (workoutIndex < 0) {
+      setConfirmDeleteExercise(null);
+      return;
+    }
+
+    const nextWorkouts = clonePlanEditWorkouts(orderedPreviewWorkouts).map(
+      (workout, index) =>
+        index === workoutIndex
+          ? {
+              ...workout,
+              exercises: workout.exercises.filter(
+                (exercise) =>
+                  String(exercise.previewSlotKey) !==
+                  String(target.exercise.previewSlotKey)
+              ),
+            }
+          : workout
+    );
+
+    commitPreviewWorkoutExerciseEdit(nextWorkouts, workoutIndex);
+    setConfirmDeleteExercise(null);
+  }
+
+  function addPlanExerciseToWorkout(targetWorkout, selectedExercise) {
+    if (!targetWorkout || !selectedExercise) {
+      setAddExerciseTarget(null);
+      return;
+    }
+
+    const workoutIndex = orderedPreviewWorkouts.findIndex(
+      (workout) => workout.previewWorkoutKey === targetWorkout.previewWorkoutKey
+    );
+
+    if (workoutIndex < 0) {
+      setAddExerciseTarget(null);
+      return;
+    }
+
+    const setCount =
+      Number(sets) ||
+      targetWorkout.exercises?.[0]?.sets?.length ||
+      orderedPreviewWorkouts[0]?.exercises?.[0]?.sets?.length ||
+      3;
+    const nextExercise = createPlanExercise({
+      exercise: selectedExercise,
+      goal,
+      history,
+      planMuscle: selectedExercise.muscles?.[0] || "",
+      reps,
+      rir,
+      setCount,
+      supersetGroup: null,
+    });
+    const nextWorkouts = clonePlanEditWorkouts(orderedPreviewWorkouts).map(
+      (workout, index) =>
+        index === workoutIndex
+          ? {
+              ...workout,
+              exercises: [...workout.exercises, nextExercise],
+            }
+          : workout
+    );
+
+    commitPreviewWorkoutExerciseEdit(nextWorkouts, workoutIndex);
+    setAddExerciseTarget(null);
+    setPickerSearch("");
+    setPickerMuscle("");
   }
 
   function changePlanDayWorkoutType(workoutKey, nextWorkoutType) {
@@ -3956,6 +4098,17 @@ export default function PlansView({
               enableWeeklyPrescriptions={generationMode === "plan"}
               exerciseLibrary={exerciseLibrary}
               workout={displayedWorkout}
+              onAddExercise={(workout) => {
+                setAddExerciseTarget(workout);
+                setPickerSearch("");
+                setPickerMuscle("");
+              }}
+              onDeleteExercise={(workout, exercise) =>
+                setConfirmDeleteExercise({
+                  exercise,
+                  workout,
+                })
+              }
               onEditSuperset={(exercise) => {
                 const group = prompt(
                   "Superset group (A, B, etc). Leave empty to clear.",
@@ -4115,6 +4268,82 @@ export default function PlansView({
         </div>
       )}
 
+      {confirmDeleteExercise && (
+        <div
+          role="presentation"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.52)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "18px",
+            position: "fixed",
+            zIndex: 2400,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Delete ${confirmDeleteExercise.exercise.name}`}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--danger-border)",
+              borderRadius: "10px",
+              boxShadow: "0 18px 42px rgba(0,0,0,.32)",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "360px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                color: "var(--danger-text)",
+                margin: 0,
+              }}
+            >
+              Delete {confirmDeleteExercise.exercise.name}?
+            </h3>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                margin: 0,
+              }}
+            >
+              This removes the exercise and all of its sets from this day.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <button
+                onClick={() => setConfirmDeleteExercise(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deletePlanExercise(confirmDeleteExercise)}
+                style={{
+                  background: "var(--danger-bg)",
+                  border: "1px solid var(--danger-border)",
+                  color: "var(--danger-text)",
+                }}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pickerTarget && (
         <ExercisePickerSheet
           title={`Replace ${getEffectivePrimaryMuscle(pickerTarget) || "exercise"}`}
@@ -4134,6 +4363,22 @@ export default function PlansView({
             setPickerTarget(null);
             setSaveStatus("");
           }}
+        />
+      )}
+
+      {addExerciseTarget && (
+        <ExercisePickerSheet
+          title="Add Exercise"
+          exerciseLibrary={generatorExerciseLibrary}
+          history={history}
+          search={pickerSearch}
+          selectedMuscle={pickerMuscle}
+          setSearch={setPickerSearch}
+          setSelectedMuscle={setPickerMuscle}
+          onClose={() => setAddExerciseTarget(null)}
+          onSelect={(exercise) =>
+            addPlanExerciseToWorkout(addExerciseTarget, exercise)
+          }
         />
       )}
 

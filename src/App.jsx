@@ -471,6 +471,95 @@ function getBenchHistoryMetadata(importedHistory, existing = {}) {
   };
 }
 
+function parseHistoryMetricValue(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace("+", ""));
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getHistorySetE1RM(set) {
+  const e1rm = calculateE1RM(
+    parseHistoryMetricValue(set.actualWeight ?? set.actual_weight ?? set.targetWeight),
+    parseHistoryMetricValue(set.actualReps ?? set.actual_reps ?? set.targetReps),
+    set.actualRir ?? set.actual_rir ?? set.targetRir
+  );
+
+  return Number.isFinite(e1rm) ? e1rm : null;
+}
+
+function getHistoryWorkoutTime(workout) {
+  const parsed = new Date(
+    workout.completedAtIso || workout.completed_at || workout.completedAt || 0
+  );
+
+  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+}
+
+function recomputeExerciseE1RMMetadata(history, existingMetadata, exerciseIds) {
+  const exerciseIdSet = new Set(
+    Array.from(exerciseIds)
+      .filter((exerciseId) => exerciseId !== undefined && exerciseId !== null)
+      .map(String)
+  );
+
+  if (exerciseIdSet.size === 0) {
+    return existingMetadata;
+  }
+
+  const metadata = {
+    ...existingMetadata,
+  };
+
+  exerciseIdSet.forEach((exerciseId) => {
+    let latestE1RM = null;
+    let latestTime = -Infinity;
+    let maxE1RM = null;
+
+    history.forEach((workout) => {
+      const completedTime = getHistoryWorkoutTime(workout);
+
+      (workout.exercises || []).forEach((exercise) => {
+        if (String(exercise.exerciseId) !== exerciseId) {
+          return;
+        }
+
+        const workoutBestE1RM = (exercise.sets || []).reduce((best, set) => {
+          const e1rm = getHistorySetE1RM(set);
+
+          return e1rm && (!best || e1rm > best) ? e1rm : best;
+        }, null);
+
+        if (!workoutBestE1RM) {
+          return;
+        }
+
+        if (!maxE1RM || workoutBestE1RM > maxE1RM.value) {
+          maxE1RM = {
+            date: workout.completedAt,
+            value: workoutBestE1RM,
+          };
+        }
+
+        if (completedTime > latestTime) {
+          latestTime = completedTime;
+          latestE1RM = {
+            date: workout.completedAt,
+            value: workoutBestE1RM,
+          };
+        }
+      });
+    });
+
+    metadata[exerciseId] = {
+      ...(metadata[exerciseId] || {}),
+      latestE1RM,
+      maxE1RM,
+    };
+  });
+
+  return metadata;
+}
+
 function hasInactiveExercisePreference(exerciseLibrary) {
   return exerciseLibrary.some((exercise) => exercise.active === "inactive");
 }
@@ -2652,6 +2741,67 @@ export default function App() {
     requestSyncCheckpoint(["history"], "history delete");
   }
 
+  function updateHistoryWorkoutSet({ workoutId, exerciseId, setId, field, value }) {
+    const editedExerciseIds = new Set();
+    const nextHistory = history.map((workout) => {
+      if (String(workout.id) !== String(workoutId)) {
+        return workout;
+      }
+
+      return {
+        ...workout,
+        exercises: (workout.exercises || []).map((exercise) => {
+          if (String(exercise.id) !== String(exerciseId)) {
+            return exercise;
+          }
+
+          if (exercise.exerciseId) {
+            editedExerciseIds.add(exercise.exerciseId);
+          }
+
+          return {
+            ...exercise,
+            sets: (exercise.sets || []).map((set) =>
+              String(set.id) === String(setId)
+                ? {
+                    ...set,
+                    [field]: value,
+                  }
+                : set
+            ),
+          };
+        }),
+      };
+    });
+
+    setHistory(nextHistory);
+    setSelectedHistory((current) => {
+      if (!current || String(current.id) !== String(workoutId)) {
+        return current;
+      }
+
+      return nextHistory.find((workout) => String(workout.id) === String(workoutId)) || current;
+    });
+    setSelectedHistoryList((currentList) => {
+      if (!Array.isArray(currentList)) {
+        return currentList;
+      }
+
+      return currentList.map(
+        (workout) =>
+          nextHistory.find((item) => String(item.id) === String(workout.id)) || workout
+      );
+    });
+
+    if (editedExerciseIds.size > 0) {
+      setExerciseMetadata((currentMetadata) =>
+        recomputeExerciseE1RMMetadata(nextHistory, currentMetadata, editedExerciseIds)
+      );
+    }
+
+    requestSyncCheckpoint(["history", "exercisePreferences"], "history edit");
+  }
+
   function getTemplateHistoryCount(templateId) {
     return history.filter(
       (workout) => String(workout.templateId) === String(templateId)
@@ -4723,6 +4873,7 @@ export default function App() {
           <CompletedWorkoutSheet
             history={history}
             onClose={() => setSelectedHistory(null)}
+            onUpdateSet={updateHistoryWorkoutSet}
             workout={selectedHistory}
           />
         )}
@@ -4925,6 +5076,7 @@ export default function App() {
         bodyWeightEntries={calendarBodyWeightEntries}
         history={history}
         nutritionEntries={calendarNutritionEntries}
+        onUpdateWorkoutSet={updateHistoryWorkoutSet}
         session={authSession}
       />
 
@@ -5304,6 +5456,7 @@ export default function App() {
         <CompletedWorkoutSheet
           history={history}
           onClose={() => setSelectedHistory(null)}
+          onUpdateSet={updateHistoryWorkoutSet}
           workout={selectedHistory}
         />
       )}

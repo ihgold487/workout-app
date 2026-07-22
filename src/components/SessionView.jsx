@@ -52,6 +52,7 @@ import {
 } from "../utils/weightIncrement";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
+const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
 
 function IconButton({
   children,
@@ -248,6 +249,9 @@ export default function SessionView({
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
   const [warmupExerciseId, setWarmupExerciseId] = useState(null);
+  const exerciseStripRef = useRef(null);
+  const exerciseThumbnailRefs = useRef({});
+  const addExerciseButtonRef = useRef(null);
   const previousExercisePanelIdRef = useRef(null);
   const [exercisePanelTransition, setExercisePanelTransition] = useState({
     direction: "next",
@@ -1027,6 +1031,48 @@ export default function SessionView({
             }
           : ex
       ),
+    }));
+  }
+
+  function updateExerciseTarget(exerciseId, field, value) {
+    const nextValue = formatSetupDefault(value);
+
+    updateSession((s) => ({
+      ...s,
+      exercises: s.exercises.map((exercise) => {
+        if (exercise.id !== exerciseId) {
+          return exercise;
+        }
+
+        const hasIncompleteSets = exercise.sets.some((set) => !set.completed);
+
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set, setIndex) => {
+            if (hasIncompleteSets && set.completed) {
+              return set;
+            }
+
+            const targetReps =
+              field === "targetReps" ? nextValue : set.targetReps;
+            const targetRir =
+              field === "targetRir" ? nextValue : set.targetRir;
+            const targetWeight =
+              getRecommendedTargetWeight(
+                exercise,
+                targetReps,
+                targetRir,
+                setIndex
+              ) || set.targetWeight;
+
+            return {
+              ...set,
+              [field]: nextValue,
+              targetWeight,
+            };
+          }),
+        };
+      }),
     }));
   }
 
@@ -2372,6 +2418,57 @@ export default function SessionView({
     }));
   }, [currentExercise?.id, currentExerciseIndex, session.exercises]);
 
+  useEffect(() => {
+    const strip = exerciseStripRef.current;
+    const currentExerciseId = currentExercise?.id || null;
+    const activeThumbnail = currentExerciseId
+      ? exerciseThumbnailRefs.current[currentExerciseId]
+      : null;
+
+    if (!strip || !activeThumbnail) {
+      return;
+    }
+
+    const stripRect = strip.getBoundingClientRect();
+    const thumbnailRect = activeThumbnail.getBoundingClientRect();
+    const visibleLeft = stripRect.left;
+    const visibleRight = stripRect.right;
+
+    if (
+      thumbnailRect.left >= visibleLeft &&
+      thumbnailRect.right <= visibleRight
+    ) {
+      return;
+    }
+
+    const plusButton = addExerciseButtonRef.current;
+    const styles = window.getComputedStyle(strip);
+    const leftPadding = Number.parseFloat(styles.paddingLeft) || 0;
+    const activeLeftInScroll =
+      thumbnailRect.left - stripRect.left + strip.scrollLeft;
+    const targetActiveLeft = activeLeftInScroll - leftPadding;
+    let targetScrollLeft = targetActiveLeft;
+
+    if (plusButton) {
+      const plusRect = plusButton.getBoundingClientRect();
+      const plusRightInScroll = plusRect.right - stripRect.left + strip.scrollLeft;
+      const targetPlusRight = plusRightInScroll - strip.clientWidth;
+
+      targetScrollLeft = Math.min(targetActiveLeft, targetPlusRight);
+    }
+
+    const maxScrollLeft = Math.max(0, strip.scrollWidth - strip.clientWidth);
+    const nextScrollLeft = Math.min(
+      Math.max(0, targetScrollLeft),
+      maxScrollLeft
+    );
+
+    strip.scrollTo({
+      behavior: "smooth",
+      left: nextScrollLeft,
+    });
+  }, [currentExercise?.id]);
+
   function getThumbnailSetForExercise(exercise) {
     return (
       exercise.sets.find(
@@ -3255,6 +3352,7 @@ export default function SessionView({
             aria-label="Workout exercises"
             className="session-exercise-strip"
             onContextMenu={(event) => event.preventDefault()}
+            ref={exerciseStripRef}
             style={{
               alignItems: "center",
               display: "flex",
@@ -3312,6 +3410,13 @@ export default function SessionView({
                               aria-label={`Show ${exercise.name}`}
                               onContextMenu={(event) => event.preventDefault()}
                               onClick={() => activateExerciseFromThumbnail(exercise)}
+                              ref={(element) => {
+                                if (element) {
+                                  exerciseThumbnailRefs.current[exercise.id] = element;
+                                } else {
+                                  delete exerciseThumbnailRefs.current[exercise.id];
+                                }
+                              }}
                               style={{
                                 alignItems: "center",
                                 background: isCurrent
@@ -3385,6 +3490,7 @@ export default function SessionView({
                 setReplacingExerciseId(null);
                 setSearch("");
               }}
+              ref={addExerciseButtonRef}
               title={showAddExercise ? "Cancel" : "Add exercise"}
               type="button"
               style={{
@@ -3791,33 +3897,73 @@ export default function SessionView({
                             <Weight size={15} aria-label="Actual weight" />
                           </span>
 
-                          <span
-                            title="Actual reps"
+                          <button
+                            aria-label="Edit target reps"
+                            onClick={() => {
+                              const targetSet =
+                                exercise.sets.find((set) => !set.completed) ||
+                                exercise.sets[0];
+
+                              setRepsPickerData({
+                                exerciseId: exercise.id,
+                                field: "targetReps",
+                                value: Number(targetSet?.targetReps || 0),
+                              });
+                              setShowRepsPicker(true);
+                            }}
+                            title="Target reps"
                             style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "inherit",
                               width: "46px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
+                              cursor: "pointer",
                               display: "inline-flex",
+                              font: "inherit",
                               justifyContent: "center",
+                              padding: 0,
                             }}
+                            type="button"
                           >
-                            <Hash size={15} aria-label="Actual reps" />
-                          </span>
+                            <Hash size={15} aria-label="Target reps" />
+                          </button>
 
-                          <span
-                            title="Actual RIR"
+                          <button
+                            aria-label="Edit target RIR"
+                            onClick={() => {
+                              const targetSet =
+                                exercise.sets.find((set) => !set.completed) ||
+                                exercise.sets[0];
+
+                              setRirPickerData({
+                                exerciseId: exercise.id,
+                                field: "targetRir",
+                                value: Number(targetSet?.targetRir || 0),
+                              });
+                              setShowRirPicker(true);
+                            }}
+                            title="Target RIR"
                             style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "inherit",
                               width: "36px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
+                              cursor: "pointer",
                               display: "inline-flex",
+                              font: "inherit",
                               justifyContent: "center",
+                              padding: 0,
                             }}
+                            type="button"
                           >
-                            <BatteryMedium size={15} aria-label="Actual RIR" />
-                          </span>
+                            <BatteryMedium size={15} aria-label="Target RIR" />
+                          </button>
 
                           <span
                             title="e1RM"
@@ -5515,9 +5661,22 @@ export default function SessionView({
             }}
             value={rirPickerData?.value}
             title="Select RIR"
-            values={RIR_PICKER_VALUES}
+            values={
+              rirPickerData?.field === "targetRir"
+                ? TARGET_RIR_PICKER_VALUES
+                : RIR_PICKER_VALUES
+            }
             onSelect={(value) => {
               if (!rirPickerData) {
+                return;
+              }
+
+              if (rirPickerData.field === "targetRir") {
+                updateExerciseTarget(
+                  rirPickerData.exerciseId,
+                  "targetRir",
+                  String(value)
+                );
                 return;
               }
 
@@ -5542,6 +5701,15 @@ export default function SessionView({
             values={Array.from({ length: 20 }, (_, i) => i + 1)}
             onSelect={(value) => {
               if (!repsPickerData) {
+                return;
+              }
+
+              if (repsPickerData.field === "targetReps") {
+                updateExerciseTarget(
+                  repsPickerData.exerciseId,
+                  "targetReps",
+                  String(value)
+                );
                 return;
               }
 

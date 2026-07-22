@@ -6,6 +6,7 @@ function WeightPickerModalContent({
   onSelect,
   options,
   title,
+  zIndex = 1000,
 }) {
   const [manualValue, setManualValue] = useState(String(current));
   const scrollRef = useRef(null);
@@ -42,7 +43,7 @@ function WeightPickerModalContent({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 1000,
+        zIndex,
       }}
     >
       <div
@@ -179,6 +180,7 @@ export default function WeightPickerModal({
   range,
   title,
   values,
+  zIndex,
 }) {
   const current = Number(value) || 0;
   const step = increment ?? (weightUnit === "kg" ? 1 : 2.5);
@@ -210,6 +212,7 @@ export default function WeightPickerModal({
       onSelect={onSelect}
       options={options}
       title={title}
+      zIndex={zIndex}
     />
   );
 }
