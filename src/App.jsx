@@ -4498,11 +4498,19 @@ export default function App() {
                     borderRadius: "8px",
                     display: "grid",
                     gap: "8px",
-                    gridTemplateColumns: "minmax(64px, 1fr) auto auto auto",
+                    gridTemplateColumns: "minmax(0, 1fr) auto auto auto auto",
                     padding: "8px",
                   }}
                 >
-                  <strong>{plate.weight} lb</strong>
+                  <strong
+                    style={{
+                      justifySelf: "start",
+                      minWidth: 0,
+                      textAlign: "left",
+                    }}
+                  >
+                    {plate.weight} lb
+                  </strong>
                   <button
                     aria-label={`Remove one ${plate.weight} lb plate`}
                     onClick={() =>
@@ -4560,8 +4568,6 @@ export default function App() {
                     onClick={() => removePlateSize(categoryKey, plate.id)}
                     style={{
                       color: "var(--danger-text)",
-                      gridColumn: "1 / -1",
-                      justifySelf: "end",
                       minHeight: "30px",
                       padding: "4px 8px",
                     }}

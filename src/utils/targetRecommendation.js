@@ -313,6 +313,7 @@ export function recommendTargetPrescription({
   allowedRepWindow = 4,
   goalMode = "maintenance",
   minWeight = 0,
+  normalizeWeight,
   preferredRepWindow = 2,
   previousE1RM,
   progressionPercent,
@@ -350,9 +351,15 @@ export function recommendTargetPrescription({
             roundWeightToIncrement(roundedWeight + weightIncrement, weightIncrement),
           ]
         : [roundedWeight]
-    ).filter((weight) => weight >= minWeight);
+    )
+      .map((weight) =>
+        typeof normalizeWeight === "function"
+          ? normalizeWeight(weight)
+          : weight
+      )
+      .filter((weight) => Number.isFinite(weight) && weight >= minWeight);
 
-    weightOptions.forEach((weight) => {
+    uniqueNumbers(weightOptions).forEach((weight) => {
       const e1rm = calculateE1RM(weight, candidateReps, rir);
 
       if (e1rm == null) {
@@ -419,6 +426,7 @@ export function recommendSetTarget({
   exercise,
   goalMode,
   history,
+  normalizeWeight,
   preferredRepWindow,
   progressionPercent,
   setIndex,
@@ -447,6 +455,7 @@ export function recommendSetTarget({
       previousE1RM: baseline.e1rm,
       preferredRepWindow,
       progressionPercent,
+      normalizeWeight,
       targetReps,
       targetRir,
       weightIncrement,

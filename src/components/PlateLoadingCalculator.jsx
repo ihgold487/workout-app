@@ -111,7 +111,7 @@ export function formatPlateNumber(value) {
     : String(Number(number.toFixed(2)));
 }
 
-export function getPlateCalculatorEquipmentId(equipmentValue) {
+export function getPlateCalculatorEquipmentId(equipmentValue, fallback = "barbell") {
   const normalized = Array.isArray(equipmentValue)
     ? String(equipmentValue[0] || "")
     : String(equipmentValue || "");
@@ -127,7 +127,7 @@ export function getPlateCalculatorEquipmentId(equipmentValue) {
   if (key.includes("machine")) return "machine";
   if (key.includes("barbell")) return "barbell";
 
-  return "barbell";
+  return fallback;
 }
 
 function comparePlateCombinations(a, b) {
@@ -182,7 +182,7 @@ function getLoadCalculatorEquipment(equipmentId, inventory) {
   };
 }
 
-function calculatePlateLoading(
+export function calculatePlateLoading(
   totalWeight,
   equipmentId,
   inventory,
@@ -309,7 +309,114 @@ function calculatePlateLoading(
   };
 }
 
+export function getClosestLoadableWeight(
+  totalWeight,
+  equipmentId,
+  inventory,
+  { cablePulleyCount = 1, dumbbellCount = 1, searchRadius = 100 } = {}
+) {
+  const requestedWeight = Number(totalWeight);
+
+  if (!Number.isFinite(requestedWeight) || requestedWeight <= 0) {
+    return null;
+  }
+
+  const equipment = getLoadCalculatorEquipment(equipmentId, inventory);
+  const isDumbbellLoad = equipment.id === "dumbbell";
+  const adjustedRequestedWeight =
+    isDumbbellLoad && Number(dumbbellCount) === 2
+      ? requestedWeight / 2
+      : requestedWeight;
+  const isBalancedLoad = equipment.loadMode === "balanced";
+  const isCableLoad = equipment.loadMode === "cable";
+  const requiresPairedPlates = isBalancedLoad || isCableLoad;
+  const cableLoadMultiplier = Number(cablePulleyCount) === 2 ? 1 : 2;
+  const maxWeight = requestedWeight + Math.max(0, Number(searchRadius) || 0);
+  const adjustedMaxWeight =
+    isDumbbellLoad && Number(dumbbellCount) === 2 ? maxWeight / 2 : maxWeight;
+  const maxLoadedWeight = isBalancedLoad
+    ? Math.max(0, adjustedMaxWeight - equipment.weight)
+    : adjustedMaxWeight;
+  const maxTargetLoad = isBalancedLoad
+    ? maxLoadedWeight / 2
+    : isCableLoad
+      ? maxLoadedWeight / cableLoadMultiplier
+      : maxLoadedWeight;
+  const maxTargetUnits = Math.max(0, Math.round(maxTargetLoad * PLATE_WEIGHT_UNIT));
+  const availablePlates = (inventory?.[equipment.categoryKey] || [])
+    .filter((plate) =>
+      Number(plate.weight) !== 55 ||
+      equipment.id === "barbell" ||
+      equipment.id === "trapBar"
+    )
+    .filter((plate) =>
+      requiresPairedPlates
+        ? Number(plate.count) >= 2 && Number(plate.weight) > 0
+        : Number(plate.count) >= 1 && Number(plate.weight) > 0
+    )
+    .sort((a, b) => b.weight - a.weight);
+  const sums = new Set([0]);
+
+  availablePlates.forEach((plate) => {
+    const plateUnits = Math.round(Number(plate.weight) * PLATE_WEIGHT_UNIT);
+    const availableCount = requiresPairedPlates
+      ? Math.floor(Number(plate.count) / 2)
+      : Number(plate.count);
+
+    for (let plateIndex = 0; plateIndex < availableCount; plateIndex += 1) {
+      Array.from(sums).forEach((sum) => {
+        const nextSum = sum + plateUnits;
+
+        if (nextSum <= maxTargetUnits) {
+          sums.add(nextSum);
+        }
+      });
+    }
+  });
+
+  const candidates = Array.from(sums).map((sumUnits) => {
+    const achievedPlateLoad = sumUnits / PLATE_WEIGHT_UNIT;
+    const achievedTotal = isBalancedLoad
+      ? equipment.weight + achievedPlateLoad * 2
+      : isCableLoad
+        ? achievedPlateLoad * cableLoadMultiplier
+        : achievedPlateLoad;
+    const weight =
+      isDumbbellLoad && Number(dumbbellCount) === 2
+        ? achievedTotal * 2
+        : achievedTotal;
+
+    return {
+      weight,
+    };
+  });
+
+  const closest = candidates.sort(
+    (a, b) =>
+      Math.abs(a.weight - requestedWeight) -
+        Math.abs(b.weight - requestedWeight) ||
+      a.weight - b.weight
+  )[0];
+
+  if (!closest || !Number.isFinite(closest.weight)) {
+    return null;
+  }
+
+  return {
+    loading: calculatePlateLoading(
+      closest.weight,
+      equipment.id,
+      inventory,
+      cablePulleyCount,
+      dumbbellCount
+    ),
+    weight: closest.weight,
+  };
+}
+
 export default function PlateLoadingCalculator({
+  fixedWeights = null,
+  fullWidth = false,
   initialEquipmentId = "barbell",
   initialWeight = "",
   inventory,
@@ -319,9 +426,9 @@ export default function PlateLoadingCalculator({
     cablePulleyCount: 1,
     dumbbellCount: 1,
     equipmentId: initialEquipmentId || "barbell",
-    optionIndex: 0,
     weight: initialWeight ?? "",
   });
+  const [optionIndexes, setOptionIndexes] = useState({});
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const deferredDraft = useDeferredValue(draft);
 
@@ -329,51 +436,148 @@ export default function PlateLoadingCalculator({
     setDraft((current) => ({
       ...current,
       equipmentId: initialEquipmentId || "barbell",
-      optionIndex: 0,
       weight: initialWeight ?? "",
     }));
+    setOptionIndexes({});
   }, [initialEquipmentId, initialWeight]);
 
-  const calculatedLoading = calculatePlateLoading(
-    deferredDraft.weight,
-    deferredDraft.equipmentId,
-    inventory,
-    deferredDraft.cablePulleyCount,
-    deferredDraft.dumbbellCount
-  );
-  const optionCount = calculatedLoading.loadingOptions?.length || 0;
-  const selectedOptionIndex = optionCount ? draft.optionIndex % optionCount : 0;
-  const loading =
-    calculatedLoading.status === "ready"
-      ? (() => {
-          const selectedPlates =
-            calculatedLoading.loadingOptions[selectedOptionIndex] ||
-            calculatedLoading.platesPerSide;
+  function getDisplayLoading(weight, loadingIndex) {
+    const calculatedLoading = calculatePlateLoading(
+      weight,
+      deferredDraft.equipmentId,
+      inventory,
+      deferredDraft.cablePulleyCount,
+      deferredDraft.dumbbellCount
+    );
+    const optionCount = calculatedLoading.loadingOptions?.length || 0;
+    const selectedOptionIndex = optionCount
+      ? (optionIndexes[loadingIndex] || 0) % optionCount
+      : 0;
+    const loading =
+      calculatedLoading.status === "ready"
+        ? (() => {
+            const selectedPlates =
+              calculatedLoading.loadingOptions[selectedOptionIndex] ||
+              calculatedLoading.platesPerSide;
 
-          return {
-            ...calculatedLoading,
-            leftPlates:
-              calculatedLoading.equipment.loadMode === "balanced" ||
-              calculatedLoading.equipment.loadMode === "cable"
-                ? selectedPlates
-                : [],
-            machinePlates:
-              calculatedLoading.equipment.loadMode === "stack"
-                ? selectedPlates
-                : [],
-            optionIndex: selectedOptionIndex,
-            platesPerSide: selectedPlates,
-            rightPlates:
-              calculatedLoading.equipment.loadMode === "balanced" ||
-              calculatedLoading.equipment.loadMode === "singleEnd" ||
-              calculatedLoading.equipment.loadMode === "cable"
-                ? selectedPlates
-                : [],
-          };
-        })()
-      : calculatedLoading;
+            return {
+              ...calculatedLoading,
+              leftPlates:
+                calculatedLoading.equipment.loadMode === "balanced" ||
+                calculatedLoading.equipment.loadMode === "cable"
+                  ? selectedPlates
+                  : [],
+              machinePlates:
+                calculatedLoading.equipment.loadMode === "stack"
+                  ? selectedPlates
+                  : [],
+              optionIndex: selectedOptionIndex,
+              platesPerSide: selectedPlates,
+              rightPlates:
+                calculatedLoading.equipment.loadMode === "balanced" ||
+                calculatedLoading.equipment.loadMode === "singleEnd" ||
+                calculatedLoading.equipment.loadMode === "cable"
+                  ? selectedPlates
+                  : [],
+            };
+          })()
+        : calculatedLoading;
 
-  function renderPlateLoadingDiagram(currentLoading) {
+    return {
+      loading,
+      optionCount,
+    };
+  }
+
+  const fixedWeightList = Array.isArray(fixedWeights)
+    ? fixedWeights.filter((weight) => weight !== "" && weight != null)
+    : null;
+  const displayLoadings =
+    fixedWeightList && fixedWeightList.length
+      ? fixedWeightList.map((weight, index) => getDisplayLoading(weight, index))
+      : [getDisplayLoading(deferredDraft.weight, 0)];
+
+  function renderCountToggle(currentLoading) {
+    const showCableToggle = currentLoading.equipment.loadMode === "cable";
+    const showDumbbellToggle = currentLoading.equipment.id === "dumbbell";
+
+    if (!showCableToggle && !showDumbbellToggle) {
+      return null;
+    }
+
+    const toggleConfig = showCableToggle
+      ? {
+          ariaLabel: "Cable pulleys",
+          icon: <Cable size={15} />,
+          stateKey: "cablePulleyCount",
+        }
+      : {
+          ariaLabel: "Dumbbell count",
+          icon: <Dumbbell size={15} />,
+          stateKey: "dumbbellCount",
+        };
+
+    return (
+      <div
+        aria-label={toggleConfig.ariaLabel}
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          alignItems: "center",
+          display: "inline-flex",
+          gap: "4px",
+          justifySelf: "end",
+        }}
+      >
+        {toggleConfig.icon}
+        <span
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "999px",
+            display: "inline-grid",
+            gridTemplateColumns: "1fr 1fr",
+            overflow: "hidden",
+          }}
+        >
+          {[1, 2].map((count) => {
+            const active = Number(draft[toggleConfig.stateKey]) === count;
+
+            return (
+              <button
+                key={count}
+                aria-pressed={active}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    [toggleConfig.stateKey]: count,
+                  }))
+                }
+                style={{
+                  background: active ? "var(--accent)" : "transparent",
+                  border: "none",
+                  color: active ? "var(--surface)" : "var(--text)",
+                  font: "inherit",
+                  fontSize: "12px",
+                  fontWeight: active ? 700 : 500,
+                  minHeight: "24px",
+                  minWidth: "28px",
+                  padding: "2px 8px",
+                }}
+                type="button"
+              >
+                {count}
+              </button>
+            );
+          })}
+        </span>
+      </div>
+    );
+  }
+
+  function renderPlateLoadingDiagram(
+    currentLoading,
+    currentOptionCount,
+    loadingIndex
+  ) {
     const leftPlates = currentLoading.leftPlates || [];
     const rightPlates = currentLoading.rightPlates || [];
     const machinePlates = currentLoading.machinePlates || [];
@@ -382,11 +586,8 @@ export default function PlateLoadingCalculator({
     const leftTotal = leftPlates.reduce((total, plate) => total + plate, 0);
     const rightTotal = rightPlates.reduce((total, plate) => total + plate, 0);
     const machineTotal = machinePlates.reduce((total, plate) => total + plate, 0);
-    const canCycleOptions = optionCount > 1;
+    const canCycleOptions = currentOptionCount > 1;
     const showMachineStack = currentLoading.equipment.loadMode === "stack";
-    const showCableToggle = currentLoading.equipment.loadMode === "cable";
-    const showDumbbellToggle = currentLoading.equipment.id === "dumbbell";
-    const showCountToggle = showCableToggle || showDumbbellToggle;
     const isOneEndedLoad =
       currentLoading.equipment.loadMode === "singleEnd" || showMachineStack;
     const shownLeftPlates = showMachineStack ? [] : leftPlates;
@@ -440,80 +641,6 @@ export default function PlateLoadingCalculator({
         </div>
       );
     };
-    const renderCountToggle = () => {
-      if (!showCountToggle) {
-        return null;
-      }
-
-      const toggleConfig = showCableToggle
-        ? {
-            ariaLabel: "Cable pulleys",
-            icon: <Cable size={15} />,
-            stateKey: "cablePulleyCount",
-          }
-        : {
-            ariaLabel: "Dumbbell count",
-            icon: <Dumbbell size={15} />,
-            stateKey: "dumbbellCount",
-          };
-
-      return (
-        <div
-          aria-label={toggleConfig.ariaLabel}
-          onClick={(event) => event.stopPropagation()}
-          style={{
-            alignItems: "center",
-            display: "inline-flex",
-            gap: "4px",
-            justifySelf: "end",
-          }}
-        >
-          {toggleConfig.icon}
-          <span
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: "999px",
-              display: "inline-grid",
-              gridTemplateColumns: "1fr 1fr",
-              overflow: "hidden",
-            }}
-          >
-            {[1, 2].map((count) => {
-              const active = Number(draft[toggleConfig.stateKey]) === count;
-
-              return (
-                <button
-                  key={count}
-                  aria-pressed={active}
-                  onClick={() =>
-                    setDraft((current) => ({
-                      ...current,
-                      [toggleConfig.stateKey]: count,
-                      optionIndex: 0,
-                    }))
-                  }
-                  style={{
-                    background: active ? "var(--accent)" : "transparent",
-                    border: "none",
-                    color: active ? "var(--surface)" : "var(--text)",
-                    font: "inherit",
-                    fontSize: "12px",
-                    fontWeight: active ? 700 : 500,
-                    minHeight: "24px",
-                    minWidth: "28px",
-                    padding: "2px 8px",
-                  }}
-                  type="button"
-                >
-                  {count}
-                </button>
-              );
-            })}
-          </span>
-        </div>
-      );
-    };
-
     return (
       <div
         aria-label="Plate loading diagram"
@@ -525,9 +652,9 @@ export default function PlateLoadingCalculator({
             return;
           }
 
-          setDraft((current) => ({
+          setOptionIndexes((current) => ({
             ...current,
-            optionIndex: (current.optionIndex + 1) % optionCount,
+            [loadingIndex]: ((current[loadingIndex] || 0) + 1) % currentOptionCount,
           }));
         }}
         onKeyDown={(event) => {
@@ -536,9 +663,9 @@ export default function PlateLoadingCalculator({
           }
 
           event.preventDefault();
-          setDraft((current) => ({
+          setOptionIndexes((current) => ({
             ...current,
-            optionIndex: (current.optionIndex + 1) % optionCount,
+            [loadingIndex]: ((current[loadingIndex] || 0) + 1) % currentOptionCount,
           }));
         }}
         style={{
@@ -555,8 +682,6 @@ export default function PlateLoadingCalculator({
           width: "100%",
         }}
       >
-        {showCountToggle && renderCountToggle()}
-
         <div
           style={{
             alignItems: "center",
@@ -653,11 +778,13 @@ export default function PlateLoadingCalculator({
       style={{
         border: showInputs ? "1px solid var(--border)" : "none",
         borderRadius: "6px",
+        boxSizing: "border-box",
         display: "grid",
         gap: "10px",
         margin: showInputs ? "18px auto" : 0,
-        maxWidth: "520px",
+        maxWidth: fullWidth ? "none" : "520px",
         padding: showInputs ? "10px" : 0,
+        width: "100%",
       }}
     >
       {showInputs && (
@@ -689,13 +816,13 @@ export default function PlateLoadingCalculator({
           </button>
           <select
             aria-label="Equipment"
-            onChange={(event) =>
+            onChange={(event) => {
               setDraft((current) => ({
                 ...current,
                 equipmentId: event.target.value,
-                optionIndex: 0,
-              }))
-            }
+              }));
+              setOptionIndexes({});
+            }}
             style={{
               font: "inherit",
               minHeight: "38px",
@@ -712,75 +839,93 @@ export default function PlateLoadingCalculator({
         </div>
       )}
 
-      <div
-        style={{
-          background: "var(--surface-muted)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          display: "grid",
-          gap: "8px",
-          padding: "10px",
-          textAlign: "left",
-        }}
-      >
-        {loading.status === "empty" && (
-          <div
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "12px",
-            }}
-          >
-            Enter a target weight to calculate the loading.
-          </div>
-        )}
+      {displayLoadings.map(({ loading, optionCount }, index) => (
+        <div
+          key={`${loading.enteredWeight ?? loading.requestedWeight ?? index}-${index}`}
+          style={{
+            background: "var(--surface-muted)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            display: "grid",
+            gap: "8px",
+            padding: "10px",
+            textAlign: "left",
+          }}
+        >
+          {loading.status === "empty" && (
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+              }}
+            >
+              Enter a target weight to calculate the loading.
+            </div>
+          )}
 
-        {loading.status === "underBar" && (
-          <div
-            style={{
-              color: "var(--danger-text)",
-              fontSize: "12px",
-            }}
-          >
-            {formatPlateNumber(loading.requestedWeight)} lb is below the{" "}
-            {formatPlateNumber(loading.equipment.weight)} lb{" "}
-            {loading.equipment.label} weight.
-          </div>
-        )}
+          {loading.status === "underBar" && (
+            <div
+              style={{
+                color: "var(--danger-text)",
+                fontSize: "12px",
+              }}
+            >
+              {formatPlateNumber(loading.requestedWeight)} lb is below the{" "}
+              {formatPlateNumber(loading.equipment.weight)} lb{" "}
+              {loading.equipment.label} weight.
+            </div>
+          )}
 
-        {loading.status === "ready" && (
-          <>
-            <strong>
-              {loading.exact ? "Load" : "Closest load"}{" "}
-              {formatPlateNumber(loading.achievedTotal)} lb
-            </strong>
-
-            {loading.platesPerSide.length > 0 ? (
-              renderPlateLoadingDiagram(loading)
-            ) : (
+          {loading.status === "ready" && (
+            <>
               <div
                 style={{
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "space-between",
+                  minWidth: 0,
                 }}
               >
-                No plates needed.
+                <strong
+                  style={{
+                    minWidth: 0,
+                  }}
+                >
+                  {loading.exact ? "Load" : "Closest load"}{" "}
+                  {formatPlateNumber(loading.achievedTotal)} lb
+                </strong>
+                {index === 0 && renderCountToggle(loading)}
               </div>
-            )}
-          </>
-        )}
-      </div>
+
+              {loading.platesPerSide.length > 0 ? (
+                renderPlateLoadingDiagram(loading, optionCount, index)
+              ) : (
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                  }}
+                >
+                  No plates needed.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ))}
 
       <WeightPickerModal
         isOpen={weightPickerOpen}
         increment={5}
         onClose={() => setWeightPickerOpen(false)}
-        onSelect={(value) =>
+        onSelect={(value) => {
           setDraft((current) => ({
             ...current,
-            optionIndex: 0,
             weight: String(value),
-          }))
-        }
+          }));
+          setOptionIndexes({});
+        }}
         range={250}
         title="Select weight"
         value={draft.weight}

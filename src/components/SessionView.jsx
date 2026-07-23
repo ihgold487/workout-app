@@ -44,6 +44,7 @@ import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import PlateLoadingCalculator, {
+  getClosestLoadableWeight,
   getPlateCalculatorEquipmentId,
 } from "./PlateLoadingCalculator";
 import { calculateE1RM } from "../utils/e1rm";
@@ -335,6 +336,18 @@ export default function SessionView({
       : weight;
   }
 
+  function getLoadableWeightForExercise(exercise, weight) {
+    const equipmentId = getPlateCalculatorEquipmentId(exercise?.equipment, null);
+
+    if (!equipmentId) {
+      return null;
+    }
+
+    const loadable = getClosestLoadableWeight(weight, equipmentId, plateInventory);
+
+    return Number.isFinite(loadable?.weight) ? loadable.weight : null;
+  }
+
   function createCompletedWorkoutId(sessionId) {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
       return `${sessionId}:completed:${crypto.randomUUID()}`;
@@ -496,6 +509,8 @@ export default function SessionView({
       exercise,
       goalMode: getGoalMode(),
       history,
+      normalizeWeight: (weight) =>
+        getLoadableWeightForExercise(exercise, weight) ?? weight,
       setIndex,
       targetReps: reps,
       targetRir: rir,
@@ -513,6 +528,8 @@ export default function SessionView({
       exercise,
       goalMode: getGoalMode(),
       history,
+      normalizeWeight: (weight) =>
+        getLoadableWeightForExercise(exercise, weight) ?? weight,
       preferredRepWindow: 2,
       setIndex,
       targetReps: set.targetReps,
@@ -599,7 +616,8 @@ export default function SessionView({
     reps,
     rir,
     targetPercent,
-    weightIncrement
+    weightIncrement,
+    normalizeWeight
   ) {
     const rawWeight = (baseE1RM * targetPercent) / (1 + (reps + rir) / 30);
     const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
@@ -614,6 +632,11 @@ export default function SessionView({
         )
       : [roundedWeight];
     const candidates = candidateWeights
+      .map((candidate) =>
+        typeof normalizeWeight === "function"
+          ? normalizeWeight(candidate)
+          : candidate
+      )
       .filter((candidate) => candidate > 0)
       .map((candidate) => {
         const e1rm = calculateE1RM(candidate, reps, rir);
@@ -639,7 +662,8 @@ export default function SessionView({
     rir,
     minPercent,
     maxPercent,
-    weightIncrement
+    weightIncrement,
+    normalizeWeight
   ) {
     const midpoint = (minPercent + maxPercent) / 2;
     const rawWeight = (baseE1RM * midpoint) / (1 + (reps + rir) / 30);
@@ -655,6 +679,11 @@ export default function SessionView({
         )
       : [roundedWeight];
     const candidates = candidateWeights
+      .map((candidate) =>
+        typeof normalizeWeight === "function"
+          ? normalizeWeight(candidate)
+          : candidate
+      )
       .filter((candidate) => candidate > 0)
       .map((candidate) => {
         const e1rm = calculateE1RM(candidate, reps, rir);
@@ -704,6 +733,8 @@ export default function SessionView({
     );
     const baseE1RM = calculateE1RM(baseWeight, baseReps, targetRir);
     const weightIncrement = getExerciseWeightIncrement(exercise);
+    const normalizeWarmupWeight = (weight) =>
+      getLoadableWeightForExercise(exercise, weight) ?? weight;
 
     if (
       baseWeight == null ||
@@ -736,7 +767,8 @@ export default function SessionView({
                 targetRir,
                 0.35,
                 0.4,
-                weightIncrement
+                weightIncrement,
+                normalizeWarmupWeight
               ),
             },
             {
@@ -747,7 +779,8 @@ export default function SessionView({
                 7,
                 targetRir,
                 0.65,
-                weightIncrement
+                weightIncrement,
+                normalizeWarmupWeight
               ),
             },
           ],
@@ -764,7 +797,8 @@ export default function SessionView({
                 targetRir,
                 0.5,
                 0.55,
-                weightIncrement
+                weightIncrement,
+                normalizeWarmupWeight
               ),
             },
           ],
@@ -1198,6 +1232,24 @@ export default function SessionView({
     });
   }
 
+  function openWarmupPlateLoadingCalculator(exercise, option) {
+    const weights = (option?.sets || [])
+      .map((warmupSet) => warmupSet.target?.weight)
+      .filter((weight) => Number.isFinite(Number(weight)));
+
+    if (!exercise || weights.length === 0) {
+      return;
+    }
+
+    setPlateCalculatorClosing(false);
+    setPlateCalculatorData({
+      equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      exerciseName: exercise.name || "Exercise",
+      fixedWeights: weights.map((weight) => String(weight)),
+      subtitle: option?.label || "Warmup sets",
+    });
+  }
+
   function closePlateLoadingCalculator({ immediate = false } = {}) {
     if (immediate) {
       setPlateCalculatorClosing(false);
@@ -1207,6 +1259,19 @@ export default function SessionView({
 
     setPlateCalculatorClosing(true);
   }
+
+  useEffect(() => {
+    if (!plateCalculatorClosing) {
+      return undefined;
+    }
+
+    const closeTimer = window.setTimeout(() => {
+      setPlateCalculatorClosing(false);
+      setPlateCalculatorData(null);
+    }, 850);
+
+    return () => window.clearTimeout(closeTimer);
+  }, [plateCalculatorClosing]);
 
   function cancelTargetPressTimer() {
     if (targetPressTimerRef.current) {
@@ -3764,8 +3829,14 @@ export default function SessionView({
                   borderRadius: "8px",
                 }}
               >
-                {group.exercises.map((exercise) => (
-                  <div
+                {group.exercises.map((exercise) => {
+                  const exerciseNote =
+                    exerciseMetadata?.[exercise.exerciseId]?.note || "";
+                  const exerciseNoteText = exerciseNote.trim();
+                  const editingNote = !!expandedNotes[exercise.id];
+
+                  return (
+                    <div
                     key={exercise.id}
                     style={{
                       marginBottom: "20px",
@@ -3785,7 +3856,7 @@ export default function SessionView({
                           onClick={() =>
                             setExpandedNotes((s) => ({
                               ...s,
-                              [exercise.id]: !s[exercise.id],
+                              [exercise.id]: true,
                             }))
                           }
                         >
@@ -3867,18 +3938,19 @@ export default function SessionView({
                       </div>
                     </div>
 
-                    {(expandedNotes[exercise.id] ||
-                      exerciseMetadata?.[
-                        exercise.exerciseId
-                      ]?.note?.trim()) && (
+                    {editingNote ? (
                       <div
                         style={{
-                          display: "flex",
+                          alignItems: "flex-start",
+                          display: "grid",
                           gap: "4px",
+                          gridTemplateColumns: "minmax(0, 1fr) auto auto",
                           marginTop: "8px",
+                          textAlign: "left",
+                          width: "100%",
                         }}
                       >
-                        <input
+                        <textarea
                           placeholder="Notes"
                           style={{
                             background: "var(--surface)",
@@ -3886,8 +3958,12 @@ export default function SessionView({
                             borderRadius: "6px",
                             boxSizing: "border-box",
                             fontSize: "0.85rem",
-                            height: "28px",
-                            padding: "2px",
+                            lineHeight: 1.35,
+                            minHeight: "42px",
+                            minWidth: 0,
+                            padding: "6px",
+                            resize: "vertical",
+                            textAlign: "left",
                             width: "100%",
                           }}
                           value={
@@ -3906,6 +3982,26 @@ export default function SessionView({
                             })
                           }
                         />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedNotes((notes) => ({
+                              ...notes,
+                              [exercise.id]: false,
+                            }))
+                          }
+                          style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            minHeight: "32px",
+                            minWidth: "32px",
+                            padding: "2px 7px",
+                          }}
+                        >
+                          <Check size={15} />
+                        </button>
 
                         <button
                           type="button"
@@ -3928,6 +4024,7 @@ export default function SessionView({
                             background: "var(--surface)",
                             border: "1px solid var(--border)",
                             borderRadius: "6px",
+                            minHeight: "32px",
                             minWidth: "28px",
                             padding: "2px 7px",
                           }}
@@ -3935,7 +4032,22 @@ export default function SessionView({
                           ✕
                         </button>
                       </div>
-                    )}
+                    ) : exerciseNoteText ? (
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "0.85rem",
+                          lineHeight: 1.35,
+                          marginTop: "8px",
+                          overflowWrap: "anywhere",
+                          textAlign: "left",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {exerciseNoteText}
+                      </div>
+                    ) : null}
 
                     <div
                       style={{
@@ -4546,8 +4658,9 @@ export default function SessionView({
                     </div>
 
                     {renderLatestSetHistory(exercise)}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -5020,7 +5133,7 @@ export default function SessionView({
               inset: 0,
               justifyContent: "center",
               position: "fixed",
-              zIndex: 2200,
+              zIndex: 10000,
             }}
           >
             <div
@@ -5044,7 +5157,7 @@ export default function SessionView({
                 display: "grid",
                 gap: "12px",
                 maxHeight: "94dvh",
-                maxWidth: "520px",
+                maxWidth: "760px",
                 overflowY: "auto",
                 padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
                 width: "100%",
@@ -5065,7 +5178,9 @@ export default function SessionView({
                       margin: 0,
                     }}
                   >
-                    Plate Loading
+                    {plateCalculatorData?.fixedWeights
+                      ? "Warmup Loading"
+                      : "Plate Loading"}
                   </h2>
                   <div
                     style={{
@@ -5077,6 +5192,9 @@ export default function SessionView({
                       whiteSpace: "nowrap",
                     }}
                   >
+                    {plateCalculatorData?.subtitle
+                      ? `${plateCalculatorData.subtitle} · `
+                      : ""}
                     {plateCalculatorData?.exerciseName}
                   </div>
                 </div>
@@ -5102,9 +5220,12 @@ export default function SessionView({
               </div>
 
               <PlateLoadingCalculator
+                fixedWeights={plateCalculatorData?.fixedWeights || null}
+                fullWidth
                 initialEquipmentId={plateCalculatorData?.equipmentId || "barbell"}
                 initialWeight={plateCalculatorData?.weight || ""}
                 inventory={plateInventory}
+                showInputs={!plateCalculatorData?.fixedWeights}
               />
             </div>
           </div>
@@ -6104,16 +6225,30 @@ export default function SessionView({
                               }}
                             >
                               <span style={{ textAlign: "left" }}>Set</span>
-                              <span
+                              <button
+                                aria-label={`Open plate loading calculator for ${option.label}`}
+                                onClick={() =>
+                                  openWarmupPlateLoadingCalculator(
+                                    warmupExercise,
+                                    option
+                                  )
+                                }
                                 title="Weight"
                                 style={{
                                   alignItems: "center",
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "inherit",
+                                  cursor: "pointer",
                                   display: "inline-flex",
+                                  font: "inherit",
                                   justifyContent: "center",
+                                  padding: 0,
                                 }}
+                                type="button"
                               >
                                 <Weight size={15} aria-label="Weight" />
-                              </span>
+                              </button>
                               <span
                                 title="Reps"
                                 style={{
