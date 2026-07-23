@@ -43,6 +43,9 @@ import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import PlateLoadingCalculator, {
+  getPlateCalculatorEquipmentId,
+} from "./PlateLoadingCalculator";
 import { calculateE1RM } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import { recommendSetTarget } from "../utils/targetRecommendation";
@@ -248,6 +251,7 @@ export default function SessionView({
   setExerciseMetadata,
   setSelectedSessionId,
   setSelectedTemplateId,
+  plateInventory,
   onWorkoutCompleted,
 }) {
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -277,6 +281,8 @@ export default function SessionView({
   const [weightUnit, setWeightUnit] = useState("lb");
   const [showWeightPicker, setShowWeightPicker] = useState(false);
   const [weightPickerData, setWeightPickerData] = useState(null);
+  const [plateCalculatorData, setPlateCalculatorData] = useState(null);
+  const [plateCalculatorClosing, setPlateCalculatorClosing] = useState(false);
   const [showRepsPicker, setShowRepsPicker] = useState(false);
   const [repsPickerData, setRepsPickerData] = useState(null);
   const [showRirPicker, setShowRirPicker] = useState(false);
@@ -1175,6 +1181,31 @@ export default function SessionView({
     }
 
     setTargetAlternativesClosing(true);
+  }
+
+  function openPlateLoadingCalculator(exercise, set) {
+    if (!exercise || !set) {
+      return;
+    }
+
+    const weight = firstPresentValue(set.actualWeight, set.targetWeight);
+
+    setPlateCalculatorClosing(false);
+    setPlateCalculatorData({
+      equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      exerciseName: exercise.name || "Exercise",
+      weight: isBlankValue(weight) ? "" : String(weight),
+    });
+  }
+
+  function closePlateLoadingCalculator({ immediate = false } = {}) {
+    if (immediate) {
+      setPlateCalculatorClosing(false);
+      setPlateCalculatorData(null);
+      return;
+    }
+
+    setPlateCalculatorClosing(true);
   }
 
   function cancelTargetPressTimer() {
@@ -2960,13 +2991,15 @@ export default function SessionView({
           }
 
           .session-workout-actions-sheet,
-          .session-target-options-sheet {
+          .session-target-options-sheet,
+          .session-plate-loading-sheet {
             animation: sessionSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
             will-change: opacity, transform;
           }
 
           .session-workout-actions-sheet[data-closing="true"],
-          .session-target-options-sheet[data-closing="true"] {
+          .session-target-options-sheet[data-closing="true"],
+          .session-plate-loading-sheet[data-closing="true"] {
             animation-name: sessionSheetSlideDown;
           }
 
@@ -3021,7 +3054,8 @@ export default function SessionView({
           @media (prefers-reduced-motion: reduce) {
             .session-current-exercise-panel,
             .session-workout-actions-sheet,
-            .session-target-options-sheet {
+            .session-target-options-sheet,
+            .session-plate-loading-sheet {
               animation: none;
             }
           }
@@ -3959,20 +3993,38 @@ export default function SessionView({
                             <Target size={14} /> Target
                           </span>
 
-                          <span
+                          <button
+                            aria-label="Open plate loading calculator"
+                            onClick={() => {
+                              const targetSet =
+                                exercise.sets.find(
+                                  (set) => activeSet?.setId === set.id
+                                ) ||
+                                exercise.sets.find((set) => !set.completed) ||
+                                exercise.sets[0];
+
+                              openPlateLoadingCalculator(exercise, targetSet);
+                            }}
                             title="Actual weight"
                             style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "inherit",
                               marginLeft: "4px",
                               width: "50px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
+                              cursor: "pointer",
                               display: "inline-flex",
+                              font: "inherit",
                               justifyContent: "center",
+                              padding: 0,
                             }}
+                            type="button"
                           >
                             <Weight size={15} aria-label="Actual weight" />
-                          </span>
+                          </button>
 
                           <button
                             aria-label="Edit target reps"
@@ -4951,6 +5003,109 @@ export default function SessionView({
                     Save
                   </button>
                 </div>
+            </div>
+          </div>
+        )}
+
+        {(plateCalculatorData || plateCalculatorClosing) && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Plate loading calculator"
+            onClick={() => closePlateLoadingCalculator()}
+            style={{
+              alignItems: "flex-end",
+              background: "rgba(0,0,0,.45)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              position: "fixed",
+              zIndex: 2200,
+            }}
+          >
+            <div
+              className="session-plate-loading-sheet"
+              data-closing={plateCalculatorClosing ? "true" : "false"}
+              onAnimationEnd={(event) => {
+                if (
+                  event.currentTarget === event.target &&
+                  plateCalculatorClosing
+                ) {
+                  setPlateCalculatorClosing(false);
+                  setPlateCalculatorData(null);
+                }
+              }}
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "var(--surface-raised)",
+                borderRadius: "18px 18px 0 0",
+                boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
+                display: "grid",
+                gap: "12px",
+                maxHeight: "94dvh",
+                maxWidth: "520px",
+                overflowY: "auto",
+                padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "12px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      margin: 0,
+                    }}
+                  >
+                    Plate Loading
+                  </h2>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "2px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {plateCalculatorData?.exerciseName}
+                  </div>
+                </div>
+
+                <button
+                  aria-label="Close plate loading calculator"
+                  onClick={() => closePlateLoadingCalculator()}
+                  style={{
+                    alignItems: "center",
+                    background: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: "999px",
+                    color: "var(--text)",
+                    display: "inline-flex",
+                    height: "32px",
+                    justifyContent: "center",
+                    width: "32px",
+                  }}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <PlateLoadingCalculator
+                initialEquipmentId={plateCalculatorData?.equipmentId || "barbell"}
+                initialWeight={plateCalculatorData?.weight || ""}
+                inventory={plateInventory}
+              />
             </div>
           </div>
         )}

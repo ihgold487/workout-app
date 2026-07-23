@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 
 function WeightPickerModalContent({
   current,
@@ -10,6 +11,29 @@ function WeightPickerModalContent({
 }) {
   const [manualValue, setManualValue] = useState(String(current));
   const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const previousBodyStyles = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    };
+
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+
+    return () => {
+      document.body.style.overflow = previousBodyStyles.overflow;
+      document.body.style.position = previousBodyStyles.position;
+      document.body.style.top = previousBodyStyles.top;
+      document.body.style.width = previousBodyStyles.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
 
   useEffect(() => {
     if (!scrollRef.current) {
@@ -43,6 +67,10 @@ function WeightPickerModalContent({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        padding: "12px",
+        boxSizing: "border-box",
+        overscrollBehavior: "contain",
+        touchAction: "none",
         zIndex,
       }}
     >
@@ -53,13 +81,20 @@ function WeightPickerModalContent({
           color: "var(--text)",
           padding: "16px",
           borderRadius: "8px",
+          boxSizing: "border-box",
+          display: "grid",
+          gap: "10px",
+          gridTemplateRows: "auto auto auto minmax(0, 1fr)",
+          maxHeight:
+            "min(560px, calc(100dvh - 24px - env(safe-area-inset-bottom)))",
           minWidth: "220px",
+          width: "min(100%, 300px)",
         }}
       >
         <div
           style={{
             fontWeight: "bold",
-            marginBottom: "12px",
+            lineHeight: 1.2,
           }}
         >
           {title || "Select Value"}
@@ -70,19 +105,78 @@ function WeightPickerModalContent({
             textAlign: "center",
             fontSize: "12px",
             color: "var(--text-muted)",
-            marginBottom: "8px",
+            lineHeight: 1.2,
           }}
         >
           Scroll or tap a value
         </div>
 
         <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            minHeight: "38px",
+          }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: "28px",
+              lineHeight: 1,
+            }}
+          >
+            ❌
+          </button>
+
+          <input
+            inputMode="decimal"
+            min="0"
+            value={manualValue}
+            onChange={(e) => setManualValue(e.target.value)}
+            style={{
+              width: "90px",
+              textAlign: "center",
+              fontSize: "22px",
+              fontWeight: "bold",
+              lineHeight: 1.2,
+            }}
+          />
+
+          <button
+            onClick={() => {
+              const weight = Math.max(0, Number(manualValue));
+
+              if (!isNaN(weight)) {
+                onSelect(weight);
+              }
+
+              onClose();
+            }}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: "28px",
+              lineHeight: 1,
+            }}
+          >
+            ✅
+          </button>
+        </div>
+
+        <div
           ref={scrollRef}
           style={{
-            maxHeight: "320px",
+            minHeight: 0,
             overflowY: "auto",
+            overscrollBehavior: "contain",
             border: "1px solid var(--border)",
             padding: "4px",
+            touchAction: "pan-y",
+            WebkitOverflowScrolling: "touch",
           }}
         >
           {options.map((option) => (
@@ -112,58 +206,6 @@ function WeightPickerModalContent({
               {option}
             </button>
           ))}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginTop: "12px",
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              border: "none",
-              background: "transparent",
-              fontSize: "28px",
-            }}
-          >
-            ❌
-          </button>
-
-          <input
-            inputMode="decimal"
-            min="0"
-            value={manualValue}
-            onChange={(e) => setManualValue(e.target.value)}
-            style={{
-              width: "90px",
-              textAlign: "center",
-              fontSize: "22px",
-              fontWeight: "bold",
-            }}
-          />
-
-          <button
-            onClick={() => {
-              const weight = Math.max(0, Number(manualValue));
-
-              if (!isNaN(weight)) {
-                onSelect(weight);
-              }
-
-              onClose();
-            }}
-            style={{
-              border: "none",
-              background: "transparent",
-              fontSize: "28px",
-            }}
-          >
-            ✅
-          </button>
         </div>
       </div>
     </div>
@@ -204,7 +246,7 @@ export default function WeightPickerModal({
     return null;
   }
 
-  return (
+  const modal = (
     <WeightPickerModalContent
       key={`${title || "value"}-${current}`}
       current={current}
@@ -215,4 +257,8 @@ export default function WeightPickerModal({
       zIndex={zIndex}
     />
   );
+
+  return typeof document === "undefined"
+    ? modal
+    : createPortal(modal, document.body);
 }

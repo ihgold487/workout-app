@@ -6487,6 +6487,7 @@ export default function App() {
         setExerciseMetadata={setExerciseMetadata}
         setSelectedSessionId={setSelectedSessionId}
         setSelectedTemplateId={setSelectedTemplateId}
+        plateInventory={plateInventory}
         onEditModeChange={setTemplatePreviewEditActive}
         onWorkoutCompleted={(completedWorkout) => {
           setSelectedHistory(completedWorkout);
