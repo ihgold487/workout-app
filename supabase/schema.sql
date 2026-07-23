@@ -1734,6 +1734,11 @@ create table if not exists public.equipment_plate_inventories (
   updated_at timestamptz not null default now()
 );
 
+comment on table public.equipment_plate_inventories is
+  'User-specific equipment inventory for plate counts and equipment weights.';
+comment on column public.equipment_plate_inventories.inventory is
+  'JSON payload with oneInch and twoInch plate arrays plus equipmentWeights keyed by app equipment id.';
+
 drop trigger if exists equipment_plate_inventories_set_updated_at on public.equipment_plate_inventories;
 create trigger equipment_plate_inventories_set_updated_at
 before update on public.equipment_plate_inventories

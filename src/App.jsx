@@ -1,6 +1,7 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import {
+  Cable,
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
@@ -157,48 +158,82 @@ const DEFAULT_PLATE_INVENTORY = {
   ],
 };
 const PLATE_COUNT_PICKER_VALUES = Array.from({ length: 41 }, (_, index) => index);
+const EQUIPMENT_WEIGHT_PICKER_VALUES = Array.from(
+  { length: 21 },
+  (_, index) => index * 5
+);
 const LOAD_CALCULATOR_EQUIPMENT = [
   {
-    categoryKey: "oneInch",
-    id: "dumbbell",
-    label: "Dumbbell",
-    loadMode: "balanced",
-    weight: 5,
-  },
-  {
     categoryKey: "twoInch",
-    id: "ezBar",
-    label: "EZ bar",
-    loadMode: "balanced",
-    weight: 15,
-  },
-  {
-    categoryKey: "twoInch",
+    defaultWeight: 45,
     id: "barbell",
     label: "Barbell",
     loadMode: "balanced",
-    weight: 45,
+    weightConsidered: true,
   },
   {
     categoryKey: "twoInch",
+    defaultWeight: 0,
+    id: "cable",
+    label: "Cable",
+    loadMode: "cable",
+    weightConsidered: false,
+  },
+  {
+    categoryKey: "oneInch",
+    defaultWeight: 5,
+    id: "dumbbell",
+    label: "Dumbbells",
+    loadMode: "balanced",
+    weightConsidered: true,
+  },
+  {
+    categoryKey: "twoInch",
+    defaultWeight: 15,
+    id: "ezBar",
+    label: "EZ Curl Bar",
+    loadMode: "balanced",
+    weightConsidered: true,
+  },
+  {
+    categoryKey: "twoInch",
+    defaultWeight: 0,
     id: "landmine",
     label: "Landmine",
     loadMode: "singleEnd",
-    weight: 0,
+    weightConsidered: false,
   },
   {
     categoryKey: "twoInch",
-    id: "trapBar",
-    label: "Trap bar",
-    loadMode: "balanced",
-    weight: 50,
-  },
-  {
-    categoryKey: "twoInch",
+    defaultWeight: 0,
     id: "machine",
     label: "Machine",
     loadMode: "stack",
-    weight: 0,
+    weightConsidered: false,
+  },
+  {
+    categoryKey: "twoInch",
+    defaultWeight: 0,
+    id: "smithMachine",
+    label: "Smith Machine",
+    loadMode: "balanced",
+    weightConsidered: true,
+  },
+  {
+    categoryKey: "twoInch",
+    defaultWeight: 50,
+    id: "trapBar",
+    label: "Trap Bar",
+    loadMode: "balanced",
+    weightConsidered: true,
+  },
+  {
+    categoryKey: "twoInch",
+    defaultWeight: 0,
+    id: "tricepBar",
+    label: "Tricep Bar",
+    loadMode: "balanced",
+    weightConsidered: true,
   },
 ];
 const PLATE_WEIGHT_UNIT = 4;
@@ -216,21 +251,34 @@ const TWO_INCH_PLATE_STYLES = {
 };
 const LOAD_CALCULATOR_BAR_WIDTHS = {
   barbell: "100%",
+  cable: "100%",
   landmine: "100%",
+  smithMachine: "100%",
   trapBar: "100%",
+  tricepBar: "100%",
   ezBar: "100%",
   dumbbell: "100%",
-  machine: "0%",
+  machine: "100%",
 };
 const LOAD_CALCULATOR_BAR_COLUMNS = {
   barbell: "74px",
+  cable: "28px",
   landmine: "74px",
+  smithMachine: "74px",
   trapBar: "74px",
+  tricepBar: "56px",
   ezBar: "56px",
   dumbbell: "37px",
-  machine: "1px",
+  machine: "28px",
 };
 const MAX_PLATE_LOADING_OPTIONS_PER_SUM = 4;
+const DEFAULT_EQUIPMENT_WEIGHTS = LOAD_CALCULATOR_EQUIPMENT.reduce(
+  (weights, equipment) => ({
+    ...weights,
+    [equipment.id]: equipment.defaultWeight,
+  }),
+  {}
+);
 
 function formatPlateNumber(value) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
@@ -272,11 +320,36 @@ function rankPlateCombinations(combinations) {
     .slice(0, MAX_PLATE_LOADING_OPTIONS_PER_SUM);
 }
 
-function calculatePlateLoading(totalWeight, equipmentId, inventory) {
-  const equipment =
+function getLoadCalculatorEquipment(equipmentId, inventory) {
+  const baseEquipment =
     LOAD_CALCULATOR_EQUIPMENT.find((option) => option.id === equipmentId) ||
     LOAD_CALCULATOR_EQUIPMENT[0];
-  const requestedWeight = Number(totalWeight);
+  const configuredWeight = Number(inventory?.equipmentWeights?.[baseEquipment.id]);
+  const equipmentWeight = Number.isFinite(configuredWeight)
+    ? Math.max(0, configuredWeight)
+    : baseEquipment.defaultWeight;
+
+  return {
+    ...baseEquipment,
+    configuredWeight: equipmentWeight,
+    weight: baseEquipment.weightConsidered ? equipmentWeight : 0,
+  };
+}
+
+function calculatePlateLoading(
+  totalWeight,
+  equipmentId,
+  inventory,
+  cablePulleyCount = 1,
+  dumbbellCount = 1
+) {
+  const equipment = getLoadCalculatorEquipment(equipmentId, inventory);
+  const enteredWeight = Number(totalWeight);
+  const isDumbbellLoad = equipment.id === "dumbbell";
+  const requestedWeight =
+    isDumbbellLoad && Number(dumbbellCount) === 2
+      ? enteredWeight / 2
+      : enteredWeight;
 
   if (!Number.isFinite(requestedWeight) || requestedWeight <= 0) {
     return {
@@ -286,6 +359,9 @@ function calculatePlateLoading(totalWeight, equipmentId, inventory) {
   }
 
   const isBalancedLoad = equipment.loadMode === "balanced";
+  const isCableLoad = equipment.loadMode === "cable";
+  const requiresPairedPlates = isBalancedLoad || isCableLoad;
+  const cableLoadMultiplier = Number(cablePulleyCount) === 2 ? 1 : 2;
   const loadedWeight = isBalancedLoad
     ? requestedWeight - equipment.weight
     : requestedWeight;
@@ -298,11 +374,20 @@ function calculatePlateLoading(totalWeight, equipmentId, inventory) {
     };
   }
 
-  const targetLoad = isBalancedLoad ? loadedWeight / 2 : loadedWeight;
+  const targetLoad = isBalancedLoad
+    ? loadedWeight / 2
+    : isCableLoad
+      ? loadedWeight / cableLoadMultiplier
+      : loadedWeight;
   const targetLoadUnits = Math.round(targetLoad * PLATE_WEIGHT_UNIT);
   const availablePlates = (inventory[equipment.categoryKey] || [])
     .filter((plate) =>
-      isBalancedLoad
+      Number(plate.weight) !== 55 ||
+      equipment.id === "barbell" ||
+      equipment.id === "trapBar"
+    )
+    .filter((plate) =>
+      requiresPairedPlates
         ? Number(plate.count) >= 2 && Number(plate.weight) > 0
         : Number(plate.count) >= 1 && Number(plate.weight) > 0
     )
@@ -311,7 +396,7 @@ function calculatePlateLoading(totalWeight, equipmentId, inventory) {
 
   availablePlates.forEach((plate) => {
     const plateUnits = Math.round(Number(plate.weight) * PLATE_WEIGHT_UNIT);
-    const availableCount = isBalancedLoad
+    const availableCount = requiresPairedPlates
       ? Math.floor(Number(plate.count) / 2)
       : Number(plate.count);
 
@@ -343,11 +428,17 @@ function calculatePlateLoading(totalWeight, equipmentId, inventory) {
   const achievedPlateLoad = bestSumUnits / PLATE_WEIGHT_UNIT;
   const achievedTotal = isBalancedLoad
     ? equipment.weight + achievedPlateLoad * 2
-    : achievedPlateLoad;
+    : isCableLoad
+      ? achievedPlateLoad * cableLoadMultiplier
+      : achievedPlateLoad;
   const leftPlates =
-    equipment.loadMode === "balanced" ? platesPerSide : [];
+    equipment.loadMode === "balanced" || equipment.loadMode === "cable"
+      ? platesPerSide
+      : [];
   const rightPlates =
-    equipment.loadMode === "balanced" || equipment.loadMode === "singleEnd"
+    equipment.loadMode === "balanced" ||
+    equipment.loadMode === "singleEnd" ||
+    equipment.loadMode === "cable"
       ? platesPerSide
       : [];
   const machinePlates = equipment.loadMode === "stack" ? platesPerSide : [];
@@ -360,6 +451,9 @@ function calculatePlateLoading(totalWeight, equipmentId, inventory) {
     leftPlates,
     loadedWeight,
     loadingOptions,
+    cablePulleyCount: Number(cablePulleyCount) === 2 ? 2 : 1,
+    dumbbellCount: Number(dumbbellCount) === 2 ? 2 : 1,
+    enteredWeight,
     machinePlates,
     platesPerSide,
     rightPlates,
@@ -394,15 +488,35 @@ function normalizePlateInventory(value) {
   };
 
   return {
+    equipmentWeights: LOAD_CALCULATOR_EQUIPMENT.reduce((weights, equipment) => {
+      const parsedWeight = Number(value?.equipmentWeights?.[equipment.id]);
+
+      return {
+        ...weights,
+        [equipment.id]: Number.isFinite(parsedWeight)
+          ? Math.max(0, parsedWeight)
+          : DEFAULT_EQUIPMENT_WEIGHTS[equipment.id],
+      };
+    }, {}),
     oneInch: normalizeCategory("oneInch"),
     twoInch: normalizeCategory("twoInch"),
   };
 }
 
 function hasConfiguredPlateInventory(inventory) {
-  return ["oneInch", "twoInch"].some((categoryKey) =>
+  const hasConfiguredPlates = ["oneInch", "twoInch"].some((categoryKey) =>
     (inventory?.[categoryKey] || []).some((plate) => Number(plate.count) > 0)
   );
+  const hasConfiguredEquipment = LOAD_CALCULATOR_EQUIPMENT.some((equipment) => {
+    const weight = Number(inventory?.equipmentWeights?.[equipment.id]);
+
+    return (
+      Number.isFinite(weight) &&
+      weight !== DEFAULT_EQUIPMENT_WEIGHTS[equipment.id]
+    );
+  });
+
+  return hasConfiguredPlates || hasConfiguredEquipment;
 }
 
 function readPlateInventory() {
@@ -1349,8 +1463,13 @@ export default function App() {
     oneInch: false,
     twoInch: false,
   });
+  const [equipmentInventoryExpanded, setEquipmentInventoryExpanded] =
+    useState(false);
   const [plateCountPicker, setPlateCountPicker] = useState(null);
+  const [equipmentWeightPicker, setEquipmentWeightPicker] = useState(null);
   const [loadCalculatorDraft, setLoadCalculatorDraft] = useState({
+    cablePulleyCount: 1,
+    dumbbellCount: 1,
     equipmentId: "barbell",
     optionIndex: 0,
     weight: "",
@@ -4222,6 +4341,23 @@ export default function App() {
     }));
   }
 
+  function setEquipmentWeight(equipmentId, weight) {
+    updatePlateInventory((currentInventory) => ({
+      ...currentInventory,
+      equipmentWeights: {
+        ...(currentInventory.equipmentWeights || {}),
+        [equipmentId]: Math.max(0, Number(weight) || 0),
+      },
+    }));
+  }
+
+  function resetEquipmentInventory() {
+    updatePlateInventory((currentInventory) => ({
+      ...currentInventory,
+      equipmentWeights: DEFAULT_EQUIPMENT_WEIGHTS,
+    }));
+  }
+
   function addPlateSize(categoryKey) {
     const weight = Number.parseFloat(newPlateDrafts[categoryKey]);
 
@@ -4485,6 +4621,118 @@ export default function App() {
     );
   }
 
+  function renderEquipmentInventory() {
+    const equipmentWeights = plateInventory.equipmentWeights || {};
+
+    return (
+      <div
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "8px",
+          padding: "10px",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+          }}
+        >
+          <button
+            aria-expanded={equipmentInventoryExpanded}
+            onClick={() =>
+              setEquipmentInventoryExpanded((expanded) => !expanded)
+            }
+            style={{
+              alignItems: "center",
+              background: "transparent",
+              border: "none",
+              color: "var(--text)",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "auto minmax(0, 1fr)",
+              padding: 0,
+              textAlign: "left",
+            }}
+            type="button"
+          >
+            {equipmentInventoryExpanded ? (
+              <ChevronDown size={18} />
+            ) : (
+              <ChevronRight size={18} />
+            )}
+            <strong>Equipment Inventory</strong>
+          </button>
+          {equipmentInventoryExpanded && (
+            <button onClick={resetEquipmentInventory} type="button">
+              Reset
+            </button>
+          )}
+        </div>
+
+        {equipmentInventoryExpanded && (
+          <div
+            style={{
+              display: "grid",
+              gap: "6px",
+            }}
+          >
+            {LOAD_CALCULATOR_EQUIPMENT.map((equipment) => {
+              const weight =
+                equipmentWeights[equipment.id] ??
+                DEFAULT_EQUIPMENT_WEIGHTS[equipment.id];
+
+              return (
+                <div
+                  key={equipment.id}
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    padding: "8px",
+                  }}
+                >
+                  <strong>{equipment.label}</strong>
+                  <button
+                    aria-label={`${equipment.label} equipment weight`}
+                    onClick={() =>
+                      setEquipmentWeightPicker({
+                        equipmentId: equipment.id,
+                        label: equipment.label,
+                        weight,
+                      })
+                    }
+                    style={{
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      font: "inherit",
+                      minHeight: "32px",
+                      minWidth: "68px",
+                      padding: "4px 8px",
+                      textAlign: "center",
+                    }}
+                    type="button"
+                  >
+                    {formatPlateNumber(weight)} lb
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderPlateLoadingDiagram(loading, optionCount) {
     const leftPlates = loading.leftPlates || [];
     const rightPlates = loading.rightPlates || [];
@@ -4496,13 +4744,24 @@ export default function App() {
     const machineTotal = machinePlates.reduce((total, plate) => total + plate, 0);
     const canCycleOptions = optionCount > 1;
     const showMachineStack = loading.equipment.loadMode === "stack";
+    const showCableToggle = loading.equipment.loadMode === "cable";
+    const showDumbbellToggle = loading.equipment.id === "dumbbell";
+    const showCountToggle = showCableToggle || showDumbbellToggle;
+    const isOneEndedLoad =
+      loading.equipment.loadMode === "singleEnd" || showMachineStack;
+    const shownLeftPlates = showMachineStack ? [] : leftPlates;
+    const shownRightPlates = showMachineStack ? machinePlates : rightPlates;
+    const shownLeftTotal = showMachineStack ? 0 : leftTotal;
+    const shownRightTotal = showMachineStack ? machineTotal : rightTotal;
     const barWidth =
       LOAD_CALCULATOR_BAR_WIDTHS[loading.equipment.id] ||
       LOAD_CALCULATOR_BAR_WIDTHS.barbell;
     const barColumnWidth =
       LOAD_CALCULATOR_BAR_COLUMNS[loading.equipment.id] ||
       LOAD_CALCULATOR_BAR_COLUMNS.barbell;
-    const diagramColumns = `minmax(0, 1fr) ${barColumnWidth} minmax(0, 1fr)`;
+    const diagramColumns = isOneEndedLoad
+      ? `minmax(0, .5fr) ${barColumnWidth} minmax(0, 1.5fr)`
+      : `minmax(0, 1fr) ${barColumnWidth} minmax(0, 1fr)`;
     const getPlateStyle = (plate) =>
       loading.equipment.categoryKey === "twoInch"
         ? TWO_INCH_PLATE_STYLES[formatPlateNumber(plate)] || {
@@ -4544,16 +4803,103 @@ export default function App() {
         </div>
       );
     };
+    const renderCountToggle = () => {
+      if (!showCountToggle) {
+        return null;
+      }
+
+      const toggleConfig = showCableToggle
+        ? {
+            ariaLabel: "Cable pulleys",
+            icon: <Cable size={15} />,
+            stateKey: "cablePulleyCount",
+          }
+        : {
+            ariaLabel: "Dumbbell count",
+            icon: <Dumbbell size={15} />,
+            stateKey: "dumbbellCount",
+          };
+
+      return (
+        <div
+          aria-label={toggleConfig.ariaLabel}
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: "4px",
+            justifySelf: "end",
+          }}
+        >
+          {toggleConfig.icon}
+          <span
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "999px",
+              display: "inline-grid",
+              gridTemplateColumns: "1fr 1fr",
+              overflow: "hidden",
+            }}
+          >
+            {[1, 2].map((pulleyCount) => {
+              const active =
+                Number(loadCalculatorDraft[toggleConfig.stateKey]) === pulleyCount;
+
+              return (
+                <button
+                  key={pulleyCount}
+                  aria-pressed={active}
+                  onClick={() =>
+                    setLoadCalculatorDraft((draft) => ({
+                      ...draft,
+                      [toggleConfig.stateKey]: pulleyCount,
+                      optionIndex: 0,
+                    }))
+                  }
+                  style={{
+                    background: active ? "var(--accent)" : "transparent",
+                    border: "none",
+                    color: active ? "var(--surface)" : "var(--text)",
+                    font: "inherit",
+                    fontSize: "12px",
+                    fontWeight: active ? 700 : 500,
+                    minHeight: "24px",
+                    minWidth: "28px",
+                    padding: "2px 8px",
+                  }}
+                  type="button"
+                >
+                  {pulleyCount}
+                </button>
+              );
+            })}
+          </span>
+        </div>
+      );
+    };
 
     return (
-      <button
+      <div
         aria-label="Plate loading diagram"
         aria-disabled={!canCycleOptions}
+        role="button"
+        tabIndex={0}
         onClick={() => {
           if (!canCycleOptions) {
             return;
           }
 
+          setLoadCalculatorDraft((draft) => ({
+            ...draft,
+            optionIndex: (draft.optionIndex + 1) % optionCount,
+          }));
+        }}
+        onKeyDown={(event) => {
+          if (!canCycleOptions || (event.key !== "Enter" && event.key !== " ")) {
+            return;
+          }
+
+          event.preventDefault();
           setLoadCalculatorDraft((draft) => ({
             ...draft,
             optionIndex: (draft.optionIndex + 1) % optionCount,
@@ -4572,121 +4918,97 @@ export default function App() {
           textAlign: "inherit",
           width: "100%",
         }}
-        type="button"
       >
-        {showMachineStack ? (
+        {showCountToggle && renderCountToggle()}
+
+        <div
+          style={{
+            alignItems: "center",
+            display: "grid",
+            gap: "3px",
+            gridTemplateColumns: diagramColumns,
+            width: "100%",
+          }}
+        >
           <div
             style={{
               alignItems: "center",
               display: "flex",
+              flexDirection: "row-reverse",
               gap: "3px",
-              justifyContent: "center",
+              justifyContent: "end",
               minWidth: 0,
             }}
           >
-            {machinePlates.map((plate, index) =>
-              renderPlate(plate, index, "machine")
+            {shownLeftPlates.map((plate, index) =>
+              renderPlate(plate, index, "left")
             )}
           </div>
-        ) : (
+
           <div
             style={{
               alignItems: "center",
-              display: "grid",
-              gap: "3px",
-              gridTemplateColumns: diagramColumns,
+              display: "flex",
+              height: "72px",
+              justifyContent: "center",
+              minWidth: 0,
               width: "100%",
             }}
           >
             <div
               style={{
-                alignItems: "center",
-                display: "flex",
-                flexDirection: "row-reverse",
-                gap: "3px",
-                justifyContent: "end",
-                minWidth: 0,
+                background: "#67717c",
+                borderRadius: "999px",
+                height: "8px",
+                width: barWidth,
               }}
-            >
-              {leftPlates.map((plate, index) => renderPlate(plate, index, "left"))}
-            </div>
-
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                height: "72px",
-                justifyContent: "center",
-                minWidth: 0,
-                width: "100%",
-              }}
-            >
-              <div
-                style={{
-                  background: "#67717c",
-                  borderRadius: "999px",
-                  height: "8px",
-                  width: barWidth,
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                gap: "3px",
-                justifyContent: "start",
-                minWidth: 0,
-              }}
-            >
-              {rightPlates.map((plate, index) =>
-                renderPlate(plate, index, "right")
-              )}
-            </div>
+            />
           </div>
-        )}
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "3px",
+              justifyContent: "start",
+              minWidth: 0,
+            }}
+          >
+            {shownRightPlates.map((plate, index) =>
+              renderPlate(plate, index, "right")
+            )}
+          </div>
+        </div>
 
         <div
           style={{
+            alignItems: "center",
             color: "var(--text-muted)",
             display: "grid",
             fontSize: "12px",
             gap: "3px",
-            gridTemplateColumns: showMachineStack ? "1fr" : diagramColumns,
+            gridTemplateColumns: diagramColumns,
             textAlign: "center",
           }}
         >
-          {showMachineStack ? (
-            <strong
-              style={{
-                color: "var(--text)",
-                fontSize: "12px",
-              }}
-            >
-              {formatPlateNumber(machineTotal)} lb {loading.equipment.label}
-            </strong>
-          ) : (
-            <>
-              <span>{leftTotal > 0 ? `${formatPlateNumber(leftTotal)} lb` : ""}</span>
-              <strong
-                style={{
-                  color: "var(--text)",
-                  fontSize: "12px",
-                }}
-              >
-                {loading.equipment.weight > 0
-                  ? `${formatPlateNumber(loading.equipment.weight)} lb `
-                  : ""}
-                {loading.equipment.label}
-              </strong>
-              <span>
-                {rightTotal > 0 ? `${formatPlateNumber(rightTotal)} lb` : ""}
-              </span>
-            </>
-          )}
+          <span>
+            {shownLeftTotal > 0 ? `${formatPlateNumber(shownLeftTotal)} lb` : ""}
+          </span>
+          <strong
+            style={{
+              color: "var(--text)",
+              fontSize: "12px",
+            }}
+          >
+            {formatPlateNumber(loading.equipment.weight)}
+          </strong>
+          <span>
+            {shownRightTotal > 0
+              ? `${formatPlateNumber(shownRightTotal)} lb`
+              : ""}
+          </span>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -4694,7 +5016,9 @@ export default function App() {
     const calculatedLoading = calculatePlateLoading(
       deferredLoadCalculatorDraft.weight,
       deferredLoadCalculatorDraft.equipmentId,
-      plateInventory
+      plateInventory,
+      deferredLoadCalculatorDraft.cablePulleyCount,
+      deferredLoadCalculatorDraft.dumbbellCount
     );
     const optionCount = calculatedLoading.loadingOptions?.length || 0;
     const selectedOptionIndex = optionCount
@@ -4710,7 +5034,8 @@ export default function App() {
             return {
               ...calculatedLoading,
               leftPlates:
-                calculatedLoading.equipment.loadMode === "balanced"
+                calculatedLoading.equipment.loadMode === "balanced" ||
+                calculatedLoading.equipment.loadMode === "cable"
                   ? selectedPlates
                   : [],
               machinePlates:
@@ -4721,7 +5046,8 @@ export default function App() {
               platesPerSide: selectedPlates,
               rightPlates:
                 calculatedLoading.equipment.loadMode === "balanced" ||
-                calculatedLoading.equipment.loadMode === "singleEnd"
+                calculatedLoading.equipment.loadMode === "singleEnd" ||
+                calculatedLoading.equipment.loadMode === "cable"
                   ? selectedPlates
                   : [],
             };
@@ -5797,6 +6123,7 @@ export default function App() {
               "2 inch plates",
               "For Olympic bars, plate-loaded machines, and 2 inch equipment."
             )}
+            {renderEquipmentInventory()}
           </div>
         </section>
 
@@ -5822,6 +6149,25 @@ export default function App() {
               plateCountPicker.plateId,
               value
             );
+          }}
+          zIndex={2400}
+        />
+        <WeightPickerModal
+          isOpen={Boolean(equipmentWeightPicker)}
+          onClose={() => setEquipmentWeightPicker(null)}
+          title={
+            equipmentWeightPicker
+              ? `${equipmentWeightPicker.label} weight`
+              : "Equipment weight"
+          }
+          value={equipmentWeightPicker?.weight}
+          values={EQUIPMENT_WEIGHT_PICKER_VALUES}
+          onSelect={(value) => {
+            if (!equipmentWeightPicker) {
+              return;
+            }
+
+            setEquipmentWeight(equipmentWeightPicker.equipmentId, value);
           }}
           zIndex={2400}
         />
