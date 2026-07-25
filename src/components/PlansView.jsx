@@ -1338,6 +1338,49 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
   };
 }
 
+function cloneWeeklyPrescriptions(weeklyPrescriptions) {
+  return Array.isArray(weeklyPrescriptions)
+    ? weeklyPrescriptions.map((week) => ({ ...week }))
+    : [];
+}
+
+function createReplacementPlanExercise({
+  goal,
+  history,
+  replacementExercise,
+  replacedExercise,
+  supersetGroup,
+  fallbackReps,
+  fallbackRir,
+}) {
+  const basePrescription = getBaseExercisePrescription(
+    replacedExercise,
+    fallbackReps,
+    fallbackRir
+  );
+  const nextExercise = createPlanExercise({
+    exercise: replacementExercise,
+    goal,
+    history,
+    planMuscle: replacedExercise.planMuscle,
+    reps: basePrescription.reps,
+    rir: basePrescription.rir,
+    setCount: replacedExercise.sets?.length || Number(basePrescription.sets) || 1,
+    supersetGroup,
+  });
+
+  if (!Array.isArray(replacedExercise.weeklyPrescriptions)) {
+    return nextExercise;
+  }
+
+  return {
+    ...nextExercise,
+    weeklyPrescriptions: cloneWeeklyPrescriptions(
+      replacedExercise.weeklyPrescriptions
+    ),
+  };
+}
+
 function getDefaultWeeklyPrescriptions({
   deload,
   durationWeeks,
@@ -2548,15 +2591,14 @@ export default function PlansView({
               ? supersetGroupBySlot[slotKey]
               : exercise.supersetGroup;
             const previewExercise = replacementExercise
-              ? createPlanExercise({
-                  exercise: replacementExercise,
+              ? createReplacementPlanExercise({
                   goal,
                   history,
-                  planMuscle: exercise.planMuscle,
-                  reps,
-                  rir,
-                  setCount: exercise.sets.length,
+                  replacementExercise,
+                  replacedExercise: exercise,
                   supersetGroup,
+                  fallbackReps: reps,
+                  fallbackRir: rir,
                 })
               : {
                   ...exercise,

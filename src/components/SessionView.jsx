@@ -2391,46 +2391,66 @@ export default function SessionView({
 
       templateChanged: true,
 
-      exercises: s.exercises.map((ex) =>
-        ex.id === oldExerciseId
-          ? {
-              ...ex,
+      exercises: s.exercises.map((ex) => {
+        if (ex.id !== oldExerciseId) {
+          return ex;
+        }
 
-              name: newExercise.name,
+        const existingSets = ex.sets || [];
+        const firstSet = existingSets[0] || {};
+        const defaultReps = formatSetupDefault(
+          firstPresentValue(firstSet.targetReps, firstSet.actualReps)
+        );
+        const defaultRir = formatSetupDefault(
+          firstPresentValue(firstSet.targetRir, firstSet.actualRir)
+        );
+        const requestedSetCount = Number(replacementValues.sets) || 1;
+        const preservingExistingSetCount =
+          requestedSetCount === existingSets.length;
+        const shouldPreserveSetReps =
+          String(replacementValues.reps ?? "") === String(defaultReps ?? "");
+        const shouldPreserveSetRir =
+          String(replacementValues.rir ?? "") === String(defaultRir ?? "");
+        const sourceSets = preservingExistingSetCount
+          ? existingSets
+          : Array.from({ length: requestedSetCount }, () => ({}));
 
-              equipment: newExercise.equipment,
+        return {
+          ...ex,
 
-              muscles: newExercise.muscles,
+          name: newExercise.name,
 
-              imageAlt: newExercise.imageAlt || "",
+          equipment: newExercise.equipment,
 
-              imageUrl: newExercise.imageUrl || "",
+          muscles: newExercise.muscles,
 
-              originalExerciseId: newExercise.id,
+          imageAlt: newExercise.imageAlt || "",
 
-              exerciseId: newExercise.id,
+          imageUrl: newExercise.imageUrl || "",
 
-              sets: Array.from(
-                {
-                  length: Number(replacementValues.sets) || 1,
-                },
-                (_, i) => ({
-                  id: Date.now() + i,
+          originalExerciseId: newExercise.id,
 
-                  targetWeight: replacementValues.weight,
+          exerciseId: newExercise.id,
 
-                  targetReps: replacementValues.reps,
+          sets: sourceSets.map((set, i) => ({
+            id: Date.now() + i,
 
-                  targetRir: replacementValues.rir,
+            targetWeight: replacementValues.weight,
 
-                  actualWeight: "",
-                  actualReps: "",
-                  actualRir: "",
-                })
-              ),
-            }
-          : ex
-      ),
+            targetReps: shouldPreserveSetReps
+              ? firstPresentValue(set.targetReps, set.actualReps, replacementValues.reps)
+              : replacementValues.reps,
+
+            targetRir: shouldPreserveSetRir
+              ? firstPresentValue(set.targetRir, set.actualRir, replacementValues.rir)
+              : replacementValues.rir,
+
+            actualWeight: "",
+            actualReps: "",
+            actualRir: "",
+          })),
+        };
+      }),
     }));
 
     if (activeSet?.exerciseId === oldExerciseId) {

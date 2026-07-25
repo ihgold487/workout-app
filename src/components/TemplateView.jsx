@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
   BarChart3,
-  BatteryMedium,
   Check,
-  Dumbbell,
   GripVertical,
   Link2,
   NotebookPen,
@@ -11,13 +9,10 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Repeat2,
   Save,
-  Target,
   Trash2,
   X,
 } from "lucide-react";
-import WeightPickerModal from "./WeightPickerModal";
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -34,7 +29,8 @@ import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
-import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import WeightPickerModal from "./WeightPickerModal";
+import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import { recommendSetTarget } from "../utils/targetRecommendation";
@@ -266,9 +262,7 @@ export default function TemplateView({
 
   const [editingExercise, setEditingExercise] = useState(null);
   const [editingExerciseDraft, setEditingExerciseDraft] = useState(null);
-  const [editingWeightSetIndex, setEditingWeightSetIndex] = useState(null);
-  const [editingRepsSetIndex, setEditingRepsSetIndex] = useState(null);
-  const [editingRirSetIndex, setEditingRirSetIndex] = useState(null);
+  const [editingPrescriptionField, setEditingPrescriptionField] = useState(null);
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -514,6 +508,7 @@ export default function TemplateView({
     });
     setEditingExercise(null);
     setEditingExerciseDraft(null);
+    setEditingPrescriptionField(null);
     setIsEditMode(false);
     setEditSnapshot(null);
     onEditModeChange?.(false);
@@ -527,6 +522,60 @@ export default function TemplateView({
     const value = values.find((item) => item != null && item !== "");
 
     return value == null ? "" : value;
+  }
+
+  function formatRange(values) {
+    const normalizedValues = [...new Set(values.map(String).filter(Boolean))];
+
+    if (normalizedValues.length === 0) {
+      return "";
+    }
+
+    const numericValues = normalizedValues
+      .map(Number)
+      .filter((value) => Number.isFinite(value));
+
+    if (numericValues.length !== normalizedValues.length) {
+      return normalizedValues.join("/");
+    }
+
+    const min = Math.min(...numericValues);
+    const max = Math.max(...numericValues);
+    const formatValue = (value) =>
+      Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+
+    return min === max ? formatValue(min) : `${formatValue(min)}-${formatValue(max)}`;
+  }
+
+  function getWorkoutPrescriptionSummary(exercise) {
+    const setCount = exercise?.sets?.length || 0;
+    const reps = formatRange(
+      (exercise?.sets || []).map((set) => firstPresentValue(set.targetReps, set.reps))
+    );
+    const rir = formatRange(
+      (exercise?.sets || []).map((set) => firstPresentValue(set.targetRir, set.rir))
+    );
+    const setLabel = setCount === 1 ? "set" : "sets";
+
+    return `${setCount} ${setLabel} | ${reps || "—"} reps | ${rir || "—"} RIR`;
+  }
+
+  function getPrescriptionSignature(exercise) {
+    return (exercise?.sets || [])
+      .map((set) =>
+        [
+          firstPresentValue(set.targetReps, set.reps),
+          firstPresentValue(set.targetRir, set.rir),
+        ].join(":")
+      )
+      .join("|");
+  }
+
+  function hasPrescriptionChanged(originalExercise, draftExercise) {
+    return (
+      (originalExercise?.sets?.length || 0) !== (draftExercise?.sets?.length || 0) ||
+      getPrescriptionSignature(originalExercise) !== getPrescriptionSignature(draftExercise)
+    );
   }
 
   function getLatestHistoryExercise(templateExercise) {
@@ -918,72 +967,74 @@ export default function TemplateView({
     };
   }
 
-  function getLiveExerciseE1RMMetadata(exercise) {
-    const exerciseId = exercise?.exerciseId || exercise?.id;
-
-    if (!exerciseId) {
-      return exerciseMetadata?.[exercise?.id] || {};
+  function getPrescriptionPickerValue(field) {
+    if (!editingExerciseDraft) {
+      return "";
     }
 
-    let latestE1RM = null;
-    let latestTime = -Infinity;
-    let maxE1RM = null;
+    if (field === "sets") {
+      return String(editingExerciseDraft.sets?.length || 1);
+    }
 
-    (history || []).forEach((workout) => {
-      const completedAt =
-        workout.completedAtIso || workout.completed_at || workout.completedAt;
-      const completedTime = Date.parse(completedAt || "");
-      const matchingExercise = (workout.exercises || []).find(
-        (item) => String(item.exerciseId || item.exercise_id || item.id) === String(exerciseId)
-      );
+    const firstSet = editingExerciseDraft.sets?.[0] || {};
 
-      if (!matchingExercise) {
-        return;
-      }
+    if (field === "reps") {
+      return firstPresentValue(firstSet.targetReps, firstSet.reps);
+    }
 
-      const bodyWeight = getLatestBodyWeightForDate(bodyWeightEntries, completedAt);
-      const workoutBestE1RM = (matchingExercise.sets || []).reduce((best, set) => {
-        const e1rm = calculateE1RM(
-          set.actualWeight ?? set.actual_weight ?? set.targetWeight,
-          set.actualReps ?? set.actual_reps ?? set.targetReps,
-          set.actualRir ?? set.actual_rir ?? set.targetRir,
-          null,
-          null,
-          null,
-          {
-            bodyWeight,
-            exercise,
-          }
-        );
+    if (field === "rir") {
+      return firstPresentValue(firstSet.targetRir, firstSet.rir);
+    }
 
-        return Number.isFinite(e1rm) && (!best || e1rm > best) ? e1rm : best;
-      }, null);
+    return "";
+  }
 
-      if (!workoutBestE1RM) {
-        return;
-      }
+  function updateEditingPrescription(field, value) {
+    if (!editingExerciseDraft) {
+      return;
+    }
 
-      if (!maxE1RM || workoutBestE1RM > maxE1RM.value) {
-        maxE1RM = {
-          date: workout.completedAt,
-          value: workoutBestE1RM,
-        };
-      }
+    const updated = structuredClone(editingExerciseDraft);
 
-      if (Number.isFinite(completedTime) && completedTime > latestTime) {
-        latestTime = completedTime;
-        latestE1RM = {
-          date: workout.completedAt,
-          value: workoutBestE1RM,
-        };
-      }
-    });
+    if (field === "sets") {
+      const nextSetCount = Math.max(1, Number(value) || 1);
+      const currentSets = updated.sets || [];
+      const templateSet = currentSets.at(-1) || {
+        targetReps: "",
+        targetRir: "",
+        targetWeight: "",
+      };
 
-    return {
-      ...(exerciseMetadata?.[exerciseId] || {}),
-      latestE1RM: latestE1RM || exerciseMetadata?.[exerciseId]?.latestE1RM,
-      maxE1RM: maxE1RM || exerciseMetadata?.[exerciseId]?.maxE1RM,
-    };
+      updated.sets = Array.from({ length: nextSetCount }, (_, index) => {
+        const existingSet = currentSets[index];
+
+        return existingSet
+          ? existingSet
+          : {
+              id: Date.now() + Math.random() + index,
+              targetReps: templateSet.targetReps || "",
+              targetRir: templateSet.targetRir || "",
+              targetWeight: templateSet.targetWeight || "",
+            };
+      });
+    }
+
+    if (field === "reps") {
+      updated.sets = (updated.sets || []).map((set) => ({
+        ...set,
+        targetReps: String(value),
+      }));
+    }
+
+    if (field === "rir") {
+      updated.sets = (updated.sets || []).map((set) => ({
+        ...set,
+        targetRir: String(value),
+      }));
+    }
+
+    setEditingExerciseDraft(updated);
+    setEditingPrescriptionField(null);
   }
 
   return (
@@ -1419,12 +1470,17 @@ export default function TemplateView({
                               : null
                           }
                           onSetClick={() => {
-                            enterEditMode();
-
                             setEditingExercise(templateExercise);
 
                             setEditingExerciseDraft(structuredClone(templateExercise));
                           }}
+                          onPrescriptionClick={() => {
+                            setEditingExercise(templateExercise);
+                            setEditingExerciseDraft(structuredClone(templateExercise));
+                          }}
+                          prescriptionSummary={getWorkoutPrescriptionSummary(
+                            templateExercise
+                          )}
                           leadingControl={
                             <IconButton
                               label="Exercise note"
@@ -1632,250 +1688,126 @@ export default function TemplateView({
         </div>
       )}
       {editingExercise && (
-        (() => {
-          const editingExerciseContext = getExerciseDetailRecord(editingExercise);
-          const editingE1RMMetadata =
-            getLiveExerciseE1RMMetadata(editingExerciseContext);
-
-          return (
         <div
+          onClick={() => {
+            setEditingExercise(null);
+            setEditingExerciseDraft(null);
+            setEditingPrescriptionField(null);
+          }}
           style={{
-            position: "fixed",
-            inset: 0,
+            alignItems: "center",
             background: "rgba(0,0,0,0.5)",
             display: "flex",
-            alignItems: "center",
+            inset: 0,
             justifyContent: "center",
+            padding: "16px",
+            position: "fixed",
             zIndex: 1000,
           }}
         >
           <div
+            onClick={(event) => event.stopPropagation()}
             style={{
               background: "var(--surface-raised)",
-              padding: "20px",
-              borderRadius: "8px",
-              minWidth: "300px",
+              borderRadius: "10px",
+              boxSizing: "border-box",
+              maxWidth: "420px",
+              padding: "18px",
+              width: "100%",
             }}
           >
-            <div>
-              <h3>{editingExercise.name}</h3>
+            <h3
+              style={{
+                fontSize: "18px",
+                lineHeight: 1.15,
+                margin: "0 0 4px",
+              }}
+            >
+              {editingExercise.name}
+            </h3>
 
-              <div
-                style={{
-                  fontSize: "0.9em",
-                  color: "var(--text-muted)",
-                  marginBottom: "12px",
-                }}
-              >
-                Latest e1RM:{" "}
-                {formatE1RM(
-                  editingE1RMMetadata?.latestE1RM?.value
-                )}
-                {" | "}
-                Max e1RM:{" "}
-                {formatE1RM(
-                  editingE1RMMetadata?.maxE1RM?.value
-                )}
-              </div>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                marginBottom: "14px",
+              }}
+            >
+              {getWorkoutPrescriptionSummary(editingExerciseDraft)}
             </div>
 
-            <div>
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  display: "grid",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  gap: "8px",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  textTransform: "uppercase",
+                }}
+              >
+                <span>Sets</span>
+                <span>Reps</span>
+                <span>RIR</span>
+              </div>
+
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "30px 60px 60px 60px 70px 40px",
-                  alignItems: "center",
-                  marginBottom: "8px",
-                  paddingBottom: "4px",
-                  borderBottom: "1px solid var(--border)",
-                  textAlign: "center",
+                  gap: "8px",
+                  gridTemplateColumns: "1fr 1fr 1fr",
                 }}
               >
-                <div>#</div>
-                <div>
-                  <Target size={15} aria-label="Target weight" />
-                </div>
-                <div>
-                  <Repeat2 size={15} aria-label="Reps" />
-                </div>
-                <div>
-                  <BatteryMedium size={15} aria-label="RIR" />
-                </div>
-                <div>
-                  <Dumbbell size={15} aria-label="e1RM" />
-                </div>
-                <div></div>
+                {[
+                  ["sets", editingExerciseDraft?.sets?.length || 1],
+                  ["reps", getPrescriptionPickerValue("reps") || "—"],
+                  ["rir", getPrescriptionPickerValue("rir") || "—"],
+                ].map(([field, value]) => (
+                  <button
+                    key={field}
+                    onClick={() => setEditingPrescriptionField(field)}
+                    style={{
+                      minHeight: "42px",
+                      padding: "8px",
+                      textAlign: "center",
+                    }}
+                    type="button"
+                  >
+                    {value}
+                  </button>
+                ))}
               </div>
-
-              {editingExerciseDraft.sets.map((set, index) => (
-                <div
-                  key={set.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "30px 60px 60px 60px 70px 40px",
-                    alignItems: "center",
-                    marginBottom: "6px",
-                  }}
-                >
-                  <div>{index + 1}</div>
-
-                  <div
-                    style={{
-                      cursor: "pointer",
-                      textAlign: "center",
-                    }}
-                    onClick={() => setEditingWeightSetIndex(index)}
-                  >
-                    {set.targetWeight}
-                  </div>
-
-                  <div
-                    style={{
-                      cursor: "pointer",
-                      textAlign: "center",
-                    }}
-                    onClick={() => setEditingRepsSetIndex(index)}
-                  >
-                    {set.targetReps}
-                  </div>
-
-                  <div
-                    style={{
-                      cursor: "pointer",
-                      textAlign: "center",
-                    }}
-                    onClick={() => setEditingRirSetIndex(index)}
-                  >
-                    {set.targetRir}
-                  </div>
-
-                  <div
-                    style={{
-                      textAlign: "center",
-                      fontSize: "0.9em",
-                    }}
-                  >
-                    {calculateE1RM(
-                      null,
-                      set.targetReps,
-                      set.targetRir || set.rir,
-                      set.targetWeight,
-                      null,
-                      null,
-                      {
-                        bodyWeight: templateBodyWeight,
-                        exercise: editingExerciseContext,
-                      }
-                    )?.toFixed(1)}
-                  </div>
-
-                  <IconButton
-                    label="Delete set"
-                    size={30}
-                    tone="danger"
-                    onClick={() => {
-                      if (editingExerciseDraft.sets.length <= 1) {
-                        return;
-                      }
-
-                      const updated = structuredClone(editingExerciseDraft);
-
-                      updated.sets.splice(index, 1);
-
-                      setEditingExerciseDraft(updated);
-                    }}
-                  >
-                    <Trash2 size={15} />
-                  </IconButton>
-                </div>
-              ))}
-
-              <button
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  gap: "5px",
-                }}
-                onClick={() => {
-                  const updated = structuredClone(editingExerciseDraft);
-
-                  updated.sets.push({
-                    id: Date.now() + Math.random(),
-
-                    targetWeight: updated.sets.at(-1)?.targetWeight || "",
-
-                    targetReps: updated.sets.at(-1)?.targetReps || "",
-
-                    targetRir: updated.sets.at(-1)?.targetRir || "",
-                  });
-
-                  setEditingExerciseDraft(updated);
-                }}
-              >
-                <Plus size={15} /> Add Set
-              </button>
             </div>
 
-            {editingWeightSetIndex !== null && (
+            {editingPrescriptionField && (
               <WeightPickerModal
-                isOpen={editingWeightSetIndex !== null}
-                onClose={() => setEditingWeightSetIndex(null)}
-                value={
-                  editingExerciseDraft?.sets[editingWeightSetIndex]
-                    ?.targetWeight
+                isOpen={Boolean(editingPrescriptionField)}
+                onClose={() => setEditingPrescriptionField(null)}
+                value={getPrescriptionPickerValue(editingPrescriptionField)}
+                increment={editingPrescriptionField === "rir" ? 0.5 : 1}
+                title={`Select ${
+                  editingPrescriptionField === "sets"
+                    ? "Sets"
+                    : editingPrescriptionField === "reps"
+                      ? "Reps"
+                      : "RIR"
+                }`}
+                values={
+                  editingPrescriptionField === "sets"
+                    ? Array.from({ length: 10 }, (_, index) => index + 1)
+                    : editingPrescriptionField === "reps"
+                      ? Array.from({ length: 30 }, (_, index) => index + 1)
+                      : Array.from({ length: 13 }, (_, index) => index * 0.5)
                 }
                 onSelect={(value) => {
-                  const updated = structuredClone(editingExerciseDraft);
-
-                  updated.sets[editingWeightSetIndex].targetWeight =
-                    String(value);
-
-                  setEditingExerciseDraft(updated);
-
-                  setEditingWeightSetIndex(null);
-                }}
-              />
-            )}
-
-            {editingRepsSetIndex !== null && (
-              <WeightPickerModal
-                isOpen={editingRepsSetIndex !== null}
-                onClose={() => setEditingRepsSetIndex(null)}
-                value={
-                  editingExerciseDraft?.sets[editingRepsSetIndex]?.targetReps
-                }
-                increment={1}
-                title="Select Reps"
-                values={Array.from({ length: 20 }, (_, i) => i + 1)}
-                onSelect={(value) => {
-                  const updated = structuredClone(editingExerciseDraft);
-
-                  updated.sets[editingRepsSetIndex].targetReps = String(value);
-
-                  setEditingExerciseDraft(updated);
-
-                  setEditingRepsSetIndex(null);
-                }}
-              />
-            )}
-
-            {editingRirSetIndex !== null && (
-              <WeightPickerModal
-                isOpen={editingRirSetIndex !== null}
-                onClose={() => setEditingRirSetIndex(null)}
-                value={
-                  editingExerciseDraft?.sets[editingRirSetIndex]?.targetRir
-                }
-                title="Select RIR"
-                values={[0, 1, 2, 3, 4, 5, 6]}
-                onSelect={(value) => {
-                  const updated = structuredClone(editingExerciseDraft);
-
-                  updated.sets[editingRirSetIndex].targetRir = String(value);
-
-                  setEditingExerciseDraft(updated);
-
-                  setEditingRirSetIndex(null);
+                  updateEditingPrescription(editingPrescriptionField, value);
                 }}
               />
             )}
@@ -1890,8 +1822,8 @@ export default function TemplateView({
               <button
                 onClick={() => {
                   setEditingExercise(null);
-
                   setEditingExerciseDraft(null);
+                  setEditingPrescriptionField(null);
                 }}
                 style={{
                   alignItems: "center",
@@ -1904,17 +1836,19 @@ export default function TemplateView({
 
               <button
                 onClick={() => {
-                  updateCurrentTemplate((currentTemplate) => ({
-                    ...currentTemplate,
+                  if (hasPrescriptionChanged(editingExercise, editingExerciseDraft)) {
+                    updateCurrentTemplate((currentTemplate) => ({
+                      ...currentTemplate,
 
-                    exercises: currentTemplate.exercises.map((ex) =>
-                      ex.id === editingExercise.id ? editingExerciseDraft : ex
-                    ),
-                  }));
+                      exercises: currentTemplate.exercises.map((ex) =>
+                        ex.id === editingExercise.id ? editingExerciseDraft : ex
+                      ),
+                    }));
+                  }
 
                   setEditingExercise(null);
-
                   setEditingExerciseDraft(null);
+                  setEditingPrescriptionField(null);
                 }}
                 style={{
                   alignItems: "center",
@@ -1927,8 +1861,6 @@ export default function TemplateView({
             </div>
           </div>
         </div>
-          );
-        })()
       )}
       {detailExercise && (
         <ExerciseDetailDialog
