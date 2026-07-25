@@ -36,6 +36,7 @@ const muscleGroups = [
 ];
 
 const emptyDraft = {
+  bodyweightLoadPercent: "",
   description: "",
   equipment: "",
   imageUrl: "",
@@ -90,8 +91,14 @@ async function isAnimatedImageFile(file) {
 
 function getExerciseDraft(exercise = {}) {
   const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
+  const bodyweightLoadPercent =
+    exercise.bodyweightLoadPercent ?? exercise.bodyweight_load_percent ?? "";
 
   return {
+    bodyweightLoadPercent:
+      bodyweightLoadPercent == null || bodyweightLoadPercent === ""
+        ? ""
+        : String(bodyweightLoadPercent),
     description: exercise.description || exercise.note || "",
     equipment: exercise.equipment?.[0] || "",
     imageUrl: exercise.imageUrl || exercise.image_url || "",
@@ -111,6 +118,10 @@ function exerciseFromDraft(draft, existing = {}) {
 
   return {
     ...existing,
+    bodyweightLoadPercent:
+      draft.bodyweightLoadPercent === ""
+        ? null
+        : clamp(Number(draft.bodyweightLoadPercent) || 0, 0, 100),
     description: draft.description.trim(),
     equipment: draft.equipment ? [draft.equipment] : [],
     imageUrl: draft.imageUrl.trim(),
@@ -171,6 +182,7 @@ function getPreferenceExerciseKeys(preference) {
 }
 
 export default function ExerciseView({
+  bodyWeightEntries = [],
   exerciseLibrary,
   history = [],
   session = null,
@@ -1060,7 +1072,9 @@ export default function ExerciseView({
         style={{
           display: "grid",
           gap: "8px",
-          gridTemplateColumns: compact ? "1fr" : "minmax(0, 1fr) 140px",
+          gridTemplateColumns: compact
+            ? "1fr"
+            : "minmax(0, 1fr) 140px 120px",
         }}
       >
         <input
@@ -1093,6 +1107,36 @@ export default function ExerciseView({
             </option>
           ))}
         </select>
+
+        <label
+          style={{
+            display: "grid",
+            gap: "4px",
+          }}
+        >
+          <span
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "12px",
+            }}
+          >
+            Bodyweight e1RM %
+          </span>
+          <input
+            inputMode="numeric"
+            max="100"
+            min="0"
+            onChange={(event) =>
+              setFormDraft({
+                ...formDraft,
+                bodyweightLoadPercent: event.target.value,
+              })
+            }
+            placeholder="0"
+            type="number"
+            value={formDraft.bodyweightLoadPercent}
+          />
+        </label>
 
         <textarea
           value={formDraft.description}
@@ -1688,6 +1732,7 @@ export default function ExerciseView({
 
       {detailExercise && (
         <ExerciseDetailDialog
+          bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
           history={history}
           onClose={() => setDetailExercise(null)}

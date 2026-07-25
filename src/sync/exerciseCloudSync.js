@@ -23,10 +23,21 @@ function remainingArrayValues(value) {
   return Array.isArray(value) ? value.slice(1).filter(Boolean) : [];
 }
 
+function parseOptionalNumber(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function cloudExerciseFromLocal(exercise, userId) {
   const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
 
   return {
+    bodyweight_load_percent: parseOptionalNumber(exercise.bodyweightLoadPercent),
     deleted_at: null,
     description: exercise.description || exercise.note || null,
     equipment: firstArrayValue(exercise.equipment),
@@ -61,6 +72,7 @@ function cloudBuiltinExerciseFromLocal(exercise, userId) {
   ].join(":");
 
   return {
+    bodyweight_load_percent: parseOptionalNumber(exercise.bodyweightLoadPercent),
     description: exercise.description || exercise.note || null,
     equipment: firstArrayValue(exercise.equipment),
     image_alt: exercise.imageAlt || exercise.image_alt || null,
@@ -366,6 +378,7 @@ function mergePreferenceMetadata(
 
 function cloudExerciseToLocal(exercise) {
   return withDefaultExerciseStatus({
+    bodyweightLoadPercent: exercise.bodyweight_load_percent ?? null,
     builtin: !!exercise.is_builtin,
     description: exercise.description || "",
     equipment: [exercise.equipment].filter(Boolean),
@@ -494,7 +507,7 @@ export async function downloadExerciseLibraryWithPreferences(
   const { data: cloudExercises, error: exerciseError } = await supabase
     .from(EXERCISES_TABLE)
     .select(
-      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,is_builtin,source,source_key"
+      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_builtin,source,source_key"
     )
     .or(`user_id.eq.${userId},user_id.is.null`)
     .is("deleted_at", null);

@@ -21,7 +21,7 @@ import {
   upsertBodyWeightEntry,
 } from "../sync/bodyMeasurementCloudSync";
 import { isSupabaseConfigured } from "../sync/supabaseClient";
-import { calculateE1RM } from "../utils/e1rm";
+import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const BASE_MEAL_OPTIONS = [
@@ -203,7 +203,27 @@ function getExerciseMatchKey(exercise) {
   ).toLowerCase()}`;
 }
 
-function getSetMetrics(set) {
+function findExerciseForHistoryExercise(historyExercise, exerciseLibrary = []) {
+  const exerciseId = firstPresentValue(
+    historyExercise?.exerciseId,
+    historyExercise?.exercise_id
+  );
+
+  if (exerciseId !== undefined && exerciseId !== null) {
+    const match = exerciseLibrary.find((exercise) => String(exercise.id) === String(exerciseId));
+
+    if (match) {
+      return {
+        ...historyExercise,
+        ...match,
+      };
+    }
+  }
+
+  return historyExercise;
+}
+
+function getSetMetrics(set, exercise, bodyWeight) {
   const weight = parseMetricValue(
     firstPresentValue(set.actualWeight, set.actual_weight, set.targetWeight)
   );
@@ -211,7 +231,10 @@ function getSetMetrics(set) {
     firstPresentValue(set.actualReps, set.actual_reps, set.targetReps)
   );
   const rir = firstPresentValue(set.actualRir, set.actual_rir, set.targetRir);
-  const e1rm = calculateE1RM(weight, reps, rir);
+  const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
+    bodyWeight,
+    exercise,
+  });
 
   return {
     e1rm: Number.isFinite(e1rm) ? e1rm : null,
@@ -231,8 +254,10 @@ function average(values) {
   return numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
 }
 
-function calculateExerciseSummary(exercise) {
-  const setMetrics = (exercise?.sets || []).map(getSetMetrics);
+function calculateExerciseSummary(exercise, exerciseContext, bodyWeight) {
+  const setMetrics = (exercise?.sets || []).map((set) =>
+    getSetMetrics(set, exerciseContext || exercise, bodyWeight)
+  );
   const volumes = setMetrics.map((set) => set.volume);
   const e1rms = setMetrics.map((set) => set.e1rm);
   const weights = setMetrics.map((set) => set.weight);
@@ -253,7 +278,13 @@ function calculateExerciseSummary(exercise) {
   };
 }
 
-function buildExerciseComparisons({ exercise, history, selectedWorkout }) {
+function buildExerciseComparisons({
+  bodyWeightEntries = [],
+  exercise,
+  exerciseLibrary = [],
+  history,
+  selectedWorkout,
+}) {
   const matchKey = getExerciseMatchKey(exercise);
   const selectedTime = getWorkoutTime(selectedWorkout);
   const selectedId = selectedWorkout?.id;
@@ -272,7 +303,14 @@ function buildExerciseComparisons({ exercise, history, selectedWorkout }) {
         {
           completedAt: workout.completedAt,
           completedTime: getWorkoutTime(workout),
-          summary: calculateExerciseSummary(match),
+          summary: calculateExerciseSummary(
+            match,
+            findExerciseForHistoryExercise(match, exerciseLibrary),
+            getLatestBodyWeightForDate(
+              bodyWeightEntries,
+              workout.completedAtIso || workout.completed_at || workout.completedAt
+            )
+          ),
         },
       ];
     })
@@ -297,10 +335,20 @@ function buildExerciseComparisons({ exercise, history, selectedWorkout }) {
   };
 }
 
-function getExerciseIncreaseFlags({ exercise, history, selectedWorkout }) {
-  const summary = calculateExerciseSummary(exercise);
+function getExerciseIncreaseFlags({
+  bodyWeight,
+  bodyWeightEntries = [],
+  exercise,
+  exerciseContext,
+  exerciseLibrary = [],
+  history,
+  selectedWorkout,
+}) {
+  const summary = calculateExerciseSummary(exercise, exerciseContext, bodyWeight);
   const comparisons = buildExerciseComparisons({
+    bodyWeightEntries,
     exercise,
+    exerciseLibrary,
     history,
     selectedWorkout,
   });
@@ -357,6 +405,8 @@ function IncreaseBadge({ color, count, label }) {
 }
 
 export function CompletedWorkoutSheet({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
   history = [],
   onClose,
   onUpdateSet,
@@ -373,6 +423,11 @@ export function CompletedWorkoutSheet({
   if (!workout) {
     return null;
   }
+
+  const workoutBodyWeight = getLatestBodyWeightForDate(
+    bodyWeightEntries,
+    workout.completedAtIso || workout.completed_at || workout.completedAt
+  );
 
   const closeSheet = () => {
     setSelectedWorkoutExerciseDetail(null);
@@ -500,8 +555,16 @@ export function CompletedWorkoutSheet({
           </div>
 
           {(workout.exercises || []).map((exercise) => {
-            const increaseFlags = getExerciseIncreaseFlags({
+            const exerciseContext = findExerciseForHistoryExercise(
               exercise,
+              exerciseLibrary
+            );
+            const increaseFlags = getExerciseIncreaseFlags({
+              bodyWeight: workoutBodyWeight,
+              bodyWeightEntries,
+              exercise,
+              exerciseContext,
+              exerciseLibrary,
               history,
               selectedWorkout: workout,
             });
@@ -705,7 +768,7 @@ export function CompletedWorkoutSheet({
                               actualReps,
                               actualRir,
                               actualWeight,
-                            }).e1rm,
+                            }, exerciseContext, workoutBodyWeight).e1rm,
                             1
                           )}
                         </span>
@@ -720,9 +783,19 @@ export function CompletedWorkoutSheet({
       </div>
 
       {selectedWorkoutExercise && (() => {
-        const summary = calculateExerciseSummary(selectedWorkoutExercise);
+        const exerciseContext = findExerciseForHistoryExercise(
+          selectedWorkoutExercise,
+          exerciseLibrary
+        );
+        const summary = calculateExerciseSummary(
+          selectedWorkoutExercise,
+          exerciseContext,
+          workoutBodyWeight
+        );
         const comparisons = buildExerciseComparisons({
+          bodyWeightEntries,
           exercise: selectedWorkoutExercise,
+          exerciseLibrary,
           history,
           selectedWorkout: workout,
         });
@@ -799,7 +872,7 @@ export function CompletedWorkoutSheet({
                   >
                     <button
                       onClick={() =>
-                        setSelectedWorkoutExerciseDetail(selectedWorkoutExercise)
+                        setSelectedWorkoutExerciseDetail(exerciseContext)
                       }
                       style={{
                         background: "transparent",
@@ -957,6 +1030,7 @@ export function CompletedWorkoutSheet({
 
       {selectedWorkoutExerciseDetail && (
         <ExerciseDetailDialog
+          bodyWeightEntries={bodyWeightEntries}
           exercise={selectedWorkoutExerciseDetail}
           history={history}
           onClose={() => setSelectedWorkoutExerciseDetail(null)}
@@ -1032,6 +1106,7 @@ export function CompletedWorkoutSheet({
 
 export default function WorkoutCalendar({
   bodyWeightEntries = [],
+  exerciseLibrary = [],
   history,
   nutritionEntries = [],
   onUpdateWorkoutSet,
@@ -2123,6 +2198,8 @@ export default function WorkoutCalendar({
 
       {selectedWorkout && (
         <CompletedWorkoutSheet
+          bodyWeightEntries={localBodyWeightEntries}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => {
             setSelectedWorkout(null);

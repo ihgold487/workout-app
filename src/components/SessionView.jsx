@@ -30,6 +30,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
   Target,
   Timer,
   Trash2,
@@ -47,7 +48,11 @@ import PlateLoadingCalculator, {
   getClosestLoadableWeight,
   getPlateCalculatorEquipmentId,
 } from "./PlateLoadingCalculator";
-import { calculateE1RM } from "../utils/e1rm";
+import {
+  calculateE1RM,
+  estimateWeightForE1RM,
+  getLatestBodyWeightForDate,
+} from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import { recommendSetTarget } from "../utils/targetRecommendation";
 import {
@@ -253,6 +258,7 @@ export default function SessionView({
   setSelectedSessionId,
   setSelectedTemplateId,
   plateInventory,
+  bodyWeightEntries = [],
   onWorkoutCompleted,
 }) {
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -475,9 +481,9 @@ export default function SessionView({
     }
 
     return {
-      e1rm: isBlankValue(weight) || isBlankValue(reps)
+      e1rm: isBlankValue(reps)
         ? null
-        : calculateE1RM(weight, reps, rir),
+        : calculateSessionE1RM(sessionExercise, weight, reps, rir),
       reps,
       rir,
       weight,
@@ -486,6 +492,34 @@ export default function SessionView({
 
   function getLinkedPlan() {
     return plans.find((plan) => String(plan.id) === String(session.planId));
+  }
+
+  const sessionBodyWeight = getLatestBodyWeightForDate(
+    bodyWeightEntries,
+    session.workoutStartedAtIso || session.startedAtIso || session.startedAt
+  );
+
+  function calculateSessionE1RM(
+    exercise,
+    actualWeight,
+    actualReps,
+    actualRir,
+    targetWeight,
+    targetReps,
+    targetRir
+  ) {
+    return calculateE1RM(
+      actualWeight,
+      actualReps,
+      actualRir,
+      targetWeight,
+      targetReps,
+      targetRir,
+      {
+        bodyWeight: sessionBodyWeight,
+        exercise,
+      }
+    );
   }
 
   function getGoalMode() {
@@ -506,6 +540,7 @@ export default function SessionView({
 
   function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
     const recommendation = recommendSetTarget({
+      bodyWeight: sessionBodyWeight,
       exercise,
       goalMode: getGoalMode(),
       history,
@@ -525,6 +560,7 @@ export default function SessionView({
   function getTargetRecommendation(exercise, set, setIndex) {
     return recommendSetTarget({
       allowedRepWindow: 2,
+      bodyWeight: sessionBodyWeight,
       exercise,
       goalMode: getGoalMode(),
       history,
@@ -1181,7 +1217,8 @@ export default function SessionView({
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
     const current = getLatestActualForSet(exercise, setIndex);
     const suggested = {
-      e1rm: calculateE1RM(
+      e1rm: calculateSessionE1RM(
+        exercise,
         "",
         "",
         "",
@@ -2123,12 +2160,25 @@ export default function SessionView({
       actualReps <= prescribedReps - 2;
 
     if (shouldReduceWeight) {
-      const actualE1RM = calculateE1RM(actualWeight, actualReps, actualRir);
+      const actualE1RM = calculateSessionE1RM(
+        exercise,
+        actualWeight,
+        actualReps,
+        actualRir
+      );
       const targetRirNumber = parseSessionNumber(targetRir) || 0;
       const rawTargetWeight =
         actualE1RM == null
           ? null
-          : actualE1RM / (1 + (prescribedReps + targetRirNumber) / 30);
+          : estimateWeightForE1RM(
+              actualE1RM,
+              prescribedReps,
+              targetRirNumber,
+              {
+                bodyWeight: sessionBodyWeight,
+                exercise,
+              }
+            );
       const reducedWeight =
         rawTargetWeight == null
           ? ""
@@ -2454,16 +2504,48 @@ export default function SessionView({
     );
   }
 
-  function createNextTemplateExercisesFromSession() {
-    return session.exercises.map((exercise) => ({
+  function applyPlanPrescriptionUpdates(exercise) {
+    if (!session.planId || !Array.isArray(exercise.weeklyPrescriptions)) {
+      return exercise;
+    }
+
+    const linkedPlan = getLinkedPlan();
+    const currentWeek = Number(session.planWeek || linkedPlan?.currentWeek || 1);
+    const firstSet = exercise.sets?.[0] || {};
+    const nextSets = String(exercise.sets?.length || 1);
+    const nextReps = firstPresentValue(
+      firstSet.actualReps,
+      firstSet.targetReps
+    );
+
+    return {
       ...exercise,
-      sets: exercise.sets.map((set) => ({
-        id: Date.now() + Math.random(),
-        targetWeight: set.actualWeight || set.targetWeight || "",
-        targetReps: set.actualReps || set.targetReps || "",
-        targetRir: set.actualRir || set.targetRir || "",
-      })),
-    }));
+      weeklyPrescriptions: exercise.weeklyPrescriptions.map((week) => {
+        if (week.isDeload || Number(week.weekNumber) < currentWeek) {
+          return week;
+        }
+
+        return {
+          ...week,
+          reps: nextReps || week.reps,
+          sets: nextSets,
+        };
+      }),
+    };
+  }
+
+  function createNextTemplateExercisesFromSession() {
+    return session.exercises.map((exercise) =>
+      applyPlanPrescriptionUpdates({
+        ...exercise,
+        sets: exercise.sets.map((set) => ({
+          id: Date.now() + Math.random(),
+          targetWeight: set.actualWeight || set.targetWeight || "",
+          targetReps: set.actualReps || set.targetReps || "",
+          targetRir: set.actualRir || set.targetRir || "",
+        })),
+      })
+    );
   }
 
   function addExercise(exercise, weight, reps, numSets, rir) {
@@ -2796,9 +2878,9 @@ export default function SessionView({
               const weight = firstPresentValue(set.actualWeight, set.targetWeight);
               const reps = firstPresentValue(set.actualReps, set.targetReps);
               const rir = firstPresentValue(set.actualRir, set.targetRir);
-              const e1rm = isBlankValue(weight)
+              const e1rm = isBlankValue(reps)
                 ? null
-                : calculateE1RM(weight, reps, rir);
+                : calculateSessionE1RM(exercise, weight, reps, rir);
 
               return (
                 <div
@@ -2937,7 +3019,8 @@ export default function SessionView({
       let bestE1RM = null;
 
       exercise.sets.forEach((set) => {
-        const e1rm = calculateE1RM(
+        const e1rm = calculateSessionE1RM(
+          exercise,
           set.actualWeight || set.targetWeight,
           set.actualReps || set.targetReps,
           set.actualRir ?? set.targetRir
@@ -3501,28 +3584,59 @@ export default function SessionView({
             gap: "8px",
           }}
         >
-          <button
-            aria-label={`Open workout controls: ${session.templateName}`}
-            onClick={openSessionActions}
+          <div
             style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--text-h)",
-              display: "block",
-              fontSize: "20px",
-              fontWeight: "bold",
-              lineHeight: 1.15,
-              minWidth: 0,
-              overflow: "hidden",
-              padding: 0,
-              textAlign: "center",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              width: "100%",
+              alignItems: "center",
+              display: "grid",
+              gap: "6px",
+              gridTemplateColumns: "1fr minmax(0, auto) 32px 1fr",
+              justifyItems: "center",
             }}
           >
-            {session.templateName}
-          </button>
+            <span />
+            <button
+              aria-label={`Open workout controls: ${session.templateName}`}
+              onClick={openSessionActions}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-h)",
+                display: "block",
+                fontSize: "20px",
+                fontWeight: "bold",
+                lineHeight: 1.15,
+                minWidth: 0,
+                overflow: "hidden",
+                padding: 0,
+                textAlign: "center",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {session.templateName}
+            </button>
+            <button
+              aria-label={`Open workout controls: ${session.templateName}`}
+              onClick={openSessionActions}
+              title="Workout controls"
+              type="button"
+              style={{
+                alignItems: "center",
+                background: "var(--surface-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "999px",
+                color: "var(--text)",
+                display: "inline-flex",
+                height: "32px",
+                justifyContent: "center",
+                padding: 0,
+                width: "32px",
+              }}
+            >
+              <SlidersHorizontal size={17} />
+            </button>
+            <span />
+          </div>
 
           <div
             aria-label="Workout exercises"
@@ -4268,9 +4382,10 @@ export default function SessionView({
                           const actualRirDisplay = isBlankValue(set.actualRir)
                             ? "—"
                             : set.actualRir;
-                          const actualE1RM = isBlankValue(set.actualWeight)
+                          const actualE1RM = isBlankValue(set.actualReps)
                             ? null
-                            : calculateE1RM(
+                            : calculateSessionE1RM(
+                                exercise,
                                 set.actualWeight,
                                 set.actualReps,
                                 set.actualRir
@@ -4405,7 +4520,8 @@ export default function SessionView({
                                   }}
                                 >
                                   (
-                                  {calculateE1RM(
+                                  {calculateSessionE1RM(
+                                    exercise,
                                     "",
                                     "",
                                     "",
@@ -4670,6 +4786,7 @@ export default function SessionView({
 
         {showAddExercise && (
           <ExercisePickerSheet
+            bodyWeightEntries={bodyWeightEntries}
             title="Add exercise"
             actionLabel="Create exercise"
             exerciseLibrary={exerciseLibrary}
@@ -4765,6 +4882,7 @@ export default function SessionView({
 
         {replacingExerciseId && !showReplaceExercise && (
           <ExercisePickerSheet
+            bodyWeightEntries={bodyWeightEntries}
             title="Replace exercise"
             exerciseLibrary={exerciseLibrary}
             history={history}
@@ -6311,6 +6429,7 @@ export default function SessionView({
 
           {detailExercise && (
             <ExerciseDetailDialog
+              bodyWeightEntries={bodyWeightEntries}
               exercise={detailExercise}
               history={history}
               onClose={() => setDetailExercise(null)}

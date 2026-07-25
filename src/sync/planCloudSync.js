@@ -2,6 +2,14 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { uploadWorkouts } from "./workoutCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
+const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
+const WORKOUT_TYPE_LABELS = {
+  push: "Push",
+  pull: "Pull",
+  upper: "Upper",
+  lower: "Lower",
+  "full-body": "Full Body",
+};
 
 function assertCloudReady(session) {
   if (!isSupabaseConfigured) {
@@ -61,10 +69,21 @@ function localPlanWorkoutToCloud({
   plan,
   planWorkout,
   position,
+  template,
   templateId,
   userId,
 }) {
   const targetRir = plan.config?.rir ?? "";
+  const weeklyPrescriptionsByPosition = (template?.exercises || []).reduce(
+    (prescriptions, exercise, exerciseIndex) => {
+      if (Array.isArray(exercise.weeklyPrescriptions)) {
+        prescriptions[exerciseIndex + 1] = exercise.weeklyPrescriptions;
+      }
+
+      return prescriptions;
+    },
+    {}
+  );
 
   return {
     day_number: planWorkout.dayNumber || position,
@@ -82,6 +101,10 @@ function localPlanWorkoutToCloud({
     workout_rules: {
       planWorkoutId: planWorkout.planWorkoutId || null,
       templateId: templateId || planWorkout.templateId || null,
+      weeklyPrescriptionsByPosition,
+      workoutType: planWorkout.workoutType || template?.workoutType || null,
+      workoutTypeLabel:
+        planWorkout.workoutTypeLabel || template?.workoutTypeLabel || null,
     },
   };
 }
@@ -268,6 +291,7 @@ export async function uploadPlans(
         plan,
         planWorkout,
         position: index + 1,
+        template,
         templateId,
         userId,
       });
@@ -312,6 +336,7 @@ export async function uploadPlans(
 
 function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan) {
   const planConfig = plan.plan_config || {};
+  const planType = planConfig.planType || existingPlan?.planType || "type-2";
 
   return {
     ...(existingPlan || {}),
@@ -329,10 +354,17 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
     id: parseLocalSourceKey(plan.source_key),
     isOpenEnded: Boolean(plan.is_open_ended),
     name: plan.name,
-    planType: planConfig.planType || existingPlan?.planType || "type-2",
+    planType,
     status: plan.status || "inactive",
     workouts: planWorkouts.map((workout) => {
       const rules = workout.workout_rules || {};
+      const inferredType =
+        planType === "type-3"
+          ? TYPE_3_WORKOUT_SEQUENCE[
+              ((workout.position || 1) - 1) % TYPE_3_WORKOUT_SEQUENCE.length
+            ]
+          : null;
+      const workoutType = rules.workoutType || inferredType || null;
       const templateId =
         workout.workout_id && workoutSourceKeyById.has(workout.workout_id)
           ? parseLocalSourceKey(workoutSourceKeyById.get(workout.workout_id))
@@ -349,6 +381,12 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
           `${parseLocalSourceKey(plan.source_key)}:workout-${workout.position}`,
         templateId,
         weekNumber: workout.week_number || null,
+        weeklyPrescriptionsByPosition:
+          rules.weeklyPrescriptionsByPosition || {},
+        workoutType,
+        workoutTypeLabel:
+          rules.workoutTypeLabel ||
+          (workoutType ? WORKOUT_TYPE_LABELS[workoutType] || null : null),
       };
     }),
   };

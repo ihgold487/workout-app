@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { formatE1RM } from "../utils/e1rm";
+import { formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import WeightPickerModal from "./WeightPickerModal";
 
 export default function ExerciseSetupDialog({
+  bodyWeightEntries = [],
   exercise,
   exerciseMetadata,
   getLatestWorkoutPerformance,
@@ -13,6 +14,11 @@ export default function ExerciseSetupDialog({
   const [activePicker, setActivePicker] = useState(null);
   const performance = getLatestWorkoutPerformance(exercise.id);
   const maxE1RM = exerciseMetadata?.[exercise.id]?.maxE1RM?.value;
+  const currentBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
+  const performanceBodyWeight = getLatestBodyWeightForDate(
+    bodyWeightEntries,
+    performance?.completedAtIso || performance?.completed_at || performance?.completedAt
+  );
 
   function setValue(field, value) {
     setValues({
@@ -101,7 +107,14 @@ export default function ExerciseSetupDialog({
               {calculateE1RM(
                 set.actualWeight,
                 set.actualReps,
-                set.actualRir
+                set.actualRir,
+                null,
+                null,
+                null,
+                {
+                  bodyWeight: performanceBodyWeight,
+                  exercise,
+                }
               )?.toFixed(1)}
               )
             </div>
@@ -116,7 +129,10 @@ export default function ExerciseSetupDialog({
         }}
       >
         🏋️ e1RM:{" "}
-        {calculateE1RM(values.weight, values.reps, values.rir)?.toFixed(1)}
+        {calculateE1RM(values.weight, values.reps, values.rir, null, null, null, {
+          bodyWeight: currentBodyWeight,
+          exercise,
+        })?.toFixed(1)}
       </div>
       {renderPickerButton({
         field: "weight",

@@ -1,4 +1,4 @@
-import { calculateE1RM } from "./e1rm.js";
+import { calculateE1RM, estimateWeightForE1RM } from "./e1rm.js";
 import { roundWeightToIncrement } from "./weightIncrement.js";
 
 export const GOAL_MODE_PROGRESSIONS = {
@@ -35,13 +35,16 @@ function getExerciseKey(exercise) {
   )}`;
 }
 
-function getSetPerformance(set) {
+function getSetPerformance(set, exercise, bodyWeight) {
   const weight = toNumber(set?.actualWeight ?? set?.targetWeight);
   const reps = toNumber(set?.actualReps ?? set?.targetReps);
   const rir = toNumber(set?.actualRir ?? set?.targetRir ?? set?.rir ?? 0);
-  const e1rm = calculateE1RM(weight, reps, rir);
+  const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
+    bodyWeight,
+    exercise,
+  });
 
-  if (weight == null || reps == null || e1rm == null) {
+  if (reps == null || e1rm == null) {
     return null;
   }
 
@@ -49,7 +52,7 @@ function getSetPerformance(set) {
     e1rm,
     reps,
     rir: rir ?? 0,
-    weight,
+    weight: weight ?? 0,
   };
 }
 
@@ -75,7 +78,7 @@ function getWorkoutTimestamp(workout) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function collectHistoricalSets(history, exercise) {
+function collectHistoricalSets(history, exercise, bodyWeight) {
   return (history || []).flatMap((workout) => {
     const matchingExercise = workout.exercises?.find((item) =>
       matchesExercise(item, exercise)
@@ -87,7 +90,7 @@ function collectHistoricalSets(history, exercise) {
 
     return (matchingExercise.sets || [])
       .map((set, setIndex) => {
-        const performance = getSetPerformance(set);
+        const performance = getSetPerformance(set, exercise, bodyWeight);
 
         if (!performance) {
           return null;
@@ -105,7 +108,7 @@ function collectHistoricalSets(history, exercise) {
   });
 }
 
-function findPreviousWorkoutBaselineSet(history, exercise, setIndex) {
+function findPreviousWorkoutBaselineSet(history, exercise, setIndex, bodyWeight) {
   const matchingWorkout = (history || [])
     .map((workout, originalIndex) => ({
       originalIndex,
@@ -130,7 +133,7 @@ function findPreviousWorkoutBaselineSet(history, exercise, setIndex) {
   );
   const performances = (matchingExercise.sets || [])
     .map((set, setIndex) => {
-      const performance = getSetPerformance(set);
+      const performance = getSetPerformance(set, exercise, bodyWeight);
 
       return performance
         ? {
@@ -163,6 +166,7 @@ function findPreviousWorkoutBaselineSet(history, exercise, setIndex) {
 }
 
 export function findBaselineSet({
+  bodyWeight,
   exercise,
   history,
   setIndex = 0,
@@ -170,14 +174,15 @@ export function findBaselineSet({
   const previousWorkoutSet = findPreviousWorkoutBaselineSet(
     history,
     exercise,
-    setIndex
+    setIndex,
+    bodyWeight
   );
 
   if (previousWorkoutSet) {
     return previousWorkoutSet;
   }
 
-  const historicalSets = collectHistoricalSets(history, exercise);
+  const historicalSets = collectHistoricalSets(history, exercise, bodyWeight);
   const matchingSet = historicalSets.find((item) => item.setIndex === setIndex);
 
   if (matchingSet) {
@@ -197,8 +202,8 @@ export function findBaselineSet({
   return null;
 }
 
-export function findBestBaselineSet({ exercise, history }) {
-  const historicalSets = collectHistoricalSets(history, exercise);
+export function findBestBaselineSet({ bodyWeight, exercise, history }) {
+  const historicalSets = collectHistoricalSets(history, exercise, bodyWeight);
   const bestSet = historicalSets
     .slice()
     .sort((a, b) => b.e1rm - a.e1rm)[0];
@@ -311,6 +316,8 @@ function buildAlternativeCandidates({
 
 export function recommendTargetPrescription({
   allowedRepWindow = 4,
+  bodyWeight,
+  exercise,
   goalMode = "maintenance",
   minWeight = 0,
   normalizeWeight,
@@ -340,7 +347,10 @@ export function recommendTargetPrescription({
   const candidates = [];
 
   for (let candidateReps = minReps; candidateReps <= maxReps; candidateReps += 1) {
-    const rawWeight = targetE1RM / (1 + (candidateReps + rir) / 30);
+    const rawWeight = estimateWeightForE1RM(targetE1RM, candidateReps, rir, {
+      bodyWeight,
+      exercise,
+    });
     const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
     const hasIncrement = Number(weightIncrement) > 0;
     const weightOptions = uniqueNumbers(
@@ -360,7 +370,10 @@ export function recommendTargetPrescription({
       .filter((weight) => Number.isFinite(weight) && weight >= minWeight);
 
     uniqueNumbers(weightOptions).forEach((weight) => {
-      const e1rm = calculateE1RM(weight, candidateReps, rir);
+      const e1rm = calculateE1RM(weight, candidateReps, rir, null, null, null, {
+        bodyWeight,
+        exercise,
+      });
 
       if (e1rm == null) {
         return;
@@ -423,6 +436,7 @@ export function recommendTargetPrescription({
 
 export function recommendSetTarget({
   allowedRepWindow,
+  bodyWeight,
   exercise,
   goalMode,
   history,
@@ -435,6 +449,7 @@ export function recommendSetTarget({
   weightIncrement,
 }) {
   const baseline = findBaselineSet({
+    bodyWeight,
     exercise,
     history,
     setIndex,
@@ -452,6 +467,8 @@ export function recommendSetTarget({
     result: recommendTargetPrescription({
       goalMode,
       allowedRepWindow,
+      bodyWeight,
+      exercise,
       previousE1RM: baseline.e1rm,
       preferredRepWindow,
       progressionPercent,

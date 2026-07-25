@@ -52,6 +52,16 @@ function splitMuscles(value) {
     .filter(Boolean);
 }
 
+function parseOptionalNumber(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function jsString(value) {
   return JSON.stringify(value);
 }
@@ -89,6 +99,12 @@ const existingIdsByKey = new Map(
     exercise.id,
   ])
 );
+const existingExercisesByKey = new Map(
+  existingSeedExercises.map((exercise) => [
+    exerciseKey(exercise.name, exercise.equipment?.[0] || ""),
+    exercise,
+  ])
+);
 const usedIds = new Set();
 let nextId =
   Math.max(0, ...existingSeedExercises.map((exercise) => Number(exercise.id))) +
@@ -123,11 +139,19 @@ const exercises = includedRows.map((row) => {
 
   usedIds.add(id);
   const image = imageManifestBySourceKey.get(row.source_key);
+  const existingExercise = existingExercisesByKey.get(key) || {};
 
   return {
+    bodyweightLoadPercent: parseOptionalNumber(row.bodyweight_load_percent),
+    description: existingExercise.description || "",
     id,
     imageAlt: image?.imageAlt || "",
     imageUrl: image?.imageUrl || "",
+    instructionSource: existingExercise.instructionSource || "",
+    instructionSourceUrl: existingExercise.instructionSourceUrl || "",
+    instructionSteps: Array.isArray(existingExercise.instructionSteps)
+      ? existingExercise.instructionSteps
+      : [],
     name: row.name,
     equipment: [row.equipment],
     muscles: [row.primary_muscle, ...splitMuscles(row.secondary_muscles)],
@@ -146,9 +170,31 @@ ${exercises
     name: ${jsString(exercise.name)},
     equipment: [${exercise.equipment.map(jsString).join(", ")}],
     muscles: [${exercise.muscles.map(jsString).join(", ")}],
-    imageUrl: ${jsString(exercise.imageUrl)},
+    ${
+      exercise.bodyweightLoadPercent == null
+        ? ""
+        : `bodyweightLoadPercent: ${exercise.bodyweightLoadPercent},\n    `
+    }imageUrl: ${jsString(exercise.imageUrl)},
     imageAlt: ${jsString(exercise.imageAlt)},
-    builtin: true,
+    ${
+      exercise.description
+        ? `description: ${jsString(exercise.description)},\n    `
+        : ""
+    }${
+      exercise.instructionSteps.length > 0
+        ? `instructionSteps: [\n${exercise.instructionSteps
+            .map((step) => `      ${jsString(step)},`)
+            .join("\n")}\n    ],\n    `
+        : ""
+    }${
+      exercise.instructionSource
+        ? `instructionSource: ${jsString(exercise.instructionSource)},\n    `
+        : ""
+    }${
+      exercise.instructionSourceUrl
+        ? `instructionSourceUrl: ${jsString(exercise.instructionSourceUrl)},\n    `
+        : ""
+    }builtin: true,
   }`
   )
   .join(",\n")}

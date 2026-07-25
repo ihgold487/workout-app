@@ -14,6 +14,7 @@ function formatEquipment(equipment) {
 
 export default function ExercisePickerSheet({
   actionLabel,
+  bodyWeightEntries = [],
   exerciseLibrary,
   onAction,
   onClose,
@@ -275,6 +276,7 @@ export default function ExercisePickerSheet({
 
       {detailExercise && (
         <ExerciseDetailDialog
+          bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
           history={history}
           onClose={() => setDetailExercise(null)}

@@ -34,7 +34,7 @@ import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
-import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import { recommendSetTarget } from "../utils/targetRecommendation";
@@ -236,6 +236,7 @@ export default function TemplateView({
   template,
   templates,
   setTemplates,
+  bodyWeightEntries = [],
   exerciseLibrary,
   exerciseMetadata,
   setExerciseMetadata,
@@ -272,6 +273,7 @@ export default function TemplateView({
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
   const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
+  const templateBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
   const [addToWorkoutsState, setAddToWorkoutsState] = useState({
@@ -602,6 +604,7 @@ export default function TemplateView({
     };
     const recommendation = recommendSetTarget({
       allowedRepWindow: 2,
+      bodyWeight: templateBodyWeight,
       exercise: recommendationExercise,
       goalMode: getGoalMode(plan),
       history,
@@ -910,7 +913,76 @@ export default function TemplateView({
 
     return {
       completedAt: workout.completedAt,
+      completedAtIso: workout.completedAtIso || workout.completed_at || workout.completedAt,
       sets: exercise.sets,
+    };
+  }
+
+  function getLiveExerciseE1RMMetadata(exercise) {
+    const exerciseId = exercise?.exerciseId || exercise?.id;
+
+    if (!exerciseId) {
+      return exerciseMetadata?.[exercise?.id] || {};
+    }
+
+    let latestE1RM = null;
+    let latestTime = -Infinity;
+    let maxE1RM = null;
+
+    (history || []).forEach((workout) => {
+      const completedAt =
+        workout.completedAtIso || workout.completed_at || workout.completedAt;
+      const completedTime = Date.parse(completedAt || "");
+      const matchingExercise = (workout.exercises || []).find(
+        (item) => String(item.exerciseId || item.exercise_id || item.id) === String(exerciseId)
+      );
+
+      if (!matchingExercise) {
+        return;
+      }
+
+      const bodyWeight = getLatestBodyWeightForDate(bodyWeightEntries, completedAt);
+      const workoutBestE1RM = (matchingExercise.sets || []).reduce((best, set) => {
+        const e1rm = calculateE1RM(
+          set.actualWeight ?? set.actual_weight ?? set.targetWeight,
+          set.actualReps ?? set.actual_reps ?? set.targetReps,
+          set.actualRir ?? set.actual_rir ?? set.targetRir,
+          null,
+          null,
+          null,
+          {
+            bodyWeight,
+            exercise,
+          }
+        );
+
+        return Number.isFinite(e1rm) && (!best || e1rm > best) ? e1rm : best;
+      }, null);
+
+      if (!workoutBestE1RM) {
+        return;
+      }
+
+      if (!maxE1RM || workoutBestE1RM > maxE1RM.value) {
+        maxE1RM = {
+          date: workout.completedAt,
+          value: workoutBestE1RM,
+        };
+      }
+
+      if (Number.isFinite(completedTime) && completedTime > latestTime) {
+        latestTime = completedTime;
+        latestE1RM = {
+          date: workout.completedAt,
+          value: workoutBestE1RM,
+        };
+      }
+    });
+
+    return {
+      ...(exerciseMetadata?.[exerciseId] || {}),
+      latestE1RM: latestE1RM || exerciseMetadata?.[exerciseId]?.latestE1RM,
+      maxE1RM: maxE1RM || exerciseMetadata?.[exerciseId]?.maxE1RM,
     };
   }
 
@@ -1135,6 +1207,7 @@ export default function TemplateView({
 
       {showAdd && (
         <ExercisePickerSheet
+          bodyWeightEntries={bodyWeightEntries}
           title="Add exercise"
           exerciseLibrary={exerciseLibrary}
           history={history}
@@ -1155,6 +1228,7 @@ export default function TemplateView({
 
       {replacingExercise && (
         <ExercisePickerSheet
+          bodyWeightEntries={bodyWeightEntries}
           title="Replace exercise"
           exerciseLibrary={exerciseLibrary}
           history={history}
@@ -1227,11 +1301,12 @@ export default function TemplateView({
               </h3>
 
               <ExerciseSetupDialog
-                exercise={pendingExercise}
+              bodyWeightEntries={bodyWeightEntries}
+              exercise={pendingExercise}
                 exerciseMetadata={exerciseMetadata}
                 getLatestWorkoutPerformance={getLatestWorkoutPerformance}
-                calculateE1RM={calculateE1RM}
-                values={newExerciseValues}
+              calculateE1RM={calculateE1RM}
+              values={newExerciseValues}
                 setValues={setNewExerciseValues}
               />
 
@@ -1557,6 +1632,12 @@ export default function TemplateView({
         </div>
       )}
       {editingExercise && (
+        (() => {
+          const editingExerciseContext = getExerciseDetailRecord(editingExercise);
+          const editingE1RMMetadata =
+            getLiveExerciseE1RMMetadata(editingExerciseContext);
+
+          return (
         <div
           style={{
             position: "fixed",
@@ -1588,12 +1669,12 @@ export default function TemplateView({
               >
                 Latest e1RM:{" "}
                 {formatE1RM(
-                  exerciseMetadata?.[editingExercise.id]?.latestE1RM?.value
+                  editingE1RMMetadata?.latestE1RM?.value
                 )}
                 {" | "}
                 Max e1RM:{" "}
                 {formatE1RM(
-                  exerciseMetadata?.[editingExercise.id]?.maxE1RM?.value
+                  editingE1RMMetadata?.maxE1RM?.value
                 )}
               </div>
             </div>
@@ -1678,7 +1759,13 @@ export default function TemplateView({
                       null,
                       set.targetReps,
                       set.targetRir || set.rir,
-                      set.targetWeight
+                      set.targetWeight,
+                      null,
+                      null,
+                      {
+                        bodyWeight: templateBodyWeight,
+                        exercise: editingExerciseContext,
+                      }
                     )?.toFixed(1)}
                   </div>
 
@@ -1840,9 +1927,12 @@ export default function TemplateView({
             </div>
           </div>
         </div>
+          );
+        })()
       )}
       {detailExercise && (
         <ExerciseDetailDialog
+          bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
           history={history}
           onClose={() => setDetailExercise(null)}

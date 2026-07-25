@@ -2171,6 +2171,7 @@ function WorkoutTypePickerSheet({
 }
 
 export default function PlansView({
+  bodyWeightEntries = [],
   editingPlan,
   exerciseLibrary,
   exerciseMetadata,
@@ -4346,6 +4347,7 @@ export default function PlansView({
 
       {pickerTarget && (
         <ExercisePickerSheet
+          bodyWeightEntries={bodyWeightEntries}
           title={`Replace ${getEffectivePrimaryMuscle(pickerTarget) || "exercise"}`}
           exerciseLibrary={generatorExerciseLibrary}
           history={history}
@@ -4368,6 +4370,7 @@ export default function PlansView({
 
       {addExerciseTarget && (
         <ExercisePickerSheet
+          bodyWeightEntries={bodyWeightEntries}
           title="Add Exercise"
           exerciseLibrary={generatorExerciseLibrary}
           history={history}
@@ -4384,6 +4387,7 @@ export default function PlansView({
 
       {detailExercise && (
         <ExerciseDetailDialog
+          bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
           history={history}
           onClose={() => setDetailExercise(null)}

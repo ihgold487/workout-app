@@ -12,7 +12,7 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { calculateE1RM, formatE1RM } from "../utils/e1rm";
+import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import MuscleMap from "./MuscleMap";
 
 const RANGE_OPTIONS = [
@@ -282,7 +282,7 @@ function getRegressionTrendDirection(points) {
   return "flat";
 }
 
-function buildExerciseHistory(exercise, history) {
+function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
   return [...(history || [])]
     .flatMap((workout) => {
       const matchingExercise = workout.exercises?.find((item) =>
@@ -293,11 +293,18 @@ function buildExerciseHistory(exercise, history) {
         return [];
       }
 
+      const bodyWeight = getLatestBodyWeightForDate(
+        bodyWeightEntries,
+        workout.completedAtIso || workout.completed_at || workout.completedAt
+      );
       const sets = (matchingExercise.sets || []).map((set, index) => {
         const weight = getSetValue(set, "actualWeight", "targetWeight");
         const reps = getSetValue(set, "actualReps", "targetReps");
         const rir = getSetValue(set, "actualRir", "targetRir");
-        const e1rm = calculateE1RM(weight, reps, rir);
+        const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
+          bodyWeight,
+          exercise,
+        });
 
         return {
           e1rm,
@@ -755,6 +762,7 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
 }
 
 export default function ExerciseDetailDialog({
+  bodyWeightEntries = [],
   exercise,
   history = [],
   onClose,
@@ -768,8 +776,8 @@ export default function ExerciseDetailDialog({
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const exerciseHistory = useMemo(
-    () => buildExerciseHistory(exercise, history),
-    [exercise, history]
+    () => buildExerciseHistory(exercise, history, bodyWeightEntries),
+    [bodyWeightEntries, exercise, history]
   );
   const historySummary = useMemo(
     () => buildHistorySummary(exerciseHistory),
@@ -1302,7 +1310,7 @@ export default function ExerciseDetailDialog({
                           <span>{set.weight || "—"} lb</span>
                           <span>{set.reps || "—"} reps</span>
                           <span>RIR {set.rir === "" ? "—" : set.rir}</span>
-                          <span>{formatE1RM(set.e1rm)}</span>
+                          <span>e1RM {formatE1RM(set.e1rm)}</span>
                         </div>
                       ))}
                     </div>

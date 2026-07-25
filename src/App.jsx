@@ -52,7 +52,7 @@ import {
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { BENCH_PRESS_HISTORY_TEST_DATA } from "./data/benchPressHistoryTestData";
-import { calculateE1RM } from "./utils/e1rm";
+import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
@@ -901,11 +901,35 @@ function parseHistoryMetricValue(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getHistorySetE1RM(set) {
+function findExerciseForHistoryExercise(historyExercise, exerciseLibrary = []) {
+  const exerciseId = historyExercise?.exerciseId ?? historyExercise?.exercise_id;
+
+  if (exerciseId !== undefined && exerciseId !== null) {
+    const match = exerciseLibrary.find((exercise) => String(exercise.id) === String(exerciseId));
+
+    if (match) {
+      return {
+        ...historyExercise,
+        ...match,
+      };
+    }
+  }
+
+  return historyExercise;
+}
+
+function getHistorySetE1RM(set, exercise, bodyWeight) {
   const e1rm = calculateE1RM(
     parseHistoryMetricValue(set.actualWeight ?? set.actual_weight ?? set.targetWeight),
     parseHistoryMetricValue(set.actualReps ?? set.actual_reps ?? set.targetReps),
-    set.actualRir ?? set.actual_rir ?? set.targetRir
+    set.actualRir ?? set.actual_rir ?? set.targetRir,
+    null,
+    null,
+    null,
+    {
+      bodyWeight,
+      exercise,
+    }
   );
 
   return Number.isFinite(e1rm) ? e1rm : null;
@@ -919,7 +943,13 @@ function getHistoryWorkoutTime(workout) {
   return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
 }
 
-function recomputeExerciseE1RMMetadata(history, existingMetadata, exerciseIds) {
+function recomputeExerciseE1RMMetadata(
+  history,
+  existingMetadata,
+  exerciseIds,
+  exerciseLibrary = [],
+  bodyWeightEntries = []
+) {
   const exerciseIdSet = new Set(
     Array.from(exerciseIds)
       .filter((exerciseId) => exerciseId !== undefined && exerciseId !== null)
@@ -941,14 +971,19 @@ function recomputeExerciseE1RMMetadata(history, existingMetadata, exerciseIds) {
 
     history.forEach((workout) => {
       const completedTime = getHistoryWorkoutTime(workout);
+      const bodyWeight = getLatestBodyWeightForDate(
+        bodyWeightEntries,
+        workout.completedAtIso || workout.completed_at || workout.completedAt
+      );
 
       (workout.exercises || []).forEach((exercise) => {
         if (String(exercise.exerciseId) !== exerciseId) {
           return;
         }
 
+        const exerciseContext = findExerciseForHistoryExercise(exercise, exerciseLibrary);
         const workoutBestE1RM = (exercise.sets || []).reduce((best, set) => {
-          const e1rm = getHistorySetE1RM(set);
+          const e1rm = getHistorySetE1RM(set, exerciseContext, bodyWeight);
 
           return e1rm && (!best || e1rm > best) ? e1rm : best;
         }, null);
@@ -1022,6 +1057,10 @@ function attachPlanLinksToTemplates(templates, plans) {
       planLinksByTemplateId.set(String(workout.templateId), {
         planId: plan.id,
         planWorkoutId: workout.planWorkoutId,
+        weeklyPrescriptionsByPosition:
+          workout.weeklyPrescriptionsByPosition || {},
+        workoutType: workout.workoutType || null,
+        workoutTypeLabel: workout.workoutTypeLabel || null,
       });
     });
   });
@@ -1035,6 +1074,24 @@ function attachPlanLinksToTemplates(templates, plans) {
     if (link) {
       nextTemplate.planId = link.planId;
       nextTemplate.planWorkoutId = link.planWorkoutId;
+      nextTemplate.workoutType = link.workoutType || template.workoutType || null;
+      nextTemplate.workoutTypeLabel =
+        link.workoutTypeLabel || template.workoutTypeLabel || null;
+      nextTemplate.exercises = (template.exercises || []).map(
+        (exercise, exerciseIndex) => {
+          const weeklyPrescriptions =
+            link.weeklyPrescriptionsByPosition?.[exerciseIndex + 1];
+
+          if (!Array.isArray(weeklyPrescriptions)) {
+            return exercise;
+          }
+
+          return {
+            ...exercise,
+            weeklyPrescriptions,
+          };
+        }
+      );
     } else {
       delete nextTemplate.planId;
       delete nextTemplate.planWorkoutId;
@@ -2979,6 +3036,7 @@ export default function App() {
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+  const localBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
   const editingPlan = plans.find(
     (plan) => String(plan.id) === String(editingPlanId)
   );
@@ -3313,7 +3371,13 @@ export default function App() {
 
     if (editedExerciseIds.size > 0) {
       setExerciseMetadata((currentMetadata) =>
-        recomputeExerciseE1RMMetadata(nextHistory, currentMetadata, editedExerciseIds)
+        recomputeExerciseE1RMMetadata(
+          nextHistory,
+          currentMetadata,
+          editedExerciseIds,
+          exerciseLibrary,
+          localBodyWeightEntries
+        )
       );
     }
 
@@ -6253,6 +6317,7 @@ export default function App() {
   if (showExercises) {
     return renderAppShell(
       <ExerciseView
+        bodyWeightEntries={localBodyWeightEntries}
         exerciseLibrary={exerciseLibrary}
         history={history}
         session={authSession}
@@ -6270,6 +6335,7 @@ export default function App() {
   if (showPlans) {
     return renderAppShell(
       <PlansView
+        bodyWeightEntries={localBodyWeightEntries}
         editingPlan={editingPlan}
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
@@ -6379,6 +6445,8 @@ export default function App() {
         </div>
         {selectedHistory && (
           <CompletedWorkoutSheet
+            bodyWeightEntries={localBodyWeightEntries}
+            exerciseLibrary={exerciseLibrary}
             history={history}
             onClose={() => setSelectedHistory(null)}
             onUpdateSet={updateHistoryWorkoutSet}
@@ -6494,6 +6562,7 @@ export default function App() {
         setSelectedSessionId={setSelectedSessionId}
         setSelectedTemplateId={setSelectedTemplateId}
         plateInventory={plateInventory}
+        bodyWeightEntries={localBodyWeightEntries}
         onEditModeChange={setTemplatePreviewEditActive}
         onWorkoutCompleted={(completedWorkout) => {
           setSelectedHistory(completedWorkout);
@@ -6506,6 +6575,7 @@ export default function App() {
   if (selectedTemplate) {
     return renderAppShell(
       <TemplateView
+        bodyWeightEntries={localBodyWeightEntries}
         template={selectedTemplate}
         templates={templates}
         setTemplates={(nextTemplates) => {
@@ -6539,8 +6609,6 @@ export default function App() {
 
       return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
     });
-
-  const calendarBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
 
   return renderAppShell(
     <>
@@ -6582,7 +6650,8 @@ export default function App() {
       {renderAuthSyncIndicator()}
 
       <WorkoutCalendar
-        bodyWeightEntries={calendarBodyWeightEntries}
+        bodyWeightEntries={localBodyWeightEntries}
+        exerciseLibrary={exerciseLibrary}
         history={history}
         nutritionEntries={calendarNutritionEntries}
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
@@ -6963,6 +7032,8 @@ export default function App() {
       </div>
       {selectedHistory && (
         <CompletedWorkoutSheet
+          bodyWeightEntries={localBodyWeightEntries}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setSelectedHistory(null)}
           onUpdateSet={updateHistoryWorkoutSet}
