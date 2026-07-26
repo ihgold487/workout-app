@@ -484,8 +484,14 @@ export default function ExerciseView({
   }, [copyImageSearch, exerciseLibrary, imageExercise]);
 
   function addExercise() {
-    if (!draft.name.trim()) {
-      alert("Exercise name required");
+    const missingFields = [
+      !draft.name.trim() ? "exercise name" : null,
+      !draft.equipment ? "equipment" : null,
+      !draft.primaryMuscle ? "primary muscle" : null,
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      alert(`Missing: ${missingFields.join(", ")}`);
       return;
     }
 
@@ -1066,164 +1072,256 @@ export default function ExerciseView({
     const availableSecondaryMuscles = muscleGroups.filter(
       (muscle) => muscle !== formDraft.primaryMuscle
     );
+    const isImageLayout = draftImagePicker && !compact;
+    const bodyweightValue =
+      formDraft.bodyweightLoadPercent === "" || formDraft.bodyweightLoadPercent == null
+        ? "0"
+        : String(formDraft.bodyweightLoadPercent);
+    const nameInput = (
+      <input
+        value={formDraft.name}
+        onChange={(event) =>
+          setFormDraft({
+            ...formDraft,
+            name: event.target.value,
+          })
+        }
+        placeholder="Exercise name"
+        style={{
+          boxSizing: "border-box",
+          minWidth: 0,
+          width: "100%",
+        }}
+      />
+    );
+    const equipmentSelect = (
+      <select
+        style={{
+          boxSizing: "border-box",
+          width: "100%",
+        }}
+        value={formDraft.equipment}
+        onChange={(event) =>
+          setFormDraft({
+            ...formDraft,
+            equipment: event.target.value,
+          })
+        }
+      >
+        <option value="">Equipment</option>
+        {equipmentOptions.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    );
+    const descriptionInput = (
+      <textarea
+        value={formDraft.description}
+        onChange={(event) =>
+          setFormDraft({
+            ...formDraft,
+            description: event.target.value,
+          })
+        }
+        placeholder="Description or notes"
+        rows={2}
+        style={{
+          boxSizing: "border-box",
+          minHeight: isImageLayout ? "72px" : undefined,
+          resize: "vertical",
+          width: "100%",
+        }}
+      />
+    );
+    const imageButton = draftImagePicker ? (
+      <button
+        aria-label="Select image for new custom exercise"
+        onClick={openDraftImageSheet}
+        style={{
+          alignItems: "center",
+          alignSelf: "start",
+          background: "transparent",
+          border: "none",
+          display: "flex",
+          justifyContent: "center",
+          padding: 0,
+        }}
+        type="button"
+      >
+        {formDraft.imageUrl ? (
+          <ExerciseThumbnail
+            alt={`${formDraft.name || "Custom exercise"} image`}
+            imageUrl={formDraft.imageUrl}
+            size={104}
+          />
+        ) : (
+          <span
+            style={{
+              alignItems: "center",
+              background: "var(--surface-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              color: "var(--text-muted)",
+              display: "flex",
+              height: "104px",
+              justifyContent: "center",
+              width: "104px",
+            }}
+          >
+            <ImagePlus size={30} />
+          </span>
+        )}
+      </button>
+    ) : null;
+    const primaryMuscleSelect = (
+      <label
+        style={{
+          alignItems: isImageLayout ? "center" : undefined,
+          display: "grid",
+          gap: "4px",
+          gridTemplateColumns: isImageLayout ? "auto minmax(0, 1fr)" : undefined,
+        }}
+      >
+        <span
+          style={{
+            fontSize: "12px",
+            fontWeight: "bold",
+            whiteSpace: isImageLayout ? "nowrap" : undefined,
+          }}
+        >
+          Primary muscle
+        </span>
+        <select
+          style={{
+            boxSizing: "border-box",
+            width: "100%",
+          }}
+          value={formDraft.primaryMuscle}
+          onChange={(event) =>
+            setFormDraft({
+              ...formDraft,
+              primaryMuscle: event.target.value,
+              secondaryMuscles: formDraft.secondaryMuscles.filter(
+                (muscle) => muscle !== event.target.value
+              ),
+            })
+          }
+        >
+          {muscleGroups.map((muscle) => (
+            <option key={muscle} value={muscle}>
+              {muscle}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+    const bodyweightSelect = (
+      <label
+        style={{
+          display: "grid",
+          gap: "4px",
+          maxWidth: isImageLayout ? "180px" : undefined,
+        }}
+      >
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            fontWeight: "bold",
+          }}
+        >
+          Bodyweight e1RM %
+        </span>
+        <select
+          style={{
+            boxSizing: "border-box",
+            width: "100%",
+          }}
+          onChange={(event) =>
+            setFormDraft({
+              ...formDraft,
+              bodyweightLoadPercent: event.target.value,
+            })
+          }
+          value={bodyweightValue}
+        >
+          {[0, 25, 50, 100].map((value) => (
+            <option key={value} value={String(value)}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
 
     return (
       <div
         style={{
           display: "grid",
           gap: "8px",
-          gridTemplateColumns: compact
-            ? "1fr"
-            : "minmax(0, 1fr) 140px 120px",
+          gridTemplateColumns: isImageLayout
+            ? "112px minmax(0, calc(100% - 112px))"
+            : compact
+              ? "1fr"
+              : "minmax(0, 1fr) 140px 120px",
         }}
       >
-        <input
-          value={formDraft.name}
-          onChange={(event) =>
-            setFormDraft({
-              ...formDraft,
-              name: event.target.value,
-            })
-          }
-          placeholder="Exercise name"
-          style={{
-            minWidth: 0,
-          }}
-        />
-
-        <select
-          value={formDraft.equipment}
-          onChange={(event) =>
-            setFormDraft({
-              ...formDraft,
-              equipment: event.target.value,
-            })
-          }
-        >
-          <option value="">Equipment</option>
-          {equipmentOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          <span
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "12px",
-            }}
-          >
-            Bodyweight e1RM %
-          </span>
-          <input
-            inputMode="numeric"
-            max="100"
-            min="0"
-            onChange={(event) =>
-              setFormDraft({
-                ...formDraft,
-                bodyweightLoadPercent: event.target.value,
-              })
-            }
-            placeholder="0"
-            type="number"
-            value={formDraft.bodyweightLoadPercent}
-          />
-        </label>
-
-        <textarea
-          value={formDraft.description}
-          onChange={(event) =>
-            setFormDraft({
-              ...formDraft,
-              description: event.target.value,
-            })
-          }
-          placeholder="Description or notes"
-          rows={compact ? 2 : 3}
-          style={{
-            gridColumn: compact || draftImagePicker ? "auto" : "1 / -1",
-            minHeight: draftImagePicker ? "92px" : undefined,
-            resize: "vertical",
-          }}
-        />
-
-        {draftImagePicker && (
-          <button
-            aria-label="Select image for new custom exercise"
-            onClick={openDraftImageSheet}
-            style={{
-              alignItems: "center",
-              alignSelf: "stretch",
-              background: "transparent",
-              border: "none",
-              display: "flex",
-              justifyContent: "center",
-              padding: 0,
-            }}
-            type="button"
-          >
-            {formDraft.imageUrl ? (
-              <ExerciseThumbnail
-                alt={`${formDraft.name || "Custom exercise"} image`}
-                imageUrl={formDraft.imageUrl}
-                size={92}
-              />
-            ) : (
-              <span
-                style={{
-                  alignItems: "center",
-                  background: "var(--surface-muted)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  color: "var(--text-muted)",
-                  display: "flex",
-                  height: "92px",
-                  justifyContent: "center",
-                  width: "92px",
-                }}
-              >
-                <ImagePlus size={28} />
-              </span>
-            )}
-          </button>
+        {isImageLayout ? (
+          <>
+            <div
+              style={{
+                gridColumn: "1",
+                gridRow: "1 / span 3",
+              }}
+            >
+              {imageButton}
+            </div>
+            <div
+              style={{
+                gridColumn: "2",
+              }}
+            >
+              {nameInput}
+            </div>
+            <div
+              style={{
+                gridColumn: "2",
+              }}
+            >
+              {descriptionInput}
+            </div>
+            <div
+              style={{
+                gridColumn: "2",
+              }}
+            >
+              {equipmentSelect}
+            </div>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+              }}
+            >
+              {primaryMuscleSelect}
+            </div>
+          </>
+        ) : (
+          <>
+            {nameInput}
+            {equipmentSelect}
+            {bodyweightSelect}
+            <div
+              style={{
+                gridColumn: compact ? "auto" : "1 / -1",
+              }}
+            >
+              {descriptionInput}
+            </div>
+            {primaryMuscleSelect}
+          </>
         )}
-
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          <span style={{ fontSize: "12px", fontWeight: "bold" }}>
-            Primary muscle
-          </span>
-          <select
-            value={formDraft.primaryMuscle}
-            onChange={(event) =>
-              setFormDraft({
-                ...formDraft,
-                primaryMuscle: event.target.value,
-                secondaryMuscles: formDraft.secondaryMuscles.filter(
-                  (muscle) => muscle !== event.target.value
-                ),
-              })
-            }
-          >
-            {muscleGroups.map((muscle) => (
-              <option key={muscle} value={muscle}>
-                {muscle}
-              </option>
-            ))}
-          </select>
-        </label>
 
         <div
           style={{
@@ -1275,6 +1373,18 @@ export default function ExerciseView({
             ))}
           </div>
         </div>
+
+        {isImageLayout && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              minWidth: "150px",
+              width: isImageLayout ? "25%" : undefined,
+            }}
+          >
+            {bodyweightSelect}
+          </div>
+        )}
       </div>
     );
   }

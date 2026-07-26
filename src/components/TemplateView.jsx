@@ -1470,16 +1470,16 @@ export default function TemplateView({
                               : null
                           }
                           onSetClick={() => {
-                            setEditingExercise(templateExercise);
+                            setEditingExercise(exercise);
 
-                            setEditingExerciseDraft(structuredClone(templateExercise));
+                            setEditingExerciseDraft(structuredClone(exercise));
                           }}
                           onPrescriptionClick={() => {
-                            setEditingExercise(templateExercise);
-                            setEditingExerciseDraft(structuredClone(templateExercise));
+                            setEditingExercise(exercise);
+                            setEditingExerciseDraft(structuredClone(exercise));
                           }}
                           prescriptionSummary={getWorkoutPrescriptionSummary(
-                            templateExercise
+                            exercise
                           )}
                           leadingControl={
                             <IconButton

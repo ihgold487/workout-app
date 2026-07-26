@@ -9,9 +9,11 @@ import {
   BellOff,
   BicepsFlexed,
   BookPlus,
+  CalendarDays,
   CalendarPlus,
   Camera,
   ChefHat,
+  Check,
   ChevronDown,
   ChevronUp,
   Coffee,
@@ -56,6 +58,16 @@ const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
 const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
+const CALORIE_CHART_SETTINGS_STORAGE_KEY = "calorieChartSettings";
+const RANGE_OPTIONS = [
+  { label: "1 week", value: 7 },
+  { label: "1 month", value: 30 },
+  { label: "3 months", value: 90 },
+  { label: "6 months", value: 183 },
+  { label: "9 months", value: 274 },
+  { label: "1 year", value: 365 },
+  { label: "All", value: null },
+];
 const DAILY_CREATINE_LOG_KEY = "dailyCreatineLog";
 const DAILY_CREATINE_REMINDER_KEY = "dailyCreatineReminder";
 const DAILY_CREATINE_REMINDER_TIME_KEY = "dailyCreatineReminderTime";
@@ -263,6 +275,67 @@ function parseLocalDateKey(dateKey) {
   }
 
   return new Date(year, month - 1, day);
+}
+
+function addDays(dateKey, days) {
+  const date = parseLocalDateKey(dateKey);
+  date.setDate(date.getDate() + days);
+
+  return getLocalDateKey(date);
+}
+
+function daysBetween(startDate, endDate) {
+  const start = parseLocalDateKey(startDate);
+  const end = parseLocalDateKey(endDate);
+
+  return Math.round((end - start) / 86400000);
+}
+
+function getOptionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || "";
+}
+
+function isValidOptionValue(options, value) {
+  return options.some((option) => option.value === value);
+}
+
+function getStoredCalorieChartSettings() {
+  if (typeof window === "undefined") {
+    return {
+      rangeDays: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(CALORIE_CHART_SETTINGS_STORAGE_KEY) || "{}"
+    );
+
+    return {
+      rangeDays: isValidOptionValue(RANGE_OPTIONS, parsed.rangeDays)
+        ? parsed.rangeDays
+        : null,
+    };
+  } catch {
+    return {
+      rangeDays: null,
+    };
+  }
+}
+
+function saveStoredCalorieChartSettings(settings) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      CALORIE_CHART_SETTINGS_STORAGE_KEY,
+      JSON.stringify(settings)
+    );
+  } catch (error) {
+    console.warn("Failed to save calorie chart settings:", error);
+  }
 }
 
 function startOfMondayWeek(date) {
@@ -1308,6 +1381,108 @@ function MacroDonutChart({ segments, totalCalories }) {
         >
           macros
         </span>
+      </div>
+    </div>
+  );
+}
+
+function SelectionSheet({ onClose, onSelect, options, selectedValue, title }) {
+  return (
+    <div
+      aria-label={title}
+      aria-modal="true"
+      onClick={onClose}
+      role="dialog"
+      style={{
+        alignItems: "flex-end",
+        background: "rgba(0,0,0,.35)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        position: "fixed",
+        zIndex: 2350,
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "var(--surface-raised)",
+          borderRadius: "18px 18px 0 0",
+          boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+          boxSizing: "border-box",
+          display: "grid",
+          gap: "10px",
+          maxWidth: "620px",
+          padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+          width: "100%",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "17px",
+              margin: 0,
+            }}
+          >
+            {title}
+          </h3>
+          <button
+            aria-label={`Close ${title}`}
+            onClick={onClose}
+            style={{
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
+              minHeight: "36px",
+              minWidth: "36px",
+              padding: 0,
+            }}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          {options.map((option) => {
+            const selected = option.value === selectedValue;
+
+            return (
+              <button
+                key={option.label}
+                onClick={() => {
+                  onSelect(option.value);
+                  onClose();
+                }}
+                style={{
+                  alignItems: "center",
+                  background: selected ? "var(--surface-muted)" : undefined,
+                  borderColor: selected ? "#ef6c00" : undefined,
+                  display: "flex",
+                  fontWeight: selected ? 700 : 500,
+                  justifyContent: "space-between",
+                  minHeight: "46px",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                }}
+                type="button"
+              >
+                <span>{option.label}</span>
+                {selected && <Check size={17} color="#ef6c00" />}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -2391,6 +2566,7 @@ function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
       carbs: 0,
       date: entry.date,
       fat: 0,
+      hasEntries: false,
       protein: 0,
     };
 
@@ -2399,6 +2575,7 @@ function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
       calories: current.calories + parseMacroValue(entry.calories),
       carbs: current.carbs + parseMacroValue(entry.carbs),
       fat: current.fat + parseMacroValue(entry.fat),
+      hasEntries: true,
       protein: current.protein + parseMacroValue(entry.protein),
     });
   });
@@ -2411,6 +2588,7 @@ function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
       carbs: 0,
       date: today,
       fat: 0,
+      hasEntries: false,
       protein: 0,
     });
   }
@@ -2421,6 +2599,51 @@ function buildDailyCalorieRows(entries, goalHistory, fallbackGoal = "") {
       ...row,
       goal: getGoalForDate(goalHistory, row.date, fallbackGoal),
     }));
+}
+
+function filterCalorieRowsByRange(rows, rangeDays) {
+  const datedRows = rows.filter((row) => row.date);
+
+  if (!rangeDays || datedRows.length === 0) {
+    return datedRows;
+  }
+
+  const lastDate = datedRows[datedRows.length - 1].date;
+  const filtered = datedRows.filter(
+    (row) => daysBetween(row.date, lastDate) <= rangeDays
+  );
+
+  return filtered.length > 0 ? filtered : [datedRows[datedRows.length - 1]];
+}
+
+function fillMissingCalorieDays(rows, goalHistory, fallbackGoal = "") {
+  if (rows.length === 0) {
+    return rows;
+  }
+
+  const rowsByDate = new Map(rows.map((row) => [row.date, row]));
+  const firstDate = rows[0].date;
+  const lastDate = rows[rows.length - 1].date;
+  const dayCount = Math.max(0, daysBetween(firstDate, lastDate));
+
+  return Array.from({ length: dayCount + 1 }, (_, index) => {
+    const date = addDays(firstDate, index);
+    const existing = rowsByDate.get(date);
+
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      calories: 0,
+      carbs: 0,
+      date,
+      fat: 0,
+      goal: getGoalForDate(goalHistory, date, fallbackGoal),
+      hasEntries: false,
+      protein: 0,
+    };
+  });
 }
 
 function getCalorieGoalStatusColor(calories, goal, tolerancePercent) {
@@ -2445,11 +2668,15 @@ function getCalorieGoalStatusColor(calories, goal, tolerancePercent) {
   return "#2e7d32";
 }
 
-function CalorieHistoryChart({ rows }) {
+function CalorieHistoryChart({ calorieGoal, goalHistory, rangeDays, rows }) {
   const [chartMode, setChartMode] = useState("macros");
   const [selectedDate, setSelectedDate] = useState(null);
   const [tolerancePercent, setTolerancePercent] = useState("5");
-  const points = rows.filter((row) => row.date);
+  const points = fillMissingCalorieDays(
+    filterCalorieRowsByRange(rows, rangeDays),
+    goalHistory,
+    calorieGoal
+  );
 
   if (points.length === 0) {
     return (
@@ -2485,8 +2712,9 @@ function CalorieHistoryChart({ rows }) {
     ...points.map((row) => Math.max(row.calories, row.goal || 0))
   );
   const maxValue = Math.ceil((rawMaxValue * 1.1) / 100) * 100;
+  const slotWidth = plotWidth / points.length;
   const barGap = points.length > 16 ? 2 : 5;
-  const barWidth = Math.max(4, plotWidth / points.length - barGap);
+  const barWidth = Math.max(1, slotWidth - barGap);
   const firstDate = points[0].date;
   const lastDate = points[points.length - 1].date;
   const selectedPoint =
@@ -2501,8 +2729,8 @@ function CalorieHistoryChart({ rows }) {
   const selectedIndex = points.findIndex((point) => point.date === selectedPoint.date);
   const selectedX =
     paddingLeft +
-    selectedIndex * (plotWidth / points.length) +
-    (plotWidth / points.length) / 2;
+    selectedIndex * slotWidth +
+    slotWidth / 2;
   const selectedY =
     height -
     paddingBottom -
@@ -2519,8 +2747,8 @@ function CalorieHistoryChart({ rows }) {
   const targetPoints = points.map((row, index) => {
     const x =
       paddingLeft +
-      index * (plotWidth / points.length) +
-      (plotWidth / points.length) / 2;
+      index * slotWidth +
+      slotWidth / 2;
     const y =
       height - paddingBottom - ((row.goal || 0) / maxValue) * plotHeight;
 
@@ -2661,7 +2889,6 @@ function CalorieHistoryChart({ rows }) {
           0
         </text>
         {points.map((row, index) => {
-          const slotWidth = plotWidth / points.length;
           const x = paddingLeft + index * slotWidth + (slotWidth - barWidth) / 2;
           const barHeight = (row.calories / maxValue) * plotHeight;
           const y = height - paddingBottom - barHeight;
@@ -2696,7 +2923,7 @@ function CalorieHistoryChart({ rows }) {
               role="button"
               style={{ cursor: "pointer" }}
             >
-              {chartMode === "goal" ? (
+              {!row.hasEntries ? null : chartMode === "goal" ? (
                 <rect
                   fill={goalStatusColor}
                   height={Math.max(1, barHeight)}
@@ -2962,6 +3189,8 @@ function CalorieHistorySheet({
   onClose,
   onSelectDate,
 }) {
+  const [chartSettings, setChartSettings] = useState(getStoredCalorieChartSettings);
+  const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
   const rows = useMemo(
     () => buildDailyCalorieRows(entries, goalHistory, calorieGoal),
     [calorieGoal, entries, goalHistory]
@@ -2970,6 +3199,21 @@ function CalorieHistorySheet({
     () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
     [rows]
   );
+  const { rangeDays } = chartSettings;
+  const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
+
+  function updateChartSettings(nextSettings) {
+    setChartSettings((currentSettings) => {
+      const updatedSettings = {
+        ...currentSettings,
+        ...nextSettings,
+      };
+
+      saveStoredCalorieChartSettings(updatedSettings);
+
+      return updatedSettings;
+    });
+  }
 
   return (
     <div
@@ -3023,24 +3267,55 @@ function CalorieHistorySheet({
             <Target size={18} color={MACRO_COLORS.calories} />
             Calories
           </h2>
-          <button
-            aria-label="Close calorie history"
-            onClick={onClose}
+          <div
             style={{
               alignItems: "center",
-              display: "inline-flex",
-              justifyContent: "center",
-              minHeight: "36px",
-              minWidth: "36px",
-              padding: 0,
+              display: "flex",
+              gap: "6px",
             }}
-            type="button"
           >
-            <X size={18} />
-          </button>
+            <button
+              aria-label={`Set calorie range, current ${rangeLabel}`}
+              onClick={() => setRangeSheetOpen(true)}
+              style={{
+                alignItems: "center",
+                borderColor: rangeDays ? "#ef6c00" : undefined,
+                color: rangeDays ? "#ef6c00" : undefined,
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: 0,
+              }}
+              title={`Range: ${rangeLabel}`}
+              type="button"
+            >
+              <CalendarDays size={18} />
+            </button>
+            <button
+              aria-label="Close calorie history"
+              onClick={onClose}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: 0,
+              }}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <CalorieHistoryChart rows={rows} />
+        <CalorieHistoryChart
+          calorieGoal={calorieGoal}
+          goalHistory={goalHistory}
+          rangeDays={rangeDays}
+          rows={rows}
+        />
 
         <div
           style={{
@@ -3115,6 +3390,15 @@ function CalorieHistorySheet({
           })}
         </div>
       </div>
+      {rangeSheetOpen && (
+        <SelectionSheet
+          onClose={() => setRangeSheetOpen(false)}
+          onSelect={(value) => updateChartSettings({ rangeDays: value })}
+          options={RANGE_OPTIONS}
+          selectedValue={rangeDays}
+          title="Calorie range"
+        />
+      )}
     </div>
   );
 }
