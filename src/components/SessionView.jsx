@@ -664,7 +664,19 @@ export default function SessionView({
     );
   }
 
+  function hasCompleteTargetPrescription(set) {
+    return (
+      !isBlankValue(set.targetWeight) &&
+      !isBlankValue(set.targetReps) &&
+      !isBlankValue(set.targetRir)
+    );
+  }
+
   function getActualTargetMatchStatus(exercise, set, setIndex) {
+    if (!hasCompleteTargetPrescription(set)) {
+      return "match";
+    }
+
     if (
       isBlankValue(set.actualWeight) &&
       isBlankValue(set.actualReps) &&
@@ -4862,18 +4874,15 @@ export default function SessionView({
                                       title={targetMismatchStyle.label}
                                       style={{
                                         alignItems: "center",
-                                        background:
-                                          targetMismatchStyle.background,
-                                        border: `1px solid ${targetMismatchStyle.border}`,
-                                        borderRadius: "999px",
-                                        color: targetMismatchStyle.color,
+                                        color:
+                                          targetMatchStatus === "alternative"
+                                            ? "#ca8a04"
+                                            : "#ef4444",
                                         display: "inline-flex",
-                                        height: "14px",
                                         justifyContent: "center",
-                                        width: "14px",
                                       }}
                                     >
-                                      <AlertTriangle size={10} strokeWidth={3} />
+                                      <Target size={12} strokeWidth={3.2} />
                                     </span>
                                   )}
                                 </div>

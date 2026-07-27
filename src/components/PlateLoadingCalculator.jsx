@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useState } from "react";
-import { Cable, Dumbbell } from "lucide-react";
+import { Cable, Dumbbell, Trash2 } from "lucide-react";
 import WeightPickerModal from "./WeightPickerModal";
 
 export const LOAD_CALCULATOR_EQUIPMENT = [
@@ -429,6 +429,8 @@ export default function PlateLoadingCalculator({
     weight: initialWeight ?? "",
   });
   const [optionIndexes, setOptionIndexes] = useState({});
+  const [manualSelections, setManualSelections] = useState({});
+  const [plateSelectorOpen, setPlateSelectorOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const deferredDraft = useDeferredValue(draft);
 
@@ -440,6 +442,48 @@ export default function PlateLoadingCalculator({
     }));
     setOptionIndexes({});
   }, [initialEquipmentId, initialWeight]);
+
+  function getManualSelectionKey() {
+    return draft.equipmentId;
+  }
+
+  function getManualSelection() {
+    return manualSelections[getManualSelectionKey()] || {};
+  }
+
+  function setManualPlateCount(plateWeight, count) {
+    const key = getManualSelectionKey();
+    const nextCount = Math.max(0, Number.parseInt(count, 10) || 0);
+
+    setManualSelections((current) => {
+      const currentSelection = current[key] || {};
+      const nextSelection = {
+        ...currentSelection,
+        [formatPlateNumber(plateWeight)]: nextCount,
+      };
+
+      if (nextCount === 0) {
+        delete nextSelection[formatPlateNumber(plateWeight)];
+      }
+
+      return {
+        ...current,
+        [key]: nextSelection,
+      };
+    });
+  }
+
+  function resetManualPlateSelection() {
+    const key = getManualSelectionKey();
+
+    setManualSelections((current) => {
+      const next = { ...current };
+
+      delete next[key];
+
+      return next;
+    });
+  }
 
   function getDisplayLoading(weight, loadingIndex) {
     const calculatedLoading = calculatePlateLoading(
@@ -578,6 +622,28 @@ export default function PlateLoadingCalculator({
     currentOptionCount,
     loadingIndex
   ) {
+    const canCycleOptions = currentOptionCount > 1;
+
+    return renderLoadedEquipmentDiagram({
+      canCycleOptions,
+      currentLoading,
+      currentOptionCount,
+      loadingIndex,
+      onCycleOption: () =>
+        setOptionIndexes((current) => ({
+          ...current,
+          [loadingIndex]: ((current[loadingIndex] || 0) + 1) % currentOptionCount,
+        })),
+    });
+  }
+
+  function renderLoadedEquipmentDiagram({
+    canCycleOptions = false,
+    currentLoading,
+    currentOptionCount = 1,
+    loadingIndex = 0,
+    onCycleOption = null,
+  }) {
     const leftPlates = currentLoading.leftPlates || [];
     const rightPlates = currentLoading.rightPlates || [];
     const machinePlates = currentLoading.machinePlates || [];
@@ -586,7 +652,6 @@ export default function PlateLoadingCalculator({
     const leftTotal = leftPlates.reduce((total, plate) => total + plate, 0);
     const rightTotal = rightPlates.reduce((total, plate) => total + plate, 0);
     const machineTotal = machinePlates.reduce((total, plate) => total + plate, 0);
-    const canCycleOptions = currentOptionCount > 1;
     const showMachineStack = currentLoading.equipment.loadMode === "stack";
     const isOneEndedLoad =
       currentLoading.equipment.loadMode === "singleEnd" || showMachineStack;
@@ -641,6 +706,7 @@ export default function PlateLoadingCalculator({
         </div>
       );
     };
+
     return (
       <div
         aria-label="Plate loading diagram"
@@ -652,10 +718,7 @@ export default function PlateLoadingCalculator({
             return;
           }
 
-          setOptionIndexes((current) => ({
-            ...current,
-            [loadingIndex]: ((current[loadingIndex] || 0) + 1) % currentOptionCount,
-          }));
+          onCycleOption?.();
         }}
         onKeyDown={(event) => {
           if (!canCycleOptions || (event.key !== "Enter" && event.key !== " ")) {
@@ -663,10 +726,7 @@ export default function PlateLoadingCalculator({
           }
 
           event.preventDefault();
-          setOptionIndexes((current) => ({
-            ...current,
-            [loadingIndex]: ((current[loadingIndex] || 0) + 1) % currentOptionCount,
-          }));
+          onCycleOption?.();
         }}
         style={{
           background: "transparent",
@@ -768,6 +828,377 @@ export default function PlateLoadingCalculator({
               ? `${formatPlateNumber(shownRightTotal)} lb`
               : ""}
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  function getManualPlateModeLabel(equipment) {
+    if (equipment.loadMode === "balanced" || equipment.loadMode === "cable") {
+      return "per side";
+    }
+
+    if (equipment.loadMode === "stack") {
+      return "in stack";
+    }
+
+    return "on sleeve";
+  }
+
+  function getManualAvailablePlates(equipment) {
+    const requiresPairedPlates =
+      equipment.loadMode === "balanced" || equipment.loadMode === "cable";
+
+    return (inventory?.[equipment.categoryKey] || [])
+      .filter((plate) =>
+        Number(plate.weight) !== 55 ||
+        equipment.id === "barbell" ||
+        equipment.id === "trapBar"
+      )
+      .map((plate) => {
+        const availableCount = requiresPairedPlates
+          ? Math.floor(Number(plate.count) / 2)
+          : Number(plate.count);
+
+        return {
+          ...plate,
+          availableCount: Math.max(0, availableCount || 0),
+        };
+      })
+      .filter((plate) => plate.availableCount > 0 && Number(plate.weight) > 0)
+      .sort((a, b) => Number(b.weight) - Number(a.weight));
+  }
+
+  function getManualLoading() {
+    const equipment = getLoadCalculatorEquipment(draft.equipmentId, inventory);
+    const selection = getManualSelection();
+    const selectedPlates = Object.entries(selection)
+      .flatMap(([weight, count]) =>
+        Array.from({ length: Math.max(0, Number(count) || 0) }, () =>
+          Number(weight)
+        )
+      )
+      .filter((weight) => Number.isFinite(weight) && weight > 0)
+      .sort((a, b) => b - a);
+    const plateTotal = selectedPlates.reduce((total, plate) => total + plate, 0);
+    const cableLoadMultiplier = Number(draft.cablePulleyCount) === 2 ? 1 : 2;
+    const achievedTotal =
+      equipment.loadMode === "balanced"
+        ? equipment.weight + plateTotal * 2
+        : equipment.loadMode === "cable"
+          ? plateTotal * cableLoadMultiplier
+          : plateTotal;
+
+    return {
+      achievedTotal,
+      equipment,
+      leftPlates:
+        equipment.loadMode === "balanced" || equipment.loadMode === "cable"
+          ? selectedPlates
+          : [],
+      machinePlates: equipment.loadMode === "stack" ? selectedPlates : [],
+      platesPerSide: selectedPlates,
+      rightPlates:
+        equipment.loadMode === "balanced" ||
+        equipment.loadMode === "singleEnd" ||
+        equipment.loadMode === "cable"
+          ? selectedPlates
+          : [],
+      status: "ready",
+    };
+  }
+
+  function renderManualLoadingTool() {
+    const manualLoading = getManualLoading();
+    const availablePlates = getManualAvailablePlates(manualLoading.equipment);
+    const selectedCount = manualLoading.platesPerSide.length;
+    const modeLabel = getManualPlateModeLabel(manualLoading.equipment);
+
+    return (
+      <>
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            display: "grid",
+            gap: "10px",
+            padding: "10px",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "start",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  alignItems: "baseline",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                  justifyContent: "flex-start",
+                }}
+              >
+                <strong>Manual loading</strong>
+                <strong>
+                  {formatPlateNumber(manualLoading.achievedTotal)} lb
+                </strong>
+              </div>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "2px",
+                  textAlign: "left",
+                }}
+              >
+                {manualLoading.equipment.label}
+              </div>
+            </div>
+            <button
+              disabled={availablePlates.length === 0}
+              onClick={() => setPlateSelectorOpen(true)}
+              style={{
+                minHeight: "34px",
+                padding: "6px 10px",
+              }}
+              type="button"
+            >
+              Plates
+            </button>
+          </div>
+
+          {renderLoadedEquipmentDiagram({
+            currentLoading: manualLoading,
+          })}
+
+          <div
+            style={{
+              alignItems: "center",
+              color: "var(--text-muted)",
+              display: "flex",
+              fontSize: "12px",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>
+              {selectedCount > 0
+                ? `${selectedCount} selected ${modeLabel}`
+                : `No plates selected ${modeLabel}`}
+            </span>
+            <button
+              aria-label="Clear selected plates"
+              disabled={selectedCount === 0}
+              onClick={resetManualPlateSelection}
+              style={{
+                alignItems: "center",
+                color: selectedCount > 0 ? "var(--danger-text)" : "var(--text-muted)",
+                display: "inline-flex",
+                gap: "4px",
+                minHeight: "28px",
+                padding: "4px 8px",
+              }}
+              type="button"
+            >
+              <Trash2 size={14} />
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {plateSelectorOpen && renderPlateSelectorSheet(manualLoading, availablePlates)}
+      </>
+    );
+  }
+
+  function renderPlateSelectorSheet(manualLoading, availablePlates) {
+    const selection = getManualSelection();
+    const modeLabel = getManualPlateModeLabel(manualLoading.equipment);
+
+    return (
+      <div
+        aria-label="Select plates"
+        aria-modal="true"
+        onClick={() => setPlateSelectorOpen(false)}
+        role="dialog"
+        style={{
+          alignItems: "flex-end",
+          background: "rgba(0,0,0,.45)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          position: "fixed",
+          zIndex: 2700,
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            background: "var(--surface-raised)",
+            borderRadius: "18px 18px 0 0",
+            boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
+            boxSizing: "border-box",
+            display: "grid",
+            gap: "12px",
+            maxHeight: "76vh",
+            maxWidth: "520px",
+            overflowY: "auto",
+            padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "start",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  margin: 0,
+                }}
+              >
+                Select plates
+              </h3>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "3px",
+                }}
+              >
+                {manualLoading.equipment.label} · counts are {modeLabel}
+              </div>
+            </div>
+            <button
+              onClick={() => setPlateSelectorOpen(false)}
+              style={{
+                minHeight: "34px",
+                padding: "6px 10px",
+              }}
+              type="button"
+            >
+              Done
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            {availablePlates.length === 0 ? (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "13px",
+                }}
+              >
+                No compatible plates are available for this equipment.
+              </div>
+            ) : (
+              availablePlates.map((plate) => {
+                const plateKey = formatPlateNumber(plate.weight);
+                const selected = Number(selection[plateKey]) || 0;
+
+                return (
+                  <div
+                    key={plate.id || plateKey}
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "minmax(0, 1fr) auto auto auto auto",
+                      padding: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        minWidth: 0,
+                      }}
+                    >
+                      <strong>{formatPlateNumber(plate.weight)} lb</strong>
+                      <span
+                        style={{
+                          color: "var(--text-muted)",
+                          display: "block",
+                          fontSize: "12px",
+                          marginTop: "2px",
+                        }}
+                      >
+                        {plate.availableCount} available {modeLabel}
+                      </span>
+                    </div>
+                    <button
+                      aria-label={`Remove one ${formatPlateNumber(plate.weight)} lb plate`}
+                      disabled={selected <= 0}
+                      onClick={() => setManualPlateCount(plate.weight, selected - 1)}
+                      style={{
+                        minHeight: "32px",
+                        minWidth: "32px",
+                        padding: "4px 8px",
+                      }}
+                      type="button"
+                    >
+                      -
+                    </button>
+                    <span
+                      aria-label={`${formatPlateNumber(plate.weight)} lb plates selected`}
+                      style={{
+                        background: "var(--surface-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        minWidth: "42px",
+                        padding: "6px 8px",
+                        textAlign: "center",
+                      }}
+                    >
+                      {selected}
+                    </span>
+                    <button
+                      aria-label={`Add one ${formatPlateNumber(plate.weight)} lb plate`}
+                      disabled={selected >= plate.availableCount}
+                      onClick={() => setManualPlateCount(plate.weight, selected + 1)}
+                      style={{
+                        minHeight: "32px",
+                        minWidth: "32px",
+                        padding: "4px 8px",
+                      }}
+                      type="button"
+                    >
+                      +
+                    </button>
+                    <button
+                      aria-label={`Reset ${formatPlateNumber(plate.weight)} lb plates`}
+                      disabled={selected <= 0}
+                      onClick={() => setManualPlateCount(plate.weight, 0)}
+                      style={{
+                        color: selected > 0 ? "var(--danger-text)" : "var(--text-muted)",
+                        minHeight: "32px",
+                        minWidth: "32px",
+                        padding: "4px 8px",
+                      }}
+                      type="button"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     );
@@ -915,6 +1346,8 @@ export default function PlateLoadingCalculator({
         </div>
       ))}
 
+      {renderManualLoadingTool()}
+
       <WeightPickerModal
         isOpen={weightPickerOpen}
         increment={5}
@@ -929,7 +1362,7 @@ export default function PlateLoadingCalculator({
         range={250}
         title="Select weight"
         value={draft.weight}
-        zIndex={2400}
+        zIndex={11000}
       />
     </section>
   );
