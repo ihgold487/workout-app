@@ -499,6 +499,26 @@ export default function SessionView({
     session.workoutStartedAtIso || session.startedAtIso || session.startedAt
   );
 
+  function getExerciseForCalculation(exercise) {
+    const libraryExercise =
+      exerciseLibrary.find(
+        (item) => String(item.id) === String(exercise?.exerciseId)
+      ) ||
+      exerciseLibrary.find((item) => getExerciseKey(item) === getExerciseKey(exercise));
+
+    return libraryExercise
+      ? {
+          ...libraryExercise,
+          ...exercise,
+          bodyweightLoadPercent:
+            exercise?.bodyweightLoadPercent ??
+            exercise?.bodyweight_load_percent ??
+            libraryExercise.bodyweightLoadPercent ??
+            libraryExercise.bodyweight_load_percent,
+        }
+      : exercise;
+  }
+
   function calculateSessionE1RM(
     exercise,
     actualWeight,
@@ -517,7 +537,7 @@ export default function SessionView({
       targetRir,
       {
         bodyWeight: sessionBodyWeight,
-        exercise,
+        exercise: getExerciseForCalculation(exercise),
       }
     );
   }
@@ -539,17 +559,18 @@ export default function SessionView({
   }
 
   function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
+    const calculationExercise = getExerciseForCalculation(exercise);
     const recommendation = recommendSetTarget({
       bodyWeight: sessionBodyWeight,
-      exercise,
+      exercise: calculationExercise,
       goalMode: getGoalMode(),
       history,
       normalizeWeight: (weight) =>
-        getLoadableWeightForExercise(exercise, weight) ?? weight,
+        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
       setIndex,
       targetReps: reps,
       targetRir: rir,
-      weightIncrement: getExerciseWeightIncrement(exercise),
+      weightIncrement: getExerciseWeightIncrement(calculationExercise),
     });
 
     const weight = recommendation.result?.recommendation?.weight;
@@ -558,19 +579,21 @@ export default function SessionView({
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
+    const calculationExercise = getExerciseForCalculation(exercise);
+
     return recommendSetTarget({
       allowedRepWindow: 2,
       bodyWeight: sessionBodyWeight,
-      exercise,
+      exercise: calculationExercise,
       goalMode: getGoalMode(),
       history,
       normalizeWeight: (weight) =>
-        getLoadableWeightForExercise(exercise, weight) ?? weight,
+        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
       preferredRepWindow: 2,
       setIndex,
       targetReps: set.targetReps,
       targetRir: set.targetRir,
-      weightIncrement: getExerciseWeightIncrement(exercise),
+      weightIncrement: getExerciseWeightIncrement(calculationExercise),
     });
   }
 
@@ -609,6 +632,65 @@ export default function SessionView({
 
   function isBlankValue(value) {
     return value == null || value === "";
+  }
+
+  function valuesMatch(left, right) {
+    if (isBlankValue(left) || isBlankValue(right)) {
+      return isBlankValue(left) && isBlankValue(right);
+    }
+
+    const leftNumber = parseSessionNumber(left);
+    const rightNumber = parseSessionNumber(right);
+
+    if (leftNumber != null && rightNumber != null) {
+      return Math.abs(leftNumber - rightNumber) < 0.001;
+    }
+
+    return String(left) === String(right);
+  }
+
+  function actualsMatchPrescription(set, prescription) {
+    if (!prescription) {
+      return false;
+    }
+
+    return (
+      !isBlankValue(set.actualWeight) &&
+      !isBlankValue(set.actualReps) &&
+      !isBlankValue(set.actualRir) &&
+      valuesMatch(set.actualWeight, prescription.weight) &&
+      valuesMatch(set.actualReps, prescription.reps) &&
+      valuesMatch(set.actualRir, prescription.rir)
+    );
+  }
+
+  function getActualTargetMatchStatus(exercise, set, setIndex) {
+    if (
+      isBlankValue(set.actualWeight) &&
+      isBlankValue(set.actualReps) &&
+      isBlankValue(set.actualRir)
+    ) {
+      return "match";
+    }
+
+    const targetPrescription = {
+      reps: set.targetReps,
+      rir: set.targetRir,
+      weight: set.targetWeight,
+    };
+
+    if (actualsMatchPrescription(set, targetPrescription)) {
+      return "match";
+    }
+
+    const alternatives =
+      getTargetRecommendation(exercise, set, setIndex).result?.alternatives ||
+      [];
+    const matchesAlternative = alternatives.some((option) =>
+      actualsMatchPrescription(set, option)
+    );
+
+    return matchesAlternative ? "alternative" : "off-target";
   }
 
   function formatPrescriptionLabel(prescription) {
@@ -752,6 +834,7 @@ export default function SessionView({
   }
 
   function getWarmupRecommendations(exercise) {
+    const calculationExercise = getExerciseForCalculation(exercise);
     const firstSet = exercise?.sets?.[0];
 
     if (!firstSet) {
@@ -767,10 +850,21 @@ export default function SessionView({
     const targetRir = parseSessionNumber(
       firstPresentValue(firstSet.actualRir, 0)
     );
-    const baseE1RM = calculateE1RM(baseWeight, baseReps, targetRir);
-    const weightIncrement = getExerciseWeightIncrement(exercise);
+    const baseE1RM = calculateE1RM(
+      baseWeight,
+      baseReps,
+      targetRir,
+      null,
+      null,
+      null,
+      {
+        bodyWeight: sessionBodyWeight,
+        exercise: calculationExercise,
+      }
+    );
+    const weightIncrement = getExerciseWeightIncrement(calculationExercise);
     const normalizeWarmupWeight = (weight) =>
-      getLoadableWeightForExercise(exercise, weight) ?? weight;
+      getLoadableWeightForExercise(calculationExercise, weight) ?? weight;
 
     if (
       baseWeight == null ||
@@ -1171,6 +1265,36 @@ export default function SessionView({
     }));
   }
 
+  function shouldUpdatePlanPrescriptionWeek(week, currentWeek) {
+    const weekNumber = Number(week.weekNumber);
+
+    return week.isDeload
+      ? weekNumber === currentWeek
+      : weekNumber >= currentWeek;
+  }
+
+  function updateWeeklyPrescriptionTargets(weeklyPrescriptions, currentWeek, updates) {
+    if (!Array.isArray(weeklyPrescriptions)) {
+      return weeklyPrescriptions;
+    }
+
+    return weeklyPrescriptions.map((week) => {
+      if (!shouldUpdatePlanPrescriptionWeek(week, currentWeek)) {
+        return week;
+      }
+
+      const nextWeek = { ...week };
+
+      Object.entries(updates).forEach(([field, value]) => {
+        if (!isBlankValue(value)) {
+          nextWeek[field] = value;
+        }
+      });
+
+      return nextWeek;
+    });
+  }
+
   function updateExerciseTarget(exerciseId, field, value) {
     const nextValue = formatSetupDefault(value);
 
@@ -1185,6 +1309,15 @@ export default function SessionView({
 
         return {
           ...exercise,
+          ...(session.planId && Array.isArray(exercise.weeklyPrescriptions)
+            ? {
+                weeklyPrescriptions: updateWeeklyPrescriptionTargets(
+                  exercise.weeklyPrescriptions,
+                  Number(session.planWeek || getLinkedPlan()?.currentWeek || 1),
+                  { [field === "targetRir" ? "rir" : "reps"]: nextValue }
+                ),
+              }
+            : {}),
           sets: exercise.sets.map((set, setIndex) => {
             if (hasIncompleteSets && set.completed) {
               return set;
@@ -1385,6 +1518,7 @@ export default function SessionView({
   const [replacingExerciseId, setReplacingExerciseId] = useState(null);
 
   const [confirmComplete, setConfirmComplete] = useState(false);
+  const [planCompletionPrompt, setPlanCompletionPrompt] = useState(null);
 
   const [showSupersetEditor, setShowSupersetEditor] = useState(false);
 
@@ -1742,9 +1876,9 @@ export default function SessionView({
 
       targetWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
 
-      targetReps: lastSet?.actualReps || lastSet?.targetReps || "",
+      targetReps: lastSet?.targetReps || "",
 
-      targetRir: lastSet?.actualRir || lastSet?.targetRir || "",
+      targetRir: lastSet?.targetRir || "",
 
       actualWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
 
@@ -2144,6 +2278,7 @@ export default function SessionView({
   }
 
   function getNextSetTargetsAfterCompletion(exercise, currentSet, nextSet) {
+    const calculationExercise = getExerciseForCalculation(exercise);
     const actualReps = parseSessionNumber(currentSet.actualReps);
     const prescribedReps = parseSessionNumber(
       nextSet.targetReps || currentSet.targetReps
@@ -2176,7 +2311,7 @@ export default function SessionView({
               targetRirNumber,
               {
                 bodyWeight: sessionBodyWeight,
-                exercise,
+                exercise: calculationExercise,
               }
             );
       const reducedWeight =
@@ -2184,7 +2319,7 @@ export default function SessionView({
           ? ""
           : roundWeightToIncrement(
               rawTargetWeight,
-              getExerciseWeightIncrement(exercise)
+              getExerciseWeightIncrement(calculationExercise)
             );
 
       return {
@@ -2200,8 +2335,8 @@ export default function SessionView({
     return {
       targetWeight:
         currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
-      targetReps: currentSet.actualReps || currentSet.targetReps || nextSet.targetReps,
-      targetRir: currentSet.actualRir || currentSet.targetRir || nextSet.targetRir,
+      targetReps: nextSet.targetReps || currentSet.targetReps,
+      targetRir: nextSet.targetRir || currentSet.targetRir,
     };
   }
 
@@ -2474,54 +2609,197 @@ export default function SessionView({
       !completedWorkout.planId ||
       !completedWorkout.planWorkoutId
     ) {
+      return null;
+    }
+
+    let completedPlan = null;
+    const nextPlans = plans.map((plan) => {
+      if (plan.id !== completedWorkout.planId) {
+        return plan;
+      }
+
+      const weekNumber = completedWorkout.planWeek || plan.currentWeek || 1;
+      const existingCompletions = plan.completions || [];
+      const alreadyCompleted = existingCompletions.some(
+        (completion) =>
+          Number(completion.weekNumber) === Number(weekNumber) &&
+          completion.planWorkoutId === completedWorkout.planWorkoutId
+      );
+      const completions = alreadyCompleted
+        ? existingCompletions
+        : [
+            ...existingCompletions,
+            {
+              completedAt: completedWorkout.completedAt,
+              planWorkoutId: completedWorkout.planWorkoutId,
+              sessionId: completedWorkout.id,
+              weekNumber,
+            },
+          ];
+      const completedThisWeek = completions.filter(
+        (completion) => Number(completion.weekNumber) === Number(weekNumber)
+      ).length;
+      const weekComplete =
+        plan.workouts?.length > 0 && completedThisWeek >= plan.workouts.length;
+      const finalPlanWeek =
+        (Number(plan.durationWeeks) || 1) + (plan.config?.deload ? 1 : 0);
+      const finalWeek = weekNumber >= finalPlanWeek;
+      const planCompleted = weekComplete && finalWeek;
+      const nextPlan = {
+        ...plan,
+        completions,
+        currentWeek:
+          weekComplete && !finalWeek
+            ? weekNumber + 1
+            : plan.currentWeek || weekNumber,
+        status: planCompleted ? "completed" : plan.status,
+      };
+
+      if (planCompleted && plan.status !== "completed") {
+        completedPlan = nextPlan;
+      }
+
+      return nextPlan;
+    });
+
+    setPlans(nextPlans);
+
+    return completedPlan;
+  }
+
+  function getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) {
+    return [...(weeklyPrescriptions || [])]
+      .filter(
+        (week) =>
+          !week.isDeload &&
+          (!durationWeeks || Number(week.weekNumber) <= Number(durationWeeks))
+      )
+      .sort((a, b) => Number(b.weekNumber) - Number(a.weekNumber))[0];
+  }
+
+  function extendWeeklyPrescriptionsOneWeek(weeklyPrescriptions, plan) {
+    if (!Array.isArray(weeklyPrescriptions)) {
+      return weeklyPrescriptions;
+    }
+
+    const durationWeeks = Number(plan.durationWeeks) || 1;
+    const nextDurationWeeks = durationWeeks + 1;
+    const sourceWeek =
+      getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) ||
+      weeklyPrescriptions.find((week) => !week.isDeload) ||
+      {};
+    const nextTrainingWeek = {
+      reps: sourceWeek.reps || "",
+      rir: sourceWeek.rir || "",
+      sets: sourceWeek.sets || "",
+      weekNumber: nextDurationWeeks,
+    };
+    const trainingWeeks = weeklyPrescriptions.filter(
+      (week) => !week.isDeload && Number(week.weekNumber) !== nextDurationWeeks
+    );
+
+    if (!plan.config?.deload) {
+      return [...trainingWeeks, nextTrainingWeek].sort(
+        (a, b) => Number(a.weekNumber) - Number(b.weekNumber)
+      );
+    }
+
+    const deloadWeek = weeklyPrescriptions.find((week) => week.isDeload);
+
+    return [
+      ...trainingWeeks,
+      nextTrainingWeek,
+      {
+        ...(deloadWeek || {}),
+        isDeload: true,
+        label: "D",
+        reps: nextTrainingWeek.reps || deloadWeek?.reps || "",
+        rir: deloadWeek?.rir || "5",
+        sets: deloadWeek?.sets || "2",
+        weekNumber: nextDurationWeeks + 1,
+      },
+    ].sort((a, b) => Number(a.weekNumber) - Number(b.weekNumber));
+  }
+
+  function extendCompletedPlanOneWeek(planId) {
+    const planToExtend = plans.find((plan) => plan.id === planId);
+
+    if (!planToExtend) {
       return;
     }
 
-    setPlans(
-      plans.map((plan) => {
-        if (plan.id !== completedWorkout.planId) {
-          return plan;
-        }
-
-        const weekNumber = completedWorkout.planWeek || plan.currentWeek || 1;
-        const existingCompletions = plan.completions || [];
-        const alreadyCompleted = existingCompletions.some(
-          (completion) =>
-            Number(completion.weekNumber) === Number(weekNumber) &&
-            completion.planWorkoutId === completedWorkout.planWorkoutId
-        );
-        const completions = alreadyCompleted
-          ? existingCompletions
-          : [
-              ...existingCompletions,
-              {
-                completedAt: completedWorkout.completedAt,
-                planWorkoutId: completedWorkout.planWorkoutId,
-                sessionId: completedWorkout.id,
-                weekNumber,
-              },
-            ];
-        const completedThisWeek = completions.filter(
-          (completion) => Number(completion.weekNumber) === Number(weekNumber)
-        ).length;
-        const weekComplete =
-          plan.workouts?.length > 0 &&
-          completedThisWeek >= plan.workouts.length;
-        const finalPlanWeek =
-          (Number(plan.durationWeeks) || 1) + (plan.config?.deload ? 1 : 0);
-        const finalWeek = weekNumber >= finalPlanWeek;
-
-        return {
-          ...plan,
-          completions,
-          currentWeek:
-            weekComplete && !finalWeek
-              ? weekNumber + 1
-              : plan.currentWeek || weekNumber,
-          status: weekComplete && finalWeek ? "completed" : plan.status,
-        };
-      })
+    const durationWeeks = Number(planToExtend.durationWeeks) || 1;
+    const nextDurationWeeks = durationWeeks + 1;
+    const templateIds = new Set(
+      (planToExtend.workouts || []).map((workout) => String(workout.templateId))
     );
+
+    setTemplates(
+      templates.map((template) =>
+        templateIds.has(String(template.id))
+          ? {
+              ...template,
+              exercises: (template.exercises || []).map((exercise) => ({
+                ...exercise,
+                weeklyPrescriptions: extendWeeklyPrescriptionsOneWeek(
+                  exercise.weeklyPrescriptions,
+                  planToExtend
+                ),
+              })),
+            }
+          : template
+      )
+    );
+
+    setPlans(
+      plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              completions: plan.config?.deload
+                ? (plan.completions || []).filter(
+                    (completion) =>
+                      Number(completion.weekNumber) <= durationWeeks
+                  )
+                : plan.completions || [],
+              currentWeek: nextDurationWeeks,
+              durationWeeks: nextDurationWeeks,
+              status: "active",
+            }
+          : {
+              ...plan,
+              status: plan.status === "active" ? "inactive" : plan.status,
+            }
+      )
+    );
+  }
+
+  function repeatCompletedPlan(planId) {
+    setPlans(
+      plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              completions: [],
+              currentWeek: 1,
+              status: "active",
+            }
+          : {
+              ...plan,
+              status: plan.status === "active" ? "inactive" : plan.status,
+            }
+      )
+    );
+  }
+
+  function finishCompletedWorkout(completedWorkout) {
+    onWorkoutCompleted?.(completedWorkout);
+
+    setSessions(sessions.filter((s) => s.id !== session.id));
+
+    setSelectedSessionId(null);
+
+    setSelectedTemplateId(null);
   }
 
   function applyPlanPrescriptionUpdates(exercise) {
@@ -2533,24 +2811,20 @@ export default function SessionView({
     const currentWeek = Number(session.planWeek || linkedPlan?.currentWeek || 1);
     const firstSet = exercise.sets?.[0] || {};
     const nextSets = String(exercise.sets?.length || 1);
-    const nextReps = firstPresentValue(
-      firstSet.actualReps,
-      firstSet.targetReps
-    );
+    const nextReps = firstSet.targetReps;
+    const nextRir = firstSet.targetRir;
 
     return {
       ...exercise,
-      weeklyPrescriptions: exercise.weeklyPrescriptions.map((week) => {
-        if (week.isDeload || Number(week.weekNumber) < currentWeek) {
-          return week;
-        }
-
-        return {
-          ...week,
-          reps: nextReps || week.reps,
+      weeklyPrescriptions: updateWeeklyPrescriptionTargets(
+        exercise.weeklyPrescriptions,
+        currentWeek,
+        {
+          reps: nextReps,
+          rir: nextRir,
           sets: nextSets,
-        };
-      }),
+        }
+      ),
     };
   }
 
@@ -2561,8 +2835,8 @@ export default function SessionView({
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
           targetWeight: set.actualWeight || set.targetWeight || "",
-          targetReps: set.actualReps || set.targetReps || "",
-          targetRir: set.actualRir || set.targetRir || "",
+          targetReps: set.targetReps || "",
+          targetRir: set.targetRir || "",
         })),
       })
     );
@@ -3079,7 +3353,7 @@ export default function SessionView({
 
     setHistory([completedWorkout, ...history]);
 
-    recordPlanWorkoutCompletion(completedWorkout);
+    const completedPlan = recordPlanWorkoutCompletion(completedWorkout);
 
     if (!structuralChanges || applyStructuralChanges) {
       nextTemplates = nextTemplates.map((t) =>
@@ -3099,13 +3373,18 @@ export default function SessionView({
 
     setTemplates(nextTemplates);
 
-    onWorkoutCompleted?.(completedWorkout);
+    setConfirmComplete(false);
 
-    setSessions(sessions.filter((s) => s.id !== session.id));
+    if (completedPlan) {
+      setPlanCompletionPrompt({
+        completedWorkout,
+        planId: completedPlan.id,
+        planName: completedPlan.name,
+      });
+      return;
+    }
 
-    setSelectedSessionId(null);
-
-    setSelectedTemplateId(null);
+    finishCompletedWorkout(completedWorkout);
   }
 
   const warmupExercise = warmupExerciseId
@@ -4375,6 +4654,27 @@ export default function SessionView({
                             activeSet?.setId === set.id;
 
                           const isCompleted = !!set.completed;
+                          const targetMatchStatus = isActive
+                            ? getActualTargetMatchStatus(exercise, set, setIndex)
+                            : "match";
+                          const showTargetMismatch =
+                            targetMatchStatus !== "match";
+                          const targetMismatchStyle =
+                            targetMatchStatus === "alternative"
+                              ? {
+                                  background: "#facc15",
+                                  border: "#ca8a04",
+                                  color: "#3f2f00",
+                                  label:
+                                    "Actual values match an alternate target",
+                                }
+                              : {
+                                  background: "#ef4444",
+                                  border: "#b91c1c",
+                                  color: "#fff",
+                                  label:
+                                    "Actual values do not match target options",
+                                };
                           const canActivate = canActivateSet(
                             exercise.id,
                             set.id
@@ -4534,22 +4834,48 @@ export default function SessionView({
 
                                 <div
                                   style={{
+                                    alignItems: "center",
                                     fontSize: "10px",
                                     color: "var(--text-muted)",
+                                    display: "flex",
+                                    gap: "4px",
+                                    minHeight: "13px",
                                     textAlign: "left",
                                   }}
                                 >
-                                  (
-                                  {calculateSessionE1RM(
-                                    exercise,
-                                    "",
-                                    "",
-                                    "",
-                                    set.targetWeight,
-                                    set.targetReps,
-                                    set.targetRir
-                                  )?.toFixed(1)}
-                                  )
+                                  <span>
+                                    (
+                                    {calculateSessionE1RM(
+                                      exercise,
+                                      "",
+                                      "",
+                                      "",
+                                      set.targetWeight,
+                                      set.targetReps,
+                                      set.targetRir
+                                    )?.toFixed(1)}
+                                    )
+                                  </span>
+                                  {showTargetMismatch && (
+                                    <span
+                                      aria-label={targetMismatchStyle.label}
+                                      title={targetMismatchStyle.label}
+                                      style={{
+                                        alignItems: "center",
+                                        background:
+                                          targetMismatchStyle.background,
+                                        border: `1px solid ${targetMismatchStyle.border}`,
+                                        borderRadius: "999px",
+                                        color: targetMismatchStyle.color,
+                                        display: "inline-flex",
+                                        height: "14px",
+                                        justifyContent: "center",
+                                        width: "14px",
+                                      }}
+                                    >
+                                      <AlertTriangle size={10} strokeWidth={3} />
+                                    </span>
+                                  )}
                                 </div>
                               </button>
 
@@ -5843,6 +6169,115 @@ export default function SessionView({
                     }}
                   >
                     Yes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {planCompletionPrompt && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Plan completed"
+              style={{
+                alignItems: "center",
+                background: "rgba(0,0,0,.45)",
+                display: "flex",
+                height: "100%",
+                justifyContent: "center",
+                left: 0,
+                position: "fixed",
+                top: 0,
+                width: "100%",
+                zIndex: 9999,
+              }}
+            >
+              <div
+                style={{
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  boxShadow: "0 0 20px rgba(0,0,0,.35)",
+                  display: "grid",
+                  gap: "12px",
+                  maxWidth: "340px",
+                  padding: "20px",
+                  width: "calc(100% - 32px)",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "8px",
+                    justifyItems: "center",
+                    textAlign: "center",
+                  }}
+                >
+                  <Trophy size={30} />
+                  <div
+                    style={{
+                      color: "var(--text-h)",
+                      fontSize: "20px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Plan completed
+                  </div>
+                  {planCompletionPrompt.planName && (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {planCompletionPrompt.planName}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      const completedWorkout =
+                        planCompletionPrompt.completedWorkout;
+
+                      setPlanCompletionPrompt(null);
+                      finishCompletedWorkout(completedWorkout);
+                    }}
+                    type="button"
+                  >
+                    Complete plan
+                  </button>
+                  <button
+                    onClick={() => {
+                      const { completedWorkout, planId } = planCompletionPrompt;
+
+                      extendCompletedPlanOneWeek(planId);
+                      setPlanCompletionPrompt(null);
+                      finishCompletedWorkout(completedWorkout);
+                    }}
+                    type="button"
+                  >
+                    Extend plan one week
+                  </button>
+                  <button
+                    onClick={() => {
+                      const { completedWorkout, planId } = planCompletionPrompt;
+
+                      repeatCompletedPlan(planId);
+                      setPlanCompletionPrompt(null);
+                      finishCompletedWorkout(completedWorkout);
+                    }}
+                    type="button"
+                  >
+                    Repeat plan
                   </button>
                 </div>
               </div>

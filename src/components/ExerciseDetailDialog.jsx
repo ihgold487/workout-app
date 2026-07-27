@@ -33,6 +33,7 @@ const TREND_OPTIONS = [
 ];
 
 const CHART_SETTINGS_STORAGE_KEY = "exerciseHistoryChartSettings";
+const CHART_METRIC_OPTIONS = ["maxWeight", "e1rm"];
 const TREND_COLOR_CHANGE_THRESHOLD_LB = 5;
 const TREND_COLOR_CHANGE_THRESHOLD_PERCENT = 0.025;
 const TREND_COLORS = {
@@ -87,6 +88,14 @@ function getSecondaryMuscleList(exercise) {
 function getSecondaryMuscles(exercise) {
   const list = getSecondaryMuscleList(exercise);
   return list.length > 0 ? list.join(", ") : "n/a";
+}
+
+function getBodyweightLoadPercent(exercise) {
+  const value =
+    exercise?.bodyweightLoadPercent ?? exercise?.bodyweight_load_percent ?? 0;
+  const parsed = Number.parseFloat(value);
+
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 0;
 }
 
 function getInstructionSteps(exercise) {
@@ -154,6 +163,7 @@ function getStoredChartSettings() {
   if (typeof window === "undefined") {
     return {
       colorTrend: false,
+      metric: "e1rm",
       rangeDays: null,
       trendDays: null,
     };
@@ -166,6 +176,9 @@ function getStoredChartSettings() {
 
     return {
       colorTrend: Boolean(parsed.colorTrend),
+      metric: CHART_METRIC_OPTIONS.includes(parsed.metric)
+        ? parsed.metric
+        : "e1rm",
       rangeDays: isValidOptionValue(RANGE_OPTIONS, parsed.rangeDays)
         ? parsed.rangeDays
         : null,
@@ -176,6 +189,7 @@ function getStoredChartSettings() {
   } catch {
     return {
       colorTrend: false,
+      metric: "e1rm",
       rangeDays: null,
       trendDays: null,
     };
@@ -770,7 +784,6 @@ export default function ExerciseDetailDialog({
   zIndex = 1400,
 }) {
   const [activeTab, setActiveTab] = useState("info");
-  const [chartMetric, setChartMetric] = useState("maxWeight");
   const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
@@ -784,7 +797,7 @@ export default function ExerciseDetailDialog({
     [exerciseHistory]
   );
   const instructionSteps = getInstructionSteps(exercise);
-  const { colorTrend, rangeDays, trendDays } = chartSettings;
+  const { colorTrend, metric: chartMetric, rangeDays, trendDays } = chartSettings;
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
   const trendLabel = getOptionLabel(TREND_OPTIONS, trendDays);
   const e1RMTrendColoringActive = chartMetric === "e1rm" && colorTrend;
@@ -1096,6 +1109,18 @@ export default function ExerciseDetailDialog({
                   {exercise.description || exercise.note}
                 </div>
               ) : null}
+              <div
+                style={{
+                  alignItems: "center",
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  paddingTop: "8px",
+                }}
+              >
+                <strong>Bodyweight e1RM %:</strong>
+                <span>{getBodyweightLoadPercent(exercise)}%</span>
+              </div>
             </div>
 
             {instructionSteps.length > 0 && (
@@ -1169,7 +1194,7 @@ export default function ExerciseDetailDialog({
               }}
             >
               <button
-                onClick={() => setChartMetric("maxWeight")}
+                onClick={() => updateChartSettings({ metric: "maxWeight" })}
                 style={{
                   background:
                     chartMetric === "maxWeight"
@@ -1184,7 +1209,7 @@ export default function ExerciseDetailDialog({
                 Max Weight
               </button>
               <button
-                onClick={() => setChartMetric("e1rm")}
+                onClick={() => updateChartSettings({ metric: "e1rm" })}
                 style={{
                   background:
                     chartMetric === "e1rm"

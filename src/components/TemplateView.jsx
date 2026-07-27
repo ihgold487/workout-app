@@ -267,6 +267,8 @@ export default function TemplateView({
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
   const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
+  const [confirmPreviousWeekIncomplete, setConfirmPreviousWeekIncomplete] =
+    useState(false);
   const templateBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
@@ -301,6 +303,20 @@ export default function TemplateView({
           : planWorkoutCompleteThisWeek
             ? `This workout is already complete for week ${currentPlanWeek}.`
             : "";
+
+  function isPreviousPlanWeekIncomplete(plan) {
+    const previousWeek = Number(currentPlanWeek) - 1;
+
+    if (!plan || previousWeek < 1 || !Array.isArray(plan.workouts)) {
+      return false;
+    }
+
+    const completedPreviousWeek = (plan.completions || []).filter(
+      (completion) => Number(completion.weekNumber) === previousWeek
+    ).length;
+
+    return completedPreviousWeek < plan.workouts.length;
+  }
 
   function formatList(value) {
     if (Array.isArray(value)) {
@@ -736,6 +752,16 @@ export default function TemplateView({
     }
 
     const plan = plans.find((item) => item.id === template.planId);
+
+    if (isPreviousPlanWeekIncomplete(plan)) {
+      setConfirmPreviousWeekIncomplete(true);
+      return;
+    }
+
+    startWorkoutSession(plan);
+  }
+
+  function startWorkoutSession(plan = plans.find((item) => item.id === template.planId)) {
     const startedAtIso = new Date().toISOString();
     const session = {
       id: Date.now(),
@@ -1875,6 +1901,74 @@ export default function TemplateView({
           template={previewTemplate}
           onClose={() => setShowTemplateMuscleMap(false)}
         />
+      )}
+      {confirmPreviousWeekIncomplete && (
+        <div
+          aria-label="Previous week incomplete"
+          aria-modal="true"
+          onClick={() => setConfirmPreviousWeekIncomplete(false)}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.45)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "16px",
+            position: "fixed",
+            zIndex: 1500,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              boxShadow: "0 8px 28px rgba(0,0,0,.22)",
+              boxSizing: "border-box",
+              display: "grid",
+              gap: "12px",
+              maxWidth: "360px",
+              padding: "16px",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                color: "var(--text-h)",
+                fontSize: "15px",
+                lineHeight: 1.35,
+              }}
+            >
+              Not all workouts from the previous week are complete. Do you want
+              to continue?
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <button
+                onClick={() => setConfirmPreviousWeekIncomplete(false)}
+                type="button"
+              >
+                No
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmPreviousWeekIncomplete(false);
+                  startWorkoutSession(linkedPlan);
+                }}
+                type="button"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
