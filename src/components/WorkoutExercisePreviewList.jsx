@@ -206,33 +206,40 @@ export function WorkoutExercisePreviewRow({
               {prescriptionSummary}
             </button>
           ) : (
-            exercise.sets.map((set) => (
-              <div
-                key={set.id}
-                onClick={() => onSetClick?.(set)}
-                style={{
-                  alignItems: "center",
-                  cursor: onSetClick ? "pointer" : "default",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                }}
-              >
-                <span>
-                  <Target size={14} /> {set.targetWeight || "TBD"}×
-                  {set.targetReps}
-                  {set.targetRir || set.rir ? ` @ ${set.targetRir || set.rir}` : ""}{" "}
-                  (<Dumbbell size={13} />{" "}
-                  {calculateE1RM(
-                    null,
-                    set.targetReps,
-                    set.targetRir || set.rir,
-                    set.targetWeight
-                  )?.toFixed(1) || "—"}
-                  )
-                </span>
-              </div>
-            ))
+            exercise.sets.map((set) => {
+              const reps = set.targetReps || set.reps || "";
+              const rir = set.targetRir || set.rir || "";
+              const targetE1RM = set.targetWeight
+                ? calculateE1RM(null, reps, rir, set.targetWeight)?.toFixed(1)
+                : null;
+
+              return (
+                <div
+                  key={set.id}
+                  onClick={() => onSetClick?.(set)}
+                  style={{
+                    alignItems: "center",
+                    cursor: onSetClick ? "pointer" : "default",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px",
+                  }}
+                >
+                  <span>
+                    <Target size={14} />{" "}
+                    {set.targetWeight ? `${set.targetWeight}×` : ""}
+                    {reps || "—"}
+                    {rir ? ` @ ${rir}` : ""}
+                    {set.targetWeight ? (
+                      <>
+                        {" "}
+                        (<Dumbbell size={13} /> {targetE1RM || "—"})
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })
           )}
         </div>
 

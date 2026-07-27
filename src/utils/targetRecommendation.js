@@ -228,6 +228,16 @@ function uniqueNumbers(values) {
   return [...new Set(values.map((value) => Number(value.toFixed(4))))];
 }
 
+function resolveWeightIncrement(weightIncrement, weight) {
+  const value =
+    typeof weightIncrement === "function"
+      ? weightIncrement(weight)
+      : weightIncrement;
+  const parsed = Number.parseFloat(String(value));
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function scoreCandidate(candidate, target) {
   const repDeviation = Math.abs(candidate.reps - target.reps);
   const rirDeviation = Math.abs(candidate.rir - target.rir);
@@ -351,14 +361,15 @@ export function recommendTargetPrescription({
       bodyWeight,
       exercise,
     });
-    const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
-    const hasIncrement = Number(weightIncrement) > 0;
+    const candidateIncrement = resolveWeightIncrement(weightIncrement, rawWeight);
+    const roundedWeight = roundWeightToIncrement(rawWeight, candidateIncrement);
+    const hasIncrement = Number(candidateIncrement) > 0;
     const weightOptions = uniqueNumbers(
       hasIncrement
         ? [
-            roundWeightToIncrement(roundedWeight - weightIncrement, weightIncrement),
+            roundWeightToIncrement(roundedWeight - candidateIncrement, candidateIncrement),
             roundedWeight,
-            roundWeightToIncrement(roundedWeight + weightIncrement, weightIncrement),
+            roundWeightToIncrement(roundedWeight + candidateIncrement, candidateIncrement),
           ]
         : [roundedWeight]
     )

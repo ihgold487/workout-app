@@ -421,6 +421,31 @@ export default function TemplateView({
     });
   }
 
+  function getSetPrescriptionReps(set, fallback = "") {
+    return firstPresentValue(set?.reps, set?.targetReps, fallback);
+  }
+
+  function getSetPrescriptionRir(set, fallback = "") {
+    return firstPresentValue(set?.rir, set?.targetRir, fallback);
+  }
+
+  function getPlannedSetPrescription({ plan, set, weekPrescription }) {
+    return {
+      reps: formatTargetValue(
+        weekPrescription?.reps ??
+          getSetPrescriptionReps(set, plan?.config?.reps ?? "")
+      ),
+      rir: formatTargetValue(
+        weekPrescription?.rir ??
+          getPlanWeekRir(
+            plan,
+            currentPlanWeek,
+            getSetPrescriptionRir(set, plan?.config?.rir ?? "")
+          )
+      ),
+    };
+  }
+
   function cloneTemplateEditState(sourceTemplate = template) {
     return {
       exercises: structuredClone(sourceTemplate.exercises || []),
@@ -566,22 +591,46 @@ export default function TemplateView({
   function getWorkoutPrescriptionSummary(exercise) {
     const setCount = exercise?.sets?.length || 0;
     const reps = formatRange(
-      (exercise?.sets || []).map((set) => firstPresentValue(set.targetReps, set.reps))
+      (exercise?.sets || []).map((set) => getSetPrescriptionReps(set))
     );
     const rir = formatRange(
-      (exercise?.sets || []).map((set) => firstPresentValue(set.targetRir, set.rir))
+      (exercise?.sets || []).map((set) => getSetPrescriptionRir(set))
     );
     const setLabel = setCount === 1 ? "set" : "sets";
 
     return `${setCount} ${setLabel} | ${reps || "—"} reps | ${rir || "—"} RIR`;
   }
 
+  function getExerciseWithCurrentInstancePrescription(exercise) {
+    const weekPrescription = getExerciseWeekPrescription(
+      exercise,
+      linkedPlan,
+      currentPlanWeek
+    );
+
+    if (!linkedPlan || !weekPrescription) {
+      return exercise;
+    }
+
+    return {
+      ...exercise,
+      sets: getExerciseSetsForPlanWeek(exercise, weekPrescription).map((set) => ({
+        ...set,
+        ...getPlannedSetPrescription({
+          plan: linkedPlan,
+          set,
+          weekPrescription,
+        }),
+      })),
+    };
+  }
+
   function getPrescriptionSignature(exercise) {
     return (exercise?.sets || [])
       .map((set) =>
         [
-          firstPresentValue(set.targetReps, set.reps),
-          firstPresentValue(set.targetRir, set.rir),
+          getSetPrescriptionReps(set),
+          getSetPrescriptionRir(set),
         ].join(":")
       )
       .join("|");
@@ -648,19 +697,10 @@ export default function TemplateView({
     exercise,
     libraryExercise,
     plan,
-    set,
     setIndex,
-    weekPrescription,
+    targetReps,
+    targetRir,
   }) {
-    const targetReps =
-      weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? "";
-    const targetRir =
-      weekPrescription?.rir ??
-      getPlanWeekRir(
-        plan,
-        currentPlanWeek,
-        set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
-      );
     const recommendationExercise = {
       ...(libraryExercise || {}),
       ...exercise,
@@ -677,16 +717,14 @@ export default function TemplateView({
       setIndex,
       targetReps,
       targetRir,
-      weightIncrement: getExerciseWeightIncrement(recommendationExercise),
+      weightIncrement: (weight) =>
+        getExerciseWeightIncrement(recommendationExercise, undefined, weight),
     });
 
     return recommendation.result?.recommendation || null;
   }
 
   function getEffectivePlanExercise(exercise, plan) {
-    const libraryExercise = exerciseLibrary.find(
-      (ex) => ex.id === exercise.exerciseId
-    );
     const weekPrescription = getExerciseWeekPrescription(
       exercise,
       plan,
@@ -696,41 +734,14 @@ export default function TemplateView({
     return {
       ...exercise,
       sets: getExerciseSetsForPlanWeek(exercise, weekPrescription).map(
-        (set, setIndex) => {
-          const dynamicTarget = getDynamicTargetPrescription({
-            exercise,
-            libraryExercise,
+        (set) => ({
+          ...set,
+          ...getPlannedSetPrescription({
             plan,
             set,
-            setIndex,
             weekPrescription,
-          });
-
-          return {
-            ...set,
-            targetWeight: formatTargetValue(
-              dynamicTarget?.weight,
-              set.targetWeight || ""
-            ),
-            targetReps: formatTargetValue(
-              dynamicTarget?.reps,
-              weekPrescription?.reps ??
-                set.targetReps ??
-                set.reps ??
-                plan?.config?.reps ??
-                ""
-            ),
-            targetRir: formatTargetValue(
-              dynamicTarget?.rir,
-              weekPrescription?.rir ??
-                getPlanWeekRir(
-                  plan,
-                  currentPlanWeek,
-                  set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
-                )
-            ),
-          };
-        }
+          }),
+        })
       ),
     };
   }
@@ -798,36 +809,27 @@ export default function TemplateView({
               plan,
               currentPlanWeek
             );
+            const plannedPrescription = getPlannedSetPrescription({
+              plan,
+              set,
+              weekPrescription,
+            });
             const dynamicTarget = getDynamicTargetPrescription({
               exercise,
               libraryExercise,
               plan,
-              set,
               setIndex,
-              weekPrescription,
+              targetReps: plannedPrescription.reps,
+              targetRir: plannedPrescription.rir,
             });
 
             const targetSet = {
               ...set,
-              targetWeight: formatTargetValue(
-                dynamicTarget?.weight,
-                set.targetWeight || ""
-              ),
+              targetWeight: formatTargetValue(dynamicTarget?.weight),
 
-              targetReps: formatTargetValue(
-                dynamicTarget?.reps,
-                weekPrescription?.reps ?? set.targetReps ?? set.reps ?? plan?.config?.reps ?? ""
-              ),
+              targetReps: plannedPrescription.reps,
 
-              targetRir: formatTargetValue(
-                dynamicTarget?.rir,
-                weekPrescription?.rir ??
-                  getPlanWeekRir(
-                    plan,
-                    currentPlanWeek,
-                    set.targetRir ?? set.rir ?? plan?.config?.rir ?? ""
-                  )
-              ),
+              targetRir: plannedPrescription.rir,
             };
             const actualDefaults = getActualDefaultsForSet(
               exercise,
@@ -852,8 +854,6 @@ export default function TemplateView({
   function addExercise(exercise) {
     enterEditMode();
 
-    const weight = newExerciseValues.weight;
-
     const reps = newExerciseValues.reps;
 
     const numSets = Number(newExerciseValues.sets);
@@ -868,11 +868,9 @@ export default function TemplateView({
       () => ({
         id: Date.now() + Math.random(),
 
-        targetWeight: weight,
+        reps,
 
-        targetReps: reps,
-
-        targetRir: rir,
+        rir,
       })
     );
 
@@ -1005,11 +1003,11 @@ export default function TemplateView({
     const firstSet = editingExerciseDraft.sets?.[0] || {};
 
     if (field === "reps") {
-      return firstPresentValue(firstSet.targetReps, firstSet.reps);
+      return getSetPrescriptionReps(firstSet);
     }
 
     if (field === "rir") {
-      return firstPresentValue(firstSet.targetRir, firstSet.rir);
+      return getSetPrescriptionRir(firstSet);
     }
 
     return "";
@@ -1026,9 +1024,8 @@ export default function TemplateView({
       const nextSetCount = Math.max(1, Number(value) || 1);
       const currentSets = updated.sets || [];
       const templateSet = currentSets.at(-1) || {
-        targetReps: "",
-        targetRir: "",
-        targetWeight: "",
+        reps: "",
+        rir: "",
       };
 
       updated.sets = Array.from({ length: nextSetCount }, (_, index) => {
@@ -1038,9 +1035,8 @@ export default function TemplateView({
           ? existingSet
           : {
               id: Date.now() + Math.random() + index,
-              targetReps: templateSet.targetReps || "",
-              targetRir: templateSet.targetRir || "",
-              targetWeight: templateSet.targetWeight || "",
+              reps: getSetPrescriptionReps(templateSet),
+              rir: getSetPrescriptionRir(templateSet),
             };
       });
     }
@@ -1048,14 +1044,14 @@ export default function TemplateView({
     if (field === "reps") {
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
-        targetReps: String(value),
+        reps: String(value),
       }));
     }
 
     if (field === "rir") {
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
-        targetRir: String(value),
+        rir: String(value),
       }));
     }
 
@@ -1323,15 +1319,20 @@ export default function TemplateView({
               ...currentTemplate,
               exercises: currentTemplate.exercises.map((templateExercise) =>
                 templateExercise.id === replacingExercise.id
-                  ? {
-                      ...templateExercise,
-                      equipment: exercise.equipment,
-                      exerciseId: exercise.id,
-                      imageAlt: exercise.imageAlt || "",
-                      imageUrl: exercise.imageUrl || "",
-                      muscles: exercise.muscles,
-                      name: exercise.name,
-                    }
+                  ? (() => {
+                      const preservedPrescription =
+                        getExerciseWithCurrentInstancePrescription(templateExercise);
+
+                      return {
+                        ...preservedPrescription,
+                        equipment: exercise.equipment,
+                        exerciseId: exercise.id,
+                        imageAlt: exercise.imageAlt || "",
+                        imageUrl: exercise.imageUrl || "",
+                        muscles: exercise.muscles,
+                        name: exercise.name,
+                      };
+                    })()
                   : templateExercise
               ),
             }));
@@ -1471,6 +1472,8 @@ export default function TemplateView({
                   const templateExercise =
                     template.exercises.find((item) => item.id === exercise.id) ||
                     exercise;
+                  const prescriptionExercise =
+                    getExerciseWithCurrentInstancePrescription(templateExercise);
                   const exerciseDetail = getExerciseDetailRecord(exercise);
                   const note = exerciseMetadata?.[exercise.exerciseId]?.note;
 
@@ -1496,16 +1499,20 @@ export default function TemplateView({
                               : null
                           }
                           onSetClick={() => {
-                            setEditingExercise(exercise);
+                            setEditingExercise(prescriptionExercise);
 
-                            setEditingExerciseDraft(structuredClone(exercise));
+                            setEditingExerciseDraft(
+                              structuredClone(prescriptionExercise)
+                            );
                           }}
                           onPrescriptionClick={() => {
-                            setEditingExercise(exercise);
-                            setEditingExerciseDraft(structuredClone(exercise));
+                            setEditingExercise(prescriptionExercise);
+                            setEditingExerciseDraft(
+                              structuredClone(prescriptionExercise)
+                            );
                           }}
                           prescriptionSummary={getWorkoutPrescriptionSummary(
-                            exercise
+                            prescriptionExercise
                           )}
                           leadingControl={
                             <IconButton
@@ -1563,7 +1570,7 @@ export default function TemplateView({
                                 onClick={() => {
                                   setShowAdd(false);
                                   setPendingExercise(null);
-                                  setReplacingExercise(exercise);
+                                  setReplacingExercise(prescriptionExercise);
                                   setSelectedMuscle(exerciseDetail?.muscles?.[0] || "");
                                   setSearch("");
                                 }}

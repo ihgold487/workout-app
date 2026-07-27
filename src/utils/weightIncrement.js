@@ -4,7 +4,7 @@ export const EQUIPMENT_WEIGHT_INCREMENTS = {
   barbell: 2.5,
   bench: null,
   bodyweight: 2.5,
-  cable: 1.25,
+  cable: 2.5,
   dumbbell: 2.5,
   dumbbells: 2.5,
   "ez bar": 2.5,
@@ -20,6 +20,10 @@ export const EQUIPMENT_WEIGHT_INCREMENTS = {
   "trap bar": 2.5,
   "tricep bar": 2.5,
 };
+
+const CABLE_FINE_INCREMENT_MAX_WEIGHT = 25;
+const CABLE_FINE_INCREMENT = 1.25;
+const CABLE_STANDARD_INCREMENT = 2.5;
 
 function normalizeEquipmentName(value) {
   return String(value || "")
@@ -39,7 +43,11 @@ function getPrimaryEquipment(exercise) {
   return equipment || "";
 }
 
-export function getExerciseWeightIncrement(exercise, fallback = DEFAULT_WEIGHT_INCREMENT) {
+export function getExerciseWeightIncrement(
+  exercise,
+  fallback = DEFAULT_WEIGHT_INCREMENT,
+  workingWeight = null
+) {
   const override =
     exercise?.weightIncrement ??
     exercise?.weight_increment ??
@@ -53,6 +61,15 @@ export function getExerciseWeightIncrement(exercise, fallback = DEFAULT_WEIGHT_I
   }
 
   const equipmentKey = normalizeEquipmentName(getPrimaryEquipment(exercise));
+
+  if (equipmentKey === "cable") {
+    const parsedWorkingWeight = Number.parseFloat(String(workingWeight));
+
+    return Number.isFinite(parsedWorkingWeight) &&
+      parsedWorkingWeight <= CABLE_FINE_INCREMENT_MAX_WEIGHT
+      ? CABLE_FINE_INCREMENT
+      : CABLE_STANDARD_INCREMENT;
+  }
 
   if (Object.prototype.hasOwnProperty.call(EQUIPMENT_WEIGHT_INCREMENTS, equipmentKey)) {
     return EQUIPMENT_WEIGHT_INCREMENTS[equipmentKey];

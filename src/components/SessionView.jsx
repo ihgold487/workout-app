@@ -570,7 +570,8 @@ export default function SessionView({
       setIndex,
       targetReps: reps,
       targetRir: rir,
-      weightIncrement: getExerciseWeightIncrement(calculationExercise),
+      weightIncrement: (weight) =>
+        getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
 
     const weight = recommendation.result?.recommendation?.weight;
@@ -593,7 +594,8 @@ export default function SessionView({
       setIndex,
       targetReps: set.targetReps,
       targetRir: set.targetRir,
-      weightIncrement: getExerciseWeightIncrement(calculationExercise),
+      weightIncrement: (weight) =>
+        getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
   }
 
@@ -2823,8 +2825,8 @@ export default function SessionView({
     const currentWeek = Number(session.planWeek || linkedPlan?.currentWeek || 1);
     const firstSet = exercise.sets?.[0] || {};
     const nextSets = String(exercise.sets?.length || 1);
-    const nextReps = firstSet.targetReps;
-    const nextRir = firstSet.targetRir;
+    const nextReps = firstPresentValue(firstSet.targetReps, firstSet.reps);
+    const nextRir = firstPresentValue(firstSet.targetRir, firstSet.rir);
 
     return {
       ...exercise,
@@ -2841,17 +2843,19 @@ export default function SessionView({
   }
 
   function createNextTemplateExercisesFromSession() {
-    return session.exercises.map((exercise) =>
-      applyPlanPrescriptionUpdates({
-        ...exercise,
+    return session.exercises.map((exercise) => {
+      const exerciseWithUpdatedPlanPrescription =
+        applyPlanPrescriptionUpdates(exercise);
+
+      return {
+        ...exerciseWithUpdatedPlanPrescription,
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
-          targetWeight: set.actualWeight || set.targetWeight || "",
-          targetReps: set.targetReps || "",
-          targetRir: set.targetRir || "",
+          reps: firstPresentValue(set.targetReps, set.reps),
+          rir: firstPresentValue(set.targetRir, set.rir),
         })),
-      })
-    );
+      };
+    });
   }
 
   function addExercise(exercise, weight, reps, numSets, rir) {

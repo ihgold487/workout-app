@@ -531,15 +531,10 @@ function getWorkoutSummary(workouts) {
     (total, sets) => total + sets,
     0
   );
-  const tbdWeightExercises = exercises.filter(
-    (exercise) => !exercise.sets[0]?.targetWeight
-  );
-
   return {
     muscleSets: Object.entries(muscleSets).sort((a, b) =>
       a[0].localeCompare(b[0])
     ),
-    tbdWeightExercises,
     totalSets,
   };
 }
@@ -704,24 +699,6 @@ function WorkoutSummarySheet({
             </div>
           ))}
         </div>
-
-        {summary.tbdWeightExercises.length > 0 && (
-          <div
-            style={{
-              background: "var(--surface-muted)",
-              borderRadius: "8px",
-              color: "var(--text-muted)",
-              fontSize: "13px",
-              marginTop: "14px",
-              padding: "10px",
-            }}
-          >
-            Weight TBD:{" "}
-            {summary.tbdWeightExercises
-              .map((exercise) => exercise.name)
-              .join(", ")}
-          </div>
-        )}
       </div>
     </div>
   );

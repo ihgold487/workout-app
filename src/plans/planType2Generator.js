@@ -1,6 +1,4 @@
 import { isExerciseActive } from "../utils/exerciseStatus";
-import { recommendSetTarget } from "../utils/targetRecommendation";
-import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 
 const CHEST_MUSCLES = ["Chest", "Upper Chest"];
 const LEG_MUSCLES = ["Glutes", "Quads", "Hamstrings"];
@@ -524,46 +522,15 @@ function rememberExerciseUsage(usage, muscle, exercise) {
 }
 
 function createSets(count, exercise, options) {
-  return Array.from({ length: count }, (_, index) => {
-    const recommendedTarget = getRecommendedTargetPrescription(exercise, {
-      goal: options.goal,
-      history: options.history,
-      reps: options.reps,
-      rir: options.rir,
-      setIndex: index,
-    });
-
-    return {
-      id: Date.now() + Math.random() + index,
-      targetWeight: formatTargetValue(recommendedTarget?.weight),
-      targetReps: formatTargetValue(recommendedTarget?.reps, options.reps),
-      targetRir: formatTargetValue(recommendedTarget?.rir, options.rir),
-    };
-  });
-}
-
-function getGoalMode(goal) {
-  return goal === "progress" ? "progress" : "maintenance";
+  return Array.from({ length: count }, (_, index) => ({
+    id: Date.now() + Math.random() + index,
+    reps: formatTargetValue(options.reps),
+    rir: formatTargetValue(options.rir),
+  }));
 }
 
 function formatTargetValue(value, fallback = "") {
   return value == null || value === "" ? String(fallback) : String(value);
-}
-
-function getRecommendedTargetPrescription(exercise, options) {
-  const recommendation = recommendSetTarget({
-    allowedRepWindow: 2,
-    exercise,
-    goalMode: getGoalMode(options.goal),
-    history: options.history,
-    preferredRepWindow: 2,
-    setIndex: options.setIndex,
-    targetReps: options.reps,
-    targetRir: options.rir,
-    weightIncrement: getExerciseWeightIncrement(exercise),
-  });
-
-  return recommendation.result?.recommendation || null;
 }
 
 export function createPlanExercise({
