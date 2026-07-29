@@ -4,7 +4,6 @@ import {
   Check,
   GripVertical,
   Link2,
-  NotebookPen,
   Pencil,
   Play,
   Plus,
@@ -1609,29 +1608,16 @@ export default function TemplateView({
                   const prescriptionExercise =
                     getExerciseWithCurrentInstancePrescription(templateExercise);
                   const exerciseDetail = getExerciseDetailRecord(exercise);
-                  const note = exerciseMetadata?.[exercise.exerciseId]?.note;
-
                   return (
                     <SortableExerciseRow key={exercise.id} exercise={exercise}>
                       {({ attributes, listeners }) => (
                         <WorkoutExercisePreviewRow
+                          compact
                           exercise={exercise}
                           exerciseDetail={exerciseDetail}
-                          note={note}
+                          layout="templateCompact"
                           onExerciseClick={() => setDetailExercise(exerciseDetail)}
-                          onClearNote={
-                            note
-                              ? () => {
-                                  const updated = {
-                                    ...exerciseMetadata,
-                                  };
-
-                                  delete updated[exercise.exerciseId];
-
-                                  setExerciseMetadata(updated);
-                                }
-                              : null
-                          }
+                          showNote={false}
                           onSetClick={() => {
                             setEditingExercise(prescriptionExercise);
 
@@ -1648,32 +1634,6 @@ export default function TemplateView({
                           prescriptionSummary={getWorkoutPrescriptionSummary(
                             prescriptionExercise
                           )}
-                          leadingControl={
-                            <IconButton
-                              label="Exercise note"
-                              size={32}
-                              onClick={() => {
-                                const nextNote = prompt(
-                                  "Exercise note",
-                                  exerciseMetadata[exercise.exerciseId]?.note || ""
-                                );
-
-                                if (nextNote === null) return;
-
-                                setExerciseMetadata({
-                                  ...exerciseMetadata,
-
-                                  [exercise.exerciseId]: {
-                                    ...(exerciseMetadata[exercise.exerciseId] || {}),
-
-                                    note: nextNote,
-                                  },
-                                });
-                              }}
-                            >
-                              <NotebookPen size={16} />
-                            </IconButton>
-                          }
                           actions={
                             <>
                               <span
