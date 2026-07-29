@@ -740,6 +740,23 @@ function firstPresentValue(...values) {
   return value == null ? "" : value;
 }
 
+function buildTrainerWorkoutPayload(workout) {
+  return {
+    ...workout,
+    exercises: (workout.exercises || []).map((exercise) => ({
+      ...exercise,
+      sets: (exercise.sets || []).map((set) => ({
+        ...set,
+        prescribedReps: firstPresentValue(set.prescribedReps, set.reps, set.targetReps),
+        prescribedRir: firstPresentValue(set.prescribedRir, set.rir, set.targetRir),
+        targetReps: firstPresentValue(set.prescribedReps, set.reps, set.targetReps),
+        targetRir: firstPresentValue(set.prescribedRir, set.rir, set.targetRir),
+        targetWeight: null,
+      })),
+    })),
+  };
+}
+
 const WEEKLY_RIR_VALUES = [0, 1, 2, 3, 4, 5, 6];
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
@@ -1309,8 +1326,8 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
   const firstSet = exercise?.sets?.[0] || {};
 
   return {
-    reps: firstPresentValue(firstSet.targetReps, firstSet.reps, fallbackReps),
-    rir: firstPresentValue(firstSet.targetRir, firstSet.rir, fallbackRir),
+    reps: firstPresentValue(firstSet.prescribedReps, firstSet.reps, firstSet.targetReps, fallbackReps),
+    rir: firstPresentValue(firstSet.prescribedRir, firstSet.rir, firstSet.targetRir, fallbackRir),
     sets: String(exercise?.sets?.length || 1),
   };
 }
@@ -3282,7 +3299,7 @@ export default function PlansView({
 
         const { error } = await supabase.rpc("create_trainer_workout_for_user", {
           target_user_id: selectedTrainerUserId,
-          workout_payload: workouts[0],
+          workout_payload: buildTrainerWorkoutPayload(workouts[0]),
         });
 
         if (error) {
@@ -3353,10 +3370,12 @@ export default function PlansView({
     if (!isTrainerTargetSelf) {
       setSaveStatus("Saving plan for selected user...");
 
+      const trainerWorkoutsPayload = workouts.map(buildTrainerWorkoutPayload);
+
       const { error } = await supabase.rpc("create_trainer_plan_for_user", {
         target_user_id: selectedTrainerUserId,
         plan_payload: plan,
-        workouts_payload: workouts,
+        workouts_payload: trainerWorkoutsPayload,
       });
 
       if (error) {

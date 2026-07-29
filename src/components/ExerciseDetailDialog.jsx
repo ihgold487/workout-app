@@ -122,8 +122,8 @@ function matchesExercise(historyExercise, exercise) {
   );
 }
 
-function getSetValue(set, actualField, targetField) {
-  return set[actualField] || set[targetField] || "";
+function getSetValue(set, actualField) {
+  return set[actualField] || "";
 }
 
 function getDateKey(value) {
@@ -312,9 +312,9 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
         workout.completedAtIso || workout.completed_at || workout.completedAt
       );
       const sets = (matchingExercise.sets || []).map((set, index) => {
-        const weight = getSetValue(set, "actualWeight", "targetWeight");
-        const reps = getSetValue(set, "actualReps", "targetReps");
-        const rir = getSetValue(set, "actualRir", "targetRir");
+        const weight = getSetValue(set, "actualWeight");
+        const reps = getSetValue(set, "actualReps");
+        const rir = getSetValue(set, "actualRir");
         const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
           bodyWeight,
           exercise,

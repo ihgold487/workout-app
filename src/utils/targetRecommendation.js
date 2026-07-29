@@ -36,9 +36,9 @@ function getExerciseKey(exercise) {
 }
 
 function getSetPerformance(set, exercise, bodyWeight) {
-  const weight = toNumber(set?.actualWeight ?? set?.targetWeight);
-  const reps = toNumber(set?.actualReps ?? set?.targetReps);
-  const rir = toNumber(set?.actualRir ?? set?.targetRir ?? set?.rir ?? 0);
+  const weight = toNumber(set?.actualWeight);
+  const reps = toNumber(set?.actualReps);
+  const rir = toNumber(set?.actualRir ?? 0);
   const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
     bodyWeight,
     exercise,

@@ -833,9 +833,6 @@ function buildBenchHistoryTestWorkouts(benchExercise) {
             completed: true,
             id: `${workoutId}-set-${set.setNumber}`,
             isDropSet: false,
-            targetReps: "",
-            targetRir: "",
-            targetWeight: "",
           })),
           supersetGroup: null,
         },
@@ -920,9 +917,9 @@ function findExerciseForHistoryExercise(historyExercise, exerciseLibrary = []) {
 
 function getHistorySetE1RM(set, exercise, bodyWeight) {
   const e1rm = calculateE1RM(
-    parseHistoryMetricValue(set.actualWeight ?? set.actual_weight ?? set.targetWeight),
-    parseHistoryMetricValue(set.actualReps ?? set.actual_reps ?? set.targetReps),
-    set.actualRir ?? set.actual_rir ?? set.targetRir,
+    parseHistoryMetricValue(set.actualWeight ?? set.actual_weight),
+    parseHistoryMetricValue(set.actualReps ?? set.actual_reps),
+    set.actualRir ?? set.actual_rir,
     null,
     null,
     null,
@@ -2606,6 +2603,10 @@ export default function App() {
       return;
     }
 
+    if (!appAccessAllowed || approvalFromCache) {
+      return;
+    }
+
     const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
     const hasUnownedLocalData =
       !localOwnerUserId && hasLocalNormalizedUserData(data);
@@ -2623,7 +2624,13 @@ export default function App() {
     runAutomaticNormalizedSync("startup");
     // Latest sync state is read from refs inside runAutomaticNormalizedSync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authSession, indexedDbReady, localOwnerUserId]);
+  }, [
+    appAccessAllowed,
+    approvalFromCache,
+    authSession,
+    indexedDbReady,
+    localOwnerUserId,
+  ]);
 
   useEffect(() => {
     if (!indexedDbReady) {
@@ -5286,59 +5293,57 @@ export default function App() {
           </h2>
         </div>
 
-        {isIraSettingsUser && (
-          <section
+        <section
+          style={{
+            margin: "18px auto",
+            maxWidth: "420px",
+          }}
+        >
+          <h3>App</h3>
+          <div
             style={{
-              margin: "18px auto",
-              maxWidth: "420px",
+              color: "var(--text-muted)",
+              fontSize: "12px",
+              marginBottom: "10px",
             }}
           >
-            <h3>App</h3>
+            v{APP_VERSION}
+            {" • built "}
+            {BUILD_TIME}
+          </div>
+          <button
+            onClick={checkForUpdate}
+            disabled={updateStatus === "checking" || updateStatus === "found"}
+          >
+            {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
+          </button>
+          {(updateStatus || buildNotice) && (
             <div
+              role="status"
+              aria-live="polite"
               style={{
                 color: "var(--text-muted)",
                 fontSize: "12px",
-                marginBottom: "10px",
+                marginTop: "6px",
               }}
             >
-              v{APP_VERSION}
-              {" • built "}
-              {BUILD_TIME}
+              {updateStatus && (
+                <div>
+                  {UPDATE_STATUS_COPY[updateStatus]}
+                  {updateStatus === "current" && lastUpdateCheck
+                    ? ` (${lastUpdateCheck.toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })})`
+                    : ""}
+                </div>
+              )}
+              {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
             </div>
-            <button
-              onClick={checkForUpdate}
-              disabled={updateStatus === "checking" || updateStatus === "found"}
-            >
-              {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
-            </button>
-            {(updateStatus || buildNotice) && (
-              <div
-                role="status"
-                aria-live="polite"
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                  marginTop: "6px",
-                }}
-              >
-                {updateStatus && (
-                  <div>
-                    {UPDATE_STATUS_COPY[updateStatus]}
-                    {updateStatus === "current" && lastUpdateCheck
-                      ? ` (${lastUpdateCheck.toLocaleString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })})`
-                      : ""}
-                  </div>
-                )}
-                {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
-              </div>
-            )}
-          </section>
-        )}
+          )}
+        </section>
 
         <section
           style={{
@@ -6591,6 +6596,10 @@ export default function App() {
         setExerciseMetadata={setExerciseMetadata}
         history={history}
         plans={plans}
+        setPlans={(nextPlans) => {
+          setPlans(nextPlans);
+          requestSyncCheckpoint(["plans"], "plan prescription save");
+        }}
         planWeekOverride={selectedTemplatePlanWeek}
       />,
       "home"

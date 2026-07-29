@@ -1,6 +1,5 @@
-import { Dumbbell, NotebookPen, Target, X } from "lucide-react";
+import { NotebookPen, Target, X } from "lucide-react";
 import ExerciseThumbnail from "./ExerciseThumbnail";
-import { calculateE1RM } from "../utils/e1rm";
 
 export function WorkoutExercisePreviewGroup({ children, group }) {
   return (
@@ -207,11 +206,8 @@ export function WorkoutExercisePreviewRow({
             </button>
           ) : (
             exercise.sets.map((set) => {
-              const reps = set.targetReps || set.reps || "";
-              const rir = set.targetRir || set.rir || "";
-              const targetE1RM = set.targetWeight
-                ? calculateE1RM(null, reps, rir, set.targetWeight)?.toFixed(1)
-                : null;
+              const reps = set.prescribedReps || set.reps || set.targetReps || "";
+              const rir = set.prescribedRir || set.rir || set.targetRir || "";
 
               return (
                 <div
@@ -227,15 +223,8 @@ export function WorkoutExercisePreviewRow({
                 >
                   <span>
                     <Target size={14} />{" "}
-                    {set.targetWeight ? `${set.targetWeight}×` : ""}
                     {reps || "—"}
                     {rir ? ` @ ${rir}` : ""}
-                    {set.targetWeight ? (
-                      <>
-                        {" "}
-                        (<Dumbbell size={13} /> {targetE1RM || "—"})
-                      </>
-                    ) : null}
                   </span>
                 </div>
               );

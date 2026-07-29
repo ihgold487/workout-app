@@ -420,6 +420,7 @@ export default function PlateLoadingCalculator({
   initialEquipmentId = "barbell",
   initialWeight = "",
   inventory,
+  onApplyManualLoading = null,
   showInputs = true,
 }) {
   const [draft, setDraft] = useState({
@@ -912,7 +913,6 @@ export default function PlateLoadingCalculator({
     const manualLoading = getManualLoading();
     const availablePlates = getManualAvailablePlates(manualLoading.equipment);
     const selectedCount = manualLoading.platesPerSide.length;
-    const modeLabel = getManualPlateModeLabel(manualLoading.equipment);
 
     return (
       <>
@@ -979,17 +979,26 @@ export default function PlateLoadingCalculator({
           <div
             style={{
               alignItems: "center",
-              color: "var(--text-muted)",
               display: "flex",
               fontSize: "12px",
               justifyContent: "space-between",
             }}
           >
-            <span>
-              {selectedCount > 0
-                ? `${selectedCount} selected ${modeLabel}`
-                : `No plates selected ${modeLabel}`}
-            </span>
+            {onApplyManualLoading ? (
+              <button
+                onClick={() => onApplyManualLoading(manualLoading.achievedTotal)}
+                style={{
+                  fontWeight: "bold",
+                  minHeight: "32px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                Apply to current set
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               aria-label="Clear selected plates"
               disabled={selectedCount === 0}

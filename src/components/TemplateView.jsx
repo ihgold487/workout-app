@@ -238,6 +238,7 @@ export default function TemplateView({
   setExerciseMetadata,
   history,
   plans = [],
+  setPlans,
   planWeekOverride = null,
   sessions,
   setSessions,
@@ -422,11 +423,21 @@ export default function TemplateView({
   }
 
   function getSetPrescriptionReps(set, fallback = "") {
-    return firstPresentValue(set?.reps, set?.targetReps, fallback);
+    return firstPresentValue(
+      set?.prescribedReps,
+      set?.reps,
+      set?.targetReps,
+      fallback
+    );
   }
 
   function getSetPrescriptionRir(set, fallback = "") {
-    return firstPresentValue(set?.rir, set?.targetRir, fallback);
+    return firstPresentValue(
+      set?.prescribedRir,
+      set?.rir,
+      set?.targetRir,
+      fallback
+    );
   }
 
   function getPlannedSetPrescription({ plan, set, weekPrescription }) {
@@ -462,17 +473,57 @@ export default function TemplateView({
     onEditModeChange?.(true);
   }
 
+  function syncLinkedPlanTemplate(nextTemplate) {
+    if (!nextTemplate?.planId || typeof setPlans !== "function") {
+      return;
+    }
+
+    setPlans((currentPlans) =>
+      (currentPlans || []).map((plan) => {
+        if (String(plan.id) !== String(nextTemplate.planId)) {
+          return plan;
+        }
+
+        return {
+          ...plan,
+          updatedAt: new Date().toISOString(),
+          workouts: (plan.workouts || []).map((planWorkout) =>
+            String(planWorkout.templateId) === String(nextTemplate.id) ||
+            String(planWorkout.planWorkoutId) === String(nextTemplate.planWorkoutId)
+              ? {
+                  ...planWorkout,
+                  exercises: structuredClone(nextTemplate.exercises || []),
+                  name: nextTemplate.name || planWorkout.name,
+                  workoutType: nextTemplate.workoutType || planWorkout.workoutType || null,
+                  workoutTypeLabel:
+                    nextTemplate.workoutTypeLabel ||
+                    planWorkout.workoutTypeLabel ||
+                    null,
+                }
+              : planWorkout
+          ),
+        };
+      })
+    );
+  }
+
   function updateCurrentTemplate(updater, { requireEdit = true } = {}) {
     if (requireEdit) {
       enterEditMode();
     }
 
     setTemplates((currentTemplates) =>
-      currentTemplates.map((currentTemplate) =>
-        currentTemplate.id === template.id
-          ? updater(currentTemplate)
-          : currentTemplate
-      )
+      currentTemplates.map((currentTemplate) => {
+        if (currentTemplate.id !== template.id) {
+          return currentTemplate;
+        }
+
+        const nextTemplate = updater(currentTemplate);
+
+        syncLinkedPlanTemplate(nextTemplate);
+
+        return nextTemplate;
+      })
     );
   }
 
@@ -527,14 +578,20 @@ export default function TemplateView({
   function cancelEditMode() {
     if (editSnapshot) {
       setTemplates((currentTemplates) =>
-        currentTemplates.map((currentTemplate) =>
-          currentTemplate.id === template.id
-            ? {
-                ...currentTemplate,
-                exercises: structuredClone(editSnapshot.exercises || []),
-              }
-            : currentTemplate
-        )
+        currentTemplates.map((currentTemplate) => {
+          if (currentTemplate.id !== template.id) {
+            return currentTemplate;
+          }
+
+          const restoredTemplate = {
+            ...currentTemplate,
+            exercises: structuredClone(editSnapshot.exercises || []),
+          };
+
+          syncLinkedPlanTemplate(restoredTemplate);
+
+          return restoredTemplate;
+        })
       );
     }
 
@@ -625,6 +682,79 @@ export default function TemplateView({
     };
   }
 
+  function getCurrentInstancePrescriptionChanges(originalExercise, draftExercise) {
+    const originalFirstSet = originalExercise?.sets?.[0] || {};
+    const draftFirstSet = draftExercise?.sets?.[0] || {};
+
+    return {
+      reps:
+        getSetPrescriptionReps(originalFirstSet) !==
+        getSetPrescriptionReps(draftFirstSet),
+      rir:
+        getSetPrescriptionRir(originalFirstSet) !==
+        getSetPrescriptionRir(draftFirstSet),
+      sets:
+        (originalExercise?.sets?.length || 0) !==
+        (draftExercise?.sets?.length || 0),
+    };
+  }
+
+  function applyCurrentInstancePrescription(
+    baseExercise,
+    instanceExercise,
+    prescriptionChanges = null
+  ) {
+    if (!linkedPlan || !Array.isArray(baseExercise?.weeklyPrescriptions)) {
+      return instanceExercise;
+    }
+
+    const changes =
+      prescriptionChanges ||
+      getCurrentInstancePrescriptionChanges(
+        getExerciseWithCurrentInstancePrescription(baseExercise),
+        instanceExercise
+      );
+    const firstSet = instanceExercise?.sets?.[0] || {};
+    const editedSets = String(instanceExercise?.sets?.length || 1);
+    const editedReps = getSetPrescriptionReps(firstSet);
+    const editedRir = getSetPrescriptionRir(firstSet);
+    const nextWeeklyPrescriptions = baseExercise.weeklyPrescriptions.map((week) => {
+      const weekNumber = Number(week.weekNumber);
+
+      if (weekNumber < Number(currentPlanWeek)) {
+        return week;
+      }
+
+      if (week.isDeload && weekNumber !== Number(currentPlanWeek)) {
+        return week;
+      }
+
+      return {
+        ...week,
+        ...(changes.reps ? { reps: editedReps } : {}),
+        ...(changes.sets ? { sets: editedSets } : {}),
+        ...(weekNumber === Number(currentPlanWeek)
+          ? {
+              ...(changes.rir ? { rir: editedRir } : {}),
+            }
+          : {}),
+      };
+    });
+
+    return {
+      ...baseExercise,
+      equipment: instanceExercise.equipment,
+      exerciseId: instanceExercise.exerciseId,
+      imageAlt: instanceExercise.imageAlt,
+      imageUrl: instanceExercise.imageUrl,
+      muscles: instanceExercise.muscles,
+      name: instanceExercise.name,
+      note: instanceExercise.note,
+      supersetGroup: instanceExercise.supersetGroup,
+      weeklyPrescriptions: nextWeeklyPrescriptions,
+    };
+  }
+
   function getPrescriptionSignature(exercise) {
     return (exercise?.sets || [])
       .map((set) =>
@@ -675,13 +805,13 @@ export default function TemplateView({
     if (historySet) {
       return {
         actualReps: formatTargetValue(
-          firstPresentValue(historySet.actualReps, historySet.targetReps)
+          firstPresentValue(historySet.actualReps)
         ),
         actualRir: formatTargetValue(
-          firstPresentValue(historySet.actualRir, historySet.targetRir)
+          firstPresentValue(historySet.actualRir)
         ),
         actualWeight: formatTargetValue(
-          firstPresentValue(historySet.actualWeight, historySet.targetWeight)
+          firstPresentValue(historySet.actualWeight)
         ),
       };
     }
@@ -825,6 +955,10 @@ export default function TemplateView({
 
             const targetSet = {
               ...set,
+              prescribedReps: plannedPrescription.reps,
+              prescribedRir: plannedPrescription.rir,
+              reps: plannedPrescription.reps,
+              rir: plannedPrescription.rir,
               targetWeight: formatTargetValue(dynamicTarget?.weight),
 
               targetReps: plannedPrescription.reps,
@@ -1323,7 +1457,7 @@ export default function TemplateView({
                       const preservedPrescription =
                         getExerciseWithCurrentInstancePrescription(templateExercise);
 
-                      return {
+                      return applyCurrentInstancePrescription(templateExercise, {
                         ...preservedPrescription,
                         equipment: exercise.equipment,
                         exerciseId: exercise.id,
@@ -1331,7 +1465,7 @@ export default function TemplateView({
                         imageUrl: exercise.imageUrl || "",
                         muscles: exercise.muscles,
                         name: exercise.name,
-                      };
+                      });
                     })()
                   : templateExercise
               ),
@@ -1874,7 +2008,16 @@ export default function TemplateView({
                       ...currentTemplate,
 
                       exercises: currentTemplate.exercises.map((ex) =>
-                        ex.id === editingExercise.id ? editingExerciseDraft : ex
+                        ex.id === editingExercise.id
+                          ? applyCurrentInstancePrescription(
+                              ex,
+                              editingExerciseDraft,
+                              getCurrentInstancePrescriptionChanges(
+                                editingExercise,
+                                editingExerciseDraft
+                              )
+                            )
+                          : ex
                       ),
                     }));
                   }

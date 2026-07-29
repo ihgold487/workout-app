@@ -225,12 +225,12 @@ function findExerciseForHistoryExercise(historyExercise, exerciseLibrary = []) {
 
 function getSetMetrics(set, exercise, bodyWeight) {
   const weight = parseMetricValue(
-    firstPresentValue(set.actualWeight, set.actual_weight, set.targetWeight)
+    firstPresentValue(set.actualWeight, set.actual_weight)
   );
   const reps = parseMetricValue(
-    firstPresentValue(set.actualReps, set.actual_reps, set.targetReps)
+    firstPresentValue(set.actualReps, set.actual_reps)
   );
-  const rir = firstPresentValue(set.actualRir, set.actual_rir, set.targetRir);
+  const rir = firstPresentValue(set.actualRir, set.actual_rir);
   const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
     bodyWeight,
     exercise,

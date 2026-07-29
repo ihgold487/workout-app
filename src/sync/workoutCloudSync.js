@@ -135,19 +135,20 @@ function localExerciseToCloud(exercise, userId, workoutId, position, cloudId) {
 }
 
 function localSetToCloud(set, userId, workoutExerciseId, setNumber) {
-  const targetRir = set.targetRir || set.rir || "";
+  const prescribedReps = set.prescribedReps || set.reps || set.targetReps || "";
+  const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
 
   return {
     deleted_at: null,
     is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
     set_number: setNumber,
-    target_reps_label: set.targetReps ? String(set.targetReps) : null,
-    target_reps_max: parseInteger(set.targetReps),
-    target_reps_min: parseInteger(set.targetReps),
-    target_rir_label: targetRir ? String(targetRir) : null,
-    target_rir_value: parseRir(targetRir),
-    target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
-    target_weight_value: parseNumber(set.targetWeight),
+    target_reps_label: prescribedReps ? String(prescribedReps) : null,
+    target_reps_max: parseInteger(prescribedReps),
+    target_reps_min: parseInteger(prescribedReps),
+    target_rir_label: prescribedRir ? String(prescribedRir) : null,
+    target_rir_value: parseRir(prescribedRir),
+    target_weight_label: null,
+    target_weight_value: null,
     updated_at: new Date().toISOString(),
     user_id: userId,
     workout_exercise_id: workoutExerciseId,
@@ -224,18 +225,17 @@ function buildLocalExerciseLookup(exerciseLibrary) {
 }
 
 function cloudSetToLocal(set) {
+  const reps = formatCloudValue(
+    set.target_reps_label,
+    set.target_reps_min ?? set.target_reps_max
+  );
+  const rir = formatCloudValue(set.target_rir_label, set.target_rir_value);
+
   return {
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
-    targetReps: formatCloudValue(
-      set.target_reps_label,
-      set.target_reps_min ?? set.target_reps_max
-    ),
-    targetRir: formatCloudValue(set.target_rir_label, set.target_rir_value),
-    targetWeight: formatCloudValue(
-      set.target_weight_label,
-      set.target_weight_value
-    ),
+    reps,
+    rir,
   };
 }
 

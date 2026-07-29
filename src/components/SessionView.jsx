@@ -295,6 +295,7 @@ export default function SessionView({
   const [showRirPicker, setShowRirPicker] = useState(false);
   const [rirPickerData, setRirPickerData] = useState(null);
   const [showApplyChangesPrompt, setShowApplyChangesPrompt] = useState(false);
+  const [workoutUpdateSelections, setWorkoutUpdateSelections] = useState({});
   const [targetAlternativesData, setTargetAlternativesData] = useState(null);
   const [targetAlternativesClosing, setTargetAlternativesClosing] =
     useState(false);
@@ -592,8 +593,8 @@ export default function SessionView({
         getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
       preferredRepWindow: 2,
       setIndex,
-      targetReps: set.targetReps,
-      targetRir: set.targetRir,
+      targetReps: getSetTargetReps(set),
+      targetRir: getSetTargetRir(set),
       weightIncrement: (weight) =>
         getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
@@ -609,6 +610,22 @@ export default function SessionView({
     return value == null || value === "" ? "" : String(value);
   }
 
+  function getSetPrescribedReps(set, fallback = "") {
+    return firstPresentValue(set?.prescribedReps, set?.reps, set?.targetReps, fallback);
+  }
+
+  function getSetPrescribedRir(set, fallback = "") {
+    return firstPresentValue(set?.prescribedRir, set?.rir, set?.targetRir, fallback);
+  }
+
+  function getSetTargetReps(set, fallback = "") {
+    return firstPresentValue(set?.targetReps, getSetPrescribedReps(set), fallback);
+  }
+
+  function getSetTargetRir(set, fallback = "") {
+    return firstPresentValue(set?.targetRir, getSetPrescribedRir(set), fallback);
+  }
+
   const getHistoryDefaultsForSet = useCallback((sessionExercise, setIndex) => {
     const historySet =
       getLatestMatchingHistoryPerformance(sessionExercise)?.exercise?.sets?.[
@@ -621,13 +638,13 @@ export default function SessionView({
 
     return {
       actualReps: formatSetupDefault(
-        firstPresentValue(historySet.actualReps, historySet.targetReps)
+        firstPresentValue(historySet.actualReps)
       ),
       actualRir: formatSetupDefault(
-        firstPresentValue(historySet.actualRir, historySet.targetRir)
+        firstPresentValue(historySet.actualRir)
       ),
       actualWeight: formatSetupDefault(
-        firstPresentValue(historySet.actualWeight, historySet.targetWeight)
+        firstPresentValue(historySet.actualWeight)
       ),
     };
   }, [getLatestMatchingHistoryPerformance]);
@@ -669,8 +686,8 @@ export default function SessionView({
   function hasCompleteTargetPrescription(set) {
     return (
       !isBlankValue(set.targetWeight) &&
-      !isBlankValue(set.targetReps) &&
-      !isBlankValue(set.targetRir)
+      !isBlankValue(getSetTargetReps(set)) &&
+      !isBlankValue(getSetTargetRir(set))
     );
   }
 
@@ -688,8 +705,8 @@ export default function SessionView({
     }
 
     const targetPrescription = {
-      reps: set.targetReps,
-      rir: set.targetRir,
+      reps: getSetTargetReps(set),
+      rir: getSetTargetRir(set),
       weight: set.targetWeight,
     };
 
@@ -957,8 +974,8 @@ export default function SessionView({
       (exercise) => exercise.id === oldExerciseId
     );
     const firstSet = replacedExercise?.sets?.[0] || {};
-    const reps = firstPresentValue(firstSet.targetReps, firstSet.actualReps);
-    const rir = firstPresentValue(firstSet.targetRir, firstSet.actualRir);
+    const reps = getSetPrescribedReps(firstSet);
+    const rir = getSetPrescribedRir(firstSet);
 
     return {
       reps: formatSetupDefault(reps),
@@ -976,13 +993,11 @@ export default function SessionView({
     const planTargets = getPlanTargetValues();
     const reps = firstPresentValue(
       planTargets.reps,
-      previousFirstSet.targetReps,
-      previousFirstSet.actualReps
+      getSetPrescribedReps(previousFirstSet)
     );
     const rir = firstPresentValue(
       planTargets.rir,
-      previousFirstSet.targetRir,
-      previousFirstSet.actualRir
+      getSetPrescribedRir(previousFirstSet)
     );
 
     return {
@@ -1250,8 +1265,8 @@ export default function SessionView({
     }
 
     applyPrescriptionToActual(exerciseId, setId, {
-      reps: set.targetReps,
-      rir: set.targetRir,
+      reps: getSetTargetReps(set),
+      rir: getSetTargetRir(set),
       weight: set.targetWeight,
     });
   }
@@ -1287,7 +1302,7 @@ export default function SessionView({
       : weekNumber >= currentWeek;
   }
 
-  function updateWeeklyPrescriptionTargets(weeklyPrescriptions, currentWeek, updates) {
+  function updateWeeklyPrescriptions(weeklyPrescriptions, currentWeek, updates) {
     if (!Array.isArray(weeklyPrescriptions)) {
       return weeklyPrescriptions;
     }
@@ -1309,8 +1324,10 @@ export default function SessionView({
     });
   }
 
-  function updateExerciseTarget(exerciseId, field, value) {
+  function updateExercisePrescription(exerciseId, field, value) {
     const nextValue = formatSetupDefault(value);
+    const prescriptionField = field === "prescribedRir" ? "rir" : "reps";
+    const targetField = field === "prescribedRir" ? "targetRir" : "targetReps";
 
     updateSession((s) => ({
       ...s,
@@ -1325,10 +1342,10 @@ export default function SessionView({
           ...exercise,
           ...(session.planId && Array.isArray(exercise.weeklyPrescriptions)
             ? {
-                weeklyPrescriptions: updateWeeklyPrescriptionTargets(
+                weeklyPrescriptions: updateWeeklyPrescriptions(
                   exercise.weeklyPrescriptions,
                   Number(session.planWeek || getLinkedPlan()?.currentWeek || 1),
-                  { [field === "targetRir" ? "rir" : "reps"]: nextValue }
+                  { [prescriptionField]: nextValue }
                 ),
               }
             : {}),
@@ -1338,9 +1355,9 @@ export default function SessionView({
             }
 
             const targetReps =
-              field === "targetReps" ? nextValue : set.targetReps;
+              field === "prescribedReps" ? nextValue : getSetTargetReps(set);
             const targetRir =
-              field === "targetRir" ? nextValue : set.targetRir;
+              field === "prescribedRir" ? nextValue : getSetTargetRir(set);
             const targetWeight =
               getRecommendedTargetWeight(
                 exercise,
@@ -1352,6 +1369,8 @@ export default function SessionView({
             return {
               ...set,
               [field]: nextValue,
+              [prescriptionField]: nextValue,
+              [targetField]: nextValue,
               targetWeight,
             };
           }),
@@ -1370,11 +1389,11 @@ export default function SessionView({
         "",
         "",
         set.targetWeight,
-        set.targetReps,
-        set.targetRir
+        getSetTargetReps(set),
+        getSetTargetRir(set)
       ),
-      reps: set.targetReps,
-      rir: set.targetRir,
+      reps: getSetTargetReps(set),
+      rir: getSetTargetRir(set),
       weight: set.targetWeight,
     };
     const alternatives = recommendation.result?.alternatives || [];
@@ -1411,7 +1430,9 @@ export default function SessionView({
     setPlateCalculatorClosing(false);
     setPlateCalculatorData({
       equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      exerciseId: exercise.id,
       exerciseName: exercise.name || "Exercise",
+      setId: set.id,
       weight: isBlankValue(weight) ? "" : String(weight),
     });
   }
@@ -1425,11 +1446,18 @@ export default function SessionView({
       return;
     }
 
+    const targetSet =
+      exercise.sets?.find((set) => idsMatch(activeSet?.setId, set.id)) ||
+      exercise.sets?.find((set) => !set.completed) ||
+      exercise.sets?.[0];
+
     setPlateCalculatorClosing(false);
     setPlateCalculatorData({
       equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      exerciseId: exercise.id,
       exerciseName: exercise.name || "Exercise",
       fixedWeights: weights.map((weight) => String(weight)),
+      setId: targetSet?.id || null,
       subtitle: option?.label || "Warmup sets",
     });
   }
@@ -1442,6 +1470,51 @@ export default function SessionView({
     }
 
     setPlateCalculatorClosing(true);
+  }
+
+  function applyManualLoadingToCurrentSet(weight) {
+    const exerciseId = plateCalculatorData?.exerciseId;
+    const setId = plateCalculatorData?.setId;
+
+    if (!exerciseId || !setId) {
+      return;
+    }
+
+    const nextWeight = formatSetupDefault(weight);
+
+    updateSession((s) => ({
+      ...s,
+      exercises: s.exercises.map((exercise) => {
+        if (!idsMatch(exercise.id, exerciseId)) {
+          return exercise;
+        }
+
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set) => {
+            if (!idsMatch(set.id, setId)) {
+              return set;
+            }
+
+            const updatedSet = {
+              ...set,
+              actualWeight: nextWeight,
+            };
+
+            return updatedSet;
+          }),
+        };
+      }),
+    }));
+
+    if (activeSet && idsMatch(activeSet.setId, setId)) {
+      setActiveSet({
+        ...activeSet,
+        actualWeight: nextWeight,
+      });
+    }
+
+    closePlateLoadingCalculator();
   }
 
   useEffect(() => {
@@ -1480,8 +1553,8 @@ export default function SessionView({
     }
 
     const defaults = getHistoryDefaultsForSet(exercise, setIndex) || {
-      actualReps: formatSetupDefault(currentSet.targetReps),
-      actualRir: formatSetupDefault(currentSet.targetRir),
+      actualReps: formatSetupDefault(getSetTargetReps(currentSet)),
+      actualRir: formatSetupDefault(getSetTargetRir(currentSet)),
       actualWeight: "",
     };
     const updates = {};
@@ -1528,6 +1601,7 @@ export default function SessionView({
   ]);
 
   const [expandedNotes, setExpandedNotes] = useState({});
+  const [noteEditSnapshots, setNoteEditSnapshots] = useState({});
 
   const [replacingExerciseId, setReplacingExerciseId] = useState(null);
 
@@ -1535,6 +1609,84 @@ export default function SessionView({
   const [planCompletionPrompt, setPlanCompletionPrompt] = useState(null);
 
   const [showSupersetEditor, setShowSupersetEditor] = useState(false);
+
+  function openExerciseNoteEditor(exercise) {
+    const noteKey = String(exercise.id);
+    const metadata = exerciseMetadata?.[exercise.exerciseId] || {};
+
+    setNoteEditSnapshots((snapshots) =>
+      snapshots[noteKey]
+        ? snapshots
+        : {
+            ...snapshots,
+            [noteKey]: {
+              exerciseId: exercise.exerciseId,
+              hadNote: Object.prototype.hasOwnProperty.call(metadata, "note"),
+              note: metadata.note || "",
+            },
+          }
+    );
+    setExpandedNotes((notes) => ({
+      ...notes,
+      [exercise.id]: true,
+    }));
+  }
+
+  function acceptExerciseNoteEdit(exercise) {
+    const noteKey = String(exercise.id);
+
+    setNoteEditSnapshots((snapshots) => {
+      const next = { ...snapshots };
+
+      delete next[noteKey];
+
+      return next;
+    });
+    setExpandedNotes((notes) => ({
+      ...notes,
+      [exercise.id]: false,
+    }));
+  }
+
+  function cancelExerciseNoteEdit(exercise) {
+    const noteKey = String(exercise.id);
+    const snapshot = noteEditSnapshots[noteKey];
+
+    if (snapshot) {
+      setExerciseMetadata((metadata) => {
+        const next = { ...(metadata || {}) };
+        const currentExerciseMetadata = {
+          ...(next[snapshot.exerciseId] || {}),
+        };
+
+        if (snapshot.hadNote) {
+          currentExerciseMetadata.note = snapshot.note;
+        } else {
+          delete currentExerciseMetadata.note;
+        }
+
+        if (Object.keys(currentExerciseMetadata).length) {
+          next[snapshot.exerciseId] = currentExerciseMetadata;
+        } else {
+          delete next[snapshot.exerciseId];
+        }
+
+        return next;
+      });
+    }
+
+    setNoteEditSnapshots((snapshots) => {
+      const next = { ...snapshots };
+
+      delete next[noteKey];
+
+      return next;
+    });
+    setExpandedNotes((notes) => ({
+      ...notes,
+      [exercise.id]: false,
+    }));
+  }
 
   const [showCreateExercise, setShowCreateExercise] = useState(false);
 
@@ -1885,14 +2037,24 @@ export default function SessionView({
   }
 
   function addSet(exerciseId, lastSet) {
+    const prescribedReps = getSetPrescribedReps(lastSet);
+    const prescribedRir = getSetPrescribedRir(lastSet);
     const newSet = {
       id: Date.now(),
 
-      targetWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
+      targetWeight: lastSet?.targetWeight || lastSet?.actualWeight || "",
 
-      targetReps: lastSet?.targetReps || "",
+      targetReps: getSetTargetReps(lastSet, prescribedReps),
 
-      targetRir: lastSet?.targetRir || "",
+      targetRir: getSetTargetRir(lastSet, prescribedRir),
+
+      prescribedReps,
+
+      prescribedRir,
+
+      reps: prescribedReps,
+
+      rir: prescribedRir,
 
       actualWeight: lastSet?.actualWeight || lastSet?.targetWeight || "",
 
@@ -2222,16 +2384,12 @@ export default function SessionView({
       nextSetIndex === completedSetContext.setIndex + 1
         ? firstPresentValue(
             completedSetContext.set?.actualReps,
-            completedSetContext.set?.targetReps,
-            completedSetContext.set?.reps,
-            nextSet.targetReps,
-            nextSet.reps,
+            getSetPrescribedReps(completedSetContext.set),
+            getSetPrescribedReps(nextSet),
             planTargets.reps
           )
         : firstPresentValue(
-            nextSet.targetReps,
-            nextSet.reps,
-            nextSet.actualReps,
+            getSetPrescribedReps(nextSet),
             planTargets.reps
           );
 
@@ -2295,14 +2453,15 @@ export default function SessionView({
     const calculationExercise = getExerciseForCalculation(exercise);
     const actualReps = parseSessionNumber(currentSet.actualReps);
     const prescribedReps = parseSessionNumber(
-      nextSet.targetReps || currentSet.targetReps
+      getSetPrescribedReps(nextSet, getSetPrescribedReps(currentSet))
     );
-    const targetRir = firstPresentValue(nextSet.targetRir, currentSet.targetRir);
-    const actualWeight = firstPresentValue(
-      currentSet.actualWeight,
-      currentSet.targetWeight
+    const targetRir = firstPresentValue(
+      getSetTargetRir(nextSet),
+      getSetPrescribedRir(nextSet),
+      getSetPrescribedRir(currentSet)
     );
-    const actualRir = firstPresentValue(currentSet.actualRir, currentSet.targetRir);
+    const actualWeight = firstPresentValue(currentSet.actualWeight);
+    const actualRir = firstPresentValue(currentSet.actualRir);
     const shouldReduceWeight =
       actualReps != null &&
       prescribedReps != null &&
@@ -2337,8 +2496,8 @@ export default function SessionView({
             );
 
       return {
-        targetReps: nextSet.targetReps || String(prescribedReps),
-        targetRir: targetRir || nextSet.targetRir,
+        targetReps: getSetTargetReps(nextSet, String(prescribedReps)),
+        targetRir: targetRir || getSetTargetRir(nextSet),
         targetWeight:
           reducedWeight != null && reducedWeight !== ""
             ? String(reducedWeight)
@@ -2349,8 +2508,8 @@ export default function SessionView({
     return {
       targetWeight:
         currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
-      targetReps: nextSet.targetReps || currentSet.targetReps,
-      targetRir: nextSet.targetRir || currentSet.targetRir,
+      targetReps: getSetTargetReps(nextSet, getSetTargetReps(currentSet)),
+      targetRir: getSetTargetRir(nextSet, getSetTargetRir(currentSet)),
     };
   }
 
@@ -2548,10 +2707,10 @@ export default function SessionView({
         const existingSets = ex.sets || [];
         const firstSet = existingSets[0] || {};
         const defaultReps = formatSetupDefault(
-          firstPresentValue(firstSet.targetReps, firstSet.actualReps)
+          getSetPrescribedReps(firstSet)
         );
         const defaultRir = formatSetupDefault(
-          firstPresentValue(firstSet.targetRir, firstSet.actualRir)
+          getSetPrescribedRir(firstSet)
         );
         const requestedSetCount = Number(replacementValues.sets) || 1;
         const preservingExistingSetCount =
@@ -2563,6 +2722,15 @@ export default function SessionView({
         const sourceSets = preservingExistingSetCount
           ? existingSets
           : Array.from({ length: requestedSetCount }, () => ({}));
+
+        const nextRepsForSet = (set) =>
+          shouldPreserveSetReps
+            ? firstPresentValue(getSetPrescribedReps(set), replacementValues.reps)
+            : replacementValues.reps;
+        const nextRirForSet = (set) =>
+          shouldPreserveSetRir
+            ? firstPresentValue(getSetPrescribedRir(set), replacementValues.rir)
+            : replacementValues.rir;
 
         return {
           ...ex,
@@ -2581,23 +2749,32 @@ export default function SessionView({
 
           exerciseId: newExercise.id,
 
-          sets: sourceSets.map((set, i) => ({
-            id: Date.now() + i,
+          sets: sourceSets.map((set, i) => {
+            const prescribedReps = nextRepsForSet(set);
+            const prescribedRir = nextRirForSet(set);
 
-            targetWeight: replacementValues.weight,
+            return {
+              id: Date.now() + i,
 
-            targetReps: shouldPreserveSetReps
-              ? firstPresentValue(set.targetReps, set.actualReps, replacementValues.reps)
-              : replacementValues.reps,
+              targetWeight: replacementValues.weight,
 
-            targetRir: shouldPreserveSetRir
-              ? firstPresentValue(set.targetRir, set.actualRir, replacementValues.rir)
-              : replacementValues.rir,
+              targetReps: prescribedReps,
 
-            actualWeight: "",
-            actualReps: "",
-            actualRir: "",
-          })),
+              targetRir: prescribedRir,
+
+              prescribedReps,
+
+              prescribedRir,
+
+              reps: prescribedReps,
+
+              rir: prescribedRir,
+
+              actualWeight: "",
+              actualReps: "",
+              actualRir: "",
+            };
+          }),
         };
       }),
     }));
@@ -2821,22 +2998,28 @@ export default function SessionView({
       return exercise;
     }
 
+    const originalTemplate = templates.find((item) => item.id === session.templateId);
+    const originalExercise = originalTemplate?.exercises?.find(
+      (item) => item.id === exercise.id
+    );
+    const setCountChanged =
+      originalExercise &&
+      (originalExercise.sets?.length || 0) !== (exercise.sets?.length || 0);
+
+    if (!setCountChanged) {
+      return exercise;
+    }
+
     const linkedPlan = getLinkedPlan();
     const currentWeek = Number(session.planWeek || linkedPlan?.currentWeek || 1);
-    const firstSet = exercise.sets?.[0] || {};
-    const nextSets = String(exercise.sets?.length || 1);
-    const nextReps = firstPresentValue(firstSet.targetReps, firstSet.reps);
-    const nextRir = firstPresentValue(firstSet.targetRir, firstSet.rir);
 
     return {
       ...exercise,
-      weeklyPrescriptions: updateWeeklyPrescriptionTargets(
+      weeklyPrescriptions: updateWeeklyPrescriptions(
         exercise.weeklyPrescriptions,
         currentWeek,
         {
-          reps: nextReps,
-          rir: nextRir,
-          sets: nextSets,
+          sets: String(exercise.sets?.length || 1),
         }
       ),
     };
@@ -2851,8 +3034,8 @@ export default function SessionView({
         ...exerciseWithUpdatedPlanPrescription,
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
-          reps: firstPresentValue(set.targetReps, set.reps),
-          rir: firstPresentValue(set.targetRir, set.rir),
+          reps: getSetPrescribedReps(set),
+          rir: getSetPrescribedRir(set),
         })),
       };
     });
@@ -2864,6 +3047,10 @@ export default function SessionView({
       targetWeight: weight,
       targetReps: reps,
       targetRir: rir,
+      prescribedReps: reps,
+      prescribedRir: rir,
+      reps,
+      rir,
       actualWeight: "",
       actualReps: "",
       actualRir: "",
@@ -2890,6 +3077,27 @@ export default function SessionView({
 
     setPendingExercise(null);
     setShowAddExercise(false);
+  }
+
+  function stripSessionOnlySetValuesForHistory(workout) {
+    return {
+      ...workout,
+      exercises: (workout.exercises || []).map((exercise) => ({
+        ...exercise,
+        sets: (exercise.sets || []).map(
+          ({
+            prescribedReps,
+            prescribedRir,
+            reps,
+            rir,
+            targetReps,
+            targetRir,
+            targetWeight,
+            ...set
+          }) => set
+        ),
+      })),
+    };
   }
 
   // UNIQUE muscle filter options
@@ -3185,9 +3393,9 @@ export default function SessionView({
             </div>
 
             {latestPerformance.sets.map((set, setIndex) => {
-              const weight = firstPresentValue(set.actualWeight, set.targetWeight);
-              const reps = firstPresentValue(set.actualReps, set.targetReps);
-              const rir = firstPresentValue(set.actualRir, set.targetRir);
+              const weight = firstPresentValue(set.actualWeight);
+              const reps = firstPresentValue(set.actualReps);
+              const rir = firstPresentValue(set.actualRir);
               const e1rm = isBlankValue(reps)
                 ? null
                 : calculateSessionE1RM(exercise, weight, reps, rir);
@@ -3306,9 +3514,333 @@ export default function SessionView({
     );
   }
 
-  function completeWorkout({ applyStructuralChanges = false } = {}) {
-    const structuralChanges = hasStructuralChanges();
-    const nextTemplateExercises = createNextTemplateExercisesFromSession();
+  function getWorkoutUpdateOptions() {
+    const original = templates.find((t) => t.id === session.templateId);
+
+    if (!original) {
+      return [];
+    }
+
+    const originalById = new Map(
+      (original.exercises || []).map((exercise) => [String(exercise.id), exercise])
+    );
+    const sessionById = new Map(
+      (session.exercises || []).map((exercise) => [String(exercise.id), exercise])
+    );
+    const changes = [];
+    const formatValueChange = (before, after) =>
+      `${before || "—"} -> ${after || "—"}`;
+    const formatExercisePrescriptionRange = (exercise, getter) => {
+      const values = [...new Set((exercise?.sets || []).map((set) => getter(set)).filter(Boolean))];
+
+      return values.length > 1 ? values.join("-") : values[0] || "—";
+    };
+    const originalOrder = (original.exercises || []).map((exercise) => String(exercise.id));
+    const sessionOrder = (session.exercises || []).map((exercise) => String(exercise.id));
+
+    if (
+      originalOrder.length === sessionOrder.length &&
+      originalOrder.some((id, index) => id !== sessionOrder[index])
+    ) {
+      changes.push({
+        id: "order",
+        label: "Exercise order changed",
+        type: "order",
+      });
+    }
+
+    (session.exercises || []).forEach((exercise) => {
+      const originalExercise = originalById.get(String(exercise.id));
+
+      if (!originalExercise) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `exercise-add:${exercise.id}`,
+          label: `Add exercise: ${exercise.name || "Exercise"}`,
+          type: "exercise-add",
+        });
+        return;
+      }
+
+      const exerciseChanged =
+        String(originalExercise.exerciseId || "") !== String(exercise.exerciseId || "") ||
+        String(originalExercise.name || "") !== String(exercise.name || "") ||
+        formatList(originalExercise.equipment) !== formatList(exercise.equipment) ||
+        formatList(originalExercise.muscles) !== formatList(exercise.muscles);
+
+      if (exerciseChanged) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `exercise-replace:${exercise.id}`,
+          label: `${originalExercise.name || "Exercise"} -> ${exercise.name || "Exercise"}`,
+          type: "exercise-replace",
+        });
+      }
+
+      if ((originalExercise.sets?.length || 0) !== (exercise.sets?.length || 0)) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `sets:${exercise.id}`,
+          label: `${exercise.name || "Exercise"}: sets ${formatValueChange(
+            originalExercise.sets?.length || 0,
+            exercise.sets?.length || 0
+          )}`,
+          type: "sets",
+        });
+      }
+
+      const originalReps = formatExercisePrescriptionRange(
+        originalExercise,
+        getSetPrescribedReps
+      );
+      const sessionReps = formatExercisePrescriptionRange(exercise, getSetPrescribedReps);
+
+      if (originalReps !== sessionReps) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `reps:${exercise.id}`,
+          label: `${exercise.name || "Exercise"}: reps ${formatValueChange(
+            originalReps,
+            sessionReps
+          )}`,
+          type: "reps",
+        });
+      }
+
+      const originalRir = formatExercisePrescriptionRange(
+        originalExercise,
+        getSetPrescribedRir
+      );
+      const sessionRir = formatExercisePrescriptionRange(exercise, getSetPrescribedRir);
+
+      if (originalRir !== sessionRir) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `rir:${exercise.id}`,
+          label: `${exercise.name || "Exercise"}: RIR ${formatValueChange(
+            originalRir,
+            sessionRir
+          )}`,
+          type: "rir",
+        });
+      }
+
+      if (
+        String(originalExercise.supersetGroup || "") !==
+        String(exercise.supersetGroup || "")
+      ) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `superset:${exercise.id}`,
+          label: `${exercise.name || "Exercise"}: superset ${formatValueChange(
+            originalExercise.supersetGroup || "",
+            exercise.supersetGroup || ""
+          )}`,
+          type: "superset",
+        });
+      }
+    });
+
+    (original.exercises || []).forEach((exercise) => {
+      if (!sessionById.has(String(exercise.id))) {
+        changes.push({
+          exerciseId: exercise.id,
+          id: `exercise-remove:${exercise.id}`,
+          label: `Remove exercise: ${exercise.name || "Exercise"}`,
+          type: "exercise-remove",
+        });
+      }
+    });
+
+    return changes;
+  }
+
+  function hasWorkoutTemplateUpdates() {
+    return getWorkoutUpdateOptions().length > 0;
+  }
+
+  function getDefaultWorkoutUpdateSelections(options = getWorkoutUpdateOptions()) {
+    return Object.fromEntries(options.map((option) => [option.id, true]));
+  }
+
+  function getSelectedWorkoutChangeState(selections, changes = getWorkoutUpdateOptions()) {
+    const selectedChanges = changes.filter((change) => selections[change.id] !== false);
+    const selectedExerciseChanges = new Map();
+    const getSelectedExerciseFields = (exerciseId) => {
+      const key = String(exerciseId);
+      const fields = selectedExerciseChanges.get(key) || new Set();
+
+      selectedExerciseChanges.set(key, fields);
+      return fields;
+    };
+
+    selectedChanges.forEach((change) => {
+      if (change.type === "order") {
+        return;
+      }
+
+      getSelectedExerciseFields(change.exerciseId).add(change.type);
+    });
+
+    return {
+      order: selectedChanges.some((change) => change.type === "order"),
+      selectedChanges,
+      selectedExerciseChanges,
+    };
+  }
+
+  function mergeWeeklyPrescriptions(originalExercise, sessionExercise, selectedFields) {
+    if (!Array.isArray(originalExercise?.weeklyPrescriptions)) {
+      return sessionExercise?.weeklyPrescriptions;
+    }
+
+    if (!Array.isArray(sessionExercise?.weeklyPrescriptions)) {
+      return originalExercise.weeklyPrescriptions;
+    }
+
+    const sessionWeeksByNumber = new Map(
+      sessionExercise.weeklyPrescriptions.map((week) => [
+        Number(week.weekNumber),
+        week,
+      ])
+    );
+
+    return originalExercise.weeklyPrescriptions.map((originalWeek) => {
+      const sessionWeek = sessionWeeksByNumber.get(Number(originalWeek.weekNumber));
+
+      if (!sessionWeek) {
+        return originalWeek;
+      }
+
+      return {
+        ...originalWeek,
+        ...(selectedFields?.has("sets") ? { sets: sessionWeek.sets } : {}),
+        ...(selectedFields?.has("reps") ? { reps: sessionWeek.reps } : {}),
+        ...(selectedFields?.has("rir") ? { rir: sessionWeek.rir } : {}),
+      };
+    });
+  }
+
+  function mergeSetPrescription(originalSet, sessionSet, selectedFields) {
+    if (!sessionSet) {
+      return originalSet;
+    }
+
+    return {
+      ...originalSet,
+      ...(selectedFields?.has("reps")
+        ? {
+            prescribedReps: getSetPrescribedReps(sessionSet),
+            reps: getSetPrescribedReps(sessionSet),
+          }
+        : {}),
+      ...(selectedFields?.has("rir")
+        ? {
+            prescribedRir: getSetPrescribedRir(sessionSet),
+            rir: getSetPrescribedRir(sessionSet),
+          }
+        : {}),
+    };
+  }
+
+  function buildTemplateExercisesFromSelectedUpdates(selections) {
+    const original = templates.find((t) => t.id === session.templateId);
+    const changeState = getSelectedWorkoutChangeState(selections);
+    const { order, selectedExerciseChanges } = changeState;
+
+    if (!original) {
+      return createNextTemplateExercisesFromSession();
+    }
+
+    const sessionTemplateExercises = createNextTemplateExercisesFromSession();
+    const getSessionTemplateExercise = (exerciseId) =>
+      sessionTemplateExercises.find((item) => idsMatch(item.id, exerciseId));
+    const buildMergedExercise = (originalExercise, sessionExercise) => {
+      const selectedFields =
+        selectedExerciseChanges.get(String(originalExercise.id)) || new Set();
+      const sourceExercise = selectedFields.has("exercise-replace")
+        ? sessionExercise || originalExercise
+        : originalExercise;
+      const setCount = selectedFields.has("sets")
+        ? sessionExercise?.sets?.length || originalExercise.sets?.length || 1
+        : originalExercise.sets?.length || 1;
+      const sourceSets = Array.from({ length: setCount }, (_, index) => {
+        const originalSet =
+          originalExercise.sets?.[index] ||
+          originalExercise.sets?.at(-1) ||
+          {};
+        const sessionSet = sessionExercise?.sets?.[index];
+
+        return {
+          ...mergeSetPrescription(originalSet, sessionSet, selectedFields),
+          id: originalSet.id || Date.now() + Math.random() + index,
+        };
+      });
+
+      return {
+        ...sourceExercise,
+        id: originalExercise.id,
+        supersetGroup: selectedFields.has("superset")
+          ? sessionExercise?.supersetGroup || null
+          : originalExercise.supersetGroup || null,
+        weeklyPrescriptions: mergeWeeklyPrescriptions(
+          originalExercise,
+          sessionExercise,
+          selectedFields
+        ),
+        sets: sourceSets,
+      };
+    };
+    const buildAddedExercise = (sessionExercise) =>
+      selectedExerciseChanges.get(String(sessionExercise.id))?.has("exercise-add")
+        ? sessionExercise
+        : null;
+
+    if (order) {
+      return sessionTemplateExercises
+        .map((sessionExercise) => {
+          const originalExercise = (original.exercises || []).find((item) =>
+            idsMatch(item.id, sessionExercise.id)
+          );
+
+          if (!originalExercise) {
+            return buildAddedExercise(sessionExercise);
+          }
+
+          return buildMergedExercise(originalExercise, sessionExercise);
+        })
+        .filter(Boolean);
+    }
+
+    const mergedOriginalExercises = (original.exercises || []).map((originalExercise) => {
+      const sessionExercise = getSessionTemplateExercise(originalExercise.id);
+      const selectedFields =
+        selectedExerciseChanges.get(String(originalExercise.id)) || new Set();
+
+      if (selectedFields.has("exercise-remove")) {
+        return null;
+      }
+
+      return buildMergedExercise(originalExercise, sessionExercise);
+    });
+    const addedExercises = sessionTemplateExercises
+      .filter(
+        (sessionExercise) =>
+          !(original.exercises || []).some((originalExercise) =>
+            idsMatch(originalExercise.id, sessionExercise.id)
+          )
+      )
+      .map(buildAddedExercise);
+
+    return [...mergedOriginalExercises, ...addedExercises].filter(Boolean);
+  }
+
+  function completeWorkout({ workoutUpdateSelections: selections = {} } = {}) {
+    const hasTemplateUpdates = hasWorkoutTemplateUpdates();
+    const selectedTemplateExercises =
+      hasTemplateUpdates && Object.values(selections).some(Boolean)
+        ? buildTemplateExercisesFromSelectedUpdates(selections)
+        : null;
     const completedAtIso = new Date().toISOString();
     const durationSeconds = getWorkoutDurationSeconds(session);
     let completedWorkout = {
@@ -3331,9 +3863,9 @@ export default function SessionView({
       exercise.sets.forEach((set) => {
         const e1rm = calculateSessionE1RM(
           exercise,
-          set.actualWeight || set.targetWeight,
-          set.actualReps || set.targetReps,
-          set.actualRir ?? set.targetRir
+          set.actualWeight,
+          set.actualReps,
+          set.actualRir
         );
 
         if (e1rm && (bestE1RM === null || e1rm > bestE1RM)) {
@@ -3365,27 +3897,31 @@ export default function SessionView({
       };
     });
 
+    completedWorkout = stripSessionOnlySetValuesForHistory(completedWorkout);
+
     setExerciseMetadata(metadataUpdates);
 
     setHistory([completedWorkout, ...history]);
 
     const completedPlan = recordPlanWorkoutCompletion(completedWorkout);
 
-    if (!structuralChanges || applyStructuralChanges) {
-      nextTemplates = nextTemplates.map((t) =>
-        t.id === session.templateId
-          ? {
-              ...t,
+    nextTemplates = nextTemplates.map((t) =>
+      t.id === session.templateId
+        ? {
+            ...t,
 
-              name: completedWorkout.templateName,
+            name: completedWorkout.templateName,
 
-              lastCompleted: completedWorkout.completedAt,
+            lastCompleted: completedWorkout.completedAt,
 
-              exercises: nextTemplateExercises,
-            }
-          : t
-      );
-    }
+            ...(selectedTemplateExercises
+              ? {
+                  exercises: selectedTemplateExercises,
+                }
+              : {}),
+          }
+        : t
+    );
 
     setTemplates(nextTemplates);
 
@@ -3409,6 +3945,7 @@ export default function SessionView({
   const warmupRecommendations = warmupExercise
     ? getWarmupRecommendations(warmupExercise)
     : null;
+  const workoutUpdateOptions = getWorkoutUpdateOptions();
 
   return (
     <div
@@ -4282,12 +4819,7 @@ export default function SessionView({
                         <IconButton
                           label="Exercise notes"
                           size={34}
-                          onClick={() =>
-                            setExpandedNotes((s) => ({
-                              ...s,
-                              [exercise.id]: true,
-                            }))
-                          }
+                          onClick={() => openExerciseNoteEditor(exercise)}
                         >
                           <NotebookPen size={17} />
                         </IconButton>{" "}
@@ -4399,27 +4931,20 @@ export default function SessionView({
                             exerciseMetadata?.[exercise.exerciseId]?.note || ""
                           }
                           onChange={(e) =>
-                            setExerciseMetadata({
-                              ...exerciseMetadata,
-
+                            setExerciseMetadata((metadata) => ({
+                              ...(metadata || {}),
                               [exercise.exerciseId]: {
-                                ...(exerciseMetadata?.[exercise.exerciseId] ||
-                                  {}),
+                                ...(metadata?.[exercise.exerciseId] || {}),
 
                                 note: e.target.value,
                               },
-                            })
+                            }))
                           }
                         />
 
                         <button
                           type="button"
-                          onClick={() =>
-                            setExpandedNotes((notes) => ({
-                              ...notes,
-                              [exercise.id]: false,
-                            }))
-                          }
+                          onClick={() => acceptExerciseNoteEdit(exercise)}
                           style={{
                             background: "var(--surface)",
                             border: "1px solid var(--border)",
@@ -4434,21 +4959,7 @@ export default function SessionView({
 
                         <button
                           type="button"
-                          onClick={() => {
-                            const updated = {
-                              ...exerciseMetadata,
-                            };
-
-                            delete updated[exercise.exerciseId];
-
-                            setExerciseMetadata(updated);
-
-                            setExpandedNotes((notes) => ({
-                              ...notes,
-
-                              [exercise.id]: false,
-                            }));
-                          }}
+                          onClick={() => cancelExerciseNoteEdit(exercise)}
                           style={{
                             background: "var(--surface)",
                             border: "1px solid var(--border)",
@@ -4568,7 +5079,7 @@ export default function SessionView({
                           </button>
 
                           <button
-                            aria-label="Edit target reps"
+                            aria-label="Edit prescribed reps"
                             onClick={() => {
                               const targetSet =
                                 exercise.sets.find((set) => !set.completed) ||
@@ -4576,12 +5087,12 @@ export default function SessionView({
 
                               setRepsPickerData({
                                 exerciseId: exercise.id,
-                                field: "targetReps",
-                                value: Number(targetSet?.targetReps || 0),
+                                field: "prescribedReps",
+                                value: Number(getSetPrescribedReps(targetSet) || 0),
                               });
                               setShowRepsPicker(true);
                             }}
-                            title="Target reps"
+                            title="Prescribed reps"
                             style={{
                               background: "transparent",
                               border: "none",
@@ -4602,7 +5113,7 @@ export default function SessionView({
                           </button>
 
                           <button
-                            aria-label="Edit target RIR"
+                            aria-label="Edit prescribed RIR"
                             onClick={() => {
                               const targetSet =
                                 exercise.sets.find((set) => !set.completed) ||
@@ -4610,12 +5121,12 @@ export default function SessionView({
 
                               setRirPickerData({
                                 exerciseId: exercise.id,
-                                field: "targetRir",
-                                value: Number(targetSet?.targetRir || 0),
+                                field: "prescribedRir",
+                                value: Number(getSetPrescribedRir(targetSet) || 0),
                               });
                               setShowRirPicker(true);
                             }}
-                            title="Target RIR"
+                            title="Prescribed RIR"
                             style={{
                               background: "transparent",
                               border: "none",
@@ -4844,8 +5355,8 @@ export default function SessionView({
                                   }}
                                 >
                                   {displayWeight(set.targetWeight)}×
-                                  {set.targetReps}
-                                  {set.targetRir ? `@${set.targetRir}` : ""}
+                                  {getSetTargetReps(set)}
+                                  {getSetTargetRir(set) ? `@${getSetTargetRir(set)}` : ""}
                                 </div>
 
                                 <div
@@ -4867,8 +5378,8 @@ export default function SessionView({
                                       "",
                                       "",
                                       set.targetWeight,
-                                      set.targetReps,
-                                      set.targetRir
+                                      getSetTargetReps(set),
+                                      getSetTargetRir(set)
                                     )?.toFixed(1)}
                                     )
                                   </span>
@@ -5702,6 +6213,11 @@ export default function SessionView({
                 initialEquipmentId={plateCalculatorData?.equipmentId || "barbell"}
                 initialWeight={plateCalculatorData?.weight || ""}
                 inventory={plateInventory}
+                onApplyManualLoading={
+                  plateCalculatorData?.setId
+                    ? applyManualLoadingToCurrentSet
+                    : null
+                }
                 showInputs={!plateCalculatorData?.fixedWeights}
               />
             </div>
@@ -6085,13 +6601,18 @@ export default function SessionView({
                   </IconButton>
 
                   <IconButton
-                    label="Complete workout"
-                    tone="success"
-                    onClick={() => {
-                      if (hasStructuralChanges()) {
-                        setConfirmComplete(false);
-                        setShowApplyChangesPrompt(true);
-                        return;
+	                    label="Complete workout"
+	                    tone="success"
+	                    onClick={() => {
+	                      const options = getWorkoutUpdateOptions();
+
+	                      if (options.length) {
+	                        setWorkoutUpdateSelections(
+	                          getDefaultWorkoutUpdateSelections(options)
+	                        );
+	                        setConfirmComplete(false);
+	                        setShowApplyChangesPrompt(true);
+	                        return;
                       }
 
                       completeWorkout();
@@ -6136,9 +6657,9 @@ export default function SessionView({
                     fontWeight: "bold",
                     marginBottom: "8px",
                   }}
-                >
-                  Apply changes to workout?
-                </div>
+	                >
+	                  Update workout prescription?
+	                </div>
 
                 <div
                   style={{
@@ -6147,9 +6668,44 @@ export default function SessionView({
                     marginBottom: "16px",
                   }}
                 >
-                  Save exercise, set, or superset changes to this workout for
-                  next time?
-                </div>
+	                  Choose which changes should be saved to this workout for
+	                  next time.
+	                </div>
+
+	                <div
+	                  style={{
+	                    display: "grid",
+	                    gap: "8px",
+	                    marginBottom: "16px",
+	                  }}
+	                >
+	                  {workoutUpdateOptions.map((option) => (
+	                    <label
+	                      key={option.id}
+	                      style={{
+	                        alignItems: "center",
+	                        background: "var(--surface-muted)",
+	                        border: "1px solid var(--border)",
+	                        borderRadius: "8px",
+	                        display: "flex",
+	                        gap: "8px",
+	                        padding: "8px 10px",
+	                      }}
+	                    >
+	                      <input
+	                        checked={workoutUpdateSelections[option.id] !== false}
+	                        onChange={(event) => {
+	                          setWorkoutUpdateSelections((current) => ({
+	                            ...current,
+	                            [option.id]: event.target.checked,
+	                          }));
+	                        }}
+	                        type="checkbox"
+	                      />
+	                      <span>{option.label}</span>
+	                    </label>
+	                  ))}
+	                </div>
 
                 <div
                   style={{
@@ -6162,25 +6718,25 @@ export default function SessionView({
                     Cancel
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setShowApplyChangesPrompt(false);
-                      completeWorkout({
-                        applyStructuralChanges: false,
-                      });
-                    }}
-                  >
+	                  <button
+	                    onClick={() => {
+	                      setShowApplyChangesPrompt(false);
+	                      completeWorkout({
+	                        workoutUpdateSelections: {},
+	                      });
+	                    }}
+	                  >
                     No
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setShowApplyChangesPrompt(false);
-                      completeWorkout({
-                        applyStructuralChanges: true,
-                      });
-                    }}
-                  >
+	                  <button
+	                    onClick={() => {
+	                      setShowApplyChangesPrompt(false);
+	                      completeWorkout({
+	                        workoutUpdateSelections,
+	                      });
+	                    }}
+	                  >
                     Yes
                   </button>
                 </div>
@@ -6601,7 +7157,7 @@ export default function SessionView({
             value={rirPickerData?.value}
             title="Select RIR"
             values={
-              rirPickerData?.field === "targetRir"
+              rirPickerData?.field === "prescribedRir"
                 ? TARGET_RIR_PICKER_VALUES
                 : RIR_PICKER_VALUES
             }
@@ -6610,10 +7166,10 @@ export default function SessionView({
                 return;
               }
 
-              if (rirPickerData.field === "targetRir") {
-                updateExerciseTarget(
+              if (rirPickerData.field === "prescribedRir") {
+                updateExercisePrescription(
                   rirPickerData.exerciseId,
-                  "targetRir",
+                  "prescribedRir",
                   String(value)
                 );
                 return;
@@ -6643,10 +7199,10 @@ export default function SessionView({
                 return;
               }
 
-              if (repsPickerData.field === "targetReps") {
-                updateExerciseTarget(
+              if (repsPickerData.field === "prescribedReps") {
+                updateExercisePrescription(
                   repsPickerData.exerciseId,
-                  "targetReps",
+                  "prescribedReps",
                   String(value)
                 );
                 return;

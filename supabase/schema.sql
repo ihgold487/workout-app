@@ -1079,8 +1079,8 @@ begin
         select value from jsonb_array_elements(coalesce(current_exercise->'sets', '[]'::jsonb))
       loop
         set_index := set_index + 1;
-        target_reps := nullif(current_set->>'targetReps', '');
-        target_rir := nullif(coalesce(current_set->>'targetRir', current_set->>'rir'), '');
+        target_reps := nullif(coalesce(current_set->>'prescribedReps', current_set->>'reps', current_set->>'targetReps'), '');
+        target_rir := nullif(coalesce(current_set->>'prescribedRir', current_set->>'rir', current_set->>'targetRir'), '');
         target_weight := nullif(current_set->>'targetWeight', '');
 
         insert into public.workout_exercise_sets (
@@ -1308,8 +1308,8 @@ begin
       select value from jsonb_array_elements(coalesce(current_exercise->'sets', '[]'::jsonb))
     loop
       set_index := set_index + 1;
-      target_reps := nullif(current_set->>'targetReps', '');
-      target_rir := nullif(coalesce(current_set->>'targetRir', current_set->>'rir'), '');
+      target_reps := nullif(coalesce(current_set->>'prescribedReps', current_set->>'reps', current_set->>'targetReps'), '');
+      target_rir := nullif(coalesce(current_set->>'prescribedRir', current_set->>'rir', current_set->>'targetRir'), '');
       target_weight := nullif(current_set->>'targetWeight', '');
 
       insert into public.workout_exercise_sets (

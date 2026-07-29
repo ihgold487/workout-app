@@ -156,15 +156,6 @@ function cloudSetToLocal(set) {
     completed: Boolean(set.completed_at),
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
-    targetReps: formatCloudValue(
-      set.target_reps_label,
-      set.target_reps_min ?? set.target_reps_max
-    ),
-    targetRir: formatCloudValue(set.target_rir_label, set.target_rir_value),
-    targetWeight: formatCloudValue(
-      set.target_weight_label,
-      set.target_weight_value
-    ),
   };
 }
 
@@ -247,37 +238,32 @@ function localExerciseToCloud(exercise, userId, sessionId, position, cloudIds) {
 }
 
 function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
-  const targetRir = set.targetRir || set.rir || "";
   const actualRir = set.actualRir ?? "";
   const e1RM = calculateE1RM(
-    set.actualWeight || set.targetWeight,
-    set.actualReps || set.targetReps,
-    actualRir || targetRir
+    set.actualWeight,
+    set.actualReps,
+    actualRir
   );
 
   return {
-    actual_reps: parseInteger(set.actualReps || set.targetReps),
+    actual_reps: parseInteger(set.actualReps),
     actual_rir_label: actualRir !== "" ? String(actualRir) : null,
     actual_rir_value: parseRir(actualRir),
-    actual_weight_label: set.actualWeight
-      ? String(set.actualWeight)
-      : set.targetWeight
-        ? String(set.targetWeight)
-        : null,
-    actual_weight_value: parseNumber(set.actualWeight || set.targetWeight),
+    actual_weight_label: set.actualWeight ? String(set.actualWeight) : null,
+    actual_weight_value: parseNumber(set.actualWeight),
     completed_at: set.completed ? new Date().toISOString() : null,
     deleted_at: null,
     estimated_1rm: e1RM,
     is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
     session_exercise_id: sessionExerciseId,
     set_number: setNumber,
-    target_reps_label: set.targetReps ? String(set.targetReps) : null,
-    target_reps_max: parseInteger(set.targetReps),
-    target_reps_min: parseInteger(set.targetReps),
-    target_rir_label: targetRir ? String(targetRir) : null,
-    target_rir_value: parseRir(targetRir),
-    target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
-    target_weight_value: parseNumber(set.targetWeight),
+    target_reps_label: null,
+    target_reps_max: null,
+    target_reps_min: null,
+    target_rir_label: null,
+    target_rir_value: null,
+    target_weight_label: null,
+    target_weight_value: null,
     updated_at: new Date().toISOString(),
     user_id: userId,
   };
