@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Cable, Dumbbell, Trash2 } from "lucide-react";
 import WeightPickerModal from "./WeightPickerModal";
+import { calculateE1RM } from "../utils/e1rm";
 
 export const LOAD_CALCULATOR_EQUIPMENT = [
   {
@@ -422,6 +424,7 @@ export default function PlateLoadingCalculator({
   inventory,
   onApplyManualLoading = null,
   showInputs = true,
+  warmupLoadContexts = [],
 }) {
   const [draft, setDraft] = useState({
     cablePulleyCount: 1,
@@ -431,6 +434,7 @@ export default function PlateLoadingCalculator({
   });
   const [optionIndexes, setOptionIndexes] = useState({});
   const [manualSelections, setManualSelections] = useState({});
+  const [manualWarmupReps, setManualWarmupReps] = useState("");
   const [plateSelectorOpen, setPlateSelectorOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const deferredDraft = useDeferredValue(draft);
@@ -443,6 +447,14 @@ export default function PlateLoadingCalculator({
     }));
     setOptionIndexes({});
   }, [initialEquipmentId, initialWeight]);
+
+  useEffect(() => {
+    const defaultReps = warmupLoadContexts.at(-1)?.reps;
+
+    setManualWarmupReps(
+      defaultReps == null || defaultReps === "" ? "" : String(defaultReps)
+    );
+  }, [warmupLoadContexts]);
 
   function getManualSelectionKey() {
     return draft.equipmentId;
@@ -484,6 +496,33 @@ export default function PlateLoadingCalculator({
 
       return next;
     });
+  }
+
+  function getWarmupLoadPercentLabel(load, context = warmupLoadContexts[0]) {
+    const loadValue = Number.parseFloat(load);
+    const baseE1RM = Number.parseFloat(context?.baseE1RM);
+    const reps = Number.parseFloat(context?.reps);
+    const rir = Number.parseFloat(context?.rir);
+
+    if (
+      !Number.isFinite(loadValue) ||
+      !Number.isFinite(baseE1RM) ||
+      !Number.isFinite(reps) ||
+      !Number.isFinite(rir) ||
+      baseE1RM <= 0
+    ) {
+      return "";
+    }
+
+    const e1rm = calculateE1RM(loadValue, reps, rir);
+
+    if (e1rm == null) {
+      return "";
+    }
+
+    return `${((e1rm / baseE1RM) * 100)
+      .toFixed(1)
+      .replace(/\.0$/, "")}% of working e1RM`;
   }
 
   function getDisplayLoading(weight, loadingIndex) {
@@ -913,6 +952,25 @@ export default function PlateLoadingCalculator({
     const manualLoading = getManualLoading();
     const availablePlates = getManualAvailablePlates(manualLoading.equipment);
     const selectedCount = manualLoading.platesPerSide.length;
+    const showWarmupRepsControl = warmupLoadContexts.length > 0;
+    const manualWarmupContext = {
+      ...(warmupLoadContexts.at(-1) || warmupLoadContexts[0] || {}),
+      reps: manualWarmupReps,
+    };
+    const manualWarmupPercentLabel = getWarmupLoadPercentLabel(
+      manualLoading.achievedTotal,
+      manualWarmupContext
+    );
+    const updateManualWarmupReps = (nextValue) => {
+      const parsed = Number.parseInt(nextValue, 10);
+
+      if (!Number.isFinite(parsed)) {
+        setManualWarmupReps("");
+        return;
+      }
+
+      setManualWarmupReps(String(Math.max(1, Math.min(30, parsed))));
+    };
 
     return (
       <>
@@ -950,13 +1008,85 @@ export default function PlateLoadingCalculator({
               </div>
               <div
                 style={{
+                  alignItems: "center",
                   color: "var(--text-muted)",
+                  display: "flex",
+                  flexWrap: "wrap",
                   fontSize: "12px",
+                  gap: "4px",
                   marginTop: "2px",
                   textAlign: "left",
                 }}
               >
-                {manualLoading.equipment.label}
+                {manualWarmupPercentLabel ? (
+                  <>
+                    <span>{manualWarmupPercentLabel}</span>
+                    {showWarmupRepsControl ? (
+                      <>
+                        <span>@</span>
+                        <button
+                          aria-label="Decrease manual warmup reps"
+                          onClick={() =>
+                            updateManualWarmupReps(
+                              Number(manualWarmupReps || 1) - 1
+                            )
+                          }
+                          style={{
+                            minHeight: "22px",
+                            minWidth: "22px",
+                            padding: "1px 5px",
+                          }}
+                          type="button"
+                        >
+                          -
+                        </button>
+                        <input
+                          aria-label="Manual warmup reps for percentage"
+                          inputMode="numeric"
+                          max="30"
+                          min="1"
+                          onChange={(event) =>
+                            updateManualWarmupReps(event.target.value)
+                          }
+                          step="1"
+                          style={{
+                            background: "var(--surface-raised)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "5px",
+                            boxSizing: "border-box",
+                            color: "var(--text)",
+                            font: "inherit",
+                            minHeight: "22px",
+                            padding: "1px 2px",
+                            textAlign: "center",
+                            width: "34px",
+                          }}
+                          type="number"
+                          value={manualWarmupReps}
+                        />
+                        <button
+                          aria-label="Increase manual warmup reps"
+                          onClick={() =>
+                            updateManualWarmupReps(
+                              Number(manualWarmupReps || 0) + 1
+                            )
+                          }
+                          style={{
+                            minHeight: "22px",
+                            minWidth: "22px",
+                            padding: "1px 5px",
+                          }}
+                          type="button"
+                        >
+                          +
+                        </button>
+                        <span>reps</span>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  manualLoading.equipment.label
+                )}
               </div>
             </div>
             <button
@@ -1019,7 +1149,13 @@ export default function PlateLoadingCalculator({
           </div>
         </div>
 
-        {plateSelectorOpen && renderPlateSelectorSheet(manualLoading, availablePlates)}
+        {plateSelectorOpen &&
+          (typeof document === "undefined"
+            ? renderPlateSelectorSheet(manualLoading, availablePlates)
+            : createPortal(
+                renderPlateSelectorSheet(manualLoading, availablePlates),
+                document.body
+              ))}
       </>
     );
   }
@@ -1041,7 +1177,7 @@ export default function PlateLoadingCalculator({
           inset: 0,
           justifyContent: "center",
           position: "fixed",
-          zIndex: 2700,
+          zIndex: 11000,
         }}
       >
         <div
@@ -1327,14 +1463,33 @@ export default function PlateLoadingCalculator({
                   minWidth: 0,
                 }}
               >
-                <strong
-                  style={{
-                    minWidth: 0,
-                  }}
-                >
-                  {loading.exact ? "Load" : "Closest load"}{" "}
-                  {formatPlateNumber(loading.achievedTotal)} lb
-                </strong>
+                <div style={{ minWidth: 0 }}>
+                  <strong
+                    style={{
+                      minWidth: 0,
+                    }}
+                  >
+                    {loading.exact ? "Load" : "Closest load"}{" "}
+                    {formatPlateNumber(loading.achievedTotal)} lb
+                  </strong>
+                  {getWarmupLoadPercentLabel(
+                    loading.achievedTotal,
+                    warmupLoadContexts[index]
+                  ) ? (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {getWarmupLoadPercentLabel(
+                        loading.achievedTotal,
+                        warmupLoadContexts[index]
+                      )}
+                    </div>
+                  ) : null}
+                </div>
                 {index === 0 && renderCountToggle(loading)}
               </div>
 

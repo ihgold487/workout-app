@@ -34,6 +34,7 @@ import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import { recommendSetTarget } from "../utils/targetRecommendation";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
+import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 
 function IconButton({
   children,
@@ -773,29 +774,13 @@ export default function TemplateView({
   }
 
   function getLatestHistoryExercise(templateExercise) {
-    const workout = history.find((historyWorkout) =>
-      historyWorkout.exercises?.some((historyExercise) => {
-        if (templateExercise.exerciseId && historyExercise.exerciseId) {
-          return (
-            String(templateExercise.exerciseId) ===
-            String(historyExercise.exerciseId)
-          );
-        }
-
-        return getExerciseKey(templateExercise) === getExerciseKey(historyExercise);
-      })
-    );
-
-    return workout?.exercises?.find((historyExercise) => {
-      if (templateExercise.exerciseId && historyExercise.exerciseId) {
-        return (
-          String(templateExercise.exerciseId) ===
-          String(historyExercise.exerciseId)
-        );
-      }
-
-      return getExerciseKey(templateExercise) === getExerciseKey(historyExercise);
-    });
+    return findLatestExercisePerformance({
+      exercise: templateExercise,
+      history,
+      plan: linkedPlan,
+      planWorkoutId: template.planWorkoutId,
+      templates,
+    })?.exercise;
   }
 
   function getActualDefaultsForSet(templateExercise, setIndex, targetSet) {
@@ -1262,8 +1247,10 @@ export default function TemplateView({
               onClick={startWorkout}
               style={{
                 alignItems: "center",
+                boxSizing: "border-box",
                 display: "inline-flex",
                 gap: "6px",
+                minHeight: "34px",
               }}
             >
               <Play size={16} /> Start
@@ -1280,8 +1267,10 @@ export default function TemplateView({
             }}
             style={{
               alignItems: "center",
+              boxSizing: "border-box",
               display: "inline-flex",
               gap: "6px",
+              minHeight: "34px",
             }}
           >
             {isEditMode ? (

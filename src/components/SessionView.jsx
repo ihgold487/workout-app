@@ -59,6 +59,7 @@ import {
   getExerciseWeightIncrement,
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
+import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
@@ -403,41 +404,22 @@ export default function SessionView({
     };
   }
 
-  const exerciseMatchesHistoryExercise = useCallback((sessionExercise, historyExercise) => {
-    if (sessionExercise.exerciseId && historyExercise.exerciseId) {
-      return String(sessionExercise.exerciseId) === String(historyExercise.exerciseId);
-    }
-
-    return getExerciseKey(sessionExercise) === getExerciseKey(historyExercise);
-  }, []);
-
-  const isCurrentSessionHistoryWorkout = useCallback((historyWorkout) => {
-    return (
-      String(historyWorkout.id) === String(session.id) ||
-      String(historyWorkout.sourceSessionId || "") === String(session.id)
-    );
-  }, [session.id]);
-
   const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
-    const workout = history.find((historyWorkout) => {
-      if (isCurrentSessionHistoryWorkout(historyWorkout)) {
-        return false;
-      }
-
-      return historyWorkout.exercises?.some((historyExercise) =>
-        exerciseMatchesHistoryExercise(sessionExercise, historyExercise)
-      );
+    return findLatestExercisePerformance({
+      currentSessionId: session.id,
+      exercise: sessionExercise,
+      history,
+      plan: getLinkedPlan(),
+      planWorkoutId: session.planWorkoutId,
+      templates,
     });
-
-    const exercise = workout?.exercises?.find((historyExercise) =>
-      exerciseMatchesHistoryExercise(sessionExercise, historyExercise)
-    );
-
-    return workout && exercise ? { exercise, workout } : null;
   }, [
-    exerciseMatchesHistoryExercise,
     history,
-    isCurrentSessionHistoryWorkout,
+    plans,
+    session.id,
+    session.planId,
+    session.planWorkoutId,
+    templates,
   ]);
 
   function getLatestWorkoutPerformance(exerciseId) {
@@ -1331,6 +1313,15 @@ export default function SessionView({
 
     updateSession((s) => ({
       ...s,
+      prescriptionEditFieldsByExercise: {
+        ...(s.prescriptionEditFieldsByExercise || {}),
+        [exerciseId]: [
+          ...new Set([
+            ...(s.prescriptionEditFieldsByExercise?.[exerciseId] || []),
+            prescriptionField,
+          ]),
+        ],
+      },
       exercises: s.exercises.map((exercise) => {
         if (exercise.id !== exerciseId) {
           return exercise;
@@ -1438,9 +1429,15 @@ export default function SessionView({
   }
 
   function openWarmupPlateLoadingCalculator(exercise, option) {
-    const weights = (option?.sets || [])
-      .map((warmupSet) => warmupSet.target?.weight)
-      .filter((weight) => Number.isFinite(Number(weight)));
+    const warmupLoadContexts = (option?.sets || [])
+      .filter((warmupSet) => Number.isFinite(Number(warmupSet.target?.weight)))
+      .map((warmupSet) => ({
+        baseE1RM: warmupRecommendations?.baseE1RM || null,
+        reps: warmupSet.reps,
+        rir: warmupRecommendations?.targetRir,
+        weight: warmupSet.target.weight,
+      }));
+    const weights = warmupLoadContexts.map((context) => context.weight);
 
     if (!exercise || weights.length === 0) {
       return;
@@ -1459,6 +1456,7 @@ export default function SessionView({
       fixedWeights: weights.map((weight) => String(weight)),
       setId: targetSet?.id || null,
       subtitle: option?.label || "Warmup sets",
+      warmupLoadContexts,
     });
   }
 
@@ -3080,9 +3078,11 @@ export default function SessionView({
   }
 
   function stripSessionOnlySetValuesForHistory(workout) {
+    const { prescriptionEditFieldsByExercise, ...historyWorkout } = workout;
+
     return {
-      ...workout,
-      exercises: (workout.exercises || []).map((exercise) => ({
+      ...historyWorkout,
+      exercises: (historyWorkout.exercises || []).map((exercise) => ({
         ...exercise,
         sets: (exercise.sets || []).map(
           ({
@@ -3537,6 +3537,8 @@ export default function SessionView({
     };
     const originalOrder = (original.exercises || []).map((exercise) => String(exercise.id));
     const sessionOrder = (session.exercises || []).map((exercise) => String(exercise.id));
+    const getSessionPrescriptionEditFields = (exerciseId) =>
+      new Set(session.prescriptionEditFieldsByExercise?.[exerciseId] || []);
 
     if (
       originalOrder.length === sessionOrder.length &&
@@ -3594,8 +3596,9 @@ export default function SessionView({
         getSetPrescribedReps
       );
       const sessionReps = formatExercisePrescriptionRange(exercise, getSetPrescribedReps);
+      const prescriptionEditFields = getSessionPrescriptionEditFields(exercise.id);
 
-      if (originalReps !== sessionReps) {
+      if (prescriptionEditFields.has("reps") && originalReps !== sessionReps) {
         changes.push({
           exerciseId: exercise.id,
           id: `reps:${exercise.id}`,
@@ -3613,7 +3616,7 @@ export default function SessionView({
       );
       const sessionRir = formatExercisePrescriptionRange(exercise, getSetPrescribedRir);
 
-      if (originalRir !== sessionRir) {
+      if (prescriptionEditFields.has("rir") && originalRir !== sessionRir) {
         changes.push({
           exerciseId: exercise.id,
           id: `rir:${exercise.id}`,
@@ -4973,20 +4976,27 @@ export default function SessionView({
                         </button>
                       </div>
                     ) : exerciseNoteText ? (
-                      <div
+                      <button
+                        type="button"
+                        onClick={() => openExerciseNoteEditor(exercise)}
                         style={{
+                          background: "transparent",
+                          border: 0,
                           color: "var(--text-muted)",
+                          cursor: "pointer",
                           fontSize: "0.85rem",
                           lineHeight: 1.35,
                           marginTop: "8px",
                           overflowWrap: "anywhere",
+                          padding: 0,
                           textAlign: "left",
                           whiteSpace: "pre-wrap",
+                          width: "100%",
                           wordBreak: "break-word",
                         }}
                       >
                         {exerciseNoteText}
-                      </div>
+                      </button>
                     ) : null}
 
                     <div
@@ -5596,8 +5606,10 @@ export default function SessionView({
                       <button
                         style={{
                           alignItems: "center",
+                          boxSizing: "border-box",
                           display: "inline-flex",
                           gap: "5px",
+                          minHeight: exercise.supersetGroup ? "40px" : "34px",
                         }}
                         onClick={() =>
                           addSet(
@@ -6214,11 +6226,12 @@ export default function SessionView({
                 initialWeight={plateCalculatorData?.weight || ""}
                 inventory={plateInventory}
                 onApplyManualLoading={
-                  plateCalculatorData?.setId
+                  plateCalculatorData?.setId && !plateCalculatorData?.fixedWeights
                     ? applyManualLoadingToCurrentSet
                     : null
                 }
                 showInputs={!plateCalculatorData?.fixedWeights}
+                warmupLoadContexts={plateCalculatorData?.warmupLoadContexts || []}
               />
             </div>
           </div>

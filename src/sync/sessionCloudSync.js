@@ -261,7 +261,7 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     target_reps_max: null,
     target_reps_min: null,
     target_rir_label: null,
-    target_rir_value: null,
+    target_rir_value: 0,
     target_weight_label: null,
     target_weight_value: null,
     updated_at: new Date().toISOString(),

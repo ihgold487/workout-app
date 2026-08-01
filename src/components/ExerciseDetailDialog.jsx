@@ -579,9 +579,11 @@ function SelectionSheet({
 }
 
 function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
+  const [selectedPointKey, setSelectedPointKey] = useState(null);
   const allPoints = data
-    .map((entry) => ({
+    .map((entry, index) => ({
       dateKey: entry.completedDateKey,
+      key: `${entry.completedDateKey || "date"}-${index}`,
       label: entry.completedAt,
       value: metric === "maxWeight" ? entry.maxWeight : entry.maxE1RM,
     }))
@@ -653,6 +655,17 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
   };
   const plotted = points.map(plotPoint);
   const trendPlotted = trendPoints.map(plotPoint);
+  const selectedPoint =
+    plotted.find((point) => point.key === selectedPointKey) || null;
+  const selectedLabelX = selectedPoint
+    ? Math.min(width - 52, Math.max(paddingLeft + 52, selectedPoint.x))
+    : 0;
+  const selectedLabelY = selectedPoint
+    ? Math.max(paddingTop + 18, selectedPoint.y - 18)
+    : 0;
+  const selectedValueLabel = selectedPoint
+    ? `${selectedPoint.value.toFixed(1)} lb`
+    : "";
 
   return (
     <div
@@ -667,12 +680,20 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
         role="img"
         aria-label={metric === "maxWeight" ? "Max weight over time" : "e1RM over time"}
         viewBox={`0 0 ${width} ${height}`}
+        onClick={() => setSelectedPointKey(null)}
         style={{
           aspectRatio: "1 / 1",
           display: "block",
           width: "100%",
         }}
       >
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="transparent"
+        />
         <line
           x1={paddingLeft}
           x2={width - paddingRight}
@@ -742,6 +763,70 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
               />
             );
           })}
+        {plotted.map((point) => (
+          <circle
+            key={`tap-${point.key}`}
+            aria-label={`${point.label}: ${point.value.toFixed(1)} lb`}
+            cx={point.x}
+            cy={point.y}
+            fill="transparent"
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectedPointKey(point.key);
+            }}
+            r="10"
+            role="button"
+            style={{
+              cursor: "pointer",
+            }}
+          />
+        ))}
+        {selectedPoint && (
+          <g pointerEvents="none">
+            <line
+              x1={selectedPoint.x}
+              x2={selectedPoint.x}
+              y1={paddingTop}
+              y2={height - paddingBottom}
+              stroke={`color-mix(in srgb, ${chartColor} 45%, var(--border))`}
+              strokeDasharray="4 4"
+            />
+            <circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              fill={chartColor}
+              r="4"
+            />
+            <rect
+              x={selectedLabelX - 52}
+              y={selectedLabelY - 16}
+              width="104"
+              height="30"
+              rx="7"
+              fill="var(--surface-raised)"
+              stroke="var(--border)"
+            />
+            <text
+              x={selectedLabelX}
+              y={selectedLabelY - 3}
+              fill="var(--text-h)"
+              fontSize="11"
+              fontWeight="bold"
+              textAnchor="middle"
+            >
+              {selectedValueLabel}
+            </text>
+            <text
+              x={selectedLabelX}
+              y={selectedLabelY + 10}
+              fill="var(--text-muted)"
+              fontSize="9"
+              textAnchor="middle"
+            >
+              {selectedPoint.label || selectedPoint.dateKey}
+            </text>
+          </g>
+        )}
         <text
           x={paddingLeft}
           y={height - 7}
