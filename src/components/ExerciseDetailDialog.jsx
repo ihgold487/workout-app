@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CalendarCheck,
@@ -580,6 +580,7 @@ function SelectionSheet({
 
 function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
   const [selectedPointKey, setSelectedPointKey] = useState(null);
+  const scrubbingRef = useRef(false);
   const allPoints = data
     .map((entry, index) => ({
       dateKey: entry.completedDateKey,
@@ -666,6 +667,57 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
   const selectedValueLabel = selectedPoint
     ? `${selectedPoint.value.toFixed(1)} lb`
     : "";
+  const selectNearestPoint = (event) => {
+    if (!plotted.length) {
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width) * width;
+    const y = ((event.clientY - bounds.top) / bounds.height) * height;
+    const plotLeft = paddingLeft;
+    const plotRight = width - paddingRight;
+    const plotTop = paddingTop;
+    const plotBottom = height - paddingBottom;
+    const hitPadding = 18;
+
+    if (
+      x < plotLeft - hitPadding ||
+      x > plotRight + hitPadding ||
+      y < plotTop - hitPadding ||
+      y > plotBottom + hitPadding
+    ) {
+      setSelectedPointKey(null);
+      return;
+    }
+
+    const nearest = plotted
+      .map((point) => ({
+        point,
+        distance: Math.hypot(point.x - x, point.y - y),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0]?.point;
+
+    if (nearest) {
+      setSelectedPointKey(nearest.key);
+    }
+  };
+  const startPointScrub = (event) => {
+    scrubbingRef.current = true;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    selectNearestPoint(event);
+  };
+  const scrubNearestPoint = (event) => {
+    if (!scrubbingRef.current) {
+      return;
+    }
+
+    selectNearestPoint(event);
+  };
+  const stopPointScrub = (event) => {
+    scrubbingRef.current = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
 
   return (
     <div
@@ -680,10 +732,15 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
         role="img"
         aria-label={metric === "maxWeight" ? "Max weight over time" : "e1RM over time"}
         viewBox={`0 0 ${width} ${height}`}
-        onClick={() => setSelectedPointKey(null)}
+        onPointerCancel={stopPointScrub}
+        onPointerDown={startPointScrub}
+        onPointerMove={scrubNearestPoint}
+        onPointerUp={stopPointScrub}
         style={{
           aspectRatio: "1 / 1",
           display: "block",
+          cursor: "pointer",
+          touchAction: "manipulation",
           width: "100%",
         }}
       >
@@ -763,24 +820,6 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
               />
             );
           })}
-        {plotted.map((point) => (
-          <circle
-            key={`tap-${point.key}`}
-            aria-label={`${point.label}: ${point.value.toFixed(1)} lb`}
-            cx={point.x}
-            cy={point.y}
-            fill="transparent"
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedPointKey(point.key);
-            }}
-            r="10"
-            role="button"
-            style={{
-              cursor: "pointer",
-            }}
-          />
-        ))}
         {selectedPoint && (
           <g pointerEvents="none">
             <line
@@ -1410,17 +1449,30 @@ export default function ExerciseDetailDialog({
                         <div
                           key={set.setNumber}
                           style={{
+                            alignItems: "center",
+                            columnGap: "4px",
                             display: "grid",
-                            fontSize: "13px",
-                            gap: "4px",
-                            gridTemplateColumns: "42px repeat(4, minmax(0, 1fr))",
+                            fontSize: "12px",
+                            gridTemplateColumns:
+                              "34px minmax(46px, .85fr) minmax(46px, .85fr) minmax(42px, .75fr) minmax(66px, 1.2fr)",
+                            minWidth: 0,
                           }}
                         >
-                          <strong>Set {set.setNumber}</strong>
-                          <span>{set.weight || "—"} lb</span>
-                          <span>{set.reps || "—"} reps</span>
-                          <span>RIR {set.rir === "" ? "—" : set.rir}</span>
-                          <span>e1RM {formatE1RM(set.e1rm)}</span>
+                          <strong style={{ whiteSpace: "nowrap" }}>
+                            Set {set.setNumber}
+                          </strong>
+                          <span style={{ whiteSpace: "nowrap" }}>
+                            {set.weight || "—"} lb
+                          </span>
+                          <span style={{ whiteSpace: "nowrap" }}>
+                            {set.reps || "—"} reps
+                          </span>
+                          <span style={{ whiteSpace: "nowrap" }}>
+                            RIR {set.rir === "" ? "—" : set.rir}
+                          </span>
+                          <span style={{ whiteSpace: "nowrap" }}>
+                            e1RM {formatE1RM(set.e1rm)}
+                          </span>
                         </div>
                       ))}
                     </div>

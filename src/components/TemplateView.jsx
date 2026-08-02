@@ -32,9 +32,14 @@ import WeightPickerModal from "./WeightPickerModal";
 import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
-import { recommendSetTarget } from "../utils/targetRecommendation";
+import {
+  recommendSetTarget,
+  recommendTargetPrescription,
+} from "../utils/targetRecommendation";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+
+const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 
 function IconButton({
   children,
@@ -821,6 +826,48 @@ export default function TemplateView({
       id: exercise.exerciseId || libraryExercise?.id || exercise.id,
       exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
     };
+
+    if (getGoalMode(plan) === "progress" && setIndex === 0) {
+      const latestHistoryExercise = getLatestHistoryExercise(exercise);
+      const latestMaxE1RM = Math.max(
+        0,
+        ...(latestHistoryExercise?.sets || [])
+          .map((set) =>
+            calculateE1RM(
+              firstPresentValue(set.actualWeight),
+              firstPresentValue(set.actualReps),
+              firstPresentValue(set.actualRir),
+              null,
+              null,
+              null,
+              {
+                bodyWeight: templateBodyWeight,
+                exercise: recommendationExercise,
+              }
+            )
+          )
+          .filter(Number.isFinite)
+      );
+
+      if (latestMaxE1RM > 0) {
+        return (
+          recommendTargetPrescription({
+            allowedRepWindow: 2,
+            bodyWeight: templateBodyWeight,
+            exercise: recommendationExercise,
+            goalMode: getGoalMode(plan),
+            preferredRepWindow: 2,
+            previousE1RM: latestMaxE1RM,
+            progressionPercent: MAIN_TARGET_PROGRESSION_PERCENT,
+            targetReps,
+            targetRir,
+            weightIncrement: (weight) =>
+              getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+          })?.recommendation || null
+        );
+      }
+    }
+
     const recommendation = recommendSetTarget({
       allowedRepWindow: 2,
       bodyWeight: templateBodyWeight,

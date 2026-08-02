@@ -514,7 +514,10 @@ export default function PlateLoadingCalculator({
       return "";
     }
 
-    const e1rm = calculateE1RM(loadValue, reps, rir);
+    const e1rm = calculateE1RM(loadValue, reps, rir, null, null, null, {
+      bodyWeight: context?.bodyWeight,
+      exercise: context?.exercise,
+    });
 
     if (e1rm == null) {
       return "";

@@ -362,14 +362,23 @@ export function recommendTargetPrescription({
       exercise,
     });
     const candidateIncrement = resolveWeightIncrement(weightIncrement, rawWeight);
-    const roundedWeight = roundWeightToIncrement(rawWeight, candidateIncrement);
+    const roundedWeight = roundWeightToIncrement(
+      Math.max(minWeight, rawWeight ?? minWeight),
+      candidateIncrement
+    );
     const hasIncrement = Number(candidateIncrement) > 0;
     const weightOptions = uniqueNumbers(
       hasIncrement
         ? [
-            roundWeightToIncrement(roundedWeight - candidateIncrement, candidateIncrement),
+            roundWeightToIncrement(
+              Math.max(minWeight, roundedWeight - candidateIncrement),
+              candidateIncrement
+            ),
             roundedWeight,
-            roundWeightToIncrement(roundedWeight + candidateIncrement, candidateIncrement),
+            roundWeightToIncrement(
+              Math.max(minWeight, roundedWeight + candidateIncrement),
+              candidateIncrement
+            ),
           ]
         : [roundedWeight]
     )

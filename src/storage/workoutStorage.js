@@ -73,6 +73,7 @@ function normalizeWorkoutData(data, { seedExercises }) {
 
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const savedExercises = arrayOrEmpty(exerciseLibrary);
+  const seedKeys = new Set(seedExercises.map(getExerciseSeedKey));
   const savedStatusBySeedKey = new Map(
     savedExercises
       .filter((exercise) => exercise.builtin)
@@ -87,8 +88,15 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const customExercises = savedExercises.filter(
     (exercise) => !exercise.builtin
   );
+  const promotedBuiltInExercises = savedExercises.filter(
+    (exercise) => exercise.builtin && !seedKeys.has(getExerciseSeedKey(exercise))
+  );
 
-  return [...seededExercises, ...customExercises.map(withDefaultExerciseStatus)];
+  return [
+    ...seededExercises,
+    ...promotedBuiltInExercises.map(withDefaultExerciseStatus),
+    ...customExercises.map(withDefaultExerciseStatus),
+  ];
 }
 
 export function loadWorkoutData({ seedExercises }) {

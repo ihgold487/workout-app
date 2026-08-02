@@ -54,7 +54,10 @@ import {
   getLatestBodyWeightForDate,
 } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
-import { recommendSetTarget } from "../utils/targetRecommendation";
+import {
+  recommendSetTarget,
+  recommendTargetPrescription,
+} from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
   roundWeightToIncrement,
@@ -63,6 +66,11 @@ import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
+const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
+const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
+const CLEAR_FATIGUE_DROP_RATIO = 0.995;
+const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
+const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 
 function getSessionSet(session, activeSet) {
   if (!activeSet?.exerciseId || !activeSet?.setId) {
@@ -205,6 +213,12 @@ function getExerciseKey(exercise) {
   )}`;
 }
 
+function shouldDefaultPlateLoadingToTricepBar(exercise) {
+  const name = normalizeLookupValue(exercise?.name);
+
+  return /\b(crunch|crunches|sit up|sit ups|situp|situps)\b/.test(name);
+}
+
 function getWorkoutDurationSeconds(session, now = Date.now()) {
   const baseSeconds = Number(session?.workoutTimerBaseSeconds || 0);
 
@@ -261,6 +275,8 @@ export default function SessionView({
   plateInventory,
   bodyWeightEntries = [],
   onWorkoutCompleted,
+  onWorkoutDataCommitted,
+  onPlanCompletionNeeded,
 }) {
   const [showAddExercise, setShowAddExercise] = useState(false);
 
@@ -345,7 +361,7 @@ export default function SessionView({
   }
 
   function getLoadableWeightForExercise(exercise, weight) {
-    const equipmentId = getPlateCalculatorEquipmentId(exercise?.equipment, null);
+    const equipmentId = getExercisePlateCalculatorEquipmentId(exercise, null);
 
     if (!equipmentId) {
       return null;
@@ -354,6 +370,14 @@ export default function SessionView({
     const loadable = getClosestLoadableWeight(weight, equipmentId, plateInventory);
 
     return Number.isFinite(loadable?.weight) ? loadable.weight : null;
+  }
+
+  function getExercisePlateCalculatorEquipmentId(exercise, fallback = "barbell") {
+    if (shouldDefaultPlateLoadingToTricepBar(exercise)) {
+      return "tricepBar";
+    }
+
+    return getPlateCalculatorEquipmentId(exercise?.equipment, fallback);
   }
 
   function createCompletedWorkoutId(sessionId) {
@@ -543,6 +567,23 @@ export default function SessionView({
 
   function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
     const calculationExercise = getExerciseForCalculation(exercise);
+    const latestMaxE1RM =
+      getGoalMode() === "progress" && setIndex === 0
+        ? getLatestMatchingMaxE1RM(exercise)
+        : null;
+
+    if (latestMaxE1RM) {
+      const recommendation = getRecommendationFromE1RM(
+        calculationExercise,
+        latestMaxE1RM,
+        reps,
+        rir
+      );
+      const weight = recommendation?.weight;
+
+      return weight != null ? String(weight) : "";
+    }
+
     const recommendation = recommendSetTarget({
       bodyWeight: sessionBodyWeight,
       exercise: calculationExercise,
@@ -560,6 +601,216 @@ export default function SessionView({
     const weight = recommendation.result?.recommendation?.weight;
 
     return weight != null ? String(weight) : "";
+  }
+
+  function getRecommendationFromE1RM(exercise, previousE1RM, reps, rir, options = {}) {
+    const calculationExercise = getExerciseForCalculation(exercise);
+
+    return (
+      recommendTargetPrescription({
+        allowedRepWindow: options.allowedRepWindow ?? 2,
+        bodyWeight: sessionBodyWeight,
+        exercise: calculationExercise,
+        goalMode: getGoalMode(),
+        normalizeWeight: (weight) =>
+          getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+        preferredRepWindow: options.preferredRepWindow ?? 2,
+        previousE1RM,
+        progressionPercent:
+          options.progressionPercent ?? MAIN_TARGET_PROGRESSION_PERCENT,
+        targetReps: reps,
+        targetRir: rir,
+        weightIncrement: (weight) =>
+          getExerciseWeightIncrement(calculationExercise, undefined, weight),
+      })?.recommendation || null
+    );
+  }
+
+  function getHistorySetE1RM(exercise, set) {
+    if (!set) {
+      return null;
+    }
+
+    const e1rm = calculateSessionE1RM(
+      exercise,
+      firstPresentValue(set.actualWeight),
+      firstPresentValue(set.actualReps),
+      firstPresentValue(set.actualRir)
+    );
+
+    return Number.isFinite(e1rm) ? e1rm : null;
+  }
+
+  function getLatestMatchingMaxE1RM(exercise) {
+    const latestSets =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const maxE1RM = Math.max(
+      0,
+      ...latestSets
+        .map((set) => getHistorySetE1RM(exercise, set))
+        .filter(Number.isFinite)
+    );
+
+    return maxE1RM > 0 ? maxE1RM : null;
+  }
+
+  function getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, currentSetE1RM) {
+    const completedE1RMs = (exercise?.sets || [])
+      .slice(0, Math.max(0, setIndex))
+      .map((set) =>
+        set.id === currentSetE1RM?.setId
+          ? currentSetE1RM.value
+          : calculateSessionE1RM(
+              exercise,
+              set.actualWeight,
+              set.actualReps,
+              set.actualRir
+            )
+      )
+      .filter(Number.isFinite);
+    const maxE1RM = Math.max(
+      0,
+      ...completedE1RMs,
+      Number(currentSetE1RM?.value) || 0
+    );
+
+    return maxE1RM > 0 ? maxE1RM : null;
+  }
+
+  function getNormalizedLatestFatigueRatio(exercise, setIndex) {
+    const latestSets =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const latestE1RMs = latestSets.map((set) => getHistorySetE1RM(exercise, set));
+    const latestMaxE1RM = Math.max(
+      0,
+      ...latestE1RMs.filter(Number.isFinite)
+    );
+
+    if (!latestMaxE1RM || setIndex < 1) {
+      return 1;
+    }
+
+    let previousCurveE1RM = latestMaxE1RM;
+
+    for (let index = 1; index <= setIndex; index += 1) {
+      const rawSetE1RM = Number.isFinite(latestE1RMs[index])
+        ? latestE1RMs[index]
+        : previousCurveE1RM;
+
+      previousCurveE1RM = Math.min(previousCurveE1RM, rawSetE1RM);
+    }
+
+    const rawRatio = Math.min(1, Math.max(0, previousCurveE1RM / latestMaxE1RM));
+
+    return 1 - (1 - rawRatio) * FATIGUE_RATIO_BLEND_TOWARD_FLAT;
+  }
+
+  function getLatestAdjacentFatigueRatio(exercise, setIndex) {
+    const latestSets =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const previousSetE1RM = getHistorySetE1RM(exercise, latestSets[setIndex - 1]);
+    const matchingSetE1RM = getHistorySetE1RM(exercise, latestSets[setIndex]);
+
+    if (
+      !Number.isFinite(previousSetE1RM) ||
+      previousSetE1RM <= 0 ||
+      !Number.isFinite(matchingSetE1RM)
+    ) {
+      return null;
+    }
+
+    return Math.min(1, Math.max(0, matchingSetE1RM / previousSetE1RM));
+  }
+
+  function getSameWeightProgressionCandidate({
+    baselineE1RM,
+    exercise,
+    fatigueCeilingE1RM = null,
+    progressionFloorE1RM = null,
+    prescribedReps,
+    targetRir,
+    weight,
+  }) {
+    const numericWeight = parseSessionNumber(weight);
+    const numericRir = parseSessionNumber(targetRir) || 0;
+
+    if (
+      baselineE1RM == null ||
+      !Number.isFinite(Number(baselineE1RM)) ||
+      numericWeight == null ||
+      prescribedReps == null
+    ) {
+      return null;
+    }
+
+    const minReps = Math.max(1, prescribedReps - SAME_WEIGHT_TARGET_REP_WINDOW);
+    const maxCandidateReps = Math.max(
+      minReps,
+      prescribedReps + SAME_WEIGHT_TARGET_REP_WINDOW
+    );
+    const candidates = [];
+
+    for (let reps = minReps; reps <= maxCandidateReps; reps += 1) {
+      const e1rm = calculateSessionE1RM(
+        exercise,
+        numericWeight,
+        reps,
+        numericRir
+      );
+
+      if (!Number.isFinite(e1rm)) {
+        continue;
+      }
+
+      candidates.push({
+        e1rm,
+        e1rmDeviation: Math.abs(e1rm - baselineE1RM) / baselineE1RM,
+        isProgressionCandidate: e1rm >= baselineE1RM,
+        clearsProgressionFloor:
+          progressionFloorE1RM == null || e1rm >= progressionFloorE1RM,
+        respectsFatigueCeiling:
+          fatigueCeilingE1RM == null || e1rm < fatigueCeilingE1RM,
+        repDeviation: Math.abs(reps - prescribedReps),
+        reps,
+        weight: numericWeight,
+      });
+    }
+
+    const eligibleCandidates = candidates.filter(
+      (candidate) =>
+        candidate.e1rmDeviation <= SAME_WEIGHT_TARGET_E1RM_TOLERANCE
+    );
+    const candidatePool =
+      progressionFloorE1RM != null &&
+      eligibleCandidates.some((candidate) => candidate.clearsProgressionFloor)
+        ? eligibleCandidates.filter((candidate) => candidate.clearsProgressionFloor)
+        : eligibleCandidates;
+    if (
+      fatigueCeilingE1RM != null &&
+      candidatePool.length > 0 &&
+      !candidatePool.some((candidate) => candidate.respectsFatigueCeiling)
+    ) {
+      return null;
+    }
+    const fatigueCandidatePool =
+      fatigueCeilingE1RM != null &&
+      candidatePool.some((candidate) => candidate.respectsFatigueCeiling)
+        ? candidatePool.filter((candidate) => candidate.respectsFatigueCeiling)
+        : candidatePool;
+
+    return (
+      fatigueCandidatePool.sort((a, b) => {
+        const progressionComparison =
+          Number(b.isProgressionCandidate) - Number(a.isProgressionCandidate);
+
+        return (
+          a.e1rmDeviation - b.e1rmDeviation ||
+          progressionComparison ||
+          a.repDeviation - b.repDeviation ||
+          b.reps - a.reps
+        );
+      })[0] || null
+    );
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
@@ -605,7 +856,7 @@ export default function SessionView({
   }
 
   function getSetTargetRir(set, fallback = "") {
-    return firstPresentValue(set?.targetRir, getSetPrescribedRir(set), fallback);
+    return getSetPrescribedRir(set, fallback);
   }
 
   const getHistoryDefaultsForSet = useCallback((sessionExercise, setIndex) => {
@@ -748,9 +999,15 @@ export default function SessionView({
     rir,
     targetPercent,
     weightIncrement,
-    normalizeWeight
+    normalizeWeight,
+    calculationOptions = {}
   ) {
-    const rawWeight = (baseE1RM * targetPercent) / (1 + (reps + rir) / 30);
+    const rawWeight = estimateWeightForE1RM(
+      baseE1RM * targetPercent,
+      reps,
+      rir,
+      calculationOptions
+    );
     const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
     const increment =
       Number(weightIncrement) > 0 ? Number(weightIncrement) : null;
@@ -768,9 +1025,17 @@ export default function SessionView({
           ? normalizeWeight(candidate)
           : candidate
       )
-      .filter((candidate) => candidate > 0)
+      .filter((candidate) => Number.isFinite(candidate) && candidate >= 0)
       .map((candidate) => {
-        const e1rm = calculateE1RM(candidate, reps, rir);
+        const e1rm = calculateE1RM(
+          candidate,
+          reps,
+          rir,
+          null,
+          null,
+          null,
+          calculationOptions
+        );
 
         return {
           e1rm,
@@ -794,10 +1059,16 @@ export default function SessionView({
     minPercent,
     maxPercent,
     weightIncrement,
-    normalizeWeight
+    normalizeWeight,
+    calculationOptions = {}
   ) {
     const midpoint = (minPercent + maxPercent) / 2;
-    const rawWeight = (baseE1RM * midpoint) / (1 + (reps + rir) / 30);
+    const rawWeight = estimateWeightForE1RM(
+      baseE1RM * midpoint,
+      reps,
+      rir,
+      calculationOptions
+    );
     const roundedWeight = roundWeightToIncrement(rawWeight, weightIncrement);
     const increment =
       Number(weightIncrement) > 0 ? Number(weightIncrement) : null;
@@ -815,9 +1086,17 @@ export default function SessionView({
           ? normalizeWeight(candidate)
           : candidate
       )
-      .filter((candidate) => candidate > 0)
+      .filter((candidate) => Number.isFinite(candidate) && candidate >= 0)
       .map((candidate) => {
-        const e1rm = calculateE1RM(candidate, reps, rir);
+        const e1rm = calculateE1RM(
+          candidate,
+          reps,
+          rir,
+          null,
+          null,
+          null,
+          calculationOptions
+        );
         const percent = e1rm / baseE1RM;
         const inRange = percent >= minPercent && percent <= maxPercent;
         const rangeDistance =
@@ -878,6 +1157,10 @@ export default function SessionView({
     const weightIncrement = getExerciseWeightIncrement(calculationExercise);
     const normalizeWarmupWeight = (weight) =>
       getLoadableWeightForExercise(calculationExercise, weight) ?? weight;
+    const warmupCalculationOptions = {
+      bodyWeight: sessionBodyWeight,
+      exercise: calculationExercise,
+    };
 
     if (
       baseWeight == null ||
@@ -911,7 +1194,8 @@ export default function SessionView({
                 0.35,
                 0.4,
                 weightIncrement,
-                normalizeWarmupWeight
+                normalizeWarmupWeight,
+                warmupCalculationOptions
               ),
             },
             {
@@ -923,7 +1207,8 @@ export default function SessionView({
                 targetRir,
                 0.65,
                 weightIncrement,
-                normalizeWarmupWeight
+                normalizeWarmupWeight,
+                warmupCalculationOptions
               ),
             },
           ],
@@ -941,7 +1226,8 @@ export default function SessionView({
                 0.5,
                 0.55,
                 weightIncrement,
-                normalizeWarmupWeight
+                normalizeWarmupWeight,
+                warmupCalculationOptions
               ),
             },
           ],
@@ -1420,7 +1706,7 @@ export default function SessionView({
 
     setPlateCalculatorClosing(false);
     setPlateCalculatorData({
-      equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      equipmentId: getExercisePlateCalculatorEquipmentId(exercise),
       exerciseId: exercise.id,
       exerciseName: exercise.name || "Exercise",
       setId: set.id,
@@ -1433,6 +1719,8 @@ export default function SessionView({
       .filter((warmupSet) => Number.isFinite(Number(warmupSet.target?.weight)))
       .map((warmupSet) => ({
         baseE1RM: warmupRecommendations?.baseE1RM || null,
+        bodyWeight: sessionBodyWeight,
+        exercise: getExerciseForCalculation(exercise),
         reps: warmupSet.reps,
         rir: warmupRecommendations?.targetRir,
         weight: warmupSet.target.weight,
@@ -1450,7 +1738,7 @@ export default function SessionView({
 
     setPlateCalculatorClosing(false);
     setPlateCalculatorData({
-      equipmentId: getPlateCalculatorEquipmentId(exercise.equipment),
+      equipmentId: getExercisePlateCalculatorEquipmentId(exercise),
       exerciseId: exercise.id,
       exerciseName: exercise.name || "Exercise",
       fixedWeights: weights.map((weight) => String(weight)),
@@ -1604,8 +1892,6 @@ export default function SessionView({
   const [replacingExerciseId, setReplacingExerciseId] = useState(null);
 
   const [confirmComplete, setConfirmComplete] = useState(false);
-  const [planCompletionPrompt, setPlanCompletionPrompt] = useState(null);
-
   const [showSupersetEditor, setShowSupersetEditor] = useState(false);
 
   function openExerciseNoteEditor(exercise) {
@@ -2453,25 +2739,104 @@ export default function SessionView({
     const prescribedReps = parseSessionNumber(
       getSetPrescribedReps(nextSet, getSetPrescribedReps(currentSet))
     );
-    const targetRir = firstPresentValue(
-      getSetTargetRir(nextSet),
-      getSetPrescribedRir(nextSet),
-      getSetPrescribedRir(currentSet)
-    );
+    const targetRir = getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet));
     const actualWeight = firstPresentValue(currentSet.actualWeight);
     const actualRir = firstPresentValue(currentSet.actualRir);
+    const currentTargetWeight = firstPresentValue(
+      currentSet.actualWeight,
+      currentSet.targetWeight
+    );
+    const nextSetIndex = exercise.sets.findIndex((set) => set.id === nextSet.id);
+    const latestMatchingSet =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets?.[nextSetIndex];
+    const latestMatchingSetE1RM = getHistorySetE1RM(exercise, latestMatchingSet);
+    const actualE1RM = calculateSessionE1RM(
+      exercise,
+      actualWeight,
+      actualReps,
+      actualRir
+    );
+
+    if (getGoalMode() === "progress" && prescribedReps != null) {
+      const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(
+        exercise,
+        nextSetIndex,
+        {
+          setId: currentSet.id,
+          value: actualE1RM,
+        }
+      );
+      const fatigueRatio = getNormalizedLatestFatigueRatio(exercise, nextSetIndex);
+      const adjacentFatigueRatio =
+        getLatestAdjacentFatigueRatio(exercise, nextSetIndex);
+      const progressTargetE1RM =
+        latestMatchingSetE1RM == null
+          ? null
+          : latestMatchingSetE1RM * (1 + MAIN_TARGET_PROGRESSION_PERCENT);
+      const fatigueTargetE1RM =
+        actualE1RM != null && adjacentFatigueRatio != null
+          ? actualE1RM * adjacentFatigueRatio
+          : todayBestE1RM == null
+            ? null
+            : todayBestE1RM * fatigueRatio;
+      const hasClearPriorFatigueDrop =
+        (adjacentFatigueRatio ?? fatigueRatio) < CLEAR_FATIGUE_DROP_RATIO;
+      const baselineE1RM =
+        progressTargetE1RM != null && fatigueTargetE1RM != null
+          ? hasClearPriorFatigueDrop
+            ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
+            : Math.max(progressTargetE1RM, fatigueTargetE1RM)
+          : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
+      const sameWeightCandidate = getSameWeightProgressionCandidate({
+        baselineE1RM,
+        exercise,
+        fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+        progressionFloorE1RM: hasClearPriorFatigueDrop
+          ? latestMatchingSetE1RM
+          : null,
+        prescribedReps,
+        targetRir,
+        weight: currentTargetWeight,
+      });
+
+      if (sameWeightCandidate) {
+        return {
+          targetReps: String(sameWeightCandidate.reps),
+          targetRir: targetRir || getSetTargetRir(nextSet),
+          targetWeight: String(sameWeightCandidate.weight),
+        };
+      }
+
+      const progressedTarget =
+        baselineE1RM == null
+          ? null
+          : getRecommendationFromE1RM(
+              calculationExercise,
+              baselineE1RM,
+              prescribedReps,
+              targetRir,
+              {
+                allowedRepWindow: 2,
+                progressionPercent: 0,
+                preferredRepWindow: 2,
+              }
+            );
+
+      if (progressedTarget?.weight != null) {
+        return {
+          targetReps: String(progressedTarget.reps ?? prescribedReps),
+          targetRir: targetRir || getSetTargetRir(nextSet),
+          targetWeight: String(progressedTarget.weight),
+        };
+      }
+    }
+
     const shouldReduceWeight =
       actualReps != null &&
       prescribedReps != null &&
       actualReps <= prescribedReps - 2;
 
     if (shouldReduceWeight) {
-      const actualE1RM = calculateSessionE1RM(
-        exercise,
-        actualWeight,
-        actualReps,
-        actualRir
-      );
       const targetRirNumber = parseSessionNumber(targetRir) || 0;
       const rawTargetWeight =
         actualE1RM == null
@@ -2489,7 +2854,7 @@ export default function SessionView({
         rawTargetWeight == null
           ? ""
           : roundWeightToIncrement(
-              rawTargetWeight,
+              Math.max(0, rawTargetWeight),
               getExerciseWeightIncrement(calculationExercise)
             );
 
@@ -2507,7 +2872,7 @@ export default function SessionView({
       targetWeight:
         currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
       targetReps: getSetTargetReps(nextSet, getSetTargetReps(currentSet)),
-      targetRir: getSetTargetRir(nextSet, getSetTargetRir(currentSet)),
+      targetRir: getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet)),
     };
   }
 
@@ -2792,13 +3157,16 @@ export default function SessionView({
     }));
   }
 
-  function recordPlanWorkoutCompletion(completedWorkout) {
+  function getPlanCompletionUpdate(completedWorkout) {
     if (
       !setPlans ||
       !completedWorkout.planId ||
       !completedWorkout.planWorkoutId
     ) {
-      return null;
+      return {
+        completedPlan: null,
+        plans,
+      };
     }
 
     let completedPlan = null;
@@ -2851,134 +3219,10 @@ export default function SessionView({
       return nextPlan;
     });
 
-    setPlans(nextPlans);
-
-    return completedPlan;
-  }
-
-  function getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) {
-    return [...(weeklyPrescriptions || [])]
-      .filter(
-        (week) =>
-          !week.isDeload &&
-          (!durationWeeks || Number(week.weekNumber) <= Number(durationWeeks))
-      )
-      .sort((a, b) => Number(b.weekNumber) - Number(a.weekNumber))[0];
-  }
-
-  function extendWeeklyPrescriptionsOneWeek(weeklyPrescriptions, plan) {
-    if (!Array.isArray(weeklyPrescriptions)) {
-      return weeklyPrescriptions;
-    }
-
-    const durationWeeks = Number(plan.durationWeeks) || 1;
-    const nextDurationWeeks = durationWeeks + 1;
-    const sourceWeek =
-      getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) ||
-      weeklyPrescriptions.find((week) => !week.isDeload) ||
-      {};
-    const nextTrainingWeek = {
-      reps: sourceWeek.reps || "",
-      rir: sourceWeek.rir || "",
-      sets: sourceWeek.sets || "",
-      weekNumber: nextDurationWeeks,
+    return {
+      completedPlan,
+      plans: nextPlans,
     };
-    const trainingWeeks = weeklyPrescriptions.filter(
-      (week) => !week.isDeload && Number(week.weekNumber) !== nextDurationWeeks
-    );
-
-    if (!plan.config?.deload) {
-      return [...trainingWeeks, nextTrainingWeek].sort(
-        (a, b) => Number(a.weekNumber) - Number(b.weekNumber)
-      );
-    }
-
-    const deloadWeek = weeklyPrescriptions.find((week) => week.isDeload);
-
-    return [
-      ...trainingWeeks,
-      nextTrainingWeek,
-      {
-        ...(deloadWeek || {}),
-        isDeload: true,
-        label: "D",
-        reps: nextTrainingWeek.reps || deloadWeek?.reps || "",
-        rir: deloadWeek?.rir || "5",
-        sets: deloadWeek?.sets || "2",
-        weekNumber: nextDurationWeeks + 1,
-      },
-    ].sort((a, b) => Number(a.weekNumber) - Number(b.weekNumber));
-  }
-
-  function extendCompletedPlanOneWeek(planId) {
-    const planToExtend = plans.find((plan) => plan.id === planId);
-
-    if (!planToExtend) {
-      return;
-    }
-
-    const durationWeeks = Number(planToExtend.durationWeeks) || 1;
-    const nextDurationWeeks = durationWeeks + 1;
-    const templateIds = new Set(
-      (planToExtend.workouts || []).map((workout) => String(workout.templateId))
-    );
-
-    setTemplates(
-      templates.map((template) =>
-        templateIds.has(String(template.id))
-          ? {
-              ...template,
-              exercises: (template.exercises || []).map((exercise) => ({
-                ...exercise,
-                weeklyPrescriptions: extendWeeklyPrescriptionsOneWeek(
-                  exercise.weeklyPrescriptions,
-                  planToExtend
-                ),
-              })),
-            }
-          : template
-      )
-    );
-
-    setPlans(
-      plans.map((plan) =>
-        plan.id === planId
-          ? {
-              ...plan,
-              completions: plan.config?.deload
-                ? (plan.completions || []).filter(
-                    (completion) =>
-                      Number(completion.weekNumber) <= durationWeeks
-                  )
-                : plan.completions || [],
-              currentWeek: nextDurationWeeks,
-              durationWeeks: nextDurationWeeks,
-              status: "active",
-            }
-          : {
-              ...plan,
-              status: plan.status === "active" ? "inactive" : plan.status,
-            }
-      )
-    );
-  }
-
-  function repeatCompletedPlan(planId) {
-    setPlans(
-      plans.map((plan) =>
-        plan.id === planId
-          ? {
-              ...plan,
-              completions: [],
-              currentWeek: 1,
-              status: "active",
-            }
-          : {
-              ...plan,
-              status: plan.status === "active" ? "inactive" : plan.status,
-            }
-      )
-    );
   }
 
   function finishCompletedWorkout(completedWorkout) {
@@ -3902,11 +4146,9 @@ export default function SessionView({
 
     completedWorkout = stripSessionOnlySetValuesForHistory(completedWorkout);
 
-    setExerciseMetadata(metadataUpdates);
-
-    setHistory([completedWorkout, ...history]);
-
-    const completedPlan = recordPlanWorkoutCompletion(completedWorkout);
+    const nextHistory = [completedWorkout, ...history];
+    const planCompletionUpdate = getPlanCompletionUpdate(completedWorkout);
+    const completedPlan = planCompletionUpdate.completedPlan;
 
     nextTemplates = nextTemplates.map((t) =>
       t.id === session.templateId
@@ -3926,17 +4168,33 @@ export default function SessionView({
         : t
     );
 
+    setExerciseMetadata(metadataUpdates);
+
+    setHistory(nextHistory);
+
+    setPlans(planCompletionUpdate.plans);
+
     setTemplates(nextTemplates);
 
     setConfirmComplete(false);
 
+    const committedWorkoutData = {
+      exerciseMetadata: metadataUpdates,
+      history: nextHistory,
+      plans: planCompletionUpdate.plans,
+      selectedSessionId: null,
+      sessions: sessions.filter((s) => s.id !== session.id),
+      templates: nextTemplates,
+    };
+
+    onWorkoutDataCommitted?.(committedWorkoutData);
+
     if (completedPlan) {
-      setPlanCompletionPrompt({
+      onPlanCompletionNeeded?.({
         completedWorkout,
         planId: completedPlan.id,
         planName: completedPlan.name,
       });
-      return;
     }
 
     finishCompletedWorkout(completedWorkout);
@@ -6751,115 +7009,6 @@ export default function SessionView({
 	                    }}
 	                  >
                     Yes
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {planCompletionPrompt && (
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Plan completed"
-              style={{
-                alignItems: "center",
-                background: "rgba(0,0,0,.45)",
-                display: "flex",
-                height: "100%",
-                justifyContent: "center",
-                left: 0,
-                position: "fixed",
-                top: 0,
-                width: "100%",
-                zIndex: 9999,
-              }}
-            >
-              <div
-                style={{
-                  background: "var(--surface-raised)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "12px",
-                  boxShadow: "0 0 20px rgba(0,0,0,.35)",
-                  display: "grid",
-                  gap: "12px",
-                  maxWidth: "340px",
-                  padding: "20px",
-                  width: "calc(100% - 32px)",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "grid",
-                    gap: "8px",
-                    justifyItems: "center",
-                    textAlign: "center",
-                  }}
-                >
-                  <Trophy size={30} />
-                  <div
-                    style={{
-                      color: "var(--text-h)",
-                      fontSize: "20px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Plan completed
-                  </div>
-                  {planCompletionPrompt.planName && (
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "13px",
-                      }}
-                    >
-                      {planCompletionPrompt.planName}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "8px",
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      const completedWorkout =
-                        planCompletionPrompt.completedWorkout;
-
-                      setPlanCompletionPrompt(null);
-                      finishCompletedWorkout(completedWorkout);
-                    }}
-                    type="button"
-                  >
-                    Complete plan
-                  </button>
-                  <button
-                    onClick={() => {
-                      const { completedWorkout, planId } = planCompletionPrompt;
-
-                      extendCompletedPlanOneWeek(planId);
-                      setPlanCompletionPrompt(null);
-                      finishCompletedWorkout(completedWorkout);
-                    }}
-                    type="button"
-                  >
-                    Extend plan one week
-                  </button>
-                  <button
-                    onClick={() => {
-                      const { completedWorkout, planId } = planCompletionPrompt;
-
-                      repeatCompletedPlan(planId);
-                      setPlanCompletionPrompt(null);
-                      finishCompletedWorkout(completedWorkout);
-                    }}
-                    type="button"
-                  >
-                    Repeat plan
                   </button>
                 </div>
               </div>

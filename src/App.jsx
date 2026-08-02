@@ -1495,6 +1495,7 @@ export default function App() {
   const [selectedHistory, setSelectedHistory] = useState(null);
 
   const [selectedHistoryList, setSelectedHistoryList] = useState(null);
+  const [planCompletionPrompt, setPlanCompletionPrompt] = useState(null);
   const [confirmDeleteHistory, setConfirmDeleteHistory] = useState(null);
 
   const [showExercises, setShowExercises] = useState(false);
@@ -2071,6 +2072,170 @@ export default function App() {
     if (indexedDbReady) {
       await saveWorkoutDataToIndexedDb(data, STORAGE_VERSION);
     }
+  }
+
+  function commitCompletedWorkoutData(updates) {
+    const data = {
+      ...(currentWorkoutDataRef.current || getCurrentWorkoutData()),
+      ...updates,
+      ownerUserId: localOwnerUserId,
+    };
+
+    currentWorkoutDataRef.current = data;
+    localDataRevisionRef.current += 1;
+    markNormalizedSyncDirty(["history", "plans", "workouts"]);
+    saveLocalWorkoutDataImmediately(data).catch((error) => {
+      console.error("Failed to save completed workout immediately:", error);
+    });
+  }
+
+  function getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) {
+    return [...(weeklyPrescriptions || [])]
+      .filter(
+        (week) =>
+          !week.isDeload &&
+          (!durationWeeks || Number(week.weekNumber) <= Number(durationWeeks))
+      )
+      .sort((a, b) => Number(b.weekNumber) - Number(a.weekNumber))[0];
+  }
+
+  function extendWeeklyPrescriptionsOneWeek(weeklyPrescriptions, plan) {
+    if (!Array.isArray(weeklyPrescriptions)) {
+      return weeklyPrescriptions;
+    }
+
+    const durationWeeks = Number(plan.durationWeeks) || 1;
+    const nextDurationWeeks = durationWeeks + 1;
+    const sourceWeek =
+      getLastTrainingPrescription(weeklyPrescriptions, durationWeeks) ||
+      weeklyPrescriptions.find((week) => !week.isDeload) ||
+      {};
+    const nextTrainingWeek = {
+      reps: sourceWeek.reps || "",
+      rir: sourceWeek.rir || "",
+      sets: sourceWeek.sets || "",
+      weekNumber: nextDurationWeeks,
+    };
+    const trainingWeeks = weeklyPrescriptions.filter(
+      (week) => !week.isDeload && Number(week.weekNumber) !== nextDurationWeeks
+    );
+
+    if (!plan.config?.deload) {
+      return [...trainingWeeks, nextTrainingWeek].sort(
+        (a, b) => Number(a.weekNumber) - Number(b.weekNumber)
+      );
+    }
+
+    const deloadWeek = weeklyPrescriptions.find((week) => week.isDeload);
+
+    return [
+      ...trainingWeeks,
+      nextTrainingWeek,
+      {
+        ...(deloadWeek || {}),
+        isDeload: true,
+        label: "D",
+        reps: nextTrainingWeek.reps || deloadWeek?.reps || "",
+        rir: deloadWeek?.rir || "5",
+        sets: deloadWeek?.sets || "2",
+        weekNumber: nextDurationWeeks + 1,
+      },
+    ].sort((a, b) => Number(a.weekNumber) - Number(b.weekNumber));
+  }
+
+  function completePlanCompletionPrompt() {
+    setPlanCompletionPrompt(null);
+  }
+
+  function extendPromptPlanOneWeek() {
+    const prompt = planCompletionPrompt;
+
+    if (!prompt) {
+      return;
+    }
+
+    const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+    const planToExtend = data.plans.find((plan) => plan.id === prompt.planId);
+
+    if (!planToExtend) {
+      setPlanCompletionPrompt(null);
+      return;
+    }
+
+    const durationWeeks = Number(planToExtend.durationWeeks) || 1;
+    const nextDurationWeeks = durationWeeks + 1;
+    const templateIds = new Set(
+      (planToExtend.workouts || []).map((workout) => String(workout.templateId))
+    );
+    const nextTemplates = data.templates.map((template) =>
+      templateIds.has(String(template.id))
+        ? {
+            ...template,
+            exercises: (template.exercises || []).map((exercise) => ({
+              ...exercise,
+              weeklyPrescriptions: extendWeeklyPrescriptionsOneWeek(
+                exercise.weeklyPrescriptions,
+                planToExtend
+              ),
+            })),
+          }
+        : template
+    );
+    const nextPlans = data.plans.map((plan) =>
+      plan.id === prompt.planId
+        ? {
+            ...plan,
+            completions: plan.config?.deload
+              ? (plan.completions || []).filter(
+                  (completion) => Number(completion.weekNumber) <= durationWeeks
+                )
+              : plan.completions || [],
+            currentWeek: nextDurationWeeks,
+            durationWeeks: nextDurationWeeks,
+            status: "active",
+          }
+        : {
+            ...plan,
+            status: plan.status === "active" ? "inactive" : plan.status,
+          }
+    );
+
+    setTemplates(nextTemplates);
+    setPlans(nextPlans);
+    commitCompletedWorkoutData({
+      plans: nextPlans,
+      templates: nextTemplates,
+    });
+    setPlanCompletionPrompt(null);
+  }
+
+  function repeatPromptPlan() {
+    const prompt = planCompletionPrompt;
+
+    if (!prompt) {
+      return;
+    }
+
+    const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+    const nextPlans = data.plans.map((plan) =>
+      plan.id === prompt.planId
+        ? {
+            ...plan,
+            completions: [],
+            currentWeek: 1,
+            status: "active",
+          }
+        : {
+            ...plan,
+            status: plan.status === "active" ? "inactive" : plan.status,
+          }
+    );
+
+    setPlans(nextPlans);
+    commitCompletedWorkoutData({
+      plans: nextPlans,
+    });
+    setPlanCompletionPrompt(null);
   }
 
   async function importBenchHistoryTestData() {
@@ -4304,7 +4469,96 @@ export default function App() {
         }}
       >
         {content}
+        {renderPlanCompletionPrompt()}
         {renderBottomNav(activeView)}
+      </div>
+    );
+  }
+
+  function renderPlanCompletionPrompt() {
+    if (!planCompletionPrompt) {
+      return null;
+    }
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Plan completed"
+        style={{
+          alignItems: "center",
+          background: "rgba(0,0,0,.45)",
+          display: "flex",
+          height: "100%",
+          justifyContent: "center",
+          left: 0,
+          position: "fixed",
+          top: 0,
+          width: "100%",
+          zIndex: 9999,
+        }}
+      >
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "12px",
+            boxShadow: "0 0 20px rgba(0,0,0,.35)",
+            display: "grid",
+            gap: "12px",
+            maxWidth: "340px",
+            padding: "20px",
+            width: "calc(100% - 32px)",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "grid",
+              gap: "8px",
+              justifyItems: "center",
+              textAlign: "center",
+            }}
+          >
+            <Trophy size={30} />
+            <div
+              style={{
+                color: "var(--text-h)",
+                fontSize: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              Plan completed
+            </div>
+            {planCompletionPrompt.planName && (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "13px",
+                }}
+              >
+                {planCompletionPrompt.planName}
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            <button onClick={completePlanCompletionPrompt} type="button">
+              Complete plan
+            </button>
+            <button onClick={extendPromptPlanOneWeek} type="button">
+              Extend plan one week
+            </button>
+            <button onClick={repeatPromptPlan} type="button">
+              Repeat plan
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -6573,6 +6827,8 @@ export default function App() {
           setSelectedHistory(completedWorkout);
           setSelectedHistoryList(null);
         }}
+        onWorkoutDataCommitted={commitCompletedWorkoutData}
+        onPlanCompletionNeeded={setPlanCompletionPrompt}
       />
     );
   }
