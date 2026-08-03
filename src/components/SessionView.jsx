@@ -71,6 +71,7 @@ const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
 const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
+const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
 
 function getSessionSet(session, activeSet) {
   if (!activeSet?.exerciseId || !activeSet?.setId) {
@@ -722,25 +723,24 @@ export default function SessionView({
     return Math.min(1, Math.max(0, matchingSetE1RM / previousSetE1RM));
   }
 
-  function getSameWeightProgressionCandidate({
+  function getRankedProgressionCandidates({
     baselineE1RM,
+    currentWeight,
     exercise,
     fatigueCeilingE1RM = null,
     progressionFloorE1RM = null,
     prescribedReps,
     targetRir,
-    weight,
   }) {
-    const numericWeight = parseSessionNumber(weight);
+    const numericCurrentWeight = parseSessionNumber(currentWeight);
     const numericRir = parseSessionNumber(targetRir) || 0;
 
     if (
       baselineE1RM == null ||
       !Number.isFinite(Number(baselineE1RM)) ||
-      numericWeight == null ||
       prescribedReps == null
     ) {
-      return null;
+      return [];
     }
 
     const minReps = Math.max(1, prescribedReps - SAME_WEIGHT_TARGET_REP_WINDOW);
@@ -748,43 +748,93 @@ export default function SessionView({
       minReps,
       prescribedReps + SAME_WEIGHT_TARGET_REP_WINDOW
     );
+    const calculationExercise = getExerciseForCalculation(exercise);
     const candidates = [];
+    const seenKeys = new Set();
 
-    for (let reps = minReps; reps <= maxCandidateReps; reps += 1) {
+    function addCandidate(weight, reps) {
+      const numericWeight = parseSessionNumber(weight);
+
+      if (numericWeight == null || reps == null) {
+        return;
+      }
+
+      const normalizedWeight =
+        getLoadableWeightForExercise(calculationExercise, numericWeight) ??
+        numericWeight;
+      const key = `${normalizedWeight}|${reps}|${numericRir}`;
+
+      if (seenKeys.has(key)) {
+        return;
+      }
+
       const e1rm = calculateSessionE1RM(
-        exercise,
-        numericWeight,
+        calculationExercise,
+        normalizedWeight,
         reps,
         numericRir
       );
 
       if (!Number.isFinite(e1rm)) {
-        continue;
+        return;
       }
 
+      seenKeys.add(key);
       candidates.push({
+        clearsProgressionFloor:
+          progressionFloorE1RM == null || e1rm >= progressionFloorE1RM,
         e1rm,
         e1rmDeviation: Math.abs(e1rm - baselineE1RM) / baselineE1RM,
         isProgressionCandidate: e1rm >= baselineE1RM,
-        clearsProgressionFloor:
-          progressionFloorE1RM == null || e1rm >= progressionFloorE1RM,
-        respectsFatigueCeiling:
-          fatigueCeilingE1RM == null || e1rm < fatigueCeilingE1RM,
+        isSameWeight:
+          numericCurrentWeight != null &&
+          Math.abs(normalizedWeight - numericCurrentWeight) < 0.001,
         repDeviation: Math.abs(reps - prescribedReps),
         reps,
-        weight: numericWeight,
+        rir: numericRir,
+        respectsFatigueCeiling:
+          fatigueCeilingE1RM == null || e1rm < fatigueCeilingE1RM,
+        weight: normalizedWeight,
       });
     }
 
-    const eligibleCandidates = candidates.filter(
-      (candidate) =>
-        candidate.e1rmDeviation <= SAME_WEIGHT_TARGET_E1RM_TOLERANCE
-    );
-    const candidatePool =
+    for (let reps = minReps; reps <= maxCandidateReps; reps += 1) {
+      addCandidate(numericCurrentWeight, reps);
+
+      const rawWeight = estimateWeightForE1RM(baselineE1RM, reps, numericRir, {
+        bodyWeight: sessionBodyWeight,
+        exercise: calculationExercise,
+      });
+      const increment = getExerciseWeightIncrement(
+        calculationExercise,
+        undefined,
+        rawWeight
+      );
+      const roundedWeight = roundWeightToIncrement(
+        Math.max(0, rawWeight ?? 0),
+        increment
+      );
+
+      [roundedWeight - increment, roundedWeight, roundedWeight + increment]
+        .filter((weight) => Number.isFinite(weight) && weight >= 0)
+        .forEach((weight) => addCandidate(weight, reps));
+    }
+
+    const eligibleCandidates = candidates.length
+      ? candidates
+      : [];
+    const progressionCandidates =
       progressionFloorE1RM != null &&
       eligibleCandidates.some((candidate) => candidate.clearsProgressionFloor)
         ? eligibleCandidates.filter((candidate) => candidate.clearsProgressionFloor)
         : eligibleCandidates;
+    const closeProgressionCandidates = progressionCandidates.filter(
+      (candidate) =>
+        candidate.e1rmDeviation <= SAME_WEIGHT_TARGET_E1RM_TOLERANCE
+    );
+    const candidatePool = closeProgressionCandidates.length
+      ? closeProgressionCandidates
+      : progressionCandidates;
     if (
       fatigueCeilingE1RM != null &&
       candidatePool.length > 0 &&
@@ -798,19 +848,24 @@ export default function SessionView({
         ? candidatePool.filter((candidate) => candidate.respectsFatigueCeiling)
         : candidatePool;
 
-    return (
-      fatigueCandidatePool.sort((a, b) => {
+    return fatigueCandidatePool
+      .sort((a, b) => {
         const progressionComparison =
           Number(b.isProgressionCandidate) - Number(a.isProgressionCandidate);
+        const candidateScore = (candidate) =>
+          candidate.e1rmDeviation +
+          (candidate.isSameWeight ? 0 : WEIGHT_CHANGE_TARGET_SCORE_PENALTY) +
+          candidate.repDeviation * 0.002;
 
         return (
-          a.e1rmDeviation - b.e1rmDeviation ||
+          candidateScore(a) - candidateScore(b) ||
           progressionComparison ||
+          Number(b.isSameWeight) - Number(a.isSameWeight) ||
           a.repDeviation - b.repDeviation ||
           b.reps - a.reps
         );
-      })[0] || null
-    );
+      })
+      .slice(0, 8);
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
@@ -924,6 +979,76 @@ export default function SessionView({
     );
   }
 
+  function getRankedProgressionAlternativesForSet(exercise, set, setIndex) {
+    const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
+
+    if (getGoalMode() !== "progress" || !previousSet) {
+      return [];
+    }
+
+    const prescribedReps = parseSessionNumber(
+      getSetPrescribedReps(set, getSetPrescribedReps(previousSet))
+    );
+
+    if (prescribedReps == null) {
+      return [];
+    }
+
+    const targetRir = getSetPrescribedRir(set, getSetPrescribedRir(previousSet));
+    const actualWeight = firstPresentValue(previousSet.actualWeight);
+    const actualReps = parseSessionNumber(previousSet.actualReps);
+    const actualRir = firstPresentValue(previousSet.actualRir);
+    const actualE1RM = calculateSessionE1RM(
+      exercise,
+      actualWeight,
+      actualReps,
+      actualRir
+    );
+    const currentTargetWeight = firstPresentValue(
+      previousSet.actualWeight,
+      previousSet.targetWeight
+    );
+    const latestMatchingSet =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets?.[setIndex];
+    const latestMatchingSetE1RM = getHistorySetE1RM(exercise, latestMatchingSet);
+    const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, {
+      setId: previousSet.id,
+      value: actualE1RM,
+    });
+    const fatigueRatio = getNormalizedLatestFatigueRatio(exercise, setIndex);
+    const adjacentFatigueRatio = getLatestAdjacentFatigueRatio(exercise, setIndex);
+    const progressTargetE1RM =
+      latestMatchingSetE1RM == null
+        ? null
+        : latestMatchingSetE1RM * (1 + MAIN_TARGET_PROGRESSION_PERCENT);
+    const fatigueTargetE1RM =
+      actualE1RM != null && adjacentFatigueRatio != null
+        ? actualE1RM * adjacentFatigueRatio
+        : todayBestE1RM == null
+          ? null
+          : todayBestE1RM * fatigueRatio;
+    const hasClearPriorFatigueDrop =
+      (adjacentFatigueRatio ?? fatigueRatio) < CLEAR_FATIGUE_DROP_RATIO;
+    const baselineE1RM =
+      progressTargetE1RM != null && fatigueTargetE1RM != null
+        ? hasClearPriorFatigueDrop
+          ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
+          : Math.max(progressTargetE1RM, fatigueTargetE1RM)
+        : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
+
+    return getRankedProgressionCandidates({
+      baselineE1RM,
+      currentWeight: currentTargetWeight,
+      exercise,
+      fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+      progressionFloorE1RM: hasClearPriorFatigueDrop
+        ? latestMatchingSetE1RM
+        : null,
+      prescribedReps,
+      targetRir,
+    });
+  }
+
   function getActualTargetMatchStatus(exercise, set, setIndex) {
     if (!hasCompleteTargetPrescription(set)) {
       return "match";
@@ -947,9 +1072,13 @@ export default function SessionView({
       return "match";
     }
 
+    const rankedProgressionAlternatives =
+      getRankedProgressionAlternativesForSet(exercise, set, setIndex);
     const alternatives =
-      getTargetRecommendation(exercise, set, setIndex).result?.alternatives ||
-      [];
+      rankedProgressionAlternatives.length > 0
+        ? rankedProgressionAlternatives
+        : getTargetRecommendation(exercise, set, setIndex).result?.alternatives ||
+          [];
     const matchesAlternative = alternatives.some((option) =>
       actualsMatchPrescription(set, option)
     );
@@ -1673,7 +1802,13 @@ export default function SessionView({
       rir: getSetTargetRir(set),
       weight: set.targetWeight,
     };
-    const alternatives = recommendation.result?.alternatives || [];
+    let alternatives = recommendation.result?.alternatives || [];
+    const rankedProgressionAlternatives =
+      getRankedProgressionAlternativesForSet(exercise, set, setIndex);
+
+    if (rankedProgressionAlternatives.length > 0) {
+      alternatives = rankedProgressionAlternatives;
+    }
 
     window.getSelection?.()?.removeAllRanges();
 
@@ -2787,8 +2922,9 @@ export default function SessionView({
             ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
             : Math.max(progressTargetE1RM, fatigueTargetE1RM)
           : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
-      const sameWeightCandidate = getSameWeightProgressionCandidate({
+      const rankedProgressionCandidates = getRankedProgressionCandidates({
         baselineE1RM,
+        currentWeight: currentTargetWeight,
         exercise,
         fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
         progressionFloorE1RM: hasClearPriorFatigueDrop
@@ -2796,14 +2932,14 @@ export default function SessionView({
           : null,
         prescribedReps,
         targetRir,
-        weight: currentTargetWeight,
       });
+      const nextProgressionCandidate = rankedProgressionCandidates[0] || null;
 
-      if (sameWeightCandidate) {
+      if (nextProgressionCandidate) {
         return {
-          targetReps: String(sameWeightCandidate.reps),
+          targetReps: String(nextProgressionCandidate.reps),
           targetRir: targetRir || getSetTargetRir(nextSet),
-          targetWeight: String(sameWeightCandidate.weight),
+          targetWeight: String(nextProgressionCandidate.weight),
         };
       }
 
