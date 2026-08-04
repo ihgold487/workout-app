@@ -92,7 +92,7 @@ const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
 
 const STARTUP_SPLASH_MINIMUM_MS = 1000;
-const AUTO_SYNC_RESUME_INTERVAL = 5 * 60 * 1000;
+const AUTO_SYNC_RESUME_INTERVAL = 60 * 60 * 1000;
 const AUTO_SYNC_CHECKPOINT_DELAY_MS = 350;
 const AUTO_SYNC_SUPPRESS_MS = 4000;
 const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
@@ -2712,6 +2712,31 @@ export default function App() {
 
       if (shouldUpload) {
         await uploadNormalizedWorkoutData(data, session, uploadDomains);
+      }
+
+      const shouldDownload =
+        shouldHydrateFirst || reason === "manual" || reason === "resume";
+
+      if (!shouldDownload) {
+        if (
+          localDataRevisionRef.current !== syncStartRevision ||
+          plateInventoryRevisionRef.current !== plateInventoryStartRevision
+        ) {
+          automaticSyncQueuedRef.current = true;
+          setSyncStatus(
+            "Sync finished, but newer local changes were detected. They will sync at the next checkpoint."
+          );
+          return;
+        }
+
+        markNormalizedSyncClean();
+        automaticSyncHydratedUserRef.current = session.user.id;
+        setSyncStatus(
+          `${shouldUpload ? "Uploaded" : "Checked"} cloud sync state. ${
+            shouldUpload ? `Pushed: ${uploadDomains.join(", ")}. ` : ""
+          }Full cloud pull skipped to reduce Supabase egress. Last auto sync: ${new Date().toLocaleTimeString()}.`
+        );
+        return;
       }
 
       const downloaded = await downloadNormalizedWorkoutData(
