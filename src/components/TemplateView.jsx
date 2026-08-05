@@ -784,6 +784,7 @@ export default function TemplateView({
       history,
       plan: linkedPlan,
       planWorkoutId: template.planWorkoutId,
+      templateId: template.id,
       templates,
     })?.exercise;
   }

@@ -273,6 +273,7 @@ function calculateExerciseSummary(exercise, exerciseContext, bodyWeight) {
         ? validVolumes.reduce((sum, value) => sum + value, 0)
         : null,
     volumeMax: validVolumes.length > 0 ? Math.max(...validVolumes) : null,
+    volumeAverage: average(validVolumes),
     weightAverage: average(validWeights),
     weightMax: validWeights.length > 0 ? Math.max(...validWeights) : null,
   };
@@ -802,6 +803,7 @@ export function CompletedWorkoutSheet({
         const metrics = [
           ["volume", "Volume", "Total weight x reps across all sets", 0],
           ["volumeMax", "Volume Max", "Highest weight x reps for one set", 0],
+          ["volumeAverage", "Volume Average", "Average weight x reps per set", 0],
           ["e1rmMax", "1 Rep Max", "Best estimated 1RM set", 1],
           ["e1rmAverage", "1 Rep Max Average", "Average estimated 1RM", 1],
           ["weightMax", "Weight Max", "Highest set weight", 1],

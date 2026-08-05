@@ -435,7 +435,9 @@ export default function SessionView({
       exercise: sessionExercise,
       history,
       plan: getLinkedPlan(),
+      planWeek: session.planWeek,
       planWorkoutId: session.planWorkoutId,
+      templateId: session.templateId,
       templates,
     });
   }, [
@@ -443,14 +445,20 @@ export default function SessionView({
     plans,
     session.id,
     session.planId,
+    session.planWeek,
     session.planWorkoutId,
+    session.templateId,
     templates,
   ]);
 
-  function getLatestWorkoutPerformance(exerciseId) {
-    const sessionExercise = session.exercises.find(
-      (exercise) => exercise.exerciseId === exerciseId || exercise.id === exerciseId
-    );
+  function getLatestWorkoutPerformance(exerciseOrId) {
+    const sessionExercise =
+      exerciseOrId && typeof exerciseOrId === "object"
+        ? exerciseOrId
+        : session.exercises.find(
+            (exercise) =>
+              exercise.exerciseId === exerciseOrId || exercise.id === exerciseOrId
+          );
 
     if (!sessionExercise) {
       return null;
@@ -840,7 +848,7 @@ export default function SessionView({
       candidatePool.length > 0 &&
       !candidatePool.some((candidate) => candidate.respectsFatigueCeiling)
     ) {
-      return null;
+      return [];
     }
     const fatigueCandidatePool =
       fatigueCeilingE1RM != null &&
@@ -1069,11 +1077,11 @@ export default function SessionView({
     };
 
     if (actualsMatchPrescription(set, targetPrescription)) {
-      return "match";
+      return "suggested";
     }
 
     const rankedProgressionAlternatives =
-      getRankedProgressionAlternativesForSet(exercise, set, setIndex);
+      getRankedProgressionAlternativesForSet(exercise, set, setIndex) || [];
     const alternatives =
       rankedProgressionAlternatives.length > 0
         ? rankedProgressionAlternatives
@@ -1114,6 +1122,18 @@ export default function SessionView({
     return Number.isInteger(displayValue)
       ? String(displayValue)
       : displayValue.toFixed(1).replace(/\.0$/, "");
+  }
+
+  function formatSessionE1RMDisplay(value) {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+      return "—";
+    }
+
+    return weightUnit === "kg"
+      ? lbsToKg(numericValue.toFixed(1))
+      : numericValue.toFixed(1);
   }
 
   function formatWarmupPercent(value) {
@@ -1804,7 +1824,7 @@ export default function SessionView({
     };
     let alternatives = recommendation.result?.alternatives || [];
     const rankedProgressionAlternatives =
-      getRankedProgressionAlternativesForSet(exercise, set, setIndex);
+      getRankedProgressionAlternativesForSet(exercise, set, setIndex) || [];
 
     if (rankedProgressionAlternatives.length > 0) {
       alternatives = rankedProgressionAlternatives;
@@ -2932,7 +2952,7 @@ export default function SessionView({
           : null,
         prescribedReps,
         targetRir,
-      });
+      }) || [];
       const nextProgressionCandidate = rankedProgressionCandidates[0] || null;
 
       if (nextProgressionCandidate) {
@@ -3651,9 +3671,7 @@ export default function SessionView({
   }
 
   function renderLatestSetHistory(exercise) {
-    const latestPerformance = getLatestWorkoutPerformance(
-      exercise.exerciseId || exercise.id
-    );
+    const latestPerformance = getLatestWorkoutPerformance(exercise);
 
     return (
       <div
@@ -3834,11 +3852,7 @@ export default function SessionView({
                       width: "42px",
                     }}
                   >
-                    {e1rm == null
-                      ? "—"
-                      : weightUnit === "kg"
-                      ? lbsToKg(e1rm.toFixed(1))
-                      : e1rm.toFixed(1)}
+                    {formatSessionE1RMDisplay(e1rm)}
                   </span>
                 </div>
               );
@@ -4347,10 +4361,14 @@ export default function SessionView({
   return (
     <div
       style={{
+        background: session.workoutTimerPaused
+          ? "linear-gradient(rgba(0,0,0,.16), rgba(0,0,0,.16)), var(--bg)"
+          : "var(--bg)",
         height: "100vh",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        transition: "background 180ms ease",
       }}
     >
       <style>
@@ -4847,22 +4865,45 @@ export default function SessionView({
               aria-label={`Open workout controls: ${session.templateName}`}
               onClick={openSessionActions}
               style={{
-                background: "transparent",
-                border: "none",
-                color: "var(--text-h)",
-                display: "block",
+                alignItems: "center",
+                background: session.workoutTimerPaused
+                  ? "var(--text-h)"
+                  : "transparent",
+                border: session.workoutTimerPaused
+                  ? "1px solid var(--text-h)"
+                  : "none",
+                borderRadius: session.workoutTimerPaused ? "999px" : 0,
+                color: session.workoutTimerPaused
+                  ? "var(--surface-raised)"
+                  : "var(--text-h)",
+                display: "inline-flex",
                 fontSize: "20px",
-                fontWeight: "bold",
+                fontWeight: session.workoutTimerPaused ? 900 : "bold",
+                gap: "6px",
+                justifyContent: "center",
                 lineHeight: 1.15,
                 minWidth: 0,
                 overflow: "hidden",
-                padding: 0,
+                padding: session.workoutTimerPaused ? "5px 10px" : 0,
                 textAlign: "center",
                 textOverflow: "ellipsis",
+                transition:
+                  "background 160ms ease, border-color 160ms ease, color 160ms ease",
                 whiteSpace: "nowrap",
               }}
             >
-              {session.templateName}
+              {session.workoutTimerPaused && (
+                <Pause aria-hidden="true" size={16} />
+              )}
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {session.templateName}
+              </span>
             </button>
             <button
               aria-label={`Open workout controls: ${session.templateName}`}
@@ -5588,21 +5629,23 @@ export default function SessionView({
                           const targetMatchStatus = isActive
                             ? getActualTargetMatchStatus(exercise, set, setIndex)
                             : "match";
-                          const showTargetMismatch =
+                          const showTargetStatus =
                             targetMatchStatus !== "match";
-                          const targetMismatchStyle =
-                            targetMatchStatus === "alternative"
+                          const targetStatusStyle =
+                            targetMatchStatus === "suggested"
                               ? {
-                                  background: "#facc15",
-                                  border: "#ca8a04",
-                                  color: "#3f2f00",
+                                  iconColor: "#16a34a",
+                                  label:
+                                    "Actual values match the first suggested target",
+                                }
+                              : targetMatchStatus === "alternative"
+                              ? {
+                                  iconColor: "#ca8a04",
                                   label:
                                     "Actual values match an alternate target",
                                 }
                               : {
-                                  background: "#ef4444",
-                                  border: "#b91c1c",
-                                  color: "#fff",
+                                  iconColor: "#ef4444",
                                   label:
                                     "Actual values do not match target options",
                                 };
@@ -5776,27 +5819,26 @@ export default function SessionView({
                                 >
                                   <span>
                                     (
-                                    {calculateSessionE1RM(
-                                      exercise,
-                                      "",
-                                      "",
-                                      "",
-                                      set.targetWeight,
-                                      getSetTargetReps(set),
-                                      getSetTargetRir(set)
-                                    )?.toFixed(1)}
+                                    {formatSessionE1RMDisplay(
+                                      calculateSessionE1RM(
+                                        exercise,
+                                        "",
+                                        "",
+                                        "",
+                                        set.targetWeight,
+                                        getSetTargetReps(set),
+                                        getSetTargetRir(set)
+                                      )
+                                    )}
                                     )
                                   </span>
-                                  {showTargetMismatch && (
+                                  {showTargetStatus && (
                                     <span
-                                      aria-label={targetMismatchStyle.label}
-                                      title={targetMismatchStyle.label}
+                                      aria-label={targetStatusStyle.label}
+                                      title={targetStatusStyle.label}
                                       style={{
                                         alignItems: "center",
-                                        color:
-                                          targetMatchStatus === "alternative"
-                                            ? "#ca8a04"
-                                            : "#ef4444",
+                                        color: targetStatusStyle.iconColor,
                                         display: "inline-flex",
                                         justifyContent: "center",
                                       }}
@@ -5926,11 +5968,7 @@ export default function SessionView({
                                     color: "var(--text-muted)",
                                   }}
                                 >
-                                  {actualE1RM == null
-                                    ? "—"
-                                    : weightUnit === "kg"
-                                    ? lbsToKg(actualE1RM.toFixed(1))
-                                    : actualE1RM.toFixed(1)}
+                                  {formatSessionE1RMDisplay(actualE1RM)}
                                 </span>
                               </span>
 
@@ -7288,7 +7326,10 @@ export default function SessionView({
                             marginLeft: "8px",
                           }}
                         >
-                          e1RM {targetAlternativesData.current.e1rm.toFixed(1)}
+                          e1RM{" "}
+                          {formatSessionE1RMDisplay(
+                            targetAlternativesData.current.e1rm
+                          )}
                         </span>
                       )}
                     </div>
@@ -7346,7 +7387,9 @@ export default function SessionView({
                           }}
                         >
                           e1RM{" "}
-                          {targetAlternativesData.suggested.e1rm.toFixed(1)}
+                          {formatSessionE1RMDisplay(
+                            targetAlternativesData.suggested.e1rm
+                          )}
                         </span>
                       )}
                     </div>
@@ -7414,7 +7457,7 @@ export default function SessionView({
                             fontSize: "13px",
                           }}
                         >
-                          e1RM {option.e1rm.toFixed(1)}
+                          e1RM {formatSessionE1RMDisplay(option.e1rm)}
                         </span>
                       </button>
                     ))

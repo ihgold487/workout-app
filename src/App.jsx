@@ -1,6 +1,7 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import {
+  Brain,
   Cable,
   CalendarPlus,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   Plus,
   RotateCcw,
   Settings,
+  Share2,
   Trash2,
   Utensils,
   X,
@@ -53,6 +55,8 @@ import {
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { BENCH_PRESS_HISTORY_TEST_DATA } from "./data/benchPressHistoryTestData";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
+import { buildCoachBrief } from "./utils/coachBrief";
+import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
@@ -1283,28 +1287,12 @@ function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
 }
 
 function getCompletedPlanWorkoutHistory(plan, planWorkoutId, weekNumber, history) {
-  const completion = getPlanCompletionsForWeek(plan, weekNumber).find(
-    (item) => item.planWorkoutId === planWorkoutId
-  );
-
-  if (!completion) {
-    return null;
-  }
-
-  const sessionMatch = history.find(
-    (workout) => String(workout.id) === String(completion.sessionId)
-  );
-
-  if (sessionMatch) {
-    return sessionMatch;
-  }
-
-  return history.find(
-    (workout) =>
-      String(workout.planId) === String(plan.id) &&
-      String(workout.planWorkoutId) === String(planWorkoutId) &&
-      Number(workout.planWeek) === Number(weekNumber)
-  ) || null;
+  return findPlanWorkoutHistory({
+    history,
+    plan,
+    planWorkoutId,
+    weekNumber,
+  });
 }
 
 function getMissingPlanWorkouts(plan, templates) {
@@ -1597,6 +1585,10 @@ export default function App() {
   const [dataAuditStatus, setDataAuditStatus] = useState("");
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
+
+  const [coachBriefPrompt, setCoachBriefPrompt] = useState("");
+
+  const [coachBriefStatus, setCoachBriefStatus] = useState("");
 
   const [benchHistoryTestStatus, setBenchHistoryTestStatus] = useState("");
 
@@ -2054,6 +2046,15 @@ export default function App() {
       sessions,
       templates,
     };
+  }
+
+  function hasActiveWorkoutSession(data = currentWorkoutDataRef.current || getCurrentWorkoutData()) {
+    return Boolean(
+      data?.selectedSessionId &&
+        (data.sessions || []).some(
+          (session) => String(session.id) === String(data.selectedSessionId)
+        )
+    );
   }
 
   function replaceWorkoutData(data) {
@@ -2675,28 +2676,44 @@ export default function App() {
       return;
     }
 
+    const visibleSyncAction = reason === "manual" ? "sync" : null;
+
     if (automaticSyncInFlightRef.current) {
       automaticSyncQueuedRef.current = true;
       setSyncStatus(
-        "Sync already in progress. New local changes will sync at the next checkpoint."
+        reason === "manual"
+          ? "Sync already in progress. Wait for it to finish, then tap Sync Now again if needed."
+          : "Sync already in progress. New local changes will sync at the next checkpoint."
       );
       return;
     }
 
     automaticSyncInFlightRef.current = true;
     lastAutomaticSyncAttemptRef.current = getCurrentTimeMs();
-    const visibleSyncAction = reason === "manual" ? "sync" : null;
     if (visibleSyncAction) {
       setActiveSyncAction(visibleSyncAction);
+      setSyncLoading(true);
     }
     setSyncStatus(
       reason === "manual"
-        ? "Syncing latest cloud data..."
+        ? "Syncing now..."
         : `Auto sync ${reason}...`
     );
 
     try {
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+      const shouldDeferForActiveWorkout =
+        hasActiveWorkoutSession(data) &&
+        reason !== "manual" &&
+        reason !== "workout completion";
+
+      if (shouldDeferForActiveWorkout) {
+        setSyncStatus(
+          "Auto sync deferred while workout is active. Local workout data is saved on this device."
+        );
+        return;
+      }
+
       const syncStartRevision = localDataRevisionRef.current;
       const plateInventoryStartRevision = plateInventoryRevisionRef.current;
       const forceUpload = reason === "workout completion";
@@ -2723,6 +2740,10 @@ export default function App() {
           : "check";
 
       if (shouldUpload) {
+        if (reason === "manual") {
+          setSyncStatus(`Syncing now... uploading ${uploadDomains.join(", ")}.`);
+        }
+
         await uploadNormalizedWorkoutData(data, session, uploadDomains);
       }
 
@@ -2749,6 +2770,10 @@ export default function App() {
           }Full cloud pull skipped to reduce Supabase egress. Last auto sync: ${new Date().toLocaleTimeString()}.`
         );
         return;
+      }
+
+      if (reason === "manual") {
+        setSyncStatus("Syncing now... pulling latest cloud data.");
       }
 
       const downloaded = await downloadNormalizedWorkoutData(
@@ -2789,16 +2814,21 @@ export default function App() {
           plateInventory: downloaded.plateInventory,
           plans: downloaded.plans,
           workouts: downloaded.workouts,
-        })} Last auto sync: ${new Date().toLocaleTimeString()}.`
+        })} Last ${reason === "manual" ? "manual" : "auto"} sync: ${new Date().toLocaleTimeString()}.`
       );
     } catch (error) {
       console.error("Automatic normalized sync failed:", error);
-      setSyncStatus(`Auto sync failed: ${error.message}`);
+      setSyncStatus(
+        reason === "manual"
+          ? `Sync Now failed: ${error.message}`
+          : `Auto sync failed: ${error.message}`
+      );
     } finally {
       automaticSyncInFlightRef.current = false;
       automaticSyncQueuedRef.current = false;
       if (visibleSyncAction) {
         setActiveSyncAction(null);
+        setSyncLoading(false);
       }
     }
   }
@@ -3054,6 +3084,85 @@ export default function App() {
     } finally {
       setSyncLoading(false);
     }
+  }
+
+  function generateCoachBrief() {
+    const brief = buildCoachBrief({
+      bodyWeightEntries: localBodyWeightEntries,
+      exerciseLibrary,
+      history,
+      plans,
+    });
+
+    setCoachBriefPrompt(brief.prompt);
+    setCoachBriefStatus(
+      `Coach brief generated from ${brief.workoutCount} recent workouts and ${brief.trackedExercises.length} tracked exercises.`
+    );
+  }
+
+  async function copyCoachBrief() {
+    if (!coachBriefPrompt) {
+      generateCoachBrief();
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(coachBriefPrompt);
+      setCoachBriefStatus("Coach brief copied. Paste it into ChatGPT.");
+    } catch (error) {
+      console.error("Coach brief copy failed:", error);
+      setCoachBriefStatus("Copy failed. Select the text and copy it manually.");
+    }
+  }
+
+  async function shareCoachBrief() {
+    const text = coachBriefPrompt || buildCoachBrief({
+      bodyWeightEntries: localBodyWeightEntries,
+      exerciseLibrary,
+      history,
+      plans,
+    }).prompt;
+
+    setCoachBriefPrompt(text);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          text,
+          title: "Workout Coach Brief",
+        });
+        setCoachBriefStatus("Coach brief shared.");
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          setCoachBriefStatus("Share canceled.");
+          return;
+        }
+
+        console.error("Coach brief share failed:", error);
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCoachBriefStatus("Sharing is unavailable. Coach brief copied instead.");
+    } catch (error) {
+      console.error("Coach brief fallback copy failed:", error);
+      setCoachBriefStatus("Sharing is unavailable. Select the text and copy it manually.");
+    }
+  }
+
+  function openChatGptForCoachBrief() {
+    const text = coachBriefPrompt || buildCoachBrief({
+      bodyWeightEntries: localBodyWeightEntries,
+      exerciseLibrary,
+      history,
+      plans,
+    }).prompt;
+
+    setCoachBriefPrompt(text);
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    setCoachBriefStatus("ChatGPT opened. Copy or share the coach brief there.");
   }
 
   async function runPersistenceAudit() {
@@ -6008,11 +6117,105 @@ export default function App() {
               }}
             >
               Automatic sync runs after startup, resume, workout completion, and
-              save checkpoints.
+              save checkpoints. Active workouts defer cloud sync until the
+              workout is completed or Sync Now is tapped.
             </div>
           </div>
           {isIraSettingsUser && (
             <>
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  marginTop: "10px",
+                  paddingTop: "10px",
+                }}
+              >
+                <h3
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: "15px",
+                    gap: "6px",
+                    justifyContent: "center",
+                    margin: "0 0 6px",
+                  }}
+                >
+                  <Brain size={16} />
+                  AI Coach Brief
+                </h3>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Builds a local workout-history prompt for ChatGPT. No API key
+                  and no cloud request are used.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    justifyContent: "center",
+                  }}
+                >
+                  <button onClick={generateCoachBrief} type="button">
+                    Generate Brief
+                  </button>
+                  <button
+                    disabled={!coachBriefPrompt}
+                    onClick={copyCoachBrief}
+                    type="button"
+                  >
+                    <Copy size={14} />
+                    Copy
+                  </button>
+                  <button onClick={shareCoachBrief} type="button">
+                    <Share2 size={14} />
+                    Share
+                  </button>
+                  <button onClick={openChatGptForCoachBrief} type="button">
+                    Open ChatGPT
+                  </button>
+                </div>
+                {coachBriefStatus && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "6px",
+                    }}
+                  >
+                    {coachBriefStatus}
+                  </div>
+                )}
+                {coachBriefPrompt && (
+                  <textarea
+                    readOnly
+                    value={coachBriefPrompt}
+                    style={{
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      boxSizing: "border-box",
+                      color: "var(--text)",
+                      fontFamily:
+                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      fontSize: "11px",
+                      lineHeight: 1.45,
+                      marginTop: "8px",
+                      minHeight: "180px",
+                      padding: "8px",
+                      resize: "vertical",
+                      width: "100%",
+                    }}
+                  />
+                )}
+              </div>
               <div
                 style={{
                   borderTop: "1px solid var(--border)",
