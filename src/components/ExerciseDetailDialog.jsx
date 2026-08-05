@@ -108,9 +108,9 @@ function getInstructionSteps(exercise) {
 
 function matchesExercise(historyExercise, exercise) {
   const libraryId = exercise.exerciseId || exercise.id;
-  const historyExerciseId = historyExercise.exerciseId || historyExercise.id;
+  const historyExerciseId = historyExercise.exerciseId;
 
-  if (libraryId != null && historyExerciseId != null && libraryId === historyExerciseId) {
+  if (libraryId != null && historyExerciseId != null && String(libraryId) === String(historyExerciseId)) {
     return true;
   }
 

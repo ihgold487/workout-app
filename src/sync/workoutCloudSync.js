@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { uploadCustomExercises } from "./exerciseCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
+const IN_FILTER_BATCH_SIZE = 75;
 
 function assertCloudReady(session) {
   if (!isSupabaseConfigured) {
@@ -73,6 +74,41 @@ function parseLocalSourceKey(sourceKey) {
   return Number.isFinite(numeric) && String(numeric) === String(sourceKey)
     ? numeric
     : sourceKey;
+}
+
+async function selectRowsByBatchedIn({
+  column,
+  ids,
+  orderColumn,
+  select,
+  table,
+}) {
+  const rows = [];
+
+  for (let index = 0; index < ids.length; index += IN_FILTER_BATCH_SIZE) {
+    const batchIds = ids.slice(index, index + IN_FILTER_BATCH_SIZE);
+    let query = supabase
+      .from(table)
+      .select(select)
+      .in(column, batchIds)
+      .is("deleted_at", null);
+
+    if (orderColumn) {
+      query = query.order(orderColumn, {
+        ascending: true,
+      });
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    rows.push(...(data || []));
+  }
+
+  return rows;
 }
 
 function normalizeLookupValue(value) {
@@ -483,41 +519,27 @@ export async function downloadWorkouts(
     };
   }
 
-  const { data: exerciseRows, error: exerciseError } = await supabase
-    .from("workout_exercises")
-    .select(
-      "id,workout_id,exercise_id,position,exercise_name,equipment,primary_muscle,secondary_muscles,superset_group,notes"
-    )
-    .in("workout_id", workoutIds)
-    .is("deleted_at", null)
-    .order("position", {
-      ascending: true,
-    });
-
-  if (exerciseError) {
-    throw exerciseError;
-  }
+  const exerciseRows = await selectRowsByBatchedIn({
+    column: "workout_id",
+    ids: workoutIds,
+    orderColumn: "position",
+    select:
+      "id,workout_id,exercise_id,position,exercise_name,equipment,primary_muscle,secondary_muscles,superset_group,notes",
+    table: "workout_exercises",
+  });
 
   const exerciseIds = exerciseRows.map((exercise) => exercise.id);
   let setRows = [];
 
   if (exerciseIds.length > 0) {
-    const { data, error } = await supabase
-      .from("workout_exercise_sets")
-      .select(
-        "id,workout_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,is_drop_set"
-      )
-      .in("workout_exercise_id", exerciseIds)
-      .is("deleted_at", null)
-      .order("set_number", {
-        ascending: true,
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    setRows = data;
+    setRows = await selectRowsByBatchedIn({
+      column: "workout_exercise_id",
+      ids: exerciseIds,
+      orderColumn: "set_number",
+      select:
+        "id,workout_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,is_drop_set",
+      table: "workout_exercise_sets",
+    });
   }
 
   const setsByExerciseId = new Map();

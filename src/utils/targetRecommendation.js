@@ -58,7 +58,7 @@ function getSetPerformance(set, exercise, bodyWeight) {
 
 function matchesExercise(historyExercise, exercise) {
   const exerciseId = exercise?.exerciseId || exercise?.id;
-  const historyExerciseId = historyExercise?.exerciseId || historyExercise?.id;
+  const historyExerciseId = historyExercise?.exerciseId;
 
   if (exerciseId != null && historyExerciseId != null) {
     return String(exerciseId) === String(historyExerciseId);

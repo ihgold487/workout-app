@@ -1586,6 +1586,7 @@ export default function App() {
   );
 
   const [syncLoading, setSyncLoading] = useState(false);
+  const [activeSyncAction, setActiveSyncAction] = useState(null);
 
   const [lastNormalizedSyncAt, setLastNormalizedSyncAt] = useState(
     readLastNormalizedSyncAt
@@ -2597,7 +2598,9 @@ export default function App() {
   }
 
   async function pullLatestNormalizedData() {
+    setActiveSyncAction("pullLatest");
     setSyncLoading(true);
+    setSyncStatus("Pulling latest cloud data...");
 
     try {
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
@@ -2628,6 +2631,7 @@ export default function App() {
       console.error("Pull latest failed:", error);
       setSyncStatus(`Pull latest failed: ${error.message}`);
     } finally {
+      setActiveSyncAction(null);
       setSyncLoading(false);
     }
   }
@@ -2681,7 +2685,15 @@ export default function App() {
 
     automaticSyncInFlightRef.current = true;
     lastAutomaticSyncAttemptRef.current = getCurrentTimeMs();
-    setSyncStatus(`Auto sync ${reason}...`);
+    const visibleSyncAction = reason === "manual" ? "sync" : null;
+    if (visibleSyncAction) {
+      setActiveSyncAction(visibleSyncAction);
+    }
+    setSyncStatus(
+      reason === "manual"
+        ? "Syncing latest cloud data..."
+        : `Auto sync ${reason}...`
+    );
 
     try {
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
@@ -2785,6 +2797,9 @@ export default function App() {
     } finally {
       automaticSyncInFlightRef.current = false;
       automaticSyncQueuedRef.current = false;
+      if (visibleSyncAction) {
+        setActiveSyncAction(null);
+      }
     }
   }
 
@@ -5961,10 +5976,29 @@ export default function App() {
               Last synced: {formatLastNormalizedSyncAt(lastNormalizedSyncAt)}
             </div>
             <button
-              disabled={!authSession || !appAccessAllowed || approvalFromCache || syncLoading}
+              disabled={
+                !authSession ||
+                !appAccessAllowed ||
+                approvalFromCache ||
+                syncLoading ||
+                Boolean(activeSyncAction)
+              }
               onClick={() => runAutomaticNormalizedSync("manual")}
             >
-              Sync Now
+              {activeSyncAction === "sync" ? "Syncing..." : "Sync Now"}
+            </button>
+            <button
+              disabled={
+                !authSession ||
+                !appAccessAllowed ||
+                approvalFromCache ||
+                syncLoading ||
+                Boolean(activeSyncAction)
+              }
+              onClick={pullLatestNormalizedData}
+              style={{ marginLeft: "8px" }}
+            >
+              {activeSyncAction === "pullLatest" ? "Pulling..." : "Pull Latest"}
             </button>
             <div
               style={{
@@ -6129,10 +6163,14 @@ export default function App() {
                     }}
                   >
                     <button
-                      disabled={!authSession || syncLoading}
+                      disabled={
+                        !authSession || syncLoading || Boolean(activeSyncAction)
+                      }
                       onClick={pullLatestNormalizedData}
                     >
-                      Pull Latest
+                      {activeSyncAction === "pullLatest"
+                        ? "Pulling..."
+                        : "Pull Latest"}
                     </button>
                     <button disabled={syncLoading} onClick={repairLocalPlanLinks}>
                       Repair Plan Links
