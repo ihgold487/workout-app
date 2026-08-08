@@ -285,13 +285,15 @@ export default function TemplateView({
   const addedToWorkouts =
     addToWorkoutsState.added &&
     String(addToWorkoutsState.templateId) === String(template.id);
-  const linkedPlan = plans.find((item) => item.id === template.planId);
+  const linkedPlan = plans.find(
+    (item) => String(item.id) === String(template.planId)
+  );
   const currentPlanWeek = Number(planWeekOverride) || linkedPlan?.currentWeek || 1;
   const planWorkoutCompleteThisWeek = Boolean(
     linkedPlan?.completions?.some(
       (completion) =>
         Number(completion.weekNumber) === Number(currentPlanWeek) &&
-        completion.planWorkoutId === template.planWorkoutId
+        String(completion.planWorkoutId) === String(template.planWorkoutId)
     )
   );
   const isPlanWorkout = Boolean(template.planId);
@@ -924,7 +926,9 @@ export default function TemplateView({
       return;
     }
 
-    const plan = plans.find((item) => item.id === template.planId);
+    const plan = plans.find(
+      (item) => String(item.id) === String(template.planId)
+    );
 
     if (isPreviousPlanWeekIncomplete(plan)) {
       setConfirmPreviousWeekIncomplete(true);
@@ -934,7 +938,9 @@ export default function TemplateView({
     startWorkoutSession(plan);
   }
 
-  function startWorkoutSession(plan = plans.find((item) => item.id === template.planId)) {
+  function startWorkoutSession(
+    plan = plans.find((item) => String(item.id) === String(template.planId))
+  ) {
     const startedAtIso = new Date().toISOString();
     const session = {
       id: Date.now(),

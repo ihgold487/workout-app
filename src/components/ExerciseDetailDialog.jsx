@@ -41,6 +41,14 @@ const TREND_COLORS = {
   flat: "#fdd835",
   increasing: "#43a047",
 };
+const BENCH_ZONE_COLORS = {
+  heavy: "#2563eb",
+  lowConfidence: "#9ca3af",
+  moderate: "#16a34a",
+};
+const BENCH_TREND_FLAT_THRESHOLD_LB_PER_WEEK = 0.25;
+const BENCH_RATIO_ALIGNED_THRESHOLD = 0.99;
+const BENCH_RATIO_LAGGING_THRESHOLD = 0.96;
 
 function formatEquipment(equipment) {
   return Array.isArray(equipment) ? equipment.filter(Boolean).join(", ") : equipment || "";
@@ -373,6 +381,395 @@ function buildHistorySummary(exerciseHistory) {
     maxE1RM: maxE1RM || null,
     maxWeight: maxWeight || null,
     workouts: exerciseHistory.length,
+  };
+}
+
+function parseHistoryNumber(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace(/^\+/, ""));
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isBarbellBenchPress(exercise) {
+  return (
+    String(exercise?.name || "").trim().toLowerCase() === "bench press" &&
+    formatEquipment(exercise?.equipment).toLowerCase().includes("barbell")
+  );
+}
+
+function average(values) {
+  const numericValues = values.filter(Number.isFinite);
+
+  return numericValues.length > 0
+    ? numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length
+    : null;
+}
+
+function formatBenchMetric(value, digits = 1, suffix = "") {
+  return Number.isFinite(value)
+    ? `${value.toFixed(digits).replace(/\.0$/, "")}${suffix}`
+    : "—";
+}
+
+function setInRange(set, { maxReps, maxRir, minReps, minRir = 0 }) {
+  return (
+    Number.isFinite(set.reps) &&
+    Number.isFinite(set.rir) &&
+    Number.isFinite(set.e1rm) &&
+    set.reps >= minReps &&
+    set.reps <= maxReps &&
+    set.rir >= minRir &&
+    set.rir <= maxRir
+  );
+}
+
+function getBestSet(sets) {
+  return sets.reduce(
+    (best, set) => (!best || set.e1rm > best.e1rm ? set : best),
+    null
+  );
+}
+
+function getRollingAveragePoints(points, windowSize = 3) {
+  return points.map((point, index) => {
+    const windowPoints = points.slice(Math.max(0, index - windowSize + 1), index + 1);
+
+    return {
+      ...point,
+      rawValue: point.value,
+      value: average(windowPoints.map((item) => item.value)),
+    };
+  });
+}
+
+function getLinearRegression(points) {
+  const sortedPoints = [...points]
+    .filter((point) => Number.isFinite(point.value) && point.dateKey)
+    .sort((left, right) => left.dateKey.localeCompare(right.dateKey));
+
+  if (sortedPoints.length < 2) {
+    return null;
+  }
+
+  const firstDate = sortedPoints[0].dateKey;
+  const xValues = sortedPoints.map((point) => daysBetween(firstDate, point.dateKey));
+  const yValues = sortedPoints.map((point) => point.value);
+  const meanX = average(xValues);
+  const meanY = average(yValues);
+  const denominator = xValues.reduce(
+    (sum, x) => sum + (x - meanX) * (x - meanX),
+    0
+  );
+
+  if (!denominator) {
+    return null;
+  }
+
+  const slopePerDay =
+    xValues.reduce(
+      (sum, x, index) => sum + (x - meanX) * (yValues[index] - meanY),
+      0
+    ) / denominator;
+  const intercept = meanY - slopePerDay * meanX;
+  const firstX = xValues[0];
+  const lastX = xValues[xValues.length - 1];
+
+  return {
+    end: {
+      dateKey: sortedPoints[sortedPoints.length - 1].dateKey,
+      value: intercept + slopePerDay * lastX,
+    },
+    pointCount: sortedPoints.length,
+    slopePerWeek: slopePerDay * 7,
+    start: {
+      dateKey: firstDate,
+      value: intercept + slopePerDay * firstX,
+    },
+  };
+}
+
+function getBenchTrendRead(regression) {
+  if (!regression || regression.pointCount < 4) {
+    return {
+      label: "Limited",
+      tone: "neutral",
+    };
+  }
+
+  if (regression.slopePerWeek > BENCH_TREND_FLAT_THRESHOLD_LB_PER_WEEK) {
+    return {
+      label: "Rising",
+      tone: "positive",
+    };
+  }
+
+  if (regression.slopePerWeek < -BENCH_TREND_FLAT_THRESHOLD_LB_PER_WEEK) {
+    return {
+      label: "Falling",
+      tone: "negative",
+    };
+  }
+
+  return {
+    label: "Flat",
+    tone: "neutral",
+  };
+}
+
+function getBenchRatioRead(ratio) {
+  if (!Number.isFinite(ratio)) {
+    return {
+      label: "Unavailable",
+      tone: "neutral",
+    };
+  }
+
+  if (ratio >= BENCH_RATIO_ALIGNED_THRESHOLD) {
+    return {
+      label: "Aligned",
+      tone: "positive",
+    };
+  }
+
+  if (ratio >= BENCH_RATIO_LAGGING_THRESHOLD) {
+    return {
+      label: "Slight lag",
+      tone: "neutral",
+    };
+  }
+
+  return {
+    label: "Lagging",
+    tone: "negative",
+  };
+}
+
+function getBenchFatigueRead(latestFatigue) {
+  if (!latestFatigue) {
+    return {
+      label: "Unavailable",
+      tone: "neutral",
+    };
+  }
+
+  if (Number.isFinite(latestFatigue.e1rmDropPercent)) {
+    if (latestFatigue.e1rmDropPercent <= 2) {
+      return {
+        label: "Stable",
+        tone: "positive",
+      };
+    }
+
+    if (latestFatigue.e1rmDropPercent >= 6) {
+      return {
+        label: "Dropping",
+        tone: "negative",
+      };
+    }
+  }
+
+  return {
+    label: "Watch",
+    tone: "neutral",
+  };
+}
+
+function formatBenchSlope(regression) {
+  if (!regression) {
+    return "—";
+  }
+
+  const sign = regression.slopePerWeek > 0 ? "+" : "";
+
+  return `${sign}${formatBenchMetric(regression.slopePerWeek, 2, " lb/week")}`;
+}
+
+function getSetLabel(set) {
+  return set
+    ? `${formatBenchMetric(set.weight, 1)} x ${formatBenchMetric(
+        set.reps,
+        0
+      )} @ ${formatBenchMetric(set.rir, 1)}`
+    : "—";
+}
+
+function getBestBenchmarkSet(sets, predicate) {
+  return sets
+    .filter(predicate)
+    .sort(
+      (left, right) =>
+        right.weight - left.weight ||
+        right.reps - left.reps ||
+        right.rir - left.rir ||
+        right.e1rm - left.e1rm
+    )[0] || null;
+}
+
+function getBestRepBenchmarkSet(sets, targetWeight) {
+  return sets
+    .filter(
+      (set) =>
+        set.weight === targetWeight &&
+        Number.isFinite(set.reps) &&
+        Number.isFinite(set.rir) &&
+        set.rir >= 0 &&
+        set.rir <= 3
+    )
+    .sort(
+      (left, right) =>
+        right.reps - left.reps ||
+        right.rir - left.rir ||
+        right.e1rm - left.e1rm
+    )[0] || null;
+}
+
+function getWorkoutFatigueSummary(entry, sets) {
+  const firstSet = sets[0] || null;
+  const secondSet = sets[1] || null;
+  const e1rmDropPercent =
+    firstSet?.e1rm && secondSet?.e1rm
+      ? ((firstSet.e1rm - secondSet.e1rm) / firstSet.e1rm) * 100
+      : null;
+  const repeatedWeightGroups = sets.reduce((groups, set) => {
+    if (!Number.isFinite(set.weight) || !Number.isFinite(set.reps)) {
+      return groups;
+    }
+
+    const key = String(set.weight);
+    const group = groups.get(key) || {
+      reps: 0,
+      sets: 0,
+      weight: set.weight,
+    };
+
+    group.reps += set.reps;
+    group.sets += 1;
+    groups.set(key, group);
+
+    return groups;
+  }, new Map());
+  const bestRepeatedWeight =
+    [...repeatedWeightGroups.values()]
+      .filter((group) => group.sets > 1)
+      .sort(
+        (left, right) =>
+          right.weight - left.weight ||
+          right.reps - left.reps ||
+          right.sets - left.sets
+      )[0] || null;
+
+  return {
+    date: entry.completedAt,
+    e1rmDropPercent,
+    repeatedWeight: bestRepeatedWeight,
+  };
+}
+
+function buildBenchPressExperiment(exerciseHistory) {
+  const workouts = [...exerciseHistory]
+    .filter((entry) => entry.completedDateKey)
+    .sort((left, right) =>
+      left.completedDateKey.localeCompare(right.completedDateKey)
+    )
+    .map((entry, index) => {
+      const sets = (entry.sets || [])
+        .map((set) => ({
+          dateKey: entry.completedDateKey,
+          e1rm: parseHistoryNumber(set.e1rm),
+          reps: parseHistoryNumber(set.reps),
+          rir: parseHistoryNumber(set.rir),
+          setNumber: set.setNumber,
+          weight: parseHistoryNumber(set.weight),
+          workoutIndex: index,
+        }))
+        .filter((set) => Number.isFinite(set.weight) && Number.isFinite(set.reps));
+      const heavySet = getBestSet(
+        sets.filter((set) => setInRange(set, { minReps: 3, maxReps: 7, maxRir: 2 }))
+      );
+      const moderateSet = getBestSet(
+        sets.filter((set) => setInRange(set, { minReps: 8, maxReps: 12, maxRir: 3 }))
+      );
+      const lowConfidenceSet = getBestSet(
+        sets.filter((set) => Number.isFinite(set.e1rm) && set.rir > 3)
+      );
+
+      return {
+        ...entry,
+        fatigue: getWorkoutFatigueSummary(entry, sets),
+        heavySet,
+        lowConfidenceSet,
+        moderateSet,
+        sets,
+      };
+    });
+  const heavyPoints = workouts
+    .filter((workout) => workout.heavySet)
+    .map((workout, index) => ({
+      dateKey: workout.completedDateKey,
+      key: `heavy-${workout.completedDateKey}-${index}`,
+      label: `${workout.completedAt} · ${getSetLabel(workout.heavySet)}`,
+      set: workout.heavySet,
+      value: workout.heavySet.e1rm,
+    }));
+  const moderatePoints = workouts
+    .filter((workout) => workout.moderateSet)
+    .map((workout, index) => ({
+      dateKey: workout.completedDateKey,
+      key: `moderate-${workout.completedDateKey}-${index}`,
+      label: `${workout.completedAt} · ${getSetLabel(workout.moderateSet)}`,
+      set: workout.moderateSet,
+      value: workout.moderateSet.e1rm,
+    }));
+  const allSets = workouts.flatMap((workout) =>
+    workout.sets.map((set) => ({
+      ...set,
+      completedAt: workout.completedAt,
+      templateName: workout.templateName,
+    }))
+  );
+  const latestHeavyRolling = getRollingAveragePoints(heavyPoints).at(-1)?.value;
+  const latestModerateRolling = getRollingAveragePoints(moderatePoints).at(-1)?.value;
+  const heavyRegression = getLinearRegression(getRollingAveragePoints(heavyPoints));
+  const moderateRegression = getLinearRegression(
+    getRollingAveragePoints(moderatePoints)
+  );
+  const heavyExpressionRatio =
+    latestHeavyRolling && latestModerateRolling
+      ? latestHeavyRolling / latestModerateRolling
+      : null;
+  const latestFatigue =
+    [...workouts].reverse().find(
+      (workout) =>
+        Number.isFinite(workout.fatigue.e1rmDropPercent) ||
+        workout.fatigue.repeatedWeight
+    )?.fatigue || null;
+
+  return {
+    benchmark6Rep: getBestBenchmarkSet(
+      allSets,
+      (set) => set.reps >= 6 && set.rir >= 1
+    ),
+    benchmark8Rep: getBestBenchmarkSet(
+      allSets,
+      (set) => set.reps >= 8 && set.rir >= 1
+    ),
+    benchmark135: getBestRepBenchmarkSet(allSets, 135),
+    benchmark145: getBestRepBenchmarkSet(allSets, 145),
+    heavyExpressionRatio,
+    heavyPoints,
+    heavyRegression,
+    latestFatigue,
+    lowConfidencePoints: workouts
+      .filter((workout) => workout.lowConfidenceSet)
+      .map((workout, index) => ({
+        dateKey: workout.completedDateKey,
+        key: `low-${workout.completedDateKey}-${index}`,
+        label: `${workout.completedAt} · ${getSetLabel(workout.lowConfidenceSet)}`,
+        set: workout.lowConfidenceSet,
+        value: workout.lowConfidenceSet.e1rm,
+      })),
+    moderatePoints,
+    moderateRegression,
   };
 }
 
@@ -899,6 +1296,668 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
   );
 }
 
+function BenchExperimentStat({ label, sublabel, value }) {
+  return (
+    <div
+      style={{
+        background: "var(--surface-muted)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        display: "grid",
+        gap: "3px",
+        padding: "8px",
+      }}
+    >
+      <div
+        style={{
+          color: "var(--text-muted)",
+          fontSize: "11px",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "14px",
+          fontWeight: 800,
+          lineHeight: 1.15,
+        }}
+      >
+        {value}
+      </div>
+      {sublabel && (
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "11px",
+            lineHeight: 1.2,
+          }}
+        >
+          {sublabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BenchZoneChart({ data, showTrendLines = false }) {
+  const [selectedPointKey, setSelectedPointKey] = useState(null);
+  const rawHeavyPoints = data.heavyPoints;
+  const rawModeratePoints = data.moderatePoints;
+  const heavyPoints = getRollingAveragePoints(rawHeavyPoints);
+  const moderatePoints = getRollingAveragePoints(rawModeratePoints);
+  const lowConfidencePoints = data.lowConfidencePoints;
+  const regressionEndpointPoints = showTrendLines
+    ? [
+        data.heavyRegression?.start,
+        data.heavyRegression?.end,
+        data.moderateRegression?.start,
+        data.moderateRegression?.end,
+      ].filter(Boolean)
+    : [];
+  const allDatedPoints = [
+    ...heavyPoints,
+    ...moderatePoints,
+    ...lowConfidencePoints,
+    ...regressionEndpointPoints,
+  ].filter((point) => Number.isFinite(point.value) && point.dateKey);
+
+  if (allDatedPoints.length < 2) {
+    return (
+      <div
+        style={{
+          alignItems: "center",
+          background: "var(--surface-muted)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          color: "var(--text-muted)",
+          display: "flex",
+          fontSize: "12px",
+          justifyContent: "center",
+          minHeight: "220px",
+          padding: "12px",
+          textAlign: "center",
+        }}
+      >
+        Not enough qualifying bench data for zone trends yet.
+      </div>
+    );
+  }
+
+  const width = 360;
+  const height = 300;
+  const paddingLeft = 42;
+  const paddingRight = 16;
+  const paddingTop = 22;
+  const paddingBottom = 34;
+  const sortedByDate = [...allDatedPoints].sort((left, right) =>
+    left.dateKey.localeCompare(right.dateKey)
+  );
+  const firstDate = sortedByDate[0].dateKey;
+  const lastDate = sortedByDate[sortedByDate.length - 1].dateKey;
+  const dateSpan = Math.max(1, daysBetween(firstDate, lastDate));
+  const values = allDatedPoints.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const plotPoint = (point) => ({
+    ...point,
+    x:
+      paddingLeft +
+      (daysBetween(firstDate, point.dateKey) / dateSpan) * plotWidth,
+    y:
+      height -
+      paddingBottom -
+      ((point.value - min) / range) * plotHeight,
+  });
+  const heavyPlotted = heavyPoints.map((point) => ({
+    ...plotPoint(point),
+    color: BENCH_ZONE_COLORS.heavy,
+    zone: "Heavy",
+  }));
+  const moderatePlotted = moderatePoints.map((point) => ({
+    ...plotPoint(point),
+    color: BENCH_ZONE_COLORS.moderate,
+    zone: "Moderate",
+  }));
+  const lowConfidencePlotted = lowConfidencePoints.map((point) => ({
+    ...plotPoint(point),
+    color: BENCH_ZONE_COLORS.lowConfidence,
+    zone: "Low confidence",
+  }));
+  const selectedPoint =
+    [...heavyPlotted, ...moderatePlotted, ...lowConfidencePlotted].find(
+      (point) => point.key === selectedPointKey
+    ) || null;
+  const plotRegression = (regression) => {
+    if (!regression) {
+      return null;
+    }
+
+    return {
+      end: plotPoint(regression.end),
+      start: plotPoint(regression.start),
+    };
+  };
+  const heavyRegressionLine = showTrendLines
+    ? plotRegression(data.heavyRegression)
+    : null;
+  const moderateRegressionLine = showTrendLines
+    ? plotRegression(data.moderateRegression)
+    : null;
+
+  function renderLine(points, color) {
+    return points.slice(1).map((point, index) => {
+      const previous = points[index];
+
+      return (
+        <line
+          key={`${color}-${previous.key}-${point.key}`}
+          x1={previous.x}
+          x2={point.x}
+          y1={previous.y}
+          y2={point.y}
+          stroke={color}
+          strokeLinecap="round"
+          strokeWidth="3"
+        />
+      );
+    });
+  }
+
+  function renderRegressionLine(regressionLine, color, key) {
+    if (!regressionLine) {
+      return null;
+    }
+
+    return (
+      <line
+        key={key}
+        x1={regressionLine.start.x}
+        x2={regressionLine.end.x}
+        y1={regressionLine.start.y}
+        y2={regressionLine.end.y}
+        stroke={color}
+        strokeDasharray="6 5"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: "var(--surface-muted)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        padding: "8px",
+      }}
+    >
+      <svg
+        aria-label="Bench press heavy and moderate zone e1RM trends"
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+        onPointerDown={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const x = ((event.clientX - bounds.left) / bounds.width) * width;
+          const y = ((event.clientY - bounds.top) / bounds.height) * height;
+          const nearest = [
+            ...heavyPlotted,
+            ...moderatePlotted,
+            ...lowConfidencePlotted,
+          ]
+            .map((point) => ({
+              distance: Math.hypot(point.x - x, point.y - y),
+              point,
+            }))
+            .sort((left, right) => left.distance - right.distance)[0];
+
+          setSelectedPointKey(
+            nearest && nearest.distance <= 28 ? nearest.point.key : null
+          );
+        }}
+        style={{
+          display: "block",
+          touchAction: "manipulation",
+          width: "100%",
+        }}
+      >
+        <rect width={width} height={height} fill="transparent" />
+        <line
+          x1={paddingLeft}
+          x2={width - paddingRight}
+          y1={height - paddingBottom}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <line
+          x1={paddingLeft}
+          x2={paddingLeft}
+          y1={paddingTop}
+          y2={height - paddingBottom}
+          stroke="var(--border)"
+        />
+        <text
+          x={paddingLeft - 8}
+          y={paddingTop + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {max.toFixed(1)}
+        </text>
+        <text
+          x={paddingLeft - 8}
+          y={height - paddingBottom + 4}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {min.toFixed(1)}
+        </text>
+        {renderLine(heavyPlotted, BENCH_ZONE_COLORS.heavy)}
+        {renderLine(moderatePlotted, BENCH_ZONE_COLORS.moderate)}
+        {renderRegressionLine(
+          heavyRegressionLine,
+          BENCH_ZONE_COLORS.heavy,
+          "heavy-regression"
+        )}
+        {renderRegressionLine(
+          moderateRegressionLine,
+          BENCH_ZONE_COLORS.moderate,
+          "moderate-regression"
+        )}
+        {lowConfidencePlotted.map((point) => (
+          <circle
+            key={point.key}
+            cx={point.x}
+            cy={point.y}
+            fill={BENCH_ZONE_COLORS.lowConfidence}
+            opacity=".38"
+            r="3"
+          />
+        ))}
+        {heavyPlotted.map((point) => (
+          <circle
+            key={point.key}
+            cx={point.x}
+            cy={point.y}
+            fill={BENCH_ZONE_COLORS.heavy}
+            r="3.5"
+          />
+        ))}
+        {moderatePlotted.map((point) => (
+          <circle
+            key={point.key}
+            cx={point.x}
+            cy={point.y}
+            fill={BENCH_ZONE_COLORS.moderate}
+            r="3.5"
+          />
+        ))}
+        {selectedPoint && (
+          <g pointerEvents="none">
+            <rect
+              x={Math.min(width - 150, Math.max(paddingLeft, selectedPoint.x - 70))}
+              y={Math.max(paddingTop, selectedPoint.y - 42)}
+              width="142"
+              height="38"
+              rx="7"
+              fill="var(--surface-raised)"
+              stroke="var(--border)"
+            />
+            <text
+              x={Math.min(width - 79, Math.max(paddingLeft + 71, selectedPoint.x))}
+              y={Math.max(paddingTop + 14, selectedPoint.y - 24)}
+              fill="var(--text-h)"
+              fontSize="11"
+              fontWeight="bold"
+              textAnchor="middle"
+            >
+              {selectedPoint.zone}: {formatBenchMetric(selectedPoint.value, 1, " lb")}
+            </text>
+            <text
+              x={Math.min(width - 79, Math.max(paddingLeft + 71, selectedPoint.x))}
+              y={Math.max(paddingTop + 28, selectedPoint.y - 10)}
+              fill="var(--text-muted)"
+              fontSize="9"
+              textAnchor="middle"
+            >
+              {selectedPoint.label}
+            </text>
+          </g>
+        )}
+        <text
+          x={paddingLeft}
+          y={height - 7}
+          fill="var(--text-muted)"
+          fontSize="10"
+        >
+          {firstDate}
+        </text>
+        <text
+          x={width - paddingRight}
+          y={height - 7}
+          fill="var(--text-muted)"
+          fontSize="10"
+          textAnchor="end"
+        >
+          {lastDate}
+        </text>
+      </svg>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "10px",
+          justifyContent: "center",
+          marginTop: "6px",
+        }}
+      >
+        {[
+          ["Heavy 3-7 reps, 0-2 RIR", BENCH_ZONE_COLORS.heavy],
+          ["Moderate 8-12 reps, 0-3 RIR", BENCH_ZONE_COLORS.moderate],
+          ["Low-confidence >3 RIR", BENCH_ZONE_COLORS.lowConfidence],
+        ].map(([label, color]) => (
+          <span
+            key={label}
+            style={{
+              alignItems: "center",
+              color: "var(--text-muted)",
+              display: "inline-flex",
+              fontSize: "11px",
+              gap: "5px",
+            }}
+          >
+            <span
+              style={{
+                background: color,
+                borderRadius: "999px",
+                height: "8px",
+                width: "8px",
+              }}
+            />
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BenchReadItem({ label, read, detail }) {
+  const toneColors = {
+    negative: "var(--danger-text)",
+    neutral: "var(--text-muted)",
+    positive: "var(--success-text)",
+  };
+
+  return (
+    <div
+      style={{
+        background: "var(--surface-muted)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        padding: "8px",
+      }}
+    >
+      <div
+        style={{
+          color: "var(--text-muted)",
+          fontSize: "11px",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          color: toneColors[read.tone] || toneColors.neutral,
+          fontSize: "14px",
+          fontWeight: 800,
+          lineHeight: 1.15,
+        }}
+      >
+        {read.label}
+      </div>
+      {detail && (
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "11px",
+            lineHeight: 1.2,
+          }}
+        >
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BenchPressExperiment({ exerciseHistory }) {
+  const [showTrendLines, setShowTrendLines] = useState(false);
+  const data = useMemo(
+    () => buildBenchPressExperiment(exerciseHistory),
+    [exerciseHistory]
+  );
+  const latestHeavy = getRollingAveragePoints(data.heavyPoints);
+  const latestModerate = getRollingAveragePoints(data.moderatePoints);
+  const latestHeavyValue =
+    latestHeavy.length > 0 ? latestHeavy[latestHeavy.length - 1].value : null;
+  const latestModerateValue =
+    latestModerate.length > 0
+      ? latestModerate[latestModerate.length - 1].value
+      : null;
+  const heavyRead = getBenchTrendRead(data.heavyRegression);
+  const moderateRead = getBenchTrendRead(data.moderateRegression);
+  const ratioRead = getBenchRatioRead(data.heavyExpressionRatio);
+  const fatigueRead = getBenchFatigueRead(data.latestFatigue);
+
+  return (
+    <section
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        display: "grid",
+        gap: "10px",
+        padding: "10px",
+      }}
+    >
+      <div>
+        <h3
+          style={{
+            fontSize: "15px",
+            margin: "0 0 4px",
+          }}
+        >
+          Bench Press Experiment
+        </h3>
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+          }}
+        >
+          Temporary bench-only view comparing heavy strength expression against
+          moderate-rep performance. Trend lines use a rolling 3-workout average.
+        </div>
+      </div>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "8px",
+          justifyContent: "space-between",
+        }}
+      >
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+          }}
+        >
+          Dashed trend lines use linear regression on the rolling points.
+        </div>
+        <button
+          aria-pressed={showTrendLines}
+          onClick={() => setShowTrendLines((current) => !current)}
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: "5px",
+            minHeight: "32px",
+            padding: "4px 9px",
+            whiteSpace: "nowrap",
+          }}
+          type="button"
+        >
+          <TrendingUp size={14} />
+          Trend
+        </button>
+      </div>
+      <BenchZoneChart data={data} showTrendLines={showTrendLines} />
+      <div
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "8px",
+          padding: "8px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 800,
+          }}
+        >
+          Current read
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          }}
+        >
+          <BenchReadItem
+            detail={formatBenchSlope(data.heavyRegression)}
+            label="Heavy trend"
+            read={heavyRead}
+          />
+          <BenchReadItem
+            detail={formatBenchSlope(data.moderateRegression)}
+            label="Moderate trend"
+            read={moderateRead}
+          />
+          <BenchReadItem
+            detail={formatBenchMetric(data.heavyExpressionRatio, 3)}
+            label="Heavy expression"
+            read={ratioRead}
+          />
+          <BenchReadItem
+            detail={data.latestFatigue?.date || "Latest comparable workout"}
+            label="Repeatability"
+            read={fatigueRead}
+          />
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <BenchExperimentStat
+          label="Heavy rolling e1RM"
+          sublabel="3-7 reps, 0-2 RIR"
+          value={formatBenchMetric(latestHeavyValue, 1, " lb")}
+        />
+        <BenchExperimentStat
+          label="Moderate rolling e1RM"
+          sublabel="8-12 reps, 0-3 RIR"
+          value={formatBenchMetric(latestModerateValue, 1, " lb")}
+        />
+        <BenchExperimentStat
+          label="Heavy / moderate"
+          sublabel="Rolling values"
+          value={formatBenchMetric(data.heavyExpressionRatio, 3)}
+        />
+        <BenchExperimentStat
+          label="Low-confidence sets"
+          sublabel="Best >3 RIR points shown faintly"
+          value={data.lowConfidencePoints.length}
+        />
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <BenchExperimentStat
+          label="Best 6+ rep set"
+          sublabel="At least 1 RIR"
+          value={getSetLabel(data.benchmark6Rep)}
+        />
+        <BenchExperimentStat
+          label="Best 8+ rep set"
+          sublabel="At least 1 RIR"
+          value={getSetLabel(data.benchmark8Rep)}
+        />
+        <BenchExperimentStat
+          label="Best at 135 lb"
+          sublabel="0-3 RIR"
+          value={getSetLabel(data.benchmark135)}
+        />
+        <BenchExperimentStat
+          label="Best at 145 lb"
+          sublabel="0-3 RIR"
+          value={getSetLabel(data.benchmark145)}
+        />
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: "8px",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <BenchExperimentStat
+          label="Latest set 1 -> 2 drop"
+          sublabel={data.latestFatigue?.date || "No comparable workout"}
+          value={
+            Number.isFinite(data.latestFatigue?.e1rmDropPercent)
+              ? `${formatBenchMetric(data.latestFatigue.e1rmDropPercent, 1)}%`
+              : "—"
+          }
+        />
+        <BenchExperimentStat
+          label="Latest same-weight retention"
+          sublabel={data.latestFatigue?.date || "No repeated weight"}
+          value={
+            data.latestFatigue?.repeatedWeight
+              ? `${formatBenchMetric(
+                  data.latestFatigue.repeatedWeight.weight,
+                  1,
+                  " lb"
+                )}: ${formatBenchMetric(
+                  data.latestFatigue.repeatedWeight.reps,
+                  0
+                )} reps`
+              : "—"
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
 export default function ExerciseDetailDialog({
   bodyWeightEntries = [],
   exercise,
@@ -925,6 +1984,7 @@ export default function ExerciseDetailDialog({
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
   const trendLabel = getOptionLabel(TREND_OPTIONS, trendDays);
   const e1RMTrendColoringActive = chartMetric === "e1rm" && colorTrend;
+  const showBenchPressExperiment = isBarbellBenchPress(exercise);
 
   function updateChartSettings(nextSettings) {
     setChartSettings((currentSettings) => {
@@ -1398,6 +2458,10 @@ export default function ExerciseDetailDialog({
               rangeDays={rangeDays}
               trendDays={trendDays}
             />
+
+            {showBenchPressExperiment && (
+              <BenchPressExperiment exerciseHistory={exerciseHistory} />
+            )}
 
             {exerciseHistory.length === 0 ? (
               <div

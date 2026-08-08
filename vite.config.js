@@ -2,12 +2,20 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+const buildTime = new Date().toLocaleString();
+
+function escapeHtmlAttribute(value) {
+  return String(value).replace(/[&"]/g, (character) =>
+    character === "&" ? "&amp;" : "&quot;"
+  );
+}
+
 // VITE CONFIG
 export default defineConfig({
   base: "/workout-app/",
 
   define: {
-    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString()),
+    __BUILD_TIME__: JSON.stringify(buildTime),
   },
 
   build: {
@@ -27,6 +35,16 @@ export default defineConfig({
   },
 
   plugins: [
+    {
+      name: "workout-build-time-meta",
+      transformIndexHtml(html) {
+        return html.replace(
+          '<meta name="color-scheme" content="light" />',
+          `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
+        );
+      },
+    },
+
     react(),
 
     VitePWA({

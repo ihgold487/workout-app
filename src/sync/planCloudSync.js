@@ -37,7 +37,64 @@ function parseDate(value) {
     : null;
 }
 
-function localPlanToCloud(plan, userId) {
+function getPlanCompletionKey(completion) {
+  const weekNumber = Number(completion?.weekNumber);
+  const planWorkoutId = completion?.planWorkoutId;
+
+  if (!Number.isFinite(weekNumber) || planWorkoutId == null) {
+    return null;
+  }
+
+  return `${weekNumber}:${String(planWorkoutId)}`;
+}
+
+function mergePlanCompletions(localCompletions = [], cloudCompletions = []) {
+  const mergedByKey = new Map();
+
+  for (const completion of cloudCompletions) {
+    const key = getPlanCompletionKey(completion);
+
+    if (key) {
+      mergedByKey.set(key, completion);
+    }
+  }
+
+  for (const completion of localCompletions) {
+    const key = getPlanCompletionKey(completion);
+
+    if (key) {
+      mergedByKey.set(key, completion);
+    }
+  }
+
+  return Array.from(mergedByKey.values()).sort((a, b) => {
+    const weekDiff = Number(a.weekNumber) - Number(b.weekNumber);
+
+    if (weekDiff !== 0) {
+      return weekDiff;
+    }
+
+    return String(a.planWorkoutId).localeCompare(String(b.planWorkoutId));
+  });
+}
+
+function localPlanToCloud(plan, userId, existingCloudPlan = null) {
+  const existingPlanConfig = existingCloudPlan?.plan_config || {};
+  const existingCloudCompletions = Array.isArray(existingPlanConfig.completions)
+    ? existingPlanConfig.completions
+    : [];
+  const localCompletions = Array.isArray(plan.completions)
+    ? plan.completions
+    : [];
+  const completions = mergePlanCompletions(
+    localCompletions,
+    existingCloudCompletions
+  );
+  const currentWeek = Math.max(
+    Number(plan.currentWeek) || 1,
+    Number(existingPlanConfig.currentWeek) || 1
+  );
+
   return {
     days_per_week: plan.daysPerWeek || null,
     deleted_at: null,
@@ -47,10 +104,10 @@ function localPlanToCloud(plan, userId) {
     is_open_ended: Boolean(plan.isOpenEnded),
     name: plan.name,
     plan_config: {
-      completions: plan.completions || [],
+      completions,
       config: plan.config || {},
       createdAt: plan.createdAt || null,
-      currentWeek: plan.currentWeek || 1,
+      currentWeek,
       goal: plan.goal || "maintain",
       planType: plan.planType || "type-2",
     },
@@ -236,7 +293,27 @@ export async function uploadPlans(
     await uploadWorkouts(templates, exerciseLibrary, session);
   }
 
-  const planRecords = plans.map((plan) => localPlanToCloud(plan, userId));
+  const sourceKeys = plans.map((plan) => String(plan.id));
+  const { data: existingPlanRows, error: existingPlanError } = sourceKeys.length
+    ? await supabase
+        .from("training_plans")
+        .select("source_key,plan_config")
+        .eq("user_id", userId)
+        .eq("source", LOCAL_APP_SOURCE)
+        .in("source_key", sourceKeys)
+        .is("deleted_at", null)
+    : { data: [], error: null };
+
+  if (existingPlanError) {
+    throw existingPlanError;
+  }
+
+  const existingPlansBySourceKey = new Map(
+    (existingPlanRows || []).map((plan) => [plan.source_key, plan])
+  );
+  const planRecords = plans.map((plan) =>
+    localPlanToCloud(plan, userId, existingPlansBySourceKey.get(String(plan.id)))
+  );
 
   if (planRecords.length > 0) {
     const { error } = await supabase.from("training_plans").upsert(planRecords, {
@@ -282,7 +359,8 @@ export async function uploadPlans(
           (item) => String(item.id) === String(planWorkout.templateId)
         ) ||
         templates.find(
-          (item) => item.planWorkoutId === planWorkout.planWorkoutId
+          (item) =>
+            String(item.planWorkoutId) === String(planWorkout.planWorkoutId)
         );
       const templateId = template?.id || planWorkout.templateId;
       const record = localPlanWorkoutToCloud({
@@ -308,7 +386,6 @@ export async function uploadPlans(
     });
   }
 
-  const sourceKeys = plans.map((plan) => String(plan.id));
   const removedPlanIds = cloudPlans
     .filter((plan) => !sourceKeys.includes(plan.source_key))
     .map((plan) => plan.id);

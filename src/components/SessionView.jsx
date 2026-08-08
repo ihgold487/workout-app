@@ -1102,6 +1102,20 @@ export default function SessionView({
     return `${prescription.weight} × ${prescription.reps} @ ${prescription.rir}`;
   }
 
+  function formatPrescriptionValue(value) {
+    return isBlankValue(value) ? "—" : String(value);
+  }
+
+  function getExercisePrescriptionDisplay(exercise) {
+    const targetSet =
+      exercise?.sets?.find((set) => !set.completed) || exercise?.sets?.[0];
+
+    return {
+      reps: formatPrescriptionValue(getSetPrescribedReps(targetSet)),
+      rir: formatPrescriptionValue(getSetPrescribedRir(targetSet)),
+    };
+  }
+
   function parseSessionNumber(value) {
     if (value === "" || value == null) {
       return null;
@@ -3327,7 +3341,7 @@ export default function SessionView({
 
     let completedPlan = null;
     const nextPlans = plans.map((plan) => {
-      if (plan.id !== completedWorkout.planId) {
+      if (String(plan.id) !== String(completedWorkout.planId)) {
         return plan;
       }
 
@@ -3336,7 +3350,8 @@ export default function SessionView({
       const alreadyCompleted = existingCompletions.some(
         (completion) =>
           Number(completion.weekNumber) === Number(weekNumber) &&
-          completion.planWorkoutId === completedWorkout.planWorkoutId
+          String(completion.planWorkoutId) ===
+            String(completedWorkout.planWorkoutId)
       );
       const completions = alreadyCompleted
         ? existingCompletions
@@ -5238,6 +5253,8 @@ export default function SessionView({
                     exerciseMetadata?.[exercise.exerciseId]?.note || "";
                   const exerciseNoteText = exerciseNote.trim();
                   const editingNote = !!expandedNotes[exercise.id];
+                  const prescriptionDisplay =
+                    getExercisePrescriptionDisplay(exercise);
 
                   return (
                     <div
@@ -5436,7 +5453,9 @@ export default function SessionView({
 
                     <div
                       style={{
+                        alignItems: "stretch",
                         display: "flex",
+                        gap: "8px",
                         justifyContent: "flex-start",
                         marginTop: "8px",
                       }}
@@ -5448,11 +5467,32 @@ export default function SessionView({
                           alignItems: "center",
                           display: "inline-flex",
                           gap: "6px",
-                          padding: "7px 10px",
+                          minHeight: "24px",
+                          padding: "2px 8px",
                         }}
                       >
                         <Flame size={15} /> Warmup sets
                       </button>
+                      <div
+                        aria-label="Prescribed reps and RIR"
+                        title="Prescribed reps and RIR"
+                        style={{
+                          alignItems: "center",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--text)",
+                          display: "inline-flex",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          justifyContent: "center",
+                          minHeight: "24px",
+                          padding: "2px 8px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {prescriptionDisplay.reps} reps ·{" "}
+                        {prescriptionDisplay.rir} RIR
+                      </div>
                     </div>
 
                     {

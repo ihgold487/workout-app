@@ -1,6 +1,7 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import {
+  AlertTriangle,
   Brain,
   Cable,
   CalendarPlus,
@@ -10,6 +11,7 @@ import {
   Circle,
   ClipboardList,
   Copy,
+  Download,
   Dumbbell,
   History,
   Home,
@@ -17,6 +19,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Search,
   Settings,
   Share2,
   Trash2,
@@ -32,7 +35,6 @@ import NutritionView from "./components/NutritionView";
 import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import {
-  createWorkoutBackup,
   clearLegacyEquipmentStorage,
   getSavedStorageVersion,
   loadWorkoutData,
@@ -53,7 +55,6 @@ import {
   updateAppUserApproval,
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
-import { BENCH_PRESS_HISTORY_TEST_DATA } from "./data/benchPressHistoryTestData";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
 import { buildCoachBrief } from "./utils/coachBrief";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
@@ -96,19 +97,17 @@ const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
 
 const STARTUP_SPLASH_MINIMUM_MS = 1000;
+const ACTIVE_WORKOUT_STARTUP_SPLASH_MINIMUM_MS = 150;
 const AUTO_SYNC_RESUME_INTERVAL = 60 * 60 * 1000;
 const AUTO_SYNC_CHECKPOINT_DELAY_MS = 350;
 const AUTO_SYNC_SUPPRESS_MS = 4000;
 const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
 const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
-const BENCH_HISTORY_TEST_BACKUP_KEY = "benchHistoryTestBackup";
 const PLATE_INVENTORY_KEY = "equipmentPlateInventory";
 const PLATE_INVENTORY_OWNER_KEY = "equipmentPlateInventoryOwner";
 const APP_APPROVAL_CACHE_KEY_PREFIX = "appUserApproval:";
 const APP_OWNER_EMAIL = "ihgold@comcast.net";
-const BENCH_HISTORY_TEST_ID_PREFIX = "bench-history-test";
-const LOCAL_TEST_SYNC_SUPPRESS_MS = 60 * 60 * 1000;
 const NORMALIZED_SYNC_DOMAINS = [
   "exercisePreferences",
   "workouts",
@@ -783,119 +782,6 @@ function formatAuditNormalizedSummary(summary) {
   return `${summary.exercises} exercises, ${summary.exercisePreferences} exercise preferences, ${summary.workouts} workout rows, ${summary.trainingPlans} plans, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets, ${summary.nutritionEntries} nutrition entries, ${summary.bodyMeasurements} body measurements`;
 }
 
-function isBenchHistoryTestWorkout(workout) {
-  return String(workout?.id || "").startsWith(BENCH_HISTORY_TEST_ID_PREFIX);
-}
-
-function getPrimaryEquipment(exercise) {
-  return Array.isArray(exercise?.equipment)
-    ? exercise.equipment[0] || ""
-    : exercise?.equipment || "";
-}
-
-function findBenchPressBarbellExercise(exerciseLibrary) {
-  return exerciseLibrary.find(
-    (exercise) =>
-      String(exercise.name || "").trim().toLowerCase() === "bench press" &&
-      String(getPrimaryEquipment(exercise)).trim().toLowerCase() === "barbell"
-  );
-}
-
-function formatCompletedAt(isoValue) {
-  const parsed = new Date(isoValue);
-
-  return Number.isFinite(parsed.getTime())
-    ? parsed.toLocaleDateString()
-    : String(isoValue || "");
-}
-
-function buildBenchHistoryTestWorkouts(benchExercise) {
-  return BENCH_PRESS_HISTORY_TEST_DATA.map((entry, workoutIndex) => {
-    const workoutId = `${BENCH_HISTORY_TEST_ID_PREFIX}-${entry.completedAtIso.slice(
-      0,
-      10
-    )}-${workoutIndex + 1}`;
-
-    return {
-      completedAt: formatCompletedAt(entry.completedAtIso),
-      completedAtIso: entry.completedAtIso,
-      durationSeconds: entry.durationSeconds || null,
-      exercises: [
-        {
-          equipment: benchExercise.equipment || ["Barbell"],
-          exerciseId: benchExercise.id,
-          id: `${workoutId}-exercise-1`,
-          imageAlt: benchExercise.imageAlt || "",
-          imageUrl: benchExercise.imageUrl || "",
-          muscles: benchExercise.muscles || [],
-          name: benchExercise.name,
-          note: "Temporary local bench history test import.",
-          sets: entry.sets.map((set) => ({
-            actualReps: set.reps,
-            actualRir: set.rir,
-            actualWeight: set.weight,
-            completed: true,
-            id: `${workoutId}-set-${set.setNumber}`,
-            isDropSet: false,
-          })),
-          supersetGroup: null,
-        },
-      ],
-      id: workoutId,
-      planId: null,
-      planWeek: null,
-      planWorkoutId: null,
-      sourceSessionId: null,
-      startedAt: formatCompletedAt(entry.completedAtIso),
-      startedAtIso: entry.completedAtIso,
-      templateId: null,
-      templateName: "Bench Press History Test",
-    };
-  });
-}
-
-function getBenchHistoryMetadata(importedHistory, existing = {}) {
-  let latestE1RM = null;
-  let maxE1RM = existing.maxE1RM || null;
-
-  importedHistory.forEach((workout) => {
-    const exercise = workout.exercises?.[0];
-    let workoutBestE1RM = null;
-
-    exercise?.sets?.forEach((set) => {
-      const e1rm = calculateE1RM(
-        set.actualWeight,
-        set.actualReps,
-        set.actualRir
-      );
-
-      if (e1rm && (!workoutBestE1RM || e1rm > workoutBestE1RM)) {
-        workoutBestE1RM = e1rm;
-      }
-
-      if (e1rm && (!maxE1RM || e1rm > maxE1RM.value)) {
-        maxE1RM = {
-          date: workout.completedAt,
-          value: e1rm,
-        };
-      }
-    });
-
-    if (!latestE1RM && workoutBestE1RM) {
-      latestE1RM = {
-        date: workout.completedAt,
-        value: workoutBestE1RM,
-      };
-    }
-  });
-
-  return {
-    ...existing,
-    latestE1RM: latestE1RM || existing.latestE1RM,
-    maxE1RM,
-  };
-}
-
 function parseHistoryMetricValue(value) {
   const parsed = Number.parseFloat(String(value ?? "").replace("+", ""));
 
@@ -936,12 +822,178 @@ function getHistorySetE1RM(set, exercise, bodyWeight) {
   return Number.isFinite(e1rm) ? e1rm : null;
 }
 
+function normalizeExportText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function getExerciseEquipmentLabel(exercise) {
+  const equipment = exercise?.equipment;
+
+  return Array.isArray(equipment)
+    ? equipment.filter(Boolean).join(", ")
+    : String(equipment || "");
+}
+
+function getHistoryExerciseName(exercise) {
+  return exercise?.name || exercise?.exerciseName || "Unknown exercise";
+}
+
+function getHistoryExerciseKey(exercise) {
+  const exerciseId = exercise?.exerciseId ?? exercise?.exercise_id;
+
+  if (exerciseId !== undefined && exerciseId !== null && exerciseId !== "") {
+    return `id:${exerciseId}`;
+  }
+
+  return `name:${normalizeExportText(getHistoryExerciseName(exercise))}|${normalizeExportText(
+    getExerciseEquipmentLabel(exercise)
+  )}`;
+}
+
+function getWorkoutName(workout) {
+  return workout?.templateName || workout?.workoutName || workout?.workout_name || workout?.name || "Workout";
+}
+
 function getHistoryWorkoutTime(workout) {
   const parsed = new Date(
     workout.completedAtIso || workout.completed_at || workout.completedAt || 0
   );
 
   return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+}
+
+function getHistoryWorkoutIso(workout) {
+  const source =
+    workout?.completedAtIso ||
+    workout?.completed_at ||
+    workout?.completedAt ||
+    "";
+  const parsed = new Date(source);
+
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
+}
+
+function formatExportNumber(value, digits = 1) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return "";
+  }
+
+  return Number.isInteger(numericValue)
+    ? String(numericValue)
+    : numericValue.toFixed(digits);
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function buildCsv(headers, rows) {
+  return [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+  ].join("\n");
+}
+
+function buildExerciseHistoryExportOptions(history = [], exerciseLibrary = []) {
+  const optionMap = new Map();
+
+  history.forEach((workout) => {
+    (workout.exercises || []).forEach((historyExercise) => {
+      const exercise = findExerciseForHistoryExercise(historyExercise, exerciseLibrary);
+      const key = getHistoryExerciseKey(exercise);
+      const current = optionMap.get(key) || {
+        equipment: getExerciseEquipmentLabel(exercise),
+        key,
+        latestTime: 0,
+        name: getHistoryExerciseName(exercise),
+        setCount: 0,
+        workoutCount: 0,
+      };
+
+      current.latestTime = Math.max(current.latestTime, getHistoryWorkoutTime(workout));
+      current.setCount += (historyExercise.sets || []).length;
+      current.workoutCount += 1;
+      optionMap.set(key, current);
+    });
+  });
+
+  return [...optionMap.values()].sort((left, right) =>
+    left.name.localeCompare(right.name) ||
+    left.equipment.localeCompare(right.equipment)
+  );
+}
+
+function buildExerciseHistoryExportRows({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+  selectedExerciseKeys = null,
+}) {
+  const selectedKeySet = selectedExerciseKeys
+    ? new Set(selectedExerciseKeys.map(String))
+    : null;
+  const rows = [];
+
+  [...history]
+    .sort((left, right) => getHistoryWorkoutTime(left) - getHistoryWorkoutTime(right))
+    .forEach((workout) => {
+      const completedAtIso = getHistoryWorkoutIso(workout);
+      const bodyWeight = getLatestBodyWeightForDate(
+        bodyWeightEntries,
+        completedAtIso || workout.completedAt || workout.completed_at
+      );
+
+      (workout.exercises || []).forEach((historyExercise) => {
+        const exercise = findExerciseForHistoryExercise(historyExercise, exerciseLibrary);
+        const exerciseKey = getHistoryExerciseKey(exercise);
+
+        if (selectedKeySet && !selectedKeySet.has(exerciseKey)) {
+          return;
+        }
+
+        (historyExercise.sets || []).forEach((set, setIndex) => {
+          const weight = parseHistoryMetricValue(set.actualWeight ?? set.actual_weight);
+          const reps = parseHistoryMetricValue(set.actualReps ?? set.actual_reps);
+          const rir = parseHistoryMetricValue(set.actualRir ?? set.actual_rir);
+          const e1rm = getHistorySetE1RM(set, exercise, bodyWeight);
+
+          rows.push({
+            completed_date: completedAtIso ? completedAtIso.slice(0, 10) : "",
+            completed_at: completedAtIso,
+            workout_name: getWorkoutName(workout),
+            workout_id: workout.id || workout.source_key || "",
+            plan_id: workout.planId || workout.plan_id || "",
+            plan_week: workout.planWeek || workout.plan_week || "",
+            plan_workout_id: workout.planWorkoutId || workout.plan_workout_id || "",
+            exercise_name: getHistoryExerciseName(exercise),
+            exercise_id: exercise.exerciseId ?? exercise.exercise_id ?? exercise.id ?? "",
+            equipment: getExerciseEquipmentLabel(exercise),
+            set_number: set.setNumber || set.set_number || setIndex + 1,
+            set_id: set.id || set.source_key || "",
+            weight: formatExportNumber(weight, 1),
+            weight_unit: "lb",
+            reps: formatExportNumber(reps, 0),
+            rir: formatExportNumber(rir, 1),
+            volume: formatExportNumber(
+              Number.isFinite(weight) && Number.isFinite(reps) ? weight * reps : null,
+              1
+            ),
+            e1rm: formatExportNumber(e1rm, 1),
+            e1rm_unit: "lb",
+            completed: set.completed ?? "",
+          });
+        });
+      });
+    });
+
+  return rows;
 }
 
 function recomputeExerciseE1RMMetadata(
@@ -1126,7 +1178,7 @@ function resolvePlanWorkoutTemplateIds(plans, templates) {
       const planWorkoutMatch = templates.find(
         (template) =>
           workout.planWorkoutId &&
-          template.planWorkoutId === workout.planWorkoutId
+          String(template.planWorkoutId) === String(workout.planWorkoutId)
       );
       const planNameMatch = templates.find(
         (template) =>
@@ -1270,19 +1322,121 @@ const activeBottomNavButtonStyle = {
   fontWeight: "bold",
 };
 
-function getPlanCompletionsForWeek(plan, weekNumber) {
-  return (plan.completions || []).filter(
+function getPlanCompletionsForWeek(plan, weekNumber, history = []) {
+  return getPlanCompletions(plan, history).filter(
     (completion) => Number(completion.weekNumber) === Number(weekNumber)
   );
+}
+
+function getPlanCompletionKey(completion) {
+  const weekNumber = Number(completion?.weekNumber);
+  const planWorkoutId = completion?.planWorkoutId;
+
+  if (!Number.isFinite(weekNumber) || planWorkoutId == null) {
+    return null;
+  }
+
+  return `${weekNumber}:${String(planWorkoutId)}`;
+}
+
+function getPlanCompletions(plan, history = []) {
+  const completionsByKey = new Map();
+
+  for (const completion of plan?.completions || []) {
+    const key = getPlanCompletionKey(completion);
+
+    if (key) {
+      completionsByKey.set(key, completion);
+    }
+  }
+
+  for (const workout of history || []) {
+    if (String(workout?.planId ?? workout?.plan_id ?? "") !== String(plan?.id)) {
+      continue;
+    }
+
+    const completion = {
+      completedAt:
+        workout.completedAt ||
+        workout.completed_at ||
+        workout.completedAtIso ||
+        workout.completed_at_iso ||
+        "",
+      planWorkoutId: workout.planWorkoutId ?? workout.plan_workout_id,
+      sessionId: workout.id || workout.source_key || workout.sessionId || "",
+      weekNumber: workout.planWeek ?? workout.plan_week,
+    };
+    const key = getPlanCompletionKey(completion);
+
+    if (key && !completionsByKey.has(key)) {
+      completionsByKey.set(key, completion);
+    }
+  }
+
+  return Array.from(completionsByKey.values()).sort((a, b) => {
+    const weekDiff = Number(a.weekNumber) - Number(b.weekNumber);
+
+    if (weekDiff !== 0) {
+      return weekDiff;
+    }
+
+    return String(a.planWorkoutId).localeCompare(String(b.planWorkoutId));
+  });
+}
+
+function getReconciledPlanCurrentWeek(plan, completions) {
+  const currentWeek = Number(plan?.currentWeek) || 1;
+  const totalWeeks = (Number(plan?.durationWeeks) || 1) + (plan?.config?.deload ? 1 : 0);
+  const workoutsPerWeek = plan?.workouts?.length || 0;
+
+  if (workoutsPerWeek === 0 || completions.length === 0) {
+    return currentWeek;
+  }
+
+  const completedWeeks = new Map();
+
+  for (const completion of completions) {
+    const weekNumber = Number(completion.weekNumber);
+
+    if (!Number.isFinite(weekNumber)) {
+      continue;
+    }
+
+    completedWeeks.set(weekNumber, (completedWeeks.get(weekNumber) || 0) + 1);
+  }
+
+  let derivedWeek = currentWeek;
+
+  for (const [weekNumber, completedCount] of completedWeeks.entries()) {
+    derivedWeek = Math.max(derivedWeek, weekNumber);
+
+    if (completedCount >= workoutsPerWeek) {
+      derivedWeek = Math.max(derivedWeek, Math.min(weekNumber + 1, totalWeeks));
+    }
+  }
+
+  return derivedWeek;
+}
+
+function reconcilePlanCompletionsWithHistory(plans = [], history = []) {
+  return plans.map((plan) => {
+    const completions = getPlanCompletions(plan, history);
+
+    return {
+      ...plan,
+      completions,
+      currentWeek: getReconciledPlanCurrentWeek(plan, completions),
+    };
+  });
 }
 
 function getPlanTotalWeeks(plan) {
   return (Number(plan?.durationWeeks) || 1) + (plan?.config?.deload ? 1 : 0);
 }
 
-function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber) {
-  return getPlanCompletionsForWeek(plan, weekNumber).some(
-    (completion) => completion.planWorkoutId === planWorkoutId
+function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber, history = []) {
+  return getPlanCompletionsForWeek(plan, weekNumber, history).some(
+    (completion) => String(completion.planWorkoutId) === String(planWorkoutId)
   );
 }
 
@@ -1311,9 +1465,13 @@ function getPlanWeekLabel(plan, weekNumber) {
     : `Week ${weekNumber}`;
 }
 
-function getPlanWeekStatus(plan, displayWeek = plan.currentWeek || 1) {
+function getPlanWeekStatus(plan, displayWeek = plan.currentWeek || 1, history = []) {
   const currentWeek = displayWeek;
-  const completedThisWeek = getPlanCompletionsForWeek(plan, currentWeek).length;
+  const completedThisWeek = getPlanCompletionsForWeek(
+    plan,
+    currentWeek,
+    history
+  ).length;
   const totalThisWeek = plan.workouts?.length || 0;
   const totalWeeks = getPlanTotalWeeks(plan);
   const currentWeekLabel =
@@ -1414,6 +1572,42 @@ function rememberUpdateConfirmation() {
     JSON.stringify({
       expiresAt: Date.now() + UPDATE_CONFIRMATION_DURATION,
     })
+  );
+}
+
+async function getLiveBuildTime() {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const response = await fetch(`${baseUrl}index.html?update-check=${Date.now()}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Live build check failed with ${response.status}.`);
+  }
+
+  const html = await response.text();
+  const match = html.match(
+    /<meta\s+name=["']app-build-time["']\s+content=["']([^"']+)["']/i
+  );
+
+  return match ? match[1] : "";
+}
+
+async function reloadWithoutServiceWorkerCache() {
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+
+    await Promise.all(
+      registrations
+        .filter((registration) =>
+          registration.scope.includes(import.meta.env.BASE_URL || "/")
+        )
+        .map((registration) => registration.unregister())
+    );
+  }
+
+  window.location.replace(
+    `${import.meta.env.BASE_URL || "/"}?updated=${Date.now()}`
   );
 }
 
@@ -1558,6 +1752,7 @@ export default function App() {
   const [approvalAdminRows, setApprovalAdminRows] = useState([]);
   const [approvalAdminStatus, setApprovalAdminStatus] = useState("");
   const [approvalAdminLoading, setApprovalAdminLoading] = useState(false);
+  const [approvalAdminExpanded, setApprovalAdminExpanded] = useState(false);
 
   const [changePasswordDialogOpen, setChangePasswordDialogOpen] =
     useState(false);
@@ -1589,11 +1784,11 @@ export default function App() {
   const [coachBriefPrompt, setCoachBriefPrompt] = useState("");
 
   const [coachBriefStatus, setCoachBriefStatus] = useState("");
-
-  const [benchHistoryTestStatus, setBenchHistoryTestStatus] = useState("");
-
-  const [benchHistoryBackupAvailable, setBenchHistoryBackupAvailable] =
-    useState(() => Boolean(localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY)));
+  const [exportExpanded, setExportExpanded] = useState(false);
+  const [exerciseExportMode, setExerciseExportMode] = useState("all");
+  const [exerciseExportSearch, setExerciseExportSearch] = useState("");
+  const [selectedExerciseExportKeys, setSelectedExerciseExportKeys] = useState([]);
+  const [exerciseExportStatus, setExerciseExportStatus] = useState("");
 
   const currentWorkoutDataRef = useRef(null);
 
@@ -2036,12 +2231,14 @@ export default function App() {
   }
 
   function getCurrentWorkoutData() {
+    const reconciledPlans = reconcilePlanCompletionsWithHistory(plans, history);
+
     return {
       exerciseLibrary,
       exerciseMetadata,
       history,
       ownerUserId: localOwnerUserId,
-      plans,
+      plans: reconciledPlans,
       selectedSessionId,
       sessions,
       templates,
@@ -2058,8 +2255,13 @@ export default function App() {
   }
 
   function replaceWorkoutData(data) {
+    const nextPlans = reconcilePlanCompletionsWithHistory(
+      data.plans,
+      data.history
+    );
+
     setTemplates(data.templates);
-    setPlans(data.plans);
+    setPlans(nextPlans);
     setHistory(data.history);
     setSessions(data.sessions);
     setExerciseLibrary(data.exerciseLibrary);
@@ -2077,10 +2279,17 @@ export default function App() {
   }
 
   function commitCompletedWorkoutData(updates) {
-    const data = {
+    const mergedData = {
       ...(currentWorkoutDataRef.current || getCurrentWorkoutData()),
       ...updates,
       ownerUserId: localOwnerUserId,
+    };
+    const data = {
+      ...mergedData,
+      plans: reconcilePlanCompletionsWithHistory(
+        mergedData.plans,
+        mergedData.history
+      ),
     };
 
     currentWorkoutDataRef.current = data;
@@ -2157,7 +2366,9 @@ export default function App() {
     }
 
     const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
-    const planToExtend = data.plans.find((plan) => plan.id === prompt.planId);
+    const planToExtend = data.plans.find(
+      (plan) => String(plan.id) === String(prompt.planId)
+    );
 
     if (!planToExtend) {
       setPlanCompletionPrompt(null);
@@ -2184,7 +2395,7 @@ export default function App() {
         : template
     );
     const nextPlans = data.plans.map((plan) =>
-      plan.id === prompt.planId
+      String(plan.id) === String(prompt.planId)
         ? {
             ...plan,
             completions: plan.config?.deload
@@ -2220,7 +2431,7 @@ export default function App() {
 
     const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
     const nextPlans = data.plans.map((plan) =>
-      plan.id === prompt.planId
+      String(plan.id) === String(prompt.planId)
         ? {
             ...plan,
             completions: [],
@@ -2238,97 +2449,6 @@ export default function App() {
       plans: nextPlans,
     });
     setPlanCompletionPrompt(null);
-  }
-
-  async function importBenchHistoryTestData() {
-    const benchExercise = findBenchPressBarbellExercise(exerciseLibrary);
-
-    if (!benchExercise) {
-      setBenchHistoryTestStatus("Bench Press / Barbell was not found.");
-      return;
-    }
-
-    const currentData = getCurrentWorkoutData();
-    const backupExists = Boolean(
-      localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY)
-    );
-    const importedHistory = buildBenchHistoryTestWorkouts(benchExercise);
-    const nextHistory = [
-      ...importedHistory,
-      ...currentData.history.filter((workout) => !isBenchHistoryTestWorkout(workout)),
-    ].sort((a, b) =>
-      String(b.completedAtIso || "").localeCompare(String(a.completedAtIso || ""))
-    );
-    const existingMetadata = currentData.exerciseMetadata?.[benchExercise.id] || {};
-    const nextData = {
-      ...currentData,
-      exerciseMetadata: {
-        ...currentData.exerciseMetadata,
-        [benchExercise.id]: getBenchHistoryMetadata(
-          importedHistory,
-          existingMetadata
-        ),
-      },
-      history: nextHistory,
-    };
-
-    if (!backupExists) {
-      safeSetLocalStorage(
-        BENCH_HISTORY_TEST_BACKUP_KEY,
-        JSON.stringify(createWorkoutBackup(currentData))
-      );
-      setBenchHistoryBackupAvailable(true);
-    }
-
-    automaticSyncSuppressUntilRef.current =
-      getCurrentTimeMs() + LOCAL_TEST_SYNC_SUPPRESS_MS;
-    replaceWorkoutData(nextData);
-
-    try {
-      await saveLocalWorkoutDataImmediately(nextData);
-      setBenchHistoryTestStatus(
-        `Imported ${importedHistory.length} local-only bench history workouts. Restore before syncing if you do not want them uploaded.`
-      );
-      setSyncStatus(
-        "Bench history test data was imported locally. Automatic sync is temporarily suppressed."
-      );
-    } catch (error) {
-      console.error("Bench history test import failed:", error);
-      setBenchHistoryTestStatus(`Import failed: ${error.message}`);
-    }
-  }
-
-  async function restoreBenchHistoryTestBackup() {
-    const rawBackup = localStorage.getItem(BENCH_HISTORY_TEST_BACKUP_KEY);
-
-    if (!rawBackup) {
-      setBenchHistoryTestStatus("No bench history test backup is available.");
-      setBenchHistoryBackupAvailable(false);
-      return;
-    }
-
-    try {
-      const backup = JSON.parse(rawBackup);
-      const restoredData = backup?.data;
-
-      if (!restoredData) {
-        throw new Error("Backup data is missing.");
-      }
-
-      automaticSyncSuppressUntilRef.current =
-        getCurrentTimeMs() + LOCAL_TEST_SYNC_SUPPRESS_MS;
-      replaceWorkoutData(restoredData);
-      await saveLocalWorkoutDataImmediately(restoredData);
-      localStorage.removeItem(BENCH_HISTORY_TEST_BACKUP_KEY);
-      setBenchHistoryBackupAvailable(false);
-      setBenchHistoryTestStatus("Restored the pre-import local workout data.");
-      setSyncStatus(
-        "Bench history test data was restored locally. Automatic sync is temporarily suppressed."
-      );
-    } catch (error) {
-      console.error("Bench history test restore failed:", error);
-      setBenchHistoryTestStatus(`Restore failed: ${error.message}`);
-    }
   }
 
   function resetLocalWorkoutDataForUser(userId = null) {
@@ -2516,8 +2636,13 @@ export default function App() {
     }
 
     if (domainSet.has("plans")) {
-      await uploadPlans(
+      const reconciledPlans = reconcilePlanCompletionsWithHistory(
         data.plans,
+        data.history
+      );
+
+      await uploadPlans(
+        reconciledPlans,
         data.templates,
         data.exerciseLibrary,
         session,
@@ -3165,6 +3290,108 @@ export default function App() {
     setCoachBriefStatus("ChatGPT opened. Copy or share the coach brief there.");
   }
 
+  function getExerciseHistoryExportCsv() {
+    const selectedExerciseKeys =
+      exerciseExportMode === "selected" ? selectedExerciseExportKeys : null;
+    const rows = buildExerciseHistoryExportRows({
+      bodyWeightEntries: localBodyWeightEntries,
+      exerciseLibrary,
+      history,
+      selectedExerciseKeys,
+    });
+
+    if (exerciseExportMode === "selected" && selectedExerciseExportKeys.length === 0) {
+      setExerciseExportStatus("Select at least one exercise to export.");
+      return null;
+    }
+
+    if (rows.length === 0) {
+      setExerciseExportStatus("No completed exercise history matched the export selection.");
+      return null;
+    }
+
+    return buildCsv(
+      [
+        "completed_date",
+        "completed_at",
+        "workout_name",
+        "workout_id",
+        "plan_id",
+        "plan_week",
+        "plan_workout_id",
+        "exercise_name",
+        "exercise_id",
+        "equipment",
+        "set_number",
+        "set_id",
+        "weight",
+        "weight_unit",
+        "reps",
+        "rir",
+        "volume",
+        "e1rm",
+        "e1rm_unit",
+        "completed",
+      ],
+      rows
+    );
+  }
+
+  function getExerciseHistoryExportFilename() {
+    const date = new Date().toISOString().slice(0, 10);
+    const scope =
+      exerciseExportMode === "selected"
+        ? `${selectedExerciseExportKeys.length}-selected`
+        : "all";
+
+    return `exercise-history-${scope}-${date}.csv`;
+  }
+
+  function toggleExerciseExportSelection(exerciseKey) {
+    setSelectedExerciseExportKeys((currentKeys) =>
+      currentKeys.includes(exerciseKey)
+        ? currentKeys.filter((key) => key !== exerciseKey)
+        : [...currentKeys, exerciseKey]
+    );
+    setExerciseExportStatus("");
+  }
+
+  function downloadExerciseHistoryExport() {
+    const csv = getExerciseHistoryExportCsv();
+
+    if (!csv) {
+      return;
+    }
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = getExerciseHistoryExportFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setExerciseExportStatus("Exercise history CSV downloaded.");
+  }
+
+  async function copyExerciseHistoryExport() {
+    const csv = getExerciseHistoryExportCsv();
+
+    if (!csv) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(csv);
+      setExerciseExportStatus("Exercise history CSV copied.");
+    } catch (error) {
+      console.error("Exercise history export copy failed:", error);
+      setExerciseExportStatus("Copy failed. Download the CSV instead.");
+    }
+  }
+
   async function runPersistenceAudit() {
     setSyncLoading(true);
 
@@ -3236,9 +3463,12 @@ export default function App() {
       return undefined;
     }
 
+    const hasRestoredActiveWorkout = hasActiveWorkoutSession();
     const timeoutId = window.setTimeout(() => {
       document.documentElement.classList.add("app-ready");
-    }, STARTUP_SPLASH_MINIMUM_MS);
+    }, hasRestoredActiveWorkout
+      ? ACTIVE_WORKOUT_STARTUP_SPLASH_MINIMUM_MS
+      : STARTUP_SPLASH_MINIMUM_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
@@ -3266,22 +3496,19 @@ export default function App() {
   }, []);
 
   async function checkForUpdate() {
-    if (!("serviceWorker" in navigator)) {
-      setUpdateStatus("unsupported");
-      return;
-    }
-
     setUpdateStatus("checking");
     rememberPendingUpdate();
     localStorage.removeItem(UPDATE_CONFIRMATION_KEY);
     setBuildNotice("");
 
     try {
-      let result;
+      let result = {
+        status: "unsupported",
+      };
 
-      if (window.checkForAppUpdate) {
+      if ("serviceWorker" in navigator && window.checkForAppUpdate) {
         result = await window.checkForAppUpdate();
-      } else {
+      } else if ("serviceWorker" in navigator) {
         result = await navigator.serviceWorker.ready.then(
           async (registration) => {
             await registration.update();
@@ -3313,9 +3540,26 @@ export default function App() {
         return;
       }
 
+      const liveBuildTime = await getLiveBuildTime();
+
+      if (liveBuildTime && liveBuildTime !== BUILD_TIME) {
+        rememberPendingUpdate();
+        setUpdateStatus("found");
+        setTimeout(() => {
+          reloadWithoutServiceWorkerCache().catch((error) => {
+            console.error("Clean update reload failed:", error);
+            window.location.reload();
+          });
+        }, 750);
+
+        return;
+      }
+
       localStorage.removeItem(PENDING_UPDATE_KEY);
       setLastUpdateCheck(new Date());
-      setUpdateStatus(result.status || "current");
+      setUpdateStatus(
+        result.status === "unsupported" ? "current" : result.status || "current"
+      );
     } catch (error) {
       localStorage.removeItem(PENDING_UPDATE_KEY);
       console.error("Update check failed:", error);
@@ -3453,7 +3697,7 @@ export default function App() {
         ...plan,
         currentWeek: plan.currentWeek || 1,
         status:
-          plan.id === planId
+          String(plan.id) === String(planId)
             ? "active"
             : plan.status === "active"
               ? "inactive"
@@ -3471,10 +3715,12 @@ export default function App() {
     setPlans(
       plans.map((plan) => ({
         ...plan,
-        completions: plan.id === planId ? [] : plan.completions || [],
-        currentWeek: plan.id === planId ? 1 : plan.currentWeek || 1,
+        completions:
+          String(plan.id) === String(planId) ? [] : plan.completions || [],
+        currentWeek:
+          String(plan.id) === String(planId) ? 1 : plan.currentWeek || 1,
         status:
-          plan.id === planId
+          String(plan.id) === String(planId)
             ? "active"
             : plan.status === "active"
               ? "inactive"
@@ -3492,7 +3738,7 @@ export default function App() {
   function extendPlan(planId, weeksToAdd) {
     setPlans(
       plans.map((plan) => {
-        if (plan.id !== planId) {
+        if (String(plan.id) !== String(planId)) {
           return {
             ...plan,
             status: plan.status === "active" ? "inactive" : plan.status,
@@ -3926,7 +4172,7 @@ export default function App() {
 
   function renderPlanCard(plan) {
     const displayWeek = planDisplayWeeks[plan.id] || plan.currentWeek || 1;
-    const weekStatus = getPlanWeekStatus(plan, displayWeek);
+    const weekStatus = getPlanWeekStatus(plan, displayWeek, history);
     const active = plan.status === "active";
     const completed = plan.status === "completed";
     const expanded = expandedPlanIds[plan.id] ?? (isHomeView && active);
@@ -4155,7 +4401,8 @@ export default function App() {
                 const done = isPlanWorkoutComplete(
                   plan,
                   planWorkout.planWorkoutId,
-                  weekStatus.currentWeek
+                  weekStatus.currentWeek,
+                  history
                 );
                 const completedWorkout = done
                   ? getCompletedPlanWorkoutHistory(
@@ -5672,6 +5919,23 @@ export default function App() {
   }
 
   function renderSettings() {
+    const exerciseHistoryExportOptions = buildExerciseHistoryExportOptions(
+      history,
+      exerciseLibrary
+    );
+    const exerciseHistoryExportQuery = exerciseExportSearch.trim().toLowerCase();
+    const filteredExerciseHistoryExportOptions = exerciseHistoryExportOptions.filter(
+      (exercise) =>
+        !exerciseHistoryExportQuery ||
+        `${exercise.name} ${exercise.equipment}`
+          .toLowerCase()
+          .includes(exerciseHistoryExportQuery)
+    );
+    const exportSelectionCount =
+      exerciseExportMode === "selected"
+        ? selectedExerciseExportKeys.length
+        : exerciseHistoryExportOptions.length;
+
     return (
       <div
         style={{
@@ -6223,124 +6487,193 @@ export default function App() {
                   paddingTop: "10px",
                 }}
               >
-                <h3
-                  style={{
-                    fontSize: "15px",
-                    margin: "0 0 6px",
-                  }}
-                >
-                  User Approvals
-                </h3>
                 <button
-                  disabled={approvalAdminLoading}
-                  onClick={loadApprovalAdminRows}
+                  aria-expanded={approvalAdminExpanded}
+                  onClick={() =>
+                    setApprovalAdminExpanded((expanded) => !expanded)
+                  }
+                  style={{
+                    alignItems: "center",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text)",
+                    display: "flex",
+                    font: "inherit",
+                    justifyContent: "space-between",
+                    padding: 0,
+                    width: "100%",
+                  }}
                   type="button"
                 >
-                  {approvalAdminLoading ? "Loading..." : "Refresh Approvals"}
-                </button>
-                <div
-                  role="status"
-                  aria-live="polite"
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {approvalAdminStatus}
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "8px",
-                    marginTop: "8px",
-                    textAlign: "left",
-                  }}
-                >
-                  {approvalAdminRows.map((row) => (
-                    <div
-                      key={row.user_id}
+                  <span
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                    }}
+                  >
+                    {approvalAdminExpanded ? (
+                      <ChevronDown size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                    <span
                       style={{
-                        background: "var(--surface-muted)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        display: "grid",
-                        gap: "8px",
-                        padding: "8px",
+                        fontSize: "15px",
+                        fontWeight: 700,
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "8px",
-                          justifyContent: "space-between",
-                        }}
-                      >
-                        <strong>{row.email || row.user_id}</strong>
-                        <span
+                      User Approvals
+                    </span>
+                    {pendingApprovalCount > 0 && (
+                      <AlertTriangle
+                        aria-label={pendingApprovalMessage}
+                        color="#ca8a04"
+                        size={16}
+                      />
+                    )}
+                  </span>
+                  {pendingApprovalCount > 0 && (
+                    <span
+                      style={{
+                        color: "#7a4f01",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {pendingApprovalMessage}
+                    </span>
+                  )}
+                </button>
+                {approvalAdminExpanded && (
+                  <>
+                    <button
+                      disabled={approvalAdminLoading}
+                      onClick={loadApprovalAdminRows}
+                      style={{
+                        marginTop: "8px",
+                      }}
+                      type="button"
+                    >
+                      {approvalAdminLoading ? "Loading..." : "Refresh Approvals"}
+                    </button>
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        marginTop: "6px",
+                      }}
+                    >
+                      {approvalAdminStatus}
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "8px",
+                        marginTop: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      {approvalAdminRows.map((row) => (
+                        <div
+                          key={row.user_id}
                           style={{
-                            background:
-                              row.status === "approved"
-                                ? "#e8f5e9"
-                                : row.status === "denied"
-                                  ? "#ffebee"
-                                  : "#fff8e1",
-                            border: `1px solid ${
-                              row.status === "approved"
-                                ? "#a5d6a7"
-                                : row.status === "denied"
-                                  ? "#ef9a9a"
-                                  : "#ffe082"
-                            }`,
-                            borderRadius: "999px",
-                            color:
-                              row.status === "approved"
-                                ? "#1b5e20"
-                                : row.status === "denied"
-                                  ? "#b71c1c"
-                                  : "#7a4f01",
-                            fontSize: "12px",
-                            lineHeight: 1.2,
-                            padding: "4px 8px",
-                            textTransform: "capitalize",
+                            background: "var(--surface-muted)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            display: "grid",
+                            gap: "8px",
+                            padding: "8px",
                           }}
                         >
-                          {row.status}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "6px",
-                        }}
-                      >
-                        <button
-                          disabled={approvalAdminLoading || row.status === "approved"}
-                          onClick={() => setUserApproval(row.user_id, "approved")}
-                          type="button"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          disabled={approvalAdminLoading || row.status === "pending"}
-                          onClick={() => setUserApproval(row.user_id, "pending")}
-                          type="button"
-                        >
-                          Pending
-                        </button>
-                        <button
-                          disabled={approvalAdminLoading || row.status === "denied"}
-                          onClick={() => setUserApproval(row.user_id, "denied")}
-                          type="button"
-                        >
-                          Deny
-                        </button>
-                      </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <strong>{row.email || row.user_id}</strong>
+                            <span
+                              style={{
+                                background:
+                                  row.status === "approved"
+                                    ? "#e8f5e9"
+                                    : row.status === "denied"
+                                      ? "#ffebee"
+                                      : "#fff8e1",
+                                border: `1px solid ${
+                                  row.status === "approved"
+                                    ? "#a5d6a7"
+                                    : row.status === "denied"
+                                      ? "#ef9a9a"
+                                      : "#ffe082"
+                                }`,
+                                borderRadius: "999px",
+                                color:
+                                  row.status === "approved"
+                                    ? "#1b5e20"
+                                    : row.status === "denied"
+                                      ? "#b71c1c"
+                                      : "#7a4f01",
+                                fontSize: "12px",
+                                lineHeight: 1.2,
+                                padding: "4px 8px",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {row.status}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "6px",
+                            }}
+                          >
+                            <button
+                              disabled={
+                                approvalAdminLoading ||
+                                row.status === "approved"
+                              }
+                              onClick={() =>
+                                setUserApproval(row.user_id, "approved")
+                              }
+                              type="button"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              disabled={
+                                approvalAdminLoading || row.status === "pending"
+                              }
+                              onClick={() =>
+                                setUserApproval(row.user_id, "pending")
+                              }
+                              type="button"
+                            >
+                              Pending
+                            </button>
+                            <button
+                              disabled={
+                                approvalAdminLoading || row.status === "denied"
+                              }
+                              onClick={() =>
+                                setUserApproval(row.user_id, "denied")
+                              }
+                              type="button"
+                            >
+                              Deny
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </div>
               <div
                 style={{
@@ -6407,65 +6740,6 @@ export default function App() {
                   {getCustomExercises(exerciseLibrary).length} custom exercises
                   ready for the normalized exercise table.
                 </div>
-              </div>
-              <div
-                style={{
-                  borderTop: "1px solid var(--border)",
-                  marginTop: "10px",
-                  paddingTop: "10px",
-                }}
-              >
-                <h3
-                  style={{
-                    fontSize: "15px",
-                    margin: "0 0 6px",
-                  }}
-                >
-                  Bench History Test
-                </h3>
-                <p
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    margin: "0 0 8px",
-                  }}
-                >
-                  Imports 71 local-only Barbell Bench Press history entries from
-                  the older CSV for chart testing. A local backup is saved before
-                  the first import.
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "8px",
-                    justifyContent: "center",
-                  }}
-                >
-                  <button onClick={importBenchHistoryTestData} type="button">
-                    Import Bench Test Data
-                  </button>
-                  <button
-                    disabled={!benchHistoryBackupAvailable}
-                    onClick={restoreBenchHistoryTestBackup}
-                    type="button"
-                  >
-                    Restore Pre-Import Data
-                  </button>
-                </div>
-                {benchHistoryTestStatus && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "6px",
-                    }}
-                  >
-                    {benchHistoryTestStatus}
-                  </div>
-                )}
               </div>
               <div
                 style={{
@@ -6723,6 +6997,301 @@ export default function App() {
         </section>
 
         {renderPlateLoadCalculator()}
+
+        <section
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            margin: "18px auto",
+            maxWidth: "520px",
+            padding: "10px",
+          }}
+        >
+          <button
+            aria-expanded={exportExpanded}
+            onClick={() => setExportExpanded((expanded) => !expanded)}
+            style={{
+              alignItems: "center",
+              background: "transparent",
+              border: "none",
+              color: "var(--text)",
+              display: "flex",
+              font: "inherit",
+              justifyContent: "space-between",
+              padding: 0,
+              width: "100%",
+            }}
+            type="button"
+          >
+            <span
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "6px",
+              }}
+            >
+              {exportExpanded ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+              <span
+                style={{
+                  fontSize: "15px",
+                  fontWeight: 700,
+                }}
+              >
+                Export
+              </span>
+            </span>
+            <span
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+              }}
+            >
+              Exercise history
+            </span>
+          </button>
+          {exportExpanded && (
+            <div
+              style={{
+                display: "grid",
+                gap: "10px",
+                marginTop: "10px",
+                textAlign: "left",
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    fontSize: "15px",
+                    margin: "0 0 4px",
+                  }}
+                >
+                  Exercise History
+                </h3>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    margin: 0,
+                  }}
+                >
+                  CSV export with one row per completed set, including workout
+                  date, exercise, weight, reps, RIR, volume, and e1RM.
+                </p>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "1fr 1fr",
+                }}
+              >
+                <button
+                  aria-pressed={exerciseExportMode === "all"}
+                  onClick={() => {
+                    setExerciseExportMode("all");
+                    setExerciseExportStatus("");
+                  }}
+                  type="button"
+                >
+                  All Exercises
+                </button>
+                <button
+                  aria-pressed={exerciseExportMode === "selected"}
+                  onClick={() => {
+                    setExerciseExportMode("selected");
+                    setExerciseExportStatus("");
+                  }}
+                  type="button"
+                >
+                  Selected
+                </button>
+              </div>
+              {exerciseExportMode === "selected" && (
+                <>
+                  <label
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      display: "flex",
+                      gap: "8px",
+                      padding: "8px",
+                    }}
+                  >
+                    <Search color="var(--text-muted)" size={16} />
+                    <input
+                      aria-label="Search exercises to export"
+                      onChange={(event) =>
+                        setExerciseExportSearch(event.target.value)
+                      }
+                      placeholder="Search exercises"
+                      type="search"
+                      value={exerciseExportSearch}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text)",
+                        flex: 1,
+                        minWidth: 0,
+                        outline: "none",
+                      }}
+                    />
+                  </label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                    }}
+                  >
+                    <button
+                      disabled={filteredExerciseHistoryExportOptions.length === 0}
+                      onClick={() => {
+                        setSelectedExerciseExportKeys((currentKeys) => [
+                          ...new Set([
+                            ...currentKeys,
+                            ...filteredExerciseHistoryExportOptions.map(
+                              (exercise) => exercise.key
+                            ),
+                          ]),
+                        ]);
+                        setExerciseExportStatus("");
+                      }}
+                      type="button"
+                    >
+                      Select Visible
+                    </button>
+                    <button
+                      disabled={selectedExerciseExportKeys.length === 0}
+                      onClick={() => {
+                        setSelectedExerciseExportKeys([]);
+                        setExerciseExportStatus("");
+                      }}
+                      type="button"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      display: "grid",
+                      gap: "6px",
+                      maxHeight: "260px",
+                      overflowY: "auto",
+                      padding: "8px",
+                    }}
+                  >
+                    {filteredExerciseHistoryExportOptions.length > 0 ? (
+                      filteredExerciseHistoryExportOptions.map((exercise) => (
+                        <label
+                          key={exercise.key}
+                          style={{
+                            alignItems: "center",
+                            display: "grid",
+                            gap: "8px",
+                            gridTemplateColumns: "auto minmax(0, 1fr)",
+                          }}
+                        >
+                          <input
+                            checked={selectedExerciseExportKeys.includes(
+                              exercise.key
+                            )}
+                            onChange={() =>
+                              toggleExerciseExportSelection(exercise.key)
+                            }
+                            type="checkbox"
+                          />
+                          <span
+                            style={{
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "block",
+                                fontWeight: 700,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {exercise.name}
+                            </span>
+                            <span
+                              style={{
+                                color: "var(--text-muted)",
+                                display: "block",
+                                fontSize: "12px",
+                              }}
+                            >
+                              {exercise.equipment || "No equipment"} ·{" "}
+                              {exercise.workoutCount} workouts ·{" "}
+                              {exercise.setCount} sets
+                            </span>
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          textAlign: "center",
+                        }}
+                      >
+                        No exercises match the search.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {exportSelectionCount} exercise
+                {exportSelectionCount === 1 ? "" : "s"} selected for export.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                <button onClick={downloadExerciseHistoryExport} type="button">
+                  <Download size={14} />
+                  Download CSV
+                </button>
+                <button onClick={copyExerciseHistoryExport} type="button">
+                  <Copy size={14} />
+                  Copy CSV
+                </button>
+              </div>
+              {exerciseExportStatus && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                  }}
+                >
+                  {exerciseExportStatus}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         <WeightPickerModal
           isOpen={Boolean(plateCountPicker)}
