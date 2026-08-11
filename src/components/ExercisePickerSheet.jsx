@@ -278,6 +278,7 @@ export default function ExercisePickerSheet({
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
           onSelect={(exercise) => {

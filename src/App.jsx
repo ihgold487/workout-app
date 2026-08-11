@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
+import { getRirForPlanWeek } from "./utils/rirPeriodization";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
 import ExerciseView from "./components/ExerciseView";
@@ -996,6 +997,222 @@ function buildExerciseHistoryExportRows({
   return rows;
 }
 
+function firstExportValue(...values) {
+  const value = values.find((item) => item !== undefined && item !== null && item !== "");
+
+  return value == null ? "" : value;
+}
+
+function getPlanExportTotalWeeks(plan) {
+  const durationWeeks = Number(plan?.durationWeeks) || 0;
+  const weeklyPrescriptionWeeks = (plan?.workouts || []).flatMap((workout) =>
+    Object.values(workout.weeklyPrescriptionsByPosition || {}).flatMap(
+      (weeklyPrescriptions) =>
+        Array.isArray(weeklyPrescriptions)
+          ? weeklyPrescriptions.map((week) => Number(week.weekNumber) || 0)
+          : []
+    )
+  );
+  const maxPrescriptionWeek = Math.max(0, ...weeklyPrescriptionWeeks);
+  const trainingWeeks = Math.max(durationWeeks, maxPrescriptionWeek, 1);
+
+  return plan?.config?.deload ? trainingWeeks + 1 : trainingWeeks;
+}
+
+function getPlanExportWorkoutTemplate(plan, planWorkout, templates = []) {
+  return (
+    templates.find(
+      (template) =>
+        planWorkout?.templateId != null &&
+        String(template.id) === String(planWorkout.templateId)
+    ) ||
+    templates.find(
+      (template) =>
+        planWorkout?.planWorkoutId != null &&
+        String(template.planWorkoutId || "") === String(planWorkout.planWorkoutId)
+    ) ||
+    templates.find(
+      (template) =>
+        String(template.planId || "") === String(plan?.id || "") &&
+        template.name === planWorkout?.name
+    ) ||
+    null
+  );
+}
+
+function getPlanExportSetCount(exercise, weekPrescription) {
+  return Math.max(
+    1,
+    Number(weekPrescription?.sets) || (exercise?.sets || []).length || 1
+  );
+}
+
+function getPlanSetReps(set, weekPrescription, plan) {
+  return firstExportValue(
+    weekPrescription?.reps,
+    set?.prescribedReps,
+    set?.reps,
+    set?.targetReps,
+    plan?.config?.reps
+  );
+}
+
+function getPlanSetRir(set, weekPrescription, plan, weekNumber) {
+  if (weekPrescription?.rir !== undefined && weekPrescription?.rir !== null && weekPrescription?.rir !== "") {
+    return weekPrescription.rir;
+  }
+
+  const fallbackRir = firstExportValue(
+    set?.prescribedRir,
+    set?.rir,
+    set?.targetRir,
+    plan?.config?.rir
+  );
+
+  return getRirForPlanWeek({
+    durationWeeks: plan?.durationWeeks,
+    initialRir: fallbackRir,
+    mode: plan?.config?.rirPeriodization,
+    weekNumber,
+  });
+}
+
+function buildPlanExportOptions(plans = []) {
+  return [...plans]
+    .sort((left, right) =>
+      String(left.name || "").localeCompare(String(right.name || ""))
+    )
+    .map((plan) => ({
+      id: String(plan.id),
+      name: plan.name || "Training Plan",
+      status: plan.status || "",
+      totalWeeks: getPlanExportTotalWeeks(plan),
+      workoutsPerWeek: plan.workouts?.length || plan.daysPerWeek || 0,
+    }));
+}
+
+function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [] }) {
+  const selectedIdSet = selectedPlanIds
+    ? new Set(selectedPlanIds.map(String))
+    : null;
+  const rows = [];
+
+  plans
+    .filter((plan) => !selectedIdSet || selectedIdSet.has(String(plan.id)))
+    .sort((left, right) =>
+      String(left.name || "").localeCompare(String(right.name || ""))
+    )
+    .forEach((plan) => {
+      const totalWeeks = getPlanExportTotalWeeks(plan);
+      const workouts = [...(plan.workouts || [])].sort(
+        (left, right) =>
+          (Number(left.dayNumber) || Number(left.position) || 0) -
+          (Number(right.dayNumber) || Number(right.position) || 0)
+      );
+
+      Array.from({ length: totalWeeks }, (_, index) => index + 1).forEach(
+        (weekNumber) => {
+          workouts.forEach((planWorkout, workoutIndex) => {
+            const template = getPlanExportWorkoutTemplate(
+              plan,
+              planWorkout,
+              templates
+            );
+            const exercises = template?.exercises || planWorkout.exercises || [];
+            const workoutName =
+              template?.name || planWorkout.name || `Workout ${workoutIndex + 1}`;
+
+            if (exercises.length === 0) {
+              rows.push({
+                plan_id: plan.id,
+                plan_name: plan.name || "",
+                plan_status: plan.status || "",
+                plan_type: plan.planType || plan.config?.planType || "",
+                plan_goal: plan.goal || plan.config?.goal || "",
+                total_weeks: totalWeeks,
+                workouts_per_week: workouts.length || plan.daysPerWeek || "",
+                current_week: plan.currentWeek || "",
+                week_number: weekNumber,
+                is_deload_week: weekNumber > Number(plan.durationWeeks || totalWeeks),
+                workout_day: planWorkout.dayNumber || workoutIndex + 1,
+                plan_workout_id: planWorkout.planWorkoutId || "",
+                workout_name: workoutName,
+                workout_type: planWorkout.workoutType || template?.workoutType || "",
+                exercise_position: "",
+                exercise_name: "",
+                exercise_id: "",
+                equipment: "",
+                set_number: "",
+                prescribed_sets: "",
+                prescribed_reps: "",
+                prescribed_rir: "",
+              });
+              return;
+            }
+
+            exercises.forEach((exercise, exerciseIndex) => {
+              const weeklyPrescriptions =
+                exercise.weeklyPrescriptions ||
+                planWorkout.weeklyPrescriptionsByPosition?.[exerciseIndex + 1] ||
+                [];
+              const weekPrescription =
+                weeklyPrescriptions.find(
+                  (week) => Number(week.weekNumber) === Number(weekNumber)
+                ) || null;
+              const prescribedSets = getPlanExportSetCount(
+                exercise,
+                weekPrescription
+              );
+
+              Array.from({ length: prescribedSets }, (_, setIndex) => {
+                const set = exercise.sets?.[setIndex] || exercise.sets?.at(-1) || {};
+
+                return {
+                  plan_id: plan.id,
+                  plan_name: plan.name || "",
+                  plan_status: plan.status || "",
+                  plan_type: plan.planType || plan.config?.planType || "",
+                  plan_goal: plan.goal || plan.config?.goal || "",
+                  total_weeks: totalWeeks,
+                  workouts_per_week: workouts.length || plan.daysPerWeek || "",
+                  current_week: plan.currentWeek || "",
+                  week_number: weekNumber,
+                  is_deload_week:
+                    weekPrescription?.isDeload ||
+                    weekNumber > Number(plan.durationWeeks || totalWeeks),
+                  workout_day: planWorkout.dayNumber || workoutIndex + 1,
+                  plan_workout_id: planWorkout.planWorkoutId || "",
+                  workout_name: workoutName,
+                  workout_type:
+                    planWorkout.workoutType ||
+                    template?.workoutType ||
+                    planWorkout.workoutTypeLabel ||
+                    template?.workoutTypeLabel ||
+                    "",
+                  exercise_position: exerciseIndex + 1,
+                  exercise_name: exercise.name || "",
+                  exercise_id: exercise.exerciseId || exercise.id || "",
+                  equipment: getExerciseEquipmentLabel(exercise),
+                  set_number: setIndex + 1,
+                  prescribed_sets: prescribedSets,
+                  prescribed_reps: getPlanSetReps(set, weekPrescription, plan),
+                  prescribed_rir: getPlanSetRir(
+                    set,
+                    weekPrescription,
+                    plan,
+                    weekNumber
+                  ),
+                };
+              }).forEach((row) => rows.push(row));
+            });
+          });
+        }
+      );
+    });
+
+  return rows;
+}
+
 function recomputeExerciseE1RMMetadata(
   history,
   existingMetadata,
@@ -1434,6 +1651,203 @@ function getPlanTotalWeeks(plan) {
   return (Number(plan?.durationWeeks) || 1) + (plan?.config?.deload ? 1 : 0);
 }
 
+function getActiveModalDialogs() {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
+  return Array.from(
+    document.querySelectorAll('[role="dialog"][aria-modal="true"]')
+  ).filter(
+    (dialog) =>
+      dialog.isConnected &&
+      !dialog.hidden &&
+      dialog.getClientRects().length > 0
+  );
+}
+
+function getScrollableModalAncestor(target, modalRoot) {
+  if (!(target instanceof Element) || !(modalRoot instanceof Element)) {
+    return null;
+  }
+
+  let element = target;
+
+  while (element && element !== document.body) {
+    if (modalRoot.contains(element)) {
+      const styles = window.getComputedStyle(element);
+      const canScrollY =
+        /(auto|scroll)/.test(styles.overflowY) &&
+        element.scrollHeight > element.clientHeight;
+
+      if (canScrollY) {
+        return element;
+      }
+    }
+
+    if (element === modalRoot) {
+      break;
+    }
+
+    element = element.parentElement;
+  }
+
+  return null;
+}
+
+function useModalScrollGuard() {
+  const scrollLockRef = useRef({
+    frameId: null,
+    locked: false,
+    modalCount: 0,
+    previousBodyStyles: null,
+    previousDocumentStyles: null,
+    scrollY: 0,
+  });
+
+  useEffect(() => {
+    function lockDocumentScroll() {
+      const lockState = scrollLockRef.current;
+
+      if (lockState.locked) {
+        return;
+      }
+
+      lockState.scrollY = window.scrollY || window.pageYOffset || 0;
+      lockState.previousBodyStyles = {
+        overflow: document.body.style.overflow,
+        position: document.body.style.position,
+        top: document.body.style.top,
+        width: document.body.style.width,
+      };
+      lockState.previousDocumentStyles = {
+        overflow: document.documentElement.style.overflow,
+        overscrollBehavior: document.documentElement.style.overscrollBehavior,
+      };
+      document.documentElement.classList.add("modal-scroll-locked");
+      document.body.classList.add("modal-scroll-locked");
+      document.documentElement.style.overflow = "hidden";
+      document.documentElement.style.overscrollBehavior = "none";
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${lockState.scrollY}px`;
+      document.body.style.width = "100%";
+      lockState.locked = true;
+    }
+
+    function unlockDocumentScroll() {
+      const lockState = scrollLockRef.current;
+
+      if (!lockState.locked) {
+        return;
+      }
+
+      document.documentElement.classList.remove("modal-scroll-locked");
+      document.body.classList.remove("modal-scroll-locked");
+      document.body.style.overflow = lockState.previousBodyStyles?.overflow || "";
+      document.body.style.position = lockState.previousBodyStyles?.position || "";
+      document.body.style.top = lockState.previousBodyStyles?.top || "";
+      document.body.style.width = lockState.previousBodyStyles?.width || "";
+      document.documentElement.style.overflow =
+        lockState.previousDocumentStyles?.overflow || "";
+      document.documentElement.style.overscrollBehavior =
+        lockState.previousDocumentStyles?.overscrollBehavior || "";
+      window.scrollTo(0, lockState.scrollY);
+      lockState.locked = false;
+      lockState.modalCount = 0;
+    }
+
+    function updateModalScrollState() {
+      const lockState = scrollLockRef.current;
+
+      if (lockState.frameId != null) {
+        cancelAnimationFrame(lockState.frameId);
+      }
+
+      lockState.frameId = requestAnimationFrame(() => {
+        lockState.frameId = null;
+        const dialogs = getActiveModalDialogs();
+        lockState.modalCount = dialogs.length;
+
+        if (dialogs.length > 0) {
+          lockDocumentScroll();
+          const topDialog = dialogs[dialogs.length - 1];
+
+          if (
+            topDialog &&
+            !topDialog.contains(document.activeElement)
+          ) {
+            if (!topDialog.hasAttribute("tabindex")) {
+              topDialog.setAttribute("tabindex", "-1");
+            }
+
+            topDialog.focus({ preventScroll: true });
+          }
+        } else {
+          unlockDocumentScroll();
+        }
+      });
+    }
+
+    function blockBackgroundWheel(event) {
+      const dialogs = getActiveModalDialogs();
+      const topDialog = dialogs[dialogs.length - 1];
+
+      if (!topDialog || topDialog.contains(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+    }
+
+    function blockBackgroundTouchMove(event) {
+      const dialogs = getActiveModalDialogs();
+      const topDialog = dialogs[dialogs.length - 1];
+
+      if (!topDialog) {
+        return;
+      }
+
+      if (!topDialog.contains(event.target)) {
+        event.preventDefault();
+        return;
+      }
+
+      if (!getScrollableModalAncestor(event.target, topDialog)) {
+        event.preventDefault();
+      }
+    }
+
+    const observer = new MutationObserver(updateModalScrollState);
+
+    observer.observe(document.body, {
+      attributeFilter: ["aria-modal", "class", "hidden", "role", "style"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    document.addEventListener("wheel", blockBackgroundWheel, {
+      passive: false,
+    });
+    document.addEventListener("touchmove", blockBackgroundTouchMove, {
+      passive: false,
+    });
+    updateModalScrollState();
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("wheel", blockBackgroundWheel);
+      document.removeEventListener("touchmove", blockBackgroundTouchMove);
+
+      if (scrollLockRef.current.frameId != null) {
+        cancelAnimationFrame(scrollLockRef.current.frameId);
+      }
+
+      unlockDocumentScroll();
+    };
+  }, []);
+}
+
 function isPlanWorkoutComplete(plan, planWorkoutId, weekNumber, history = []) {
   return getPlanCompletionsForWeek(plan, weekNumber, history).some(
     (completion) => String(completion.planWorkoutId) === String(planWorkoutId)
@@ -1615,6 +2029,8 @@ async function reloadWithoutServiceWorkerCache() {
 const savedStorageVersion = getSavedStorageVersion();
 
 export default function App() {
+  useModalScrollGuard();
+
   const initialWorkoutData = useState(() =>
     loadWorkoutData({
       seedExercises,
@@ -1789,6 +2205,9 @@ export default function App() {
   const [exerciseExportSearch, setExerciseExportSearch] = useState("");
   const [selectedExerciseExportKeys, setSelectedExerciseExportKeys] = useState([]);
   const [exerciseExportStatus, setExerciseExportStatus] = useState("");
+  const [planExportMode, setPlanExportMode] = useState("active");
+  const [selectedPlanExportIds, setSelectedPlanExportIds] = useState([]);
+  const [planExportStatus, setPlanExportStatus] = useState("");
 
   const currentWorkoutDataRef = useRef(null);
 
@@ -3389,6 +3808,118 @@ export default function App() {
     } catch (error) {
       console.error("Exercise history export copy failed:", error);
       setExerciseExportStatus("Copy failed. Download the CSV instead.");
+    }
+  }
+
+  function getPlanExportCsv() {
+    const selectedPlanIds =
+      planExportMode === "active"
+        ? plans
+            .filter((plan) => plan.status === "active")
+            .map((plan) => String(plan.id))
+        : selectedPlanExportIds;
+
+    if (selectedPlanIds.length === 0) {
+      setPlanExportStatus(
+        planExportMode === "active"
+          ? "No active plan is available to export."
+          : "Select at least one plan to export."
+      );
+      return null;
+    }
+
+    const rows = buildPlanExportRows({
+      plans,
+      selectedPlanIds,
+      templates,
+    });
+
+    if (rows.length === 0) {
+      setPlanExportStatus("No plan rows matched the export selection.");
+      return null;
+    }
+
+    return buildCsv(
+      [
+        "plan_id",
+        "plan_name",
+        "plan_status",
+        "plan_type",
+        "plan_goal",
+        "total_weeks",
+        "workouts_per_week",
+        "current_week",
+        "week_number",
+        "is_deload_week",
+        "workout_day",
+        "plan_workout_id",
+        "workout_name",
+        "workout_type",
+        "exercise_position",
+        "exercise_name",
+        "exercise_id",
+        "equipment",
+        "set_number",
+        "prescribed_sets",
+        "prescribed_reps",
+        "prescribed_rir",
+      ],
+      rows
+    );
+  }
+
+  function getPlanExportFilename() {
+    const date = new Date().toISOString().slice(0, 10);
+    const scope =
+      planExportMode === "selected"
+        ? `${selectedPlanExportIds.length}-selected`
+        : "active";
+
+    return `plans-${scope}-${date}.csv`;
+  }
+
+  function togglePlanExportSelection(planId) {
+    setSelectedPlanExportIds((currentIds) =>
+      currentIds.includes(String(planId))
+        ? currentIds.filter((id) => id !== String(planId))
+        : [...currentIds, String(planId)]
+    );
+    setPlanExportStatus("");
+  }
+
+  function downloadPlanExport() {
+    const csv = getPlanExportCsv();
+
+    if (!csv) {
+      return;
+    }
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = getPlanExportFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setPlanExportStatus("Plan CSV downloaded.");
+  }
+
+  async function copyPlanExport() {
+    const csv = getPlanExportCsv();
+
+    if (!csv) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(csv);
+      setPlanExportStatus("Plan CSV copied.");
+    } catch (error) {
+      console.error("Plan export copy failed:", error);
+      setPlanExportStatus("Copy failed. Download the CSV instead.");
     }
   }
 
@@ -5935,6 +6466,14 @@ export default function App() {
       exerciseExportMode === "selected"
         ? selectedExerciseExportKeys.length
         : exerciseHistoryExportOptions.length;
+    const planExportOptions = buildPlanExportOptions(plans);
+    const activePlanExportCount = planExportOptions.filter(
+      (plan) => plan.status === "active"
+    ).length;
+    const planExportSelectionCount =
+      planExportMode === "selected"
+        ? selectedPlanExportIds.length
+        : activePlanExportCount;
 
     return (
       <div
@@ -7050,7 +7589,7 @@ export default function App() {
                 fontSize: "12px",
               }}
             >
-              Exercise history
+              Exercise history and plans
             </span>
           </button>
           {exportExpanded && (
@@ -7066,21 +7605,11 @@ export default function App() {
                 <h3
                   style={{
                     fontSize: "15px",
-                    margin: "0 0 4px",
+                    margin: 0,
                   }}
                 >
                   Exercise History
                 </h3>
-                <p
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    margin: 0,
-                  }}
-                >
-                  CSV export with one row per completed set, including workout
-                  date, exercise, weight, reps, RIR, volume, and e1RM.
-                </p>
               </div>
               <div
                 style={{
@@ -7289,6 +7818,197 @@ export default function App() {
                   {exerciseExportStatus}
                 </div>
               )}
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  marginTop: "4px",
+                  paddingTop: "12px",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "15px",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Plans
+                </h3>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "1fr 1fr",
+                  }}
+                >
+                  <button
+                    aria-pressed={planExportMode === "active"}
+                    onClick={() => {
+                      setPlanExportMode("active");
+                      setPlanExportStatus("");
+                    }}
+                    type="button"
+                  >
+                    Active Plan
+                  </button>
+                  <button
+                    aria-pressed={planExportMode === "selected"}
+                    onClick={() => {
+                      setPlanExportMode("selected");
+                      setPlanExportStatus("");
+                    }}
+                    type="button"
+                  >
+                    Selected Plans
+                  </button>
+                </div>
+                {planExportMode === "selected" && (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        marginTop: "8px",
+                      }}
+                    >
+                      <button
+                        disabled={planExportOptions.length === 0}
+                        onClick={() => {
+                          setSelectedPlanExportIds(
+                            planExportOptions.map((plan) => plan.id)
+                          );
+                          setPlanExportStatus("");
+                        }}
+                        type="button"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        disabled={selectedPlanExportIds.length === 0}
+                        onClick={() => {
+                          setSelectedPlanExportIds([]);
+                          setPlanExportStatus("");
+                        }}
+                        type="button"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        display: "grid",
+                        gap: "6px",
+                        marginTop: "8px",
+                        maxHeight: "220px",
+                        overflowY: "auto",
+                        padding: "8px",
+                      }}
+                    >
+                      {planExportOptions.length > 0 ? (
+                        planExportOptions.map((plan) => (
+                          <label
+                            key={plan.id}
+                            style={{
+                              alignItems: "center",
+                              display: "grid",
+                              gap: "8px",
+                              gridTemplateColumns: "auto minmax(0, 1fr)",
+                            }}
+                          >
+                            <input
+                              checked={selectedPlanExportIds.includes(plan.id)}
+                              onChange={() =>
+                                togglePlanExportSelection(plan.id)
+                              }
+                              type="checkbox"
+                            />
+                            <span
+                              style={{
+                                minWidth: 0,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontWeight: 700,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {plan.name}
+                              </span>
+                              <span
+                                style={{
+                                  color: "var(--text-muted)",
+                                  display: "block",
+                                  fontSize: "12px",
+                                }}
+                              >
+                                {plan.status || "No status"} · {plan.totalWeeks}{" "}
+                                weeks · {plan.workoutsPerWeek} workouts/week
+                              </span>
+                            </span>
+                          </label>
+                        ))
+                      ) : (
+                        <div
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "12px",
+                            textAlign: "center",
+                          }}
+                        >
+                          No plans available.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "8px",
+                  }}
+                >
+                  {planExportSelectionCount} plan
+                  {planExportSelectionCount === 1 ? "" : "s"} selected for
+                  export.
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    marginTop: "8px",
+                  }}
+                >
+                  <button onClick={downloadPlanExport} type="button">
+                    <Download size={14} />
+                    Download CSV
+                  </button>
+                  <button onClick={copyPlanExport} type="button">
+                    <Copy size={14} />
+                    Copy CSV
+                  </button>
+                </div>
+                {planExportStatus && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "8px",
+                    }}
+                  >
+                    {planExportStatus}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>

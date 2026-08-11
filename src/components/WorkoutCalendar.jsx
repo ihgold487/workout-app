@@ -1034,6 +1034,7 @@ export function CompletedWorkoutSheet({
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}
           exercise={selectedWorkoutExerciseDetail}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setSelectedWorkoutExerciseDetail(null)}
           zIndex={zIndex + 200}

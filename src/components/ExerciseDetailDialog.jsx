@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import MuscleMap from "./MuscleMap";
 
 const RANGE_OPTIONS = [
@@ -112,22 +113,6 @@ function getInstructionSteps(exercise) {
   return Array.isArray(value)
     ? value.map((step) => String(step || "").trim()).filter(Boolean)
     : [];
-}
-
-function matchesExercise(historyExercise, exercise) {
-  const libraryId = exercise.exerciseId || exercise.id;
-  const historyExerciseId = historyExercise.exerciseId;
-
-  if (libraryId != null && historyExerciseId != null && String(libraryId) === String(historyExerciseId)) {
-    return true;
-  }
-
-  return (
-    String(historyExercise.name || "").toLowerCase() ===
-      String(exercise.name || "").toLowerCase() &&
-    formatEquipment(historyExercise.equipment).toLowerCase() ===
-      formatEquipment(exercise.equipment).toLowerCase()
-  );
 }
 
 function getSetValue(set, actualField) {
@@ -308,7 +293,7 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
   return [...(history || [])]
     .flatMap((workout) => {
       const matchingExercise = workout.exercises?.find((item) =>
-        matchesExercise(item, exercise)
+        exercisesMatch(item, exercise)
       );
 
       if (!matchingExercise) {
@@ -1961,6 +1946,7 @@ function BenchPressExperiment({ exerciseHistory }) {
 export default function ExerciseDetailDialog({
   bodyWeightEntries = [],
   exercise,
+  exerciseLibrary = [],
   history = [],
   onClose,
   onSelect,
@@ -1979,6 +1965,18 @@ export default function ExerciseDetailDialog({
     () => buildHistorySummary(exerciseHistory),
     [exerciseHistory]
   );
+  const detailImageExercise = useMemo(() => {
+    if (exercise?.imageUrl) {
+      return exercise;
+    }
+
+    return (
+      exerciseLibrary.find(
+        (libraryExercise) =>
+          libraryExercise?.imageUrl && exercisesMatch(libraryExercise, exercise)
+      ) || exercise
+    );
+  }, [exercise, exerciseLibrary]);
   const instructionSteps = getInstructionSteps(exercise);
   const { colorTrend, metric: chartMetric, rangeDays, trendDays } = chartSettings;
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
@@ -2243,10 +2241,13 @@ export default function ExerciseDetailDialog({
                 overflow: "hidden",
               }}
             >
-              {exercise.imageUrl ? (
+              {detailImageExercise.imageUrl ? (
                 <img
-                  alt={exercise.imageAlt || `${exercise.name} demonstration`}
-                  src={exercise.imageUrl}
+                  alt={
+                    detailImageExercise.imageAlt ||
+                    `${exercise.name} demonstration`
+                  }
+                  src={detailImageExercise.imageUrl}
                   style={{
                     display: "block",
                     maxHeight: "440px",

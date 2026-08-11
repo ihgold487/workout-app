@@ -4427,6 +4427,7 @@ export default function PlansView({
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
+          exerciseLibrary={generatorExerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
         />

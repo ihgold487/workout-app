@@ -72,6 +72,12 @@ const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
 const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
+const HISTORY_DEFAULT_SOURCE_FIELDS = [
+  "historyDefaultSourceKey",
+  "historyDefaultActualWeight",
+  "historyDefaultActualReps",
+  "historyDefaultActualRir",
+];
 
 function getSessionSet(session, activeSet) {
   if (!activeSet?.exerciseId || !activeSet?.setId) {
@@ -319,7 +325,7 @@ export default function SessionView({
     useState(false);
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
-  const appliedHistoryDefaultsRef = useRef(new Set());
+  const appliedHistoryDefaultsRef = useRef(new Map());
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -923,14 +929,24 @@ export default function SessionView({
   }
 
   const getHistoryDefaultsForSet = useCallback((sessionExercise, setIndex) => {
-    const historySet =
-      getLatestMatchingHistoryPerformance(sessionExercise)?.exercise?.sets?.[
-        setIndex
-      ];
+    const latestPerformance =
+      getLatestMatchingHistoryPerformance(sessionExercise);
+    const historySet = latestPerformance?.exercise?.sets?.[setIndex];
 
     if (!historySet) {
       return null;
     }
+
+    const sourceWorkoutId =
+      latestPerformance?.workout?.id ||
+      latestPerformance?.workout?.source_key ||
+      latestPerformance?.workout?.sourceKey ||
+      "";
+    const sourceExerciseId =
+      latestPerformance?.exercise?.id ||
+      latestPerformance?.exercise?.exerciseId ||
+      "";
+    const sourceSetId = historySet.id || historySet.setId || setIndex;
 
     return {
       actualReps: formatSetupDefault(
@@ -942,6 +958,7 @@ export default function SessionView({
       actualWeight: formatSetupDefault(
         firstPresentValue(historySet.actualWeight)
       ),
+      sourceKey: `history:${sourceWorkoutId}:${sourceExerciseId}:${sourceSetId}`,
     };
   }, [getLatestMatchingHistoryPerformance]);
 
@@ -962,6 +979,103 @@ export default function SessionView({
     }
 
     return String(left) === String(right);
+  }
+
+  function getStoredHistoryDefault(set) {
+    if (!set?.historyDefaultSourceKey) {
+      return null;
+    }
+
+    return {
+      actualReps: set.historyDefaultActualReps || "",
+      actualRir: set.historyDefaultActualRir || "",
+      actualWeight: set.historyDefaultActualWeight || "",
+      sourceKey: set.historyDefaultSourceKey,
+    };
+  }
+
+  function buildHistoryDefaultMetadata(defaults) {
+    if (!defaults?.sourceKey) {
+      return null;
+    }
+
+    return {
+      actualReps: formatSetupDefault(defaults.actualReps),
+      actualRir: formatSetupDefault(defaults.actualRir),
+      actualWeight: formatSetupDefault(defaults.actualWeight),
+      sourceKey: defaults.sourceKey,
+    };
+  }
+
+  function stripHistoryDefaultMetadata(set) {
+    const nextSet = { ...set };
+
+    HISTORY_DEFAULT_SOURCE_FIELDS.forEach((field) => {
+      delete nextSet[field];
+    });
+
+    return nextSet;
+  }
+
+  function getHistoryDefaultUpdates(set, defaults, previousDefault) {
+    const metadata = buildHistoryDefaultMetadata(defaults);
+
+    if (!metadata) {
+      return null;
+    }
+
+    const sourceChanged =
+      previousDefault?.sourceKey &&
+      previousDefault.sourceKey !== metadata.sourceKey;
+    const defaultChanged =
+      previousDefault &&
+      (!valuesMatch(previousDefault.actualWeight, metadata.actualWeight) ||
+        !valuesMatch(previousDefault.actualReps, metadata.actualReps) ||
+        !valuesMatch(previousDefault.actualRir, metadata.actualRir));
+    const canReplacePreviousDefault = sourceChanged || defaultChanged;
+    const updates = {};
+
+    if (
+      metadata.actualWeight &&
+      (isBlankValue(set.actualWeight) ||
+        (canReplacePreviousDefault &&
+          valuesMatch(set.actualWeight, previousDefault.actualWeight)))
+    ) {
+      updates.actualWeight = metadata.actualWeight;
+    }
+
+    if (
+      metadata.actualReps &&
+      (isBlankValue(set.actualReps) ||
+        (canReplacePreviousDefault &&
+          valuesMatch(set.actualReps, previousDefault.actualReps)))
+    ) {
+      updates.actualReps = metadata.actualReps;
+    }
+
+    if (
+      metadata.actualRir !== "" &&
+      (isBlankValue(set.actualRir) ||
+        (canReplacePreviousDefault &&
+          valuesMatch(set.actualRir, previousDefault.actualRir)))
+    ) {
+      updates.actualRir = metadata.actualRir;
+    }
+
+    if (!Object.keys(updates).length) {
+      return null;
+    }
+
+    return {
+      metadata,
+      updates: {
+        ...updates,
+        historyDefaultActualReps: metadata.actualReps,
+        historyDefaultActualRir: metadata.actualRir,
+        historyDefaultActualWeight: metadata.actualWeight,
+        historyDefaultSourceKey: metadata.sourceKey,
+      },
+    };
   }
 
   function actualsMatchPrescription(set, prescription) {
@@ -1493,49 +1607,35 @@ export default function SessionView({
 
   useEffect(() => {
     let hasUpdates = false;
-    const nextAppliedKeys = new Set(appliedHistoryDefaultsRef.current);
+    const nextAppliedDefaults = new Map(appliedHistoryDefaultsRef.current);
 
     const exercises = session.exercises.map((exercise) => {
       let exerciseChanged = false;
       const sets = exercise.sets.map((set, setIndex) => {
         const defaultKey = `${session.id}:${exercise.id}:${set.id}`;
-
-        if (nextAppliedKeys.has(defaultKey)) {
-          return set;
-        }
-
         const defaults = getHistoryDefaultsForSet(exercise, setIndex);
 
         if (!defaults) {
           return set;
         }
 
-        nextAppliedKeys.add(defaultKey);
+        const defaultUpdate = getHistoryDefaultUpdates(
+          set,
+          defaults,
+          getStoredHistoryDefault(set) || nextAppliedDefaults.get(defaultKey)
+        );
 
-        const updates = {};
-
-        if (isBlankValue(set.actualWeight) && defaults.actualWeight) {
-          updates.actualWeight = defaults.actualWeight;
-        }
-
-        if (isBlankValue(set.actualReps) && defaults.actualReps) {
-          updates.actualReps = defaults.actualReps;
-        }
-
-        if (isBlankValue(set.actualRir) && defaults.actualRir !== "") {
-          updates.actualRir = defaults.actualRir;
-        }
-
-        if (!Object.keys(updates).length) {
+        if (!defaultUpdate) {
           return set;
         }
 
+        nextAppliedDefaults.set(defaultKey, defaultUpdate.metadata);
         hasUpdates = true;
         exerciseChanged = true;
 
         return {
           ...set,
-          ...updates,
+          ...defaultUpdate.updates,
         };
       });
 
@@ -1547,7 +1647,7 @@ export default function SessionView({
         : exercise;
     });
 
-    appliedHistoryDefaultsRef.current = nextAppliedKeys;
+    appliedHistoryDefaultsRef.current = nextAppliedDefaults;
 
     if (!hasUpdates) {
       return;
@@ -1663,6 +1763,8 @@ export default function SessionView({
 
   const updateActual = useCallback(
     (exerciseId, setId, field, value) => {
+      appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
+
       updateSession((s) => ({
         ...s,
 
@@ -1673,10 +1775,10 @@ export default function SessionView({
 
                 sets: ex.sets.map((set) =>
                   set.id === setId
-                    ? {
+                    ? stripHistoryDefaultMetadata({
                         ...set,
                         [field]: value,
-                      }
+                      })
                     : set
                 ),
               }
@@ -1684,7 +1786,7 @@ export default function SessionView({
         ),
       }));
     },
-    [updateSession]
+    [session.id, updateSession]
   );
 
   function applyTargetToActual(exerciseId, setId) {
@@ -1703,6 +1805,8 @@ export default function SessionView({
   }
 
   function applyPrescriptionToActual(exerciseId, setId, prescription) {
+    appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
+
     updateSession((s) => ({
       ...s,
       exercises: s.exercises.map((ex) =>
@@ -1711,12 +1815,12 @@ export default function SessionView({
               ...ex,
               sets: ex.sets.map((set) =>
                 set.id === setId
-                  ? {
+                  ? stripHistoryDefaultMetadata({
                       ...set,
                       actualReps: formatSetupDefault(prescription.reps),
                       actualRir: formatSetupDefault(prescription.rir),
                       actualWeight: formatSetupDefault(prescription.weight),
-                    }
+                    })
                   : set
               ),
             }
@@ -1936,6 +2040,7 @@ export default function SessionView({
     }
 
     const nextWeight = formatSetupDefault(weight);
+    appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
 
     updateSession((s) => ({
       ...s,
@@ -1951,10 +2056,10 @@ export default function SessionView({
               return set;
             }
 
-            const updatedSet = {
+            const updatedSet = stripHistoryDefaultMetadata({
               ...set,
               actualWeight: nextWeight,
-            };
+            });
 
             return updatedSet;
           }),
@@ -2007,28 +2112,25 @@ export default function SessionView({
       return;
     }
 
+    const defaultKey = `${session.id}:${exercise.id}:${currentSet.id}`;
     const defaults = getHistoryDefaultsForSet(exercise, setIndex) || {
       actualReps: formatSetupDefault(getSetTargetReps(currentSet)),
       actualRir: formatSetupDefault(getSetTargetRir(currentSet)),
       actualWeight: "",
+      sourceKey: `target:${defaultKey}`,
     };
-    const updates = {};
+    const defaultUpdate = getHistoryDefaultUpdates(
+      currentSet,
+      defaults,
+      getStoredHistoryDefault(currentSet) ||
+        appliedHistoryDefaultsRef.current.get(defaultKey)
+    );
 
-    if (isBlankValue(currentSet.actualWeight) && defaults.actualWeight) {
-      updates.actualWeight = defaults.actualWeight;
-    }
-
-    if (isBlankValue(currentSet.actualReps) && defaults.actualReps) {
-      updates.actualReps = defaults.actualReps;
-    }
-
-    if (isBlankValue(currentSet.actualRir) && defaults.actualRir !== "") {
-      updates.actualRir = defaults.actualRir;
-    }
-
-    if (!Object.keys(updates).length) {
+    if (!defaultUpdate) {
       return;
     }
+
+    appliedHistoryDefaultsRef.current.set(defaultKey, defaultUpdate.metadata);
 
     updateSession((s) => ({
       ...s,
@@ -2040,7 +2142,7 @@ export default function SessionView({
                 set.id === currentSet.id
                   ? {
                       ...set,
-                      ...updates,
+                      ...defaultUpdate.updates,
                     }
                   : set
               ),
@@ -2052,6 +2154,7 @@ export default function SessionView({
     activeSet,
     getHistoryDefaultsForSet,
     session.exercises,
+    session.id,
     updateSession,
   ]);
 
@@ -3508,6 +3611,10 @@ export default function SessionView({
             targetReps,
             targetRir,
             targetWeight,
+            historyDefaultActualReps,
+            historyDefaultActualRir,
+            historyDefaultActualWeight,
+            historyDefaultSourceKey,
             ...set
           }) => set
         ),
@@ -7836,6 +7943,7 @@ export default function SessionView({
             <ExerciseDetailDialog
               bodyWeightEntries={bodyWeightEntries}
               exercise={detailExercise}
+              exerciseLibrary={exerciseLibrary}
               history={history}
               onClose={() => setDetailExercise(null)}
             />

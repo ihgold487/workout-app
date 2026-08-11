@@ -29,10 +29,61 @@ function normalizeLookupValue(value) {
     .trim();
 }
 
+function singularizeLookupToken(token) {
+  if (token.length <= 3 || token.endsWith("ss")) {
+    return token;
+  }
+
+  if (token.endsWith("ves")) {
+    return `${token.slice(0, -3)}f`;
+  }
+
+  if (token.endsWith("ies")) {
+    return `${token.slice(0, -3)}y`;
+  }
+
+  if (
+    token.endsWith("ches") ||
+    token.endsWith("shes") ||
+    token.endsWith("xes") ||
+    token.endsWith("zes")
+  ) {
+    return token.slice(0, -2);
+  }
+
+  if (token.endsWith("s")) {
+    return token.slice(0, -1);
+  }
+
+  return token;
+}
+
+function normalizeComparableLookupValue(value) {
+  return normalizeLookupValue(value)
+    .split(" ")
+    .filter(Boolean)
+    .map(singularizeLookupToken)
+    .join(" ");
+}
+
+function getExerciseName(exercise) {
+  return exercise?.name || exercise?.exerciseName || exercise?.exercise_name || "";
+}
+
+function getExerciseId(exercise) {
+  return exercise?.exerciseId ?? exercise?.exercise_id ?? exercise?.id;
+}
+
 function getExerciseKey(exercise) {
-  return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
+  return `${normalizeLookupValue(getExerciseName(exercise))}||${normalizeLookupValue(
     formatEquipment(exercise?.equipment)
   )}`;
+}
+
+function getComparableExerciseKey(exercise) {
+  return `${normalizeComparableLookupValue(
+    getExerciseName(exercise)
+  )}||${normalizeComparableLookupValue(formatEquipment(exercise?.equipment))}`;
 }
 
 function getSetPerformance(set, exercise, bodyWeight) {
@@ -57,14 +108,17 @@ function getSetPerformance(set, exercise, bodyWeight) {
 }
 
 function matchesExercise(historyExercise, exercise) {
-  const exerciseId = exercise?.exerciseId || exercise?.id;
-  const historyExerciseId = historyExercise?.exerciseId;
+  const exerciseId = getExerciseId(exercise);
+  const historyExerciseId = getExerciseId(historyExercise);
 
   if (exerciseId != null && historyExerciseId != null) {
     return String(exerciseId) === String(historyExerciseId);
   }
 
-  return getExerciseKey(historyExercise) === getExerciseKey(exercise);
+  return (
+    getExerciseKey(historyExercise) === getExerciseKey(exercise) ||
+    getComparableExerciseKey(historyExercise) === getComparableExerciseKey(exercise)
+  );
 }
 
 function getWorkoutTimestamp(workout) {

@@ -6,6 +6,43 @@ function normalizeLookupValue(value) {
     .trim();
 }
 
+function singularizeLookupToken(token) {
+  if (token.length <= 3 || token.endsWith("ss")) {
+    return token;
+  }
+
+  if (token.endsWith("ves")) {
+    return `${token.slice(0, -3)}f`;
+  }
+
+  if (token.endsWith("ies")) {
+    return `${token.slice(0, -3)}y`;
+  }
+
+  if (
+    token.endsWith("ches") ||
+    token.endsWith("shes") ||
+    token.endsWith("xes") ||
+    token.endsWith("zes")
+  ) {
+    return token.slice(0, -2);
+  }
+
+  if (token.endsWith("s")) {
+    return token.slice(0, -1);
+  }
+
+  return token;
+}
+
+function normalizeComparableLookupValue(value) {
+  return normalizeLookupValue(value)
+    .split(" ")
+    .filter(Boolean)
+    .map(singularizeLookupToken)
+    .join(" ");
+}
+
 function formatList(value) {
   if (Array.isArray(value)) {
     return value.filter(Boolean).join(", ");
@@ -14,25 +51,42 @@ function formatList(value) {
   return value || "";
 }
 
+function getExerciseName(exercise) {
+  return exercise?.name || exercise?.exerciseName || exercise?.exercise_name || "";
+}
+
+function getExerciseId(exercise) {
+  return exercise?.exerciseId ?? exercise?.exercise_id;
+}
+
 function getExerciseKey(exercise) {
-  return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
+  return `${normalizeLookupValue(getExerciseName(exercise))}||${normalizeLookupValue(
     formatList(exercise?.equipment)
   )}`;
 }
 
+function getComparableExerciseKey(exercise) {
+  return `${normalizeComparableLookupValue(
+    getExerciseName(exercise)
+  )}||${normalizeComparableLookupValue(formatList(exercise?.equipment))}`;
+}
+
 export function exercisesMatch(leftExercise, rightExercise) {
-  const leftId = leftExercise?.exerciseId;
-  const rightId = rightExercise?.exerciseId;
+  const leftId = getExerciseId(leftExercise);
+  const rightId = getExerciseId(rightExercise);
+  const exactKeyMatches = getExerciseKey(leftExercise) === getExerciseKey(rightExercise);
+  const comparableKeyMatches =
+    getComparableExerciseKey(leftExercise) === getComparableExerciseKey(rightExercise);
 
   if (leftId != null && rightId != null) {
     if (String(leftId) === String(rightId)) {
       return true;
     }
 
-    return getExerciseKey(leftExercise) === getExerciseKey(rightExercise);
+    return exactKeyMatches || comparableKeyMatches;
   }
 
-  return getExerciseKey(leftExercise) === getExerciseKey(rightExercise);
+  return exactKeyMatches || comparableKeyMatches;
 }
 
 function getTemplateForPlanWorkout(planWorkout, templates = [], planId) {

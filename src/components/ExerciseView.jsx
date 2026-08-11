@@ -1844,6 +1844,7 @@ export default function ExerciseView({
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
         />

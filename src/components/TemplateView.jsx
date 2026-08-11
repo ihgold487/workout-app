@@ -785,6 +785,7 @@ export default function TemplateView({
       exercise: templateExercise,
       history,
       plan: linkedPlan,
+      planWeek: currentPlanWeek,
       planWorkoutId: template.planWorkoutId,
       templateId: template.id,
       templates,
@@ -2045,6 +2046,7 @@ export default function TemplateView({
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}
           exercise={detailExercise}
+          exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
         />

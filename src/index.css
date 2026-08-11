@@ -48,6 +48,21 @@ body {
   color: var(--text);
 }
 
+html.modal-scroll-locked,
+body.modal-scroll-locked {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+[role="dialog"][aria-modal="true"] {
+  overscroll-behavior: contain;
+}
+
+[role="dialog"][aria-modal="true"] > * {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 button,
 input,
 select,
