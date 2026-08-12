@@ -3291,8 +3291,7 @@ export default function App() {
         await uploadNormalizedWorkoutData(data, session, uploadDomains);
       }
 
-      const shouldDownload =
-        shouldHydrateFirst || reason === "manual" || reason === "resume";
+      const shouldDownload = shouldHydrateFirst || reason === "manual";
 
       if (!shouldDownload) {
         if (

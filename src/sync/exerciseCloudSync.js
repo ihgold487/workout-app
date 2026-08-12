@@ -412,6 +412,10 @@ function getPreferenceStatus(preference) {
 function applyCloudExerciseMetadata(localExercise, cloudExercise) {
   return withDefaultExerciseStatus({
     ...localExercise,
+    bodyweightLoadPercent:
+      cloudExercise.bodyweight_load_percent ??
+      localExercise.bodyweightLoadPercent ??
+      null,
     description: cloudExercise.description || localExercise.description || "",
     exerciseId: cloudExercise.id,
     imageAlt: cloudExercise.image_alt || localExercise.imageAlt || "",

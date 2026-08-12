@@ -72,6 +72,7 @@ const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
 const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
+const REST_NOTIFICATION_ICON = `${import.meta.env.BASE_URL || "/"}icon-192.png`;
 const HISTORY_DEFAULT_SOURCE_FIELDS = [
   "historyDefaultSourceKey",
   "historyDefaultActualWeight",
@@ -326,6 +327,7 @@ export default function SessionView({
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
   const appliedHistoryDefaultsRef = useRef(new Map());
+  const restNotificationSentKeyRef = useRef(null);
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -2286,6 +2288,52 @@ export default function SessionView({
   const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
   const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
 
+  async function requestRestNotificationPermission() {
+    if (!("Notification" in window)) {
+      return "unsupported";
+    }
+
+    if (Notification.permission === "default") {
+      return Notification.requestPermission();
+    }
+
+    return Notification.permission;
+  }
+
+  async function showRestCompleteNotification() {
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      return false;
+    }
+
+    const options = {
+      body: "Ready for next set",
+      icon: REST_NOTIFICATION_ICON,
+      tag: "workout-rest-complete",
+      renotify: true,
+    };
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+
+        if (registration?.showNotification) {
+          await registration.showNotification("Rest complete", options);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.warn("Service-worker notification failed:", error);
+    }
+
+    try {
+      new Notification("Rest complete", options);
+      return true;
+    } catch (error) {
+      console.warn("Page notification failed:", error);
+      return false;
+    }
+  }
+
   useEffect(() => {
     if (session.workoutTimerPaused) {
       return;
@@ -2326,12 +2374,6 @@ export default function SessionView({
       };
     });
   }
-
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
 
   useEffect(
     () => () => {
@@ -2378,6 +2420,8 @@ export default function SessionView({
 
   useEffect(() => {
     if (restSeconds === 0 && timerRunning) {
+      const notificationKey = `${timerStartedAt || ""}:${restMinutes}:${restRemainder}`;
+
       navigator.vibrate?.([200, 100, 200]);
 
       try {
@@ -2403,14 +2447,9 @@ export default function SessionView({
         // Audio feedback is optional.
       }
 
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(
-          "Rest complete",
-
-          {
-            body: "Ready for next set",
-          }
-        );
+      if (restNotificationSentKeyRef.current !== notificationKey) {
+        restNotificationSentKeyRef.current = notificationKey;
+        void showRestCompleteNotification();
       }
 
       setTimeout(() => {
@@ -2424,7 +2463,7 @@ export default function SessionView({
         setTimerPaused(false);
       }, 0);
     }
-  }, [restSeconds, timerRunning, restMinutes, restRemainder]);
+  }, [restSeconds, timerRunning, timerStartedAt, restMinutes, restRemainder]);
 
   useEffect(() => {
     if (!activeSet?.setId) {
@@ -2993,6 +3032,8 @@ export default function SessionView({
     setTimerFinished(false);
     setTimerPaused(false);
     setTimerStartedAt(startedAt);
+    restNotificationSentKeyRef.current = null;
+    void requestRestNotificationPermission();
     setTimerRunning(true);
   }
 
@@ -3002,6 +3043,7 @@ export default function SessionView({
     setTimerStartedAt(null);
     setTimerExpiredAt(null);
     setTimerFinished(false);
+    restNotificationSentKeyRef.current = null;
     setRestSeconds(restMinutes * 60 + restRemainder);
   }
 
@@ -3518,9 +3560,16 @@ export default function SessionView({
     const originalExercise = originalTemplate?.exercises?.find(
       (item) => item.id === exercise.id
     );
+    const weekPrescription = originalExercise?.weeklyPrescriptions?.find(
+      (week) => Number(week.weekNumber) === Number(session.planWeek)
+    );
+    const expectedSetCount = Math.max(
+      1,
+      Number(weekPrescription?.sets) || originalExercise?.sets?.length || 0
+    );
     const setCountChanged =
       originalExercise &&
-      (originalExercise.sets?.length || 0) !== (exercise.sets?.length || 0);
+      expectedSetCount !== (exercise.sets?.length || 0);
 
     if (!setCountChanged) {
       return exercise;
@@ -3600,25 +3649,29 @@ export default function SessionView({
 
     return {
       ...historyWorkout,
-      exercises: (historyWorkout.exercises || []).map((exercise) => ({
-        ...exercise,
-        sets: (exercise.sets || []).map(
-          ({
-            prescribedReps,
-            prescribedRir,
-            reps,
-            rir,
-            targetReps,
-            targetRir,
-            targetWeight,
-            historyDefaultActualReps,
-            historyDefaultActualRir,
-            historyDefaultActualWeight,
-            historyDefaultSourceKey,
-            ...set
-          }) => set
-        ),
-      })),
+      exercises: (historyWorkout.exercises || [])
+        .map((exercise) => ({
+          ...exercise,
+          sets: (exercise.sets || [])
+            .filter((set) => set.completed)
+            .map(
+              ({
+                prescribedReps,
+                prescribedRir,
+                reps,
+                rir,
+                targetReps,
+                targetRir,
+                targetWeight,
+                historyDefaultActualReps,
+                historyDefaultActualRir,
+                historyDefaultActualWeight,
+                historyDefaultSourceKey,
+                ...set
+              }) => set
+            ),
+        }))
+        .filter((exercise) => exercise.sets.length > 0),
     };
   }
 
@@ -4014,19 +4067,41 @@ export default function SessionView({
 
     if (!original) return false;
 
-    const getStructuralSignature = (exercises) =>
+    const originalById = new Map(
+      (original.exercises || []).map((exercise) => [String(exercise.id), exercise])
+    );
+    const getExpectedSetCount = (exercise) => {
+      if (!session.planId || !Array.isArray(exercise?.weeklyPrescriptions)) {
+        return exercise?.sets?.length || 0;
+      }
+
+      const weekPrescription = exercise.weeklyPrescriptions.find(
+        (week) => Number(week.weekNumber) === Number(session.planWeek)
+      );
+
+      return Math.max(
+        1,
+        Number(weekPrescription?.sets) || exercise?.sets?.length || 0
+      );
+    };
+    const getStructuralSignature = (exercises, { usePlanExpectedSets = false } = {}) =>
       exercises.map((ex) => ({
         equipment: formatList(ex.equipment),
         exerciseId: ex.exerciseId || null,
         muscles: formatList(ex.muscles),
         name: ex.name,
-        setCount: ex.sets?.length || 0,
+        setCount: usePlanExpectedSets && originalById.has(String(ex.id))
+          ? getExpectedSetCount(originalById.get(String(ex.id)))
+          : ex.sets?.length || 0,
         supersetGroup: ex.supersetGroup || null,
       }));
 
     return (
-      JSON.stringify(getStructuralSignature(original.exercises)) !==
-      JSON.stringify(getStructuralSignature(session.exercises))
+      JSON.stringify(
+        getStructuralSignature(original.exercises, {
+          usePlanExpectedSets: true,
+        })
+      ) !== JSON.stringify(getStructuralSignature(session.exercises))
     );
   }
 
@@ -4050,6 +4125,20 @@ export default function SessionView({
       const values = [...new Set((exercise?.sets || []).map((set) => getter(set)).filter(Boolean))];
 
       return values.length > 1 ? values.join("-") : values[0] || "—";
+    };
+    const getExpectedSetCount = (exercise) => {
+      if (!session.planId || !Array.isArray(exercise?.weeklyPrescriptions)) {
+        return exercise?.sets?.length || 0;
+      }
+
+      const weekPrescription = exercise.weeklyPrescriptions.find(
+        (week) => Number(week.weekNumber) === Number(session.planWeek)
+      );
+
+      return Math.max(
+        1,
+        Number(weekPrescription?.sets) || exercise?.sets?.length || 0
+      );
     };
     const originalOrder = (original.exercises || []).map((exercise) => String(exercise.id));
     const sessionOrder = (session.exercises || []).map((exercise) => String(exercise.id));
@@ -4095,12 +4184,14 @@ export default function SessionView({
         });
       }
 
-      if ((originalExercise.sets?.length || 0) !== (exercise.sets?.length || 0)) {
+      const expectedSetCount = getExpectedSetCount(originalExercise);
+
+      if (expectedSetCount !== (exercise.sets?.length || 0)) {
         changes.push({
           exerciseId: exercise.id,
           id: `sets:${exercise.id}`,
           label: `${exercise.name || "Exercise"}: sets ${formatValueChange(
-            originalExercise.sets?.length || 0,
+            expectedSetCount,
             exercise.sets?.length || 0
           )}`,
           type: "sets",
@@ -4379,7 +4470,7 @@ export default function SessionView({
     completedWorkout.exercises.forEach((exercise) => {
       let bestE1RM = null;
 
-      exercise.sets.forEach((set) => {
+      exercise.sets.filter((set) => set.completed).forEach((set) => {
         const e1rm = calculateSessionE1RM(
           exercise,
           set.actualWeight,
@@ -4921,6 +5012,7 @@ export default function SessionView({
                 setTimerStartedAt(null);
                 setTimerExpiredAt(null);
                 setTimerFinished(false);
+                restNotificationSentKeyRef.current = null;
                 setRestSeconds(restMinutes * 60 + restRemainder);
               } else if (timerRunning) {
                 setTimerPaused(true);
@@ -4929,6 +5021,8 @@ export default function SessionView({
               } else {
                 setTimerPaused(false);
                 setTimerExpiredAt(null);
+                restNotificationSentKeyRef.current = null;
+                void requestRestNotificationPermission();
 
                 if (restSeconds <= 0) {
                   setRestSeconds(restMinutes * 60 + restRemainder);
@@ -4959,6 +5053,7 @@ export default function SessionView({
               setTimerStartedAt(null);
               setTimerExpiredAt(null);
               setTimerFinished(false);
+              restNotificationSentKeyRef.current = null;
 
               setRestSeconds(restMinutes * 60 + restRemainder);
             }}
