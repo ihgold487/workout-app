@@ -23,6 +23,8 @@ import {
   Settings,
   Share2,
   Trash2,
+  Trophy,
+  Upload,
   Utensils,
   X,
 } from "lucide-react";
@@ -96,12 +98,15 @@ const UPDATE_CONFIRMATION_KEY = "pwaUpdateConfirmation";
 const UPDATE_CONFIRMATION_DURATION = 10 * 60 * 1000;
 const LAST_AUTO_UPDATE_CHECK_KEY = "lastAutoPwaUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL = 15 * 60 * 1000;
+const MANUAL_UPDATE_CHECK_TIMEOUT_MS = 20000;
 
 const STARTUP_SPLASH_MINIMUM_MS = 1000;
 const ACTIVE_WORKOUT_STARTUP_SPLASH_MINIMUM_MS = 150;
 const AUTO_SYNC_RESUME_INTERVAL = 60 * 60 * 1000;
 const AUTO_SYNC_CHECKPOINT_DELAY_MS = 350;
 const AUTO_SYNC_SUPPRESS_MS = 4000;
+const NORMALIZED_SYNC_TIMEOUT_MS = 90 * 1000;
+const RECENT_HISTORY_SYNC_LOOKBACK_MS = 36 * 60 * 60 * 1000;
 const NORMALIZED_SYNC_DIRTY_KEY = "normalizedSyncDirty";
 const NORMALIZED_SYNC_DIRTY_DOMAINS_KEY = "normalizedSyncDirtyDomains";
 const LAST_NORMALIZED_SYNC_KEY = "lastNormalizedSyncAt";
@@ -639,9 +644,21 @@ function formatHistoryTimestamp(workout) {
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
+const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
+const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
 
 function getNutritionLogStorageKey(userId) {
   return userId ? `${NUTRITION_LOG_KEY}:${userId}` : NUTRITION_LOG_KEY;
+}
+
+function getDailyCalorieGoalStorageKey(userId) {
+  return userId ? `${DAILY_CALORIE_GOAL_KEY}:${userId}` : DAILY_CALORIE_GOAL_KEY;
+}
+
+function getDailyCalorieGoalHistoryStorageKey(userId) {
+  return userId
+    ? `${DAILY_CALORIE_GOAL_HISTORY_KEY}:${userId}`
+    : DAILY_CALORIE_GOAL_HISTORY_KEY;
 }
 
 function readLocalArray(key) {
@@ -1014,9 +1031,224 @@ function getPlanExportTotalWeeks(plan) {
     )
   );
   const maxPrescriptionWeek = Math.max(0, ...weeklyPrescriptionWeeks);
-  const trainingWeeks = Math.max(durationWeeks, maxPrescriptionWeek, 1);
+  const configuredTotalWeeks =
+    durationWeeks + (plan?.config?.deload ? 1 : 0);
 
-  return plan?.config?.deload ? trainingWeeks + 1 : trainingWeeks;
+  return Math.max(configuredTotalWeeks, maxPrescriptionWeek, 1);
+}
+
+function getPlanExportTrainingWeeks(plan) {
+  return Math.max(1, Number(plan?.durationWeeks) || 1);
+}
+
+function getPlanExportConfiguredTotalWeeks(plan) {
+  return getPlanExportTrainingWeeks(plan) + (plan?.config?.deload ? 1 : 0);
+}
+
+function getPlanExportWeekRole(plan, weekNumber, weekPrescription = null) {
+  const trainingWeeks = getPlanExportTrainingWeeks(plan);
+  const deloadWeekNumber = plan?.config?.deload ? trainingWeeks + 1 : null;
+
+  if (
+    weekPrescription?.isDeload ||
+    (deloadWeekNumber && Number(weekNumber) === Number(deloadWeekNumber))
+  ) {
+    return "deload";
+  }
+
+  if (Number(weekNumber) <= trainingWeeks) {
+    return "training";
+  }
+
+  return "extension";
+}
+
+const PLAN_EXPORT_WORKOUT_TYPE_LABELS = {
+  "full body": "full-body",
+  "full-body": "full-body",
+  lower: "lower",
+  pull: "pull",
+  push: "push",
+  upper: "upper",
+};
+const PLAN_EXPORT_WORKOUT_TYPE_DISPLAY_LABELS = {
+  "full-body": "Full Body",
+  lower: "Lower",
+  pull: "Pull",
+  push: "Push",
+  upper: "Upper",
+};
+
+const PLAN_EXPORT_WORKOUT_TYPE_SEQUENCE = {
+  "type-3": ["push", "pull", "lower", "upper", "lower"],
+  "type-5": ["push", "pull", "lower", "upper", "lower"],
+};
+
+function normalizePlanExportWorkoutType(value) {
+  const normalized = normalizeExportText(value).replace(/-/g, " ");
+
+  return PLAN_EXPORT_WORKOUT_TYPE_LABELS[normalized] || "";
+}
+
+function inferPlanExportWorkoutTypeFromName(workoutName) {
+  const normalized = ` ${normalizeExportText(workoutName)} `;
+
+  if (/\bfull body\b|\bfull-body\b/.test(normalized)) {
+    return "full-body";
+  }
+
+  return ["push", "pull", "lower", "upper"].find((type) =>
+    new RegExp(`\\b${type}\\b`).test(normalized)
+  ) || "";
+}
+
+function getStoredPlanExportWorkoutType(planWorkout, template) {
+  return (
+    normalizePlanExportWorkoutType(planWorkout?.workoutType) ||
+    normalizePlanExportWorkoutType(template?.workoutType) ||
+    normalizePlanExportWorkoutType(planWorkout?.workoutTypeLabel) ||
+    normalizePlanExportWorkoutType(template?.workoutTypeLabel)
+  );
+}
+
+function getPlanExportWorkoutType({
+  plan,
+  planWorkout,
+  template,
+  workoutIndex,
+  workoutName,
+}) {
+  const inferredFromName = inferPlanExportWorkoutTypeFromName(workoutName);
+  const storedWorkoutType = getStoredPlanExportWorkoutType(planWorkout, template);
+  const sequenceType =
+    PLAN_EXPORT_WORKOUT_TYPE_SEQUENCE[plan?.planType]?.[
+      workoutIndex % PLAN_EXPORT_WORKOUT_TYPE_SEQUENCE[plan?.planType].length
+    ] || "";
+
+  return {
+    source:
+      inferredFromName
+        ? "workout_name"
+        : sequenceType
+          ? "plan_type_sequence"
+          : storedWorkoutType
+            ? "stored_metadata"
+            : "",
+    storedWorkoutType,
+    workoutType: inferredFromName || sequenceType || storedWorkoutType,
+  };
+}
+
+function normalizeStoredPlanWorkoutTypes(plans = [], templates = []) {
+  const templateById = new Map(
+    templates.map((template) => [String(template.id), template])
+  );
+  const repairedLinksByTemplateId = new Map();
+  const nextPlans = plans.map((plan) => ({
+    ...plan,
+    workouts: (plan.workouts || []).map((workout, workoutIndex) => {
+      const template =
+        workout.templateId != null
+          ? templateById.get(String(workout.templateId))
+          : null;
+      const workoutName =
+        template?.name || workout.name || `Workout ${workoutIndex + 1}`;
+      const typeInfo = getPlanExportWorkoutType({
+        plan,
+        planWorkout: workout,
+        template,
+        workoutIndex,
+        workoutName,
+      });
+      const workoutType = typeInfo.workoutType || workout.workoutType || null;
+      const workoutTypeLabel =
+        workoutType
+          ? PLAN_EXPORT_WORKOUT_TYPE_DISPLAY_LABELS[workoutType] ||
+            workout.workoutTypeLabel ||
+            template?.workoutTypeLabel ||
+            null
+          : workout.workoutTypeLabel || null;
+      const nextWorkout = {
+        ...workout,
+        workoutType,
+        workoutTypeLabel,
+      };
+
+      if (workout.templateId != null) {
+        repairedLinksByTemplateId.set(String(workout.templateId), {
+          workoutType,
+          workoutTypeLabel,
+        });
+      }
+
+      return nextWorkout;
+    }),
+  }));
+  const nextTemplates = templates.map((template) => {
+    const repairedLink = repairedLinksByTemplateId.get(String(template.id));
+
+    return repairedLink
+      ? {
+          ...template,
+          workoutType: repairedLink.workoutType,
+          workoutTypeLabel: repairedLink.workoutTypeLabel,
+        }
+      : template;
+  });
+
+  return {
+    plans: nextPlans,
+    templates: nextTemplates,
+  };
+}
+
+function getPlanWorkoutTypeSignature(plans = [], templates = []) {
+  const planParts = plans.flatMap((plan) =>
+    (plan.workouts || []).map((workout, workoutIndex) =>
+      [
+        "plan",
+        plan?.id ?? "",
+        workout?.planWorkoutId ?? "",
+        workout?.templateId ?? "",
+        workoutIndex,
+        workout?.workoutType ?? "",
+        workout?.workoutTypeLabel ?? "",
+      ].join(":")
+    )
+  );
+  const templateParts = templates.map((template) =>
+    [
+      "template",
+      template?.id ?? "",
+      template?.planWorkoutId ?? "",
+      template?.workoutType ?? "",
+      template?.workoutTypeLabel ?? "",
+    ].join(":")
+  );
+
+  return [...planParts, ...templateParts].join("|");
+}
+
+function normalizeWorkoutDataPlanTypes(data) {
+  const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
+    data?.plans,
+    data?.templates
+  );
+  const changed =
+    getPlanWorkoutTypeSignature(data?.plans, data?.templates) !==
+    getPlanWorkoutTypeSignature(
+      normalizedPlanData.plans,
+      normalizedPlanData.templates
+    );
+
+  return {
+    changed,
+    data: {
+      ...data,
+      plans: normalizedPlanData.plans,
+      templates: normalizedPlanData.templates,
+    },
+  };
 }
 
 function getPlanExportWorkoutTemplate(plan, planWorkout, templates = []) {
@@ -1121,6 +1353,14 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
             const exercises = template?.exercises || planWorkout.exercises || [];
             const workoutName =
               template?.name || planWorkout.name || `Workout ${workoutIndex + 1}`;
+            const workoutTypeInfo = getPlanExportWorkoutType({
+              plan,
+              planWorkout,
+              template,
+              workoutIndex,
+              workoutName,
+            });
+            const weekRole = getPlanExportWeekRole(plan, weekNumber);
 
             if (exercises.length === 0) {
               rows.push({
@@ -1130,14 +1370,19 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                 plan_type: plan.planType || plan.config?.planType || "",
                 plan_goal: plan.goal || plan.config?.goal || "",
                 total_weeks: totalWeeks,
+                training_weeks: getPlanExportTrainingWeeks(plan),
+                configured_total_weeks: getPlanExportConfiguredTotalWeeks(plan),
                 workouts_per_week: workouts.length || plan.daysPerWeek || "",
                 current_week: plan.currentWeek || "",
                 week_number: weekNumber,
-                is_deload_week: weekNumber > Number(plan.durationWeeks || totalWeeks),
+                week_role: weekRole,
+                is_deload_week: weekRole === "deload",
                 workout_day: planWorkout.dayNumber || workoutIndex + 1,
                 plan_workout_id: planWorkout.planWorkoutId || "",
                 workout_name: workoutName,
-                workout_type: planWorkout.workoutType || template?.workoutType || "",
+                workout_type: workoutTypeInfo.workoutType,
+                stored_workout_type: workoutTypeInfo.storedWorkoutType,
+                workout_type_source: workoutTypeInfo.source,
                 exercise_position: "",
                 exercise_name: "",
                 exercise_id: "",
@@ -1163,6 +1408,11 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                 exercise,
                 weekPrescription
               );
+              const exerciseWeekRole = getPlanExportWeekRole(
+                plan,
+                weekNumber,
+                weekPrescription
+              );
 
               Array.from({ length: prescribedSets }, (_, setIndex) => {
                 const set = exercise.sets?.[setIndex] || exercise.sets?.at(-1) || {};
@@ -1174,21 +1424,19 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                   plan_type: plan.planType || plan.config?.planType || "",
                   plan_goal: plan.goal || plan.config?.goal || "",
                   total_weeks: totalWeeks,
+                  training_weeks: getPlanExportTrainingWeeks(plan),
+                  configured_total_weeks: getPlanExportConfiguredTotalWeeks(plan),
                   workouts_per_week: workouts.length || plan.daysPerWeek || "",
                   current_week: plan.currentWeek || "",
                   week_number: weekNumber,
-                  is_deload_week:
-                    weekPrescription?.isDeload ||
-                    weekNumber > Number(plan.durationWeeks || totalWeeks),
+                  week_role: exerciseWeekRole,
+                  is_deload_week: exerciseWeekRole === "deload",
                   workout_day: planWorkout.dayNumber || workoutIndex + 1,
                   plan_workout_id: planWorkout.planWorkoutId || "",
                   workout_name: workoutName,
-                  workout_type:
-                    planWorkout.workoutType ||
-                    template?.workoutType ||
-                    planWorkout.workoutTypeLabel ||
-                    template?.workoutTypeLabel ||
-                    "",
+                  workout_type: workoutTypeInfo.workoutType,
+                  stored_workout_type: workoutTypeInfo.storedWorkoutType,
+                  workout_type_source: workoutTypeInfo.source,
                   exercise_position: exerciseIndex + 1,
                   exercise_name: exercise.name || "",
                   exercise_id: exercise.exerciseId || exercise.id || "",
@@ -1211,6 +1459,751 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
     });
 
   return rows;
+}
+
+function buildAiPlanDraftInstructions() {
+  return {
+    importSchema: "workout-app.ai-plan-draft.v1",
+    requiredShape: {
+      analysis: {
+        rationale:
+          "optional string[] explaining material changes to split, volume, reps, RIR, deloads, or exercise selection",
+        summary: "optional string summarizing the plan and main conclusions",
+        watchNext: "optional string[] listing items to monitor in the next block",
+      },
+      schema: "workout-app.ai-plan-draft.v1",
+      plan: {
+        daysPerWeek: "number",
+        deloadWeeks:
+          "number; deload weeks after the training block. Use 0 when no deload is planned.",
+        goal: "string",
+        name: "string",
+        trainingWeeks:
+          "number; count of normal training weeks, not including deload weeks",
+      },
+      workouts: [
+        {
+          dayNumber: "number",
+          exercises: [
+            {
+              equipment: "string or string[]",
+              name: "string matching the exercise library when possible",
+              sets: [
+                {
+                  reps: "number or string",
+                  rir: "number or string",
+                },
+              ],
+              weeklyPrescriptions:
+                "optional [{ weekNumber, sets, reps, rir, isDeload }]",
+            },
+          ],
+          name: "string",
+          workoutType: "push | pull | lower | upper | full-body | optional string",
+        },
+      ],
+    },
+    safety:
+      "The app imports drafts as inactive plans only. Review the plan before activating it.",
+  };
+}
+
+function buildTrainingProfileContext() {
+  return {
+    benchmarkFamilies: [
+      {
+        allowedVariants: [
+          {
+            equipment: ["Barbell"],
+            names: ["Bench Press"],
+          },
+          {
+            equipment: ["Barbell"],
+            names: ["Incline Bench Press"],
+          },
+        ],
+        disallowedForBenchmarkCredit:
+          "Dumbbell bench and dumbbell incline bench can be useful accessories, but they do not satisfy the chest benchmark requirement.",
+        muscleGroup: "Chest",
+        role: "benchmark family",
+      },
+      {
+        allowedVariants: [
+          {
+            equipment: ["Barbell"],
+            names: ["Deadlift", "Deadlifts"],
+          },
+          {
+            equipment: ["Trap Bar"],
+            names: ["Deadlift", "Deadlifts"],
+          },
+          {
+            equipment: ["Trap Bar"],
+            names: ["Deficit Deadlift", "Deficit Deadlifts"],
+          },
+          {
+            equipment: ["Barbell"],
+            names: ["Sumo Deadlift", "Sumo Deadlifts"],
+          },
+        ],
+        guidance:
+          "Treat conventional, trap-bar, deficit trap-bar, and sumo deadlift variants as acceptable lower/posterior-chain benchmark options.",
+        muscleGroup: "Lower body / posterior chain",
+        role: "benchmark family",
+      },
+      {
+        allowedVariants: [
+          {
+            equipment: ["Bodyweight"],
+            names: ["Pull-Up", "Pull-Ups", "Chin-Up", "Chin-Ups"],
+          },
+        ],
+        guidance:
+          "Grip and handle variations are acceptable benchmark options when they are pull-up or chin-up patterns.",
+        muscleGroup: "Back",
+        role: "benchmark family",
+      },
+    ],
+    goals: {
+      primary: "Strength gain and hypertrophy",
+      strengthMetric: "estimated 1 rep maximum (e1RM)",
+      hypertrophyMetric: "subjective visual progress for now",
+    },
+    currentPriorities: [
+      {
+        benchmarkPreference: {
+          equipment: ["Barbell"],
+          name: "Bench Press",
+        },
+        muscleGroup: "Chest",
+        priority: "emphasized",
+        rationale:
+          "Chest development is a current hypertrophy priority, and barbell bench performance is a particularly useful strength signal within that priority.",
+      },
+    ],
+    hardRules: {
+      benchmarkCoverage:
+        "Each plan must include at least one exercise from every benchmark family.",
+      benchmarkChoice:
+        "Choose one or more allowed variants from each benchmark family based on history, fatigue, equipment, and plan intent; do not force every listed variant into the same week.",
+      benchmarkPlacement:
+        "When a benchmark exercise is included, place it before other direct exercises for that benchmark's primary muscle group in that workout so its e1RM signal is meaningful. It does not have to be the first exercise in the workout when the plan intentionally prioritizes another muscle or movement first.",
+      benchmarkPurpose:
+        "Benchmark exercises are the primary exercises used to evaluate strength progression through e1RM. Supporting exercises should still progress where practical, but their e1RM trends are secondary and should not override benchmark performance, hypertrophy goals, fatigue management, or exercise-role considerations.",
+      benchmarkRecurrence:
+        "Benchmark exercises should normally recur consistently enough during the training block to provide a meaningful e1RM trend, but variations may be rotated when justified.",
+      inactiveDraft:
+        "Imported AI plans are drafts and must remain inactive until reviewed in the app.",
+    },
+    planningFreedom: {
+      currentPlanIsReference: true,
+      guidance:
+        "Use the current plan and recent history as evidence, not as a strict template.",
+      mayChange: [
+        "split",
+        "days per week",
+        "workout order",
+        "exercise selection",
+        "sets",
+        "rep ranges",
+        "RIR targets",
+        "RIR progression",
+        "deload timing",
+        "weekly volume by muscle",
+      ],
+      shouldExplainChanges:
+        "When materially changing structure, volume, reps, or RIR, explain the evidence from history or goals that motivated the change.",
+    },
+    softPreferences: {
+      daysPerWeek: 5,
+      deloadWeeks: 1,
+      lowerBodyExerciseCount: "Usually 6-7.",
+      normalSetCount: "Usually 3-4 working sets per exercise.",
+      pushPullFullBodyExerciseCount: "Usually 7-8.",
+      rirProgression: "Often stepped across training weeks, such as 3, 3, 2, 2, 1.",
+      shouldersMayAppearIn: ["push", "pull", "upper"],
+      split: ["push or pull", "pull or push", "lower", "upper", "lower"],
+      trainingWeeks: 5,
+      usualAbsPlacement: "lower body workouts",
+    },
+    source: "GoalsAndDefinitions-derived structured context",
+    precedence:
+      "Use these structured fields as the authoritative planning guidance for this export.",
+  };
+}
+
+function getBodyWeightEntryTime(entry) {
+  const parsed = Date.parse(entry?.date || entry?.measured_at || "");
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getBodyWeightEntryValue(entry) {
+  const parsed = Number.parseFloat(
+    String(entry?.weight ?? entry?.body_weight_value ?? "")
+  );
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getBodyWeightEntryUnit(entry) {
+  return entry?.unit || entry?.body_weight_unit || "lb";
+}
+
+function formatBodyWeightTrendValue(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(1)) : null;
+}
+
+function averageBodyWeight(entries) {
+  const values = entries
+    .map(getBodyWeightEntryValue)
+    .filter((value) => value != null);
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getBodyWeightChange(latestValue, firstEntry) {
+  const firstValue = getBodyWeightEntryValue(firstEntry);
+
+  return latestValue != null && firstValue != null
+    ? formatBodyWeightTrendValue(latestValue - firstValue)
+    : null;
+}
+
+function buildBodyWeightTrendContext(bodyWeightEntries = [], plans = []) {
+  const sortedEntries = [...bodyWeightEntries]
+    .filter((entry) => getBodyWeightEntryTime(entry) > 0)
+    .sort((left, right) => getBodyWeightEntryTime(left) - getBodyWeightEntryTime(right));
+  const latest = sortedEntries.at(-1) || null;
+
+  if (!latest) {
+    return {
+      available: false,
+      note: "No body-weight entries were available in local app data.",
+    };
+  }
+
+  const latestTime = getBodyWeightEntryTime(latest);
+  const entriesSinceDays = (days) => {
+    const cutoff = latestTime - days * 24 * 60 * 60 * 1000;
+
+    return sortedEntries.filter((entry) => getBodyWeightEntryTime(entry) >= cutoff);
+  };
+  const latestValue = getBodyWeightEntryValue(latest);
+  const activePlan = plans.find((plan) => plan.status === "active") || null;
+  const activePlanStartTime = Date.parse(activePlan?.createdAt || "");
+  const activePlanEntries = Number.isFinite(activePlanStartTime)
+    ? sortedEntries.filter((entry) => getBodyWeightEntryTime(entry) >= activePlanStartTime)
+    : [];
+  const firstActivePlanEntry = activePlanEntries[0] || null;
+  const first90DayEntry = entriesSinceDays(90)[0] || null;
+  const first30DayEntry = entriesSinceDays(30)[0] || null;
+
+  return {
+    available: true,
+    averages: {
+      sevenDay: formatBodyWeightTrendValue(averageBodyWeight(entriesSinceDays(7))),
+      fourteenDay: formatBodyWeightTrendValue(averageBodyWeight(entriesSinceDays(14))),
+      thirtyDay: formatBodyWeightTrendValue(averageBodyWeight(entriesSinceDays(30))),
+    },
+    change: {
+      activePlan: getBodyWeightChange(latestValue, firstActivePlanEntry),
+      thirtyDay: getBodyWeightChange(latestValue, first30DayEntry),
+      ninetyDay: getBodyWeightChange(latestValue, first90DayEntry),
+    },
+    entryCount: sortedEntries.length,
+    latest: {
+      date: latest.date || latest.measured_at || "",
+      unit: getBodyWeightEntryUnit(latest),
+      value: formatBodyWeightTrendValue(latestValue),
+    },
+    note:
+      "Use body-weight trend as context when interpreting strength and hypertrophy progress; do not overfit plan decisions to small day-to-day fluctuations.",
+  };
+}
+
+function parseNutritionNumber(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace(/^\+/, ""));
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundNutritionNumber(value, digits = 1) {
+  return Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
+}
+
+function getAiDateKey(value) {
+  const date = value ? new Date(value) : new Date();
+
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetweenDateKeys(startDate, endDate) {
+  const start = Date.parse(`${startDate}T00:00:00`);
+  const end = Date.parse(`${endDate}T00:00:00`);
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return 0;
+  }
+
+  return Math.round((end - start) / 86400000);
+}
+
+function readDailyCalorieGoalForAi(storageKey) {
+  const parsed = Number(localStorage.getItem(storageKey));
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function readDailyCalorieGoalHistoryForAi(storageKey, fallbackGoal = 0) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed
+        .map((entry) => ({
+          date: String(entry.date || "").slice(0, 10),
+          goal: Math.round(parseNutritionNumber(entry.goal)),
+        }))
+        .filter((entry) => entry.date && entry.goal > 0)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+  } catch (error) {
+    console.error("Failed to read AI calorie goal history:", error);
+  }
+
+  return fallbackGoal > 0
+    ? [
+        {
+          date: getAiDateKey(),
+          goal: fallbackGoal,
+        },
+      ]
+    : [];
+}
+
+function getNutritionGoalForDate(goalHistory, date, fallbackGoal = 0) {
+  const candidates = (goalHistory || [])
+    .filter((entry) => entry.date <= date)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return candidates[0]?.goal || fallbackGoal || 0;
+}
+
+function averageNutritionRows(rows) {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return {
+    calories: roundNutritionNumber(
+      rows.reduce((sum, row) => sum + row.calories, 0) / rows.length,
+      0
+    ),
+    carbs: roundNutritionNumber(
+      rows.reduce((sum, row) => sum + row.carbs, 0) / rows.length
+    ),
+    fat: roundNutritionNumber(
+      rows.reduce((sum, row) => sum + row.fat, 0) / rows.length
+    ),
+    protein: roundNutritionNumber(
+      rows.reduce((sum, row) => sum + row.protein, 0) / rows.length
+    ),
+  };
+}
+
+function buildNutritionTrendContext({
+  calorieGoal = 0,
+  calorieGoalHistory = [],
+  lookbackDays = 30,
+  nutritionEntries = [],
+} = {}) {
+  const rowsByDate = new Map();
+
+  nutritionEntries.forEach((entry) => {
+    const date = String(entry?.date || "").slice(0, 10);
+
+    if (!date) {
+      return;
+    }
+
+    const current = rowsByDate.get(date) || {
+      calories: 0,
+      carbs: 0,
+      date,
+      fat: 0,
+      protein: 0,
+    };
+
+    rowsByDate.set(date, {
+      ...current,
+      calories: current.calories + parseNutritionNumber(entry.calories),
+      carbs: current.carbs + parseNutritionNumber(entry.carbs),
+      fat: current.fat + parseNutritionNumber(entry.fat),
+      protein: current.protein + parseNutritionNumber(entry.protein),
+    });
+  });
+
+  const allRows = [...rowsByDate.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({
+      calories: roundNutritionNumber(row.calories, 0),
+      calorieGoal: getNutritionGoalForDate(
+        calorieGoalHistory,
+        row.date,
+        calorieGoal
+      ),
+      carbs: roundNutritionNumber(row.carbs),
+      date: row.date,
+      fat: roundNutritionNumber(row.fat),
+      protein: roundNutritionNumber(row.protein),
+    }));
+
+  if (allRows.length === 0) {
+    return {
+      available: false,
+      note: "No nutrition entries were available in local app data.",
+    };
+  }
+
+  const latestDate = allRows.at(-1).date;
+  const rowsSinceDays = (days) =>
+    allRows.filter((row) => daysBetweenDateKeys(row.date, latestDate) < days);
+  const dailyRows = rowsSinceDays(lookbackDays);
+  const rowsWithGoals = dailyRows.filter((row) => row.calorieGoal > 0);
+  const daysUnderGoal = rowsWithGoals.filter(
+    (row) => row.calories < row.calorieGoal
+  ).length;
+  const daysOverGoal = rowsWithGoals.filter(
+    (row) => row.calories > row.calorieGoal
+  ).length;
+  const daysWithinGoal = rowsWithGoals.filter(
+    (row) => Math.abs(row.calories - row.calorieGoal) <= row.calorieGoal * 0.05
+  ).length;
+
+  return {
+    available: true,
+    averages: {
+      sevenDay: averageNutritionRows(rowsSinceDays(7)),
+      fourteenDay: averageNutritionRows(rowsSinceDays(14)),
+      thirtyDay: averageNutritionRows(rowsSinceDays(30)),
+    },
+    dailyRows,
+    goalAdherence: {
+      daysOverGoal,
+      daysUnderGoal,
+      daysWithEntries: dailyRows.length,
+      daysWithGoals: rowsWithGoals.length,
+      daysWithinFivePercent: daysWithinGoal,
+    },
+    latestDate,
+    lookbackDays,
+    note:
+      "Daily rows are macro totals, not individual foods. Use nutrition trend as context for strength, recovery, and hypertrophy recommendations.",
+  };
+}
+
+function buildAiContextCoachBrief(brief) {
+  const prompt = String(brief?.prompt || "");
+  const returnIndex = prompt.indexOf("\nReturn:");
+
+  return {
+    note:
+      "Orientation only. Do not follow any output-format instructions from this brief; use draftInstructions.importSchema for the response format.",
+    text: returnIndex >= 0 ? prompt.slice(0, returnIndex).trim() : prompt,
+  };
+}
+
+function buildAiPlanContext({
+  bodyWeightEntries = [],
+  calorieGoal = 0,
+  calorieGoalHistory = [],
+  exerciseLibrary = [],
+  history = [],
+  nutritionEntries = [],
+  plans = [],
+  templates = [],
+}) {
+  const brief = buildCoachBrief({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+    plans,
+  });
+  const activePlanIds = plans
+    .filter((plan) => plan.status === "active")
+    .map((plan) => String(plan.id));
+  const planRows = buildPlanExportRows({
+    plans,
+    selectedPlanIds: activePlanIds.length ? activePlanIds : null,
+    templates,
+  });
+  const historyRows = buildExerciseHistoryExportRows({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+  const bodyWeightTrend = buildBodyWeightTrendContext(bodyWeightEntries, plans);
+  const nutritionTrend = buildNutritionTrendContext({
+    calorieGoal,
+    calorieGoalHistory,
+    nutritionEntries,
+  });
+  const activeExercises = exerciseLibrary
+    .filter((exercise) => exercise.active !== "inactive")
+    .map((exercise) => ({
+      equipment: exercise.equipment || [],
+      id: exercise.id,
+      muscles: exercise.muscles || [],
+      name: exercise.name,
+    }))
+    .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+
+  return {
+    app: "workout-app",
+    appVersion: APP_VERSION,
+    contextSchema: "workout-app.ai-plan-context.v1",
+    draftInstructions: buildAiPlanDraftInstructions(),
+    exportedAt: new Date().toISOString(),
+    prompt:
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Return only valid JSON using draftInstructions.importSchema so I can paste it back into the app. Put explanation in the optional analysis object.",
+    summary: {
+      activeExerciseCount: activeExercises.length,
+      activePlanCount: activePlanIds.length,
+      completedSetRows: historyRows.length,
+      nutritionDays:
+        nutritionTrend.available ? nutritionTrend.goalAdherence.daysWithEntries : 0,
+      planPrescriptionRows: planRows.length,
+      trackedExerciseCount: brief.trackedExercises.length,
+      workoutCount: brief.workoutCount,
+    },
+    bodyWeightTrend,
+    nutritionTrend,
+    trainingProfile: buildTrainingProfileContext(),
+    coachBrief: buildAiContextCoachBrief(brief),
+    activeExercises,
+    activePlanPrescriptionRows: planRows,
+    completedSetRows: historyRows,
+  };
+}
+
+function getAiPlanPrompt(context) {
+  return [
+    "I attached a workout-app AI context export from my local app.",
+    "",
+    "Please evaluate my progress and create the next plan/workout draft from it.",
+    "Use the exercise names/equipment in activeExercises when possible.",
+    "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
+    "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
+    "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
+    "Put any observations, rationale, and watch items inside the optional analysis object so the entire response remains importable JSON.",
+    "Use plan.trainingWeeks for normal training weeks and plan.deloadWeeks for deload weeks. Do not use plan.durationWeeks unless you are maintaining backward compatibility with an older draft.",
+    "",
+    "Return only valid JSON with this top-level shape:",
+    JSON.stringify(buildAiPlanDraftInstructions().requiredShape, null, 2),
+    "",
+    `Context summary: ${JSON.stringify(context.summary)}`,
+  ].join("\n");
+}
+
+function parseAiPlanDraft(rawText) {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error("Paste valid JSON from ChatGPT before importing.");
+  }
+
+  const draft = parsed.workoutAppAiPlanDraft || parsed.planDraft || parsed;
+  const plan = draft.plan || {};
+  const workouts = draft.workouts || plan.workouts;
+
+  if (!Array.isArray(workouts) || workouts.length === 0) {
+    throw new Error("The draft must include a non-empty workouts array.");
+  }
+
+  return {
+    analysis: draft.analysis || draft.coachNotes || parsed.analysis || null,
+    plan,
+    schema: draft.schema || parsed.schema || "",
+    workouts,
+  };
+}
+
+function normalizeAiPlanAnalysis(analysis) {
+  if (!analysis || typeof analysis !== "object" || Array.isArray(analysis)) {
+    return null;
+  }
+
+  const normalizeList = (value) =>
+    Array.isArray(value)
+      ? value.map((item) => String(item || "").trim()).filter(Boolean)
+      : String(value || "").trim()
+        ? [String(value).trim()]
+        : [];
+  const normalized = {
+    rationale: normalizeList(analysis.rationale),
+    summary: String(analysis.summary || "").trim(),
+    watchNext: normalizeList(analysis.watchNext || analysis.watch_next),
+  };
+
+  return normalized.summary ||
+    normalized.rationale.length > 0 ||
+    normalized.watchNext.length > 0
+    ? normalized
+    : null;
+}
+
+function normalizeAiDraftEquipment(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).map(String);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function findAiDraftExercise(exerciseDraft, exerciseLibrary = []) {
+  const draftName = normalizeExportText(exerciseDraft?.name);
+  const draftEquipment = normalizeExportText(
+    normalizeAiDraftEquipment(exerciseDraft?.equipment).join(", ")
+  );
+  const activeExercises = exerciseLibrary.filter(
+    (exercise) => exercise.active !== "inactive"
+  );
+
+  return (
+    activeExercises.find(
+      (exercise) =>
+        normalizeExportText(exercise.name) === draftName &&
+        normalizeExportText(getExerciseEquipmentLabel(exercise)) === draftEquipment
+    ) ||
+    activeExercises.find(
+      (exercise) => normalizeExportText(exercise.name) === draftName
+    ) ||
+    null
+  );
+}
+
+function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
+  const importedAt = Date.now();
+  const planId = importedAt;
+  const planName =
+    String(draft.plan?.name || "").trim() ||
+    `AI Plan Draft ${new Date().toISOString().slice(0, 10)}`;
+  const parsedDurationWeeks = Number(
+    draft.plan?.trainingWeeks || draft.plan?.durationWeeks || draft.plan?.weeks || 4
+  );
+  const parsedDeloadWeeks = Number(draft.plan?.deloadWeeks);
+  const durationWeeks = Number.isFinite(parsedDurationWeeks)
+    ? parsedDurationWeeks
+    : 4;
+  const deloadWeeks = Number.isFinite(parsedDeloadWeeks)
+    ? Math.max(0, parsedDeloadWeeks)
+    : 0;
+  const daysPerWeek = Number(draft.plan?.daysPerWeek) || draft.workouts.length;
+  const aiAnalysis = normalizeAiPlanAnalysis(draft.analysis);
+  const unmatchedExercises = [];
+  const templates = draft.workouts.map((workoutDraft, workoutIndex) => {
+    const templateId = importedAt + workoutIndex + 1;
+    const planWorkoutId = `${planId}:ai-workout-${workoutIndex + 1}`;
+
+    return {
+      dayNumber: Number(workoutDraft.dayNumber) || workoutIndex + 1,
+      exercises: (workoutDraft.exercises || []).map((exerciseDraft, exerciseIndex) => {
+        const libraryExercise = findAiDraftExercise(exerciseDraft, exerciseLibrary);
+        const setDrafts = Array.isArray(exerciseDraft.sets)
+          ? exerciseDraft.sets
+          : Array.from(
+              { length: Math.max(1, Number(exerciseDraft.sets) || 3) },
+              () => ({
+                reps: exerciseDraft.reps,
+                rir: exerciseDraft.rir,
+              })
+            );
+
+        if (!libraryExercise) {
+          unmatchedExercises.push(exerciseDraft.name || `Exercise ${exerciseIndex + 1}`);
+        }
+
+        return {
+          equipment:
+            libraryExercise?.equipment ||
+            normalizeAiDraftEquipment(exerciseDraft.equipment),
+          exerciseId: libraryExercise?.id || null,
+          id: importedAt + workoutIndex * 100 + exerciseIndex,
+          muscles: libraryExercise?.muscles || exerciseDraft.muscles || [],
+          name: libraryExercise?.name || exerciseDraft.name || "Exercise",
+          planMuscle: exerciseDraft.planMuscle || libraryExercise?.muscles?.[0] || "",
+          sets: setDrafts.map((setDraft, setIndex) => ({
+            id: importedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
+            reps: String(setDraft?.reps ?? exerciseDraft.reps ?? ""),
+            rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
+          })),
+          supersetGroup: exerciseDraft.supersetGroup || null,
+          weeklyPrescriptions: Array.isArray(exerciseDraft.weeklyPrescriptions)
+            ? exerciseDraft.weeklyPrescriptions
+            : [],
+        };
+      }),
+      id: templateId,
+      name: workoutDraft.name || `Day ${workoutIndex + 1}`,
+      planId,
+      planWorkoutId,
+      workoutType: workoutDraft.workoutType || null,
+      workoutTypeLabel: workoutDraft.workoutTypeLabel || workoutDraft.workoutType || null,
+    };
+  });
+  const plan = {
+    config: {
+      deload:
+        draft.plan?.deload != null
+          ? Boolean(draft.plan.deload)
+          : deloadWeeks > 0,
+      deloadWeeks,
+      reps: draft.plan?.reps || "",
+      rir: draft.plan?.rir || "",
+      rirPeriodization: draft.plan?.rirPeriodization || "none",
+      sets: draft.plan?.sets || undefined,
+      workoutTypeByDay: {},
+    },
+    createdAt: new Date().toISOString(),
+    currentWeek: 1,
+    daysPerWeek,
+    durationWeeks,
+    goal: draft.plan?.goal || "Hybrid strength and hypertrophy",
+    id: planId,
+    aiAnalysis,
+    name: planName,
+    planType: draft.plan?.planType || "type-5",
+    status: "inactive",
+    updatedAt: new Date().toISOString(),
+    workouts: templates.map((template, index) => ({
+      dayNumber: template.dayNumber || index + 1,
+      name: template.name,
+      planWorkoutId: template.planWorkoutId,
+      templateId: template.id,
+      workoutType: template.workoutType,
+      workoutTypeLabel: template.workoutTypeLabel,
+    })),
+  };
+
+  return {
+    plan,
+    templates,
+    unmatchedExercises,
+  };
 }
 
 function recomputeExerciseE1RMMetadata(
@@ -1991,9 +2984,22 @@ function rememberUpdateConfirmation() {
 
 async function getLiveBuildTime() {
   const baseUrl = import.meta.env.BASE_URL || "/";
-  const response = await fetch(`${baseUrl}index.html?update-check=${Date.now()}`, {
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    MANUAL_UPDATE_CHECK_TIMEOUT_MS
+  );
+
+  let response;
+
+  try {
+    response = await fetch(`${baseUrl}index.html?update-check=${Date.now()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`Live build check failed with ${response.status}.`);
@@ -2005,6 +3011,46 @@ async function getLiveBuildTime() {
   );
 
   return match ? match[1] : "";
+}
+
+function withUpdateTimeout(promise, message = "Update check timed out.") {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(
+      () => reject(new Error(message)),
+      MANUAL_UPDATE_CHECK_TIMEOUT_MS
+    );
+
+    Promise.resolve(promise).then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(
+      () => reject(new Error(message)),
+      timeoutMs
+    );
+
+    Promise.resolve(promise).then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 }
 
 async function reloadWithoutServiceWorkerCache() {
@@ -2031,11 +3077,17 @@ const savedStorageVersion = getSavedStorageVersion();
 export default function App() {
   useModalScrollGuard();
 
-  const initialWorkoutData = useState(() =>
-    loadWorkoutData({
-      seedExercises,
-    })
+  const initialWorkoutDataResult = useState(() =>
+    normalizeWorkoutDataPlanTypes(
+      loadWorkoutData({
+        seedExercises,
+      })
+    )
   )[0];
+  const initialWorkoutData = initialWorkoutDataResult.data;
+  const initialPlanWorkoutTypeRepairNeededRef = useRef(
+    initialWorkoutDataResult.changed
+  );
 
   // STORAGE MIGRATIONS
   useEffect(() => {
@@ -2200,6 +3252,8 @@ export default function App() {
   const [coachBriefPrompt, setCoachBriefPrompt] = useState("");
 
   const [coachBriefStatus, setCoachBriefStatus] = useState("");
+  const [aiPlanDraftText, setAiPlanDraftText] = useState("");
+  const [aiPlanStatus, setAiPlanStatus] = useState("");
   const [exportExpanded, setExportExpanded] = useState(false);
   const [exerciseExportMode, setExerciseExportMode] = useState("all");
   const [exerciseExportSearch, setExerciseExportSearch] = useState("");
@@ -2216,6 +3270,7 @@ export default function App() {
   const automaticSyncInFlightRef = useRef(false);
 
   const automaticSyncQueuedRef = useRef(false);
+  const automaticSyncAttemptIdRef = useRef(0);
 
   const automaticSyncHydratedUserRef = useRef(null);
 
@@ -2246,6 +3301,7 @@ export default function App() {
   const planDirtyReadyRef = useRef(false);
 
   const previousHistoryLengthRef = useRef(history.length);
+  const workoutCompletionSyncHistoryLengthRef = useRef(null);
 
   const userEmail = authSession?.user?.email || "";
   const normalizedUserEmail = userEmail.toLowerCase();
@@ -2651,16 +3707,20 @@ export default function App() {
 
   function getCurrentWorkoutData() {
     const reconciledPlans = reconcilePlanCompletionsWithHistory(plans, history);
+    const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
+      reconciledPlans,
+      templates
+    );
 
     return {
       exerciseLibrary,
       exerciseMetadata,
       history,
       ownerUserId: localOwnerUserId,
-      plans: reconciledPlans,
+      plans: normalizedPlanData.plans,
       selectedSessionId,
       sessions,
-      templates,
+      templates: normalizedPlanData.templates,
     };
   }
 
@@ -2674,13 +3734,17 @@ export default function App() {
   }
 
   function replaceWorkoutData(data) {
-    const nextPlans = reconcilePlanCompletionsWithHistory(
+    const reconciledPlans = reconcilePlanCompletionsWithHistory(
       data.plans,
       data.history
     );
+    const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
+      reconciledPlans,
+      data.templates
+    );
 
-    setTemplates(data.templates);
-    setPlans(nextPlans);
+    setTemplates(normalizedPlanData.templates);
+    setPlans(normalizedPlanData.plans);
     setHistory(data.history);
     setSessions(data.sessions);
     setExerciseLibrary(data.exerciseLibrary);
@@ -2714,6 +3778,10 @@ export default function App() {
     currentWorkoutDataRef.current = data;
     localDataRevisionRef.current += 1;
     markNormalizedSyncDirty(["history", "plans", "workouts"]);
+    workoutCompletionSyncHistoryLengthRef.current = data.history.length;
+    window.setTimeout(() => {
+      runAutomaticNormalizedSync("workout completion");
+    }, 0);
     saveLocalWorkoutDataImmediately(data).catch((error) => {
       console.error("Failed to save completed workout immediately:", error);
     });
@@ -2975,14 +4043,35 @@ export default function App() {
   );
 
   function isAutomaticSyncAvailable(session = authSessionRef.current) {
-    return Boolean(
-      isSupabaseConfigured &&
-        session?.user?.id &&
-        appAccessAllowed &&
-        !approvalFromCache &&
-        indexedDbReady &&
-        (typeof navigator === "undefined" || navigator.onLine)
-    );
+    return !getAutomaticSyncUnavailableReason(session);
+  }
+
+  function getAutomaticSyncUnavailableReason(session = authSessionRef.current) {
+    if (!isSupabaseConfigured) {
+      return "Supabase sync is not configured.";
+    }
+
+    if (!session?.user?.id) {
+      return "Sign in before syncing.";
+    }
+
+    if (!appAccessAllowed) {
+      return "App access is not approved yet.";
+    }
+
+    if (approvalFromCache) {
+      return "Reconnect before syncing; app approval is only cached locally.";
+    }
+
+    if (!indexedDbReady) {
+      return "Local database is still loading. Try again in a moment.";
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return "This device is offline.";
+    }
+
+    return "";
   }
 
   function markNormalizedSyncDirty(domains = NORMALIZED_SYNC_DOMAINS) {
@@ -3020,7 +4109,47 @@ export default function App() {
     }, AUTO_SYNC_CHECKPOINT_DELAY_MS);
   }
 
-  async function uploadNormalizedWorkoutData(data, session, domains) {
+  function getWorkoutHistoryTime(workout) {
+    const parsed = Date.parse(
+      workout?.completedAtIso ||
+        workout?.completed_at ||
+        workout?.completedAt ||
+        workout?.completed_at_iso ||
+        ""
+    );
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function getHistoryForSync(history = [], reason = "auto") {
+    const lastSyncTime = Date.parse(lastNormalizedSyncAt || "");
+
+    if (
+      !Number.isFinite(lastSyncTime) ||
+      reason === "history replacement" ||
+      reason === "reset"
+    ) {
+      return {
+        history,
+        partial: false,
+      };
+    }
+
+    const cutoff = Math.max(0, lastSyncTime - RECENT_HISTORY_SYNC_LOOKBACK_MS);
+    const recentHistory = history.filter(
+      (workout) => getWorkoutHistoryTime(workout) >= cutoff
+    );
+
+    const scopedHistory =
+      recentHistory.length > 0 ? recentHistory : history.slice(0, 1);
+
+    return {
+      history: scopedHistory,
+      partial: scopedHistory.length < history.length,
+    };
+  }
+
+  async function uploadNormalizedWorkoutData(data, session, domains, options = {}) {
     const domainSet = new Set(domains);
     const shouldSyncWorkouts =
       domainSet.has("workouts") ||
@@ -3029,6 +4158,7 @@ export default function App() {
     let workoutsUploaded = false;
 
     if (domainSet.has("exercisePreferences")) {
+      setSyncStatus("Syncing now... uploading exercise preferences.");
       await uploadCustomExercises(data.exerciseLibrary, session);
       await uploadExercisePreferences(
         data.exerciseLibrary,
@@ -3038,17 +4168,26 @@ export default function App() {
     }
 
     if (shouldSyncWorkouts) {
+      setSyncStatus("Syncing now... uploading workouts.");
       await uploadWorkouts(data.templates, data.exerciseLibrary, session);
       workoutsUploaded = true;
     }
 
     if (domainSet.has("history")) {
+      const historyScope = getHistoryForSync(data.history, options.reason);
+
+      setSyncStatus(
+        `Syncing now... uploading ${historyScope.history.length} completed workout${
+          historyScope.history.length === 1 ? "" : "s"
+        }${historyScope.partial ? " changed since the last sync" : ""}.`
+      );
       await uploadWorkoutHistory(
-        data.history,
+        historyScope.history,
         data.templates,
         data.exerciseLibrary,
         session,
         {
+          preserveCloudHistory: historyScope.partial,
           skipWorkoutRefresh: workoutsUploaded,
         }
       );
@@ -3060,6 +4199,7 @@ export default function App() {
         data.history
       );
 
+      setSyncStatus("Syncing now... uploading plans.");
       await uploadPlans(
         reconciledPlans,
         data.templates,
@@ -3072,6 +4212,7 @@ export default function App() {
     }
 
     if (domainSet.has("plateInventory")) {
+      setSyncStatus("Syncing now... uploading plate inventory.");
       await uploadPlateInventory(plateInventoryRef.current, session);
     }
   }
@@ -3184,6 +4325,10 @@ export default function App() {
   function repairLocalPlanLinks() {
     const resolvedPlans = resolvePlanWorkoutTemplateIds(plans, templates);
     const linkedTemplates = attachPlanLinksToTemplates(templates, resolvedPlans);
+    const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
+      resolvedPlans,
+      linkedTemplates
+    );
     const beforeBrokenLinks = getAuditLocalSummary({
       exerciseLibrary,
       exerciseMetadata,
@@ -3196,13 +4341,13 @@ export default function App() {
       exerciseLibrary,
       exerciseMetadata,
       history,
-      plans: resolvedPlans,
+      plans: normalizedPlanData.plans,
       sessions,
-      templates: linkedTemplates,
+      templates: normalizedPlanData.templates,
     }).missingPlanWorkouts.length;
 
-    setPlans(resolvedPlans);
-    setTemplates(linkedTemplates);
+    setPlans(normalizedPlanData.plans);
+    setTemplates(normalizedPlanData.templates);
 
     if (afterBrokenLinks < beforeBrokenLinks) {
       markNormalizedSyncDirty(["plans", "workouts"]);
@@ -3213,38 +4358,7 @@ export default function App() {
     );
   }
 
-  async function runAutomaticNormalizedSync(reason = "auto") {
-    const session = authSessionRef.current;
-
-    if (!isAutomaticSyncAvailable(session)) {
-      return;
-    }
-
-    const visibleSyncAction = reason === "manual" ? "sync" : null;
-
-    if (automaticSyncInFlightRef.current) {
-      automaticSyncQueuedRef.current = true;
-      setSyncStatus(
-        reason === "manual"
-          ? "Sync already in progress. Wait for it to finish, then tap Sync Now again if needed."
-          : "Sync already in progress. New local changes will sync at the next checkpoint."
-      );
-      return;
-    }
-
-    automaticSyncInFlightRef.current = true;
-    lastAutomaticSyncAttemptRef.current = getCurrentTimeMs();
-    if (visibleSyncAction) {
-      setActiveSyncAction(visibleSyncAction);
-      setSyncLoading(true);
-    }
-    setSyncStatus(
-      reason === "manual"
-        ? "Syncing now..."
-        : `Auto sync ${reason}...`
-    );
-
-    try {
+  async function performNormalizedSync(reason, session) {
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
       const shouldDeferForActiveWorkout =
         hasActiveWorkoutSession(data) &&
@@ -3262,12 +4376,17 @@ export default function App() {
       const plateInventoryStartRevision = plateInventoryRevisionRef.current;
       const forceUpload = reason === "workout completion";
       const dirtyDomains = [...normalizedSyncDirtyDomainsRef.current];
+
+      if (reason === "manual") {
+        setSyncStatus("Syncing now... checking cloud state.");
+      }
+
       const cloudSummary = await getNormalizedCloudSummary(session);
       const shouldSeedPlateInventory =
         cloudSummary.plateInventory === 0 &&
         hasConfiguredPlateInventory(plateInventoryRef.current);
       const uploadDomains = forceUpload
-        ? [...NORMALIZED_SYNC_DOMAINS]
+        ? ["workouts", "history", "plans"]
         : shouldSeedPlateInventory
           ? [...new Set([...dirtyDomains, "plateInventory"])]
           : dirtyDomains;
@@ -3288,10 +4407,13 @@ export default function App() {
           setSyncStatus(`Syncing now... uploading ${uploadDomains.join(", ")}.`);
         }
 
-        await uploadNormalizedWorkoutData(data, session, uploadDomains);
+        await uploadNormalizedWorkoutData(data, session, uploadDomains, {
+          reason,
+        });
       }
 
-      const shouldDownload = shouldHydrateFirst || reason === "manual";
+      const shouldDownload =
+        shouldHydrateFirst || (reason === "manual" && !shouldUpload);
 
       if (!shouldDownload) {
         if (
@@ -3310,7 +4432,9 @@ export default function App() {
         setSyncStatus(
           `${shouldUpload ? "Uploaded" : "Checked"} cloud sync state. ${
             shouldUpload ? `Pushed: ${uploadDomains.join(", ")}. ` : ""
-          }Full cloud pull skipped to reduce Supabase egress. Last auto sync: ${new Date().toLocaleTimeString()}.`
+          }Full cloud pull skipped to reduce Supabase egress. Last ${
+            reason === "manual" ? "manual" : "auto"
+          } sync: ${new Date().toLocaleTimeString()}.`
         );
         return;
       }
@@ -3359,6 +4483,55 @@ export default function App() {
           workouts: downloaded.workouts,
         })} Last ${reason === "manual" ? "manual" : "auto"} sync: ${new Date().toLocaleTimeString()}.`
       );
+  }
+
+  async function runAutomaticNormalizedSync(reason = "auto") {
+    const session = authSessionRef.current || authSession;
+    const unavailableReason = getAutomaticSyncUnavailableReason(session);
+
+    if (unavailableReason) {
+      if (reason === "manual") {
+        setSyncStatus(`Sync unavailable: ${unavailableReason}`);
+      }
+      return;
+    }
+
+    const visibleSyncAction = reason === "manual" ? "sync" : null;
+
+    if (automaticSyncInFlightRef.current && reason !== "manual") {
+      automaticSyncQueuedRef.current = true;
+      setSyncStatus(
+        "Sync already in progress. New local changes will sync at the next checkpoint."
+      );
+      return;
+    }
+
+    if (automaticSyncInFlightRef.current && reason === "manual") {
+      automaticSyncQueuedRef.current = false;
+      setSyncStatus("Restarting sync now...");
+    }
+
+    automaticSyncInFlightRef.current = true;
+    const syncAttemptId = automaticSyncAttemptIdRef.current + 1;
+
+    automaticSyncAttemptIdRef.current = syncAttemptId;
+    lastAutomaticSyncAttemptRef.current = getCurrentTimeMs();
+    if (visibleSyncAction) {
+      setActiveSyncAction(visibleSyncAction);
+      setSyncLoading(true);
+    }
+    setSyncStatus(
+      reason === "manual"
+        ? "Syncing now..."
+        : `Auto sync ${reason}...`
+    );
+
+    try {
+      await withTimeout(
+        performNormalizedSync(reason, session),
+        NORMALIZED_SYNC_TIMEOUT_MS,
+        "Sync timed out. Check your connection and try Sync Now again."
+      );
     } catch (error) {
       console.error("Automatic normalized sync failed:", error);
       setSyncStatus(
@@ -3367,14 +4540,25 @@ export default function App() {
           : `Auto sync failed: ${error.message}`
       );
     } finally {
-      automaticSyncInFlightRef.current = false;
-      automaticSyncQueuedRef.current = false;
-      if (visibleSyncAction) {
-        setActiveSyncAction(null);
-        setSyncLoading(false);
+      if (automaticSyncAttemptIdRef.current === syncAttemptId) {
+        automaticSyncInFlightRef.current = false;
+        automaticSyncQueuedRef.current = false;
+        if (visibleSyncAction) {
+          setActiveSyncAction(null);
+          setSyncLoading(false);
+        }
       }
     }
   }
+
+  useEffect(() => {
+    if (!initialPlanWorkoutTypeRepairNeededRef.current) {
+      return;
+    }
+
+    initialPlanWorkoutTypeRepairNeededRef.current = false;
+    markNormalizedSyncDirty(["plans", "workouts"]);
+  }, []);
 
   useEffect(() => {
     if (!authSession?.user?.id || !indexedDbReady) {
@@ -3492,6 +4676,11 @@ export default function App() {
     }
 
     if (history.length > previousHistoryLength) {
+      if (workoutCompletionSyncHistoryLengthRef.current === history.length) {
+        workoutCompletionSyncHistoryLengthRef.current = null;
+        return;
+      }
+
       markNormalizedSyncDirty(["history"]);
       runAutomaticNormalizedSync("workout completion");
     }
@@ -3708,6 +4897,111 @@ export default function App() {
     setCoachBriefStatus("ChatGPT opened. Copy or share the coach brief there.");
   }
 
+  function getAiPlanContext() {
+    const userId = authSession?.user?.id || null;
+    const calorieGoal = readDailyCalorieGoalForAi(
+      getDailyCalorieGoalStorageKey(userId)
+    );
+    const calorieGoalHistory = readDailyCalorieGoalHistoryForAi(
+      getDailyCalorieGoalHistoryStorageKey(userId),
+      calorieGoal
+    );
+
+    return buildAiPlanContext({
+      bodyWeightEntries: localBodyWeightEntries,
+      calorieGoal,
+      calorieGoalHistory,
+      exerciseLibrary,
+      history,
+      nutritionEntries: calendarNutritionEntries,
+      plans,
+      templates,
+    });
+  }
+
+  async function copyAiPlanPrompt() {
+    const context = getAiPlanContext();
+    const prompt = getAiPlanPrompt(context);
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setAiPlanStatus(
+        "AI plan prompt copied. Attach the context JSON in your existing ChatGPT discussion."
+      );
+    } catch (error) {
+      console.error("AI plan prompt copy failed:", error);
+      setAiPlanStatus("Copy failed. Download the context and copy the visible prompt.");
+    }
+  }
+
+  function downloadAiPlanContext() {
+    const context = getAiPlanContext();
+    const blob = new Blob([JSON.stringify(context, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `workout-ai-context-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setAiPlanStatus(
+      "AI context downloaded. Attach it to your existing ChatGPT discussion."
+    );
+  }
+
+  function openChatGptForAiPlan() {
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    setAiPlanStatus("ChatGPT opened. Use Copy Prompt and attach the JSON context.");
+  }
+
+  function importAiPlanDraft() {
+    try {
+      const draft = parseAiPlanDraft(aiPlanDraftText);
+      const imported = buildImportedAiPlanDraft({
+        draft,
+        exerciseLibrary,
+      });
+      const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
+        [...plans, imported.plan],
+        [...templates, ...imported.templates]
+      );
+      const nextPlans = normalizedPlanData.plans;
+      const nextTemplates = normalizedPlanData.templates;
+      const nextData = {
+        ...getCurrentWorkoutData(),
+        plans: nextPlans,
+        templates: nextTemplates,
+      };
+
+      currentWorkoutDataRef.current = nextData;
+      localDataRevisionRef.current += 1;
+      setPlans(nextPlans);
+      setTemplates(nextTemplates);
+      markNormalizedSyncDirty(["plans", "workouts"]);
+      saveLocalWorkoutDataImmediately(nextData).catch((error) => {
+        console.error("Failed to save imported AI plan draft:", error);
+      });
+      setAiPlanDraftText("");
+      setAiPlanStatus(
+        `Imported inactive draft "${imported.plan.name}" with ${imported.templates.length} workouts.${
+          imported.plan.aiAnalysis ? " AI notes are shown on the plan card." : ""
+        }${
+          imported.unmatchedExercises.length
+            ? ` Review unmatched exercises: ${imported.unmatchedExercises
+                .slice(0, 5)
+                .join(", ")}${imported.unmatchedExercises.length > 5 ? "..." : ""}.`
+            : ""
+        }`
+      );
+    } catch (error) {
+      setAiPlanStatus(error.message);
+    }
+  }
+
   function getExerciseHistoryExportCsv() {
     const selectedExerciseKeys =
       exerciseExportMode === "selected" ? selectedExerciseExportKeys : null;
@@ -3846,14 +5140,19 @@ export default function App() {
         "plan_type",
         "plan_goal",
         "total_weeks",
+        "training_weeks",
+        "configured_total_weeks",
         "workouts_per_week",
         "current_week",
         "week_number",
+        "week_role",
         "is_deload_week",
         "workout_day",
         "plan_workout_id",
         "workout_name",
         "workout_type",
+        "stored_workout_type",
+        "workout_type_source",
         "exercise_position",
         "exercise_name",
         "exercise_id",
@@ -3963,14 +5262,21 @@ export default function App() {
         }
 
         if (indexedDbData) {
-          setTemplates(indexedDbData.templates);
-          setPlans(indexedDbData.plans);
-          setHistory(indexedDbData.history);
-          setSessions(indexedDbData.sessions);
-          setExerciseLibrary(indexedDbData.exerciseLibrary);
-          setExerciseMetadata(indexedDbData.exerciseMetadata);
-          setLocalOwnerUserId(indexedDbData.ownerUserId || null);
-          setSelectedSessionId(indexedDbData.selectedSessionId);
+          const normalizedIndexedDbData =
+            normalizeWorkoutDataPlanTypes(indexedDbData);
+
+          if (normalizedIndexedDbData.changed) {
+            markNormalizedSyncDirty(["plans", "workouts"]);
+          }
+
+          setTemplates(normalizedIndexedDbData.data.templates);
+          setPlans(normalizedIndexedDbData.data.plans);
+          setHistory(normalizedIndexedDbData.data.history);
+          setSessions(normalizedIndexedDbData.data.sessions);
+          setExerciseLibrary(normalizedIndexedDbData.data.exerciseLibrary);
+          setExerciseMetadata(normalizedIndexedDbData.data.exerciseMetadata);
+          setLocalOwnerUserId(normalizedIndexedDbData.data.ownerUserId || null);
+          setSelectedSessionId(normalizedIndexedDbData.data.selectedSessionId);
         }
       } catch (error) {
         console.error("Failed to load workout data from IndexedDB:", error);
@@ -4037,12 +5343,15 @@ export default function App() {
       };
 
       if ("serviceWorker" in navigator && window.checkForAppUpdate) {
-        result = await window.checkForAppUpdate();
+        result = await withUpdateTimeout(
+          window.checkForAppUpdate(),
+          "Service worker update check timed out."
+        );
       } else if ("serviceWorker" in navigator) {
-        result = await navigator.serviceWorker.ready.then(
-          async (registration) => {
+        result = await withUpdateTimeout(
+          navigator.serviceWorker.ready.then(async (registration) => {
             await registration.update();
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => window.setTimeout(resolve, 1000));
 
             if (registration.waiting) {
               registration.waiting.postMessage({
@@ -4054,7 +5363,8 @@ export default function App() {
               shouldReload: Boolean(registration.waiting),
               status: registration.waiting ? "found" : "current",
             };
-          }
+          }),
+          "Service worker registration update timed out."
         );
       }
 
@@ -4098,15 +5408,16 @@ export default function App() {
   }
 
   useEffect(() => {
+    const normalizedPlanData = normalizeStoredPlanWorkoutTypes(plans, templates);
     const data = {
       exerciseLibrary,
       exerciseMetadata,
       history,
       ownerUserId: localOwnerUserId,
-      plans,
+      plans: normalizedPlanData.plans,
       selectedSessionId,
       sessions,
-      templates,
+      templates: normalizedPlanData.templates,
     };
 
     saveWorkoutData(data, STORAGE_VERSION);
@@ -4922,6 +6233,62 @@ export default function App() {
                   >
                     Remove incomplete plan
                   </button>
+                </div>
+              )}
+              {plan.aiAnalysis && (
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--text)",
+                    display: "grid",
+                    gap: "6px",
+                    padding: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    AI plan notes
+                  </div>
+                  {plan.aiAnalysis.summary && (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {plan.aiAnalysis.summary}
+                    </div>
+                  )}
+                  {plan.aiAnalysis.rationale?.length > 0 && (
+                    <ul
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                        margin: "0 0 0 18px",
+                        padding: 0,
+                      }}
+                    >
+                      {plan.aiAnalysis.rationale.map((item, index) => (
+                        <li key={`rationale-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {plan.aiAnalysis.watchNext?.length > 0 && (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                      }}
+                    >
+                      Watch next: {plan.aiAnalysis.watchNext.join("; ")}
+                    </div>
+                  )}
                 </div>
               )}
               {(plan.workouts || []).map((planWorkout) => {
@@ -7017,6 +8384,102 @@ export default function App() {
                     }}
                   />
                 )}
+                <div
+                  style={{
+                    borderTop: "1px solid var(--border)",
+                    display: "grid",
+                    gap: "8px",
+                    marginTop: "10px",
+                    paddingTop: "10px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      fontSize: "15px",
+                      gap: "6px",
+                      justifyContent: "center",
+                      margin: 0,
+                    }}
+                  >
+                    <ClipboardList size={16} />
+                    AI Plan Draft
+                  </h3>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    Download a JSON context file, attach it in your existing
+                    ChatGPT discussion, then paste the returned draft JSON here.
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <button onClick={downloadAiPlanContext} type="button">
+                      <Download size={14} />
+                      Context
+                    </button>
+                    <button onClick={copyAiPlanPrompt} type="button">
+                      <Copy size={14} />
+                      Prompt
+                    </button>
+                    <button onClick={openChatGptForAiPlan} type="button">
+                      Open ChatGPT
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label="AI plan draft JSON"
+                    onChange={(event) => {
+                      setAiPlanDraftText(event.target.value);
+                      setAiPlanStatus("");
+                    }}
+                    placeholder="Paste ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
+                    value={aiPlanDraftText}
+                    style={{
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      boxSizing: "border-box",
+                      color: "var(--text)",
+                      fontFamily:
+                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      fontSize: "11px",
+                      lineHeight: 1.45,
+                      minHeight: "150px",
+                      padding: "8px",
+                      resize: "vertical",
+                      width: "100%",
+                    }}
+                  />
+                  <button
+                    disabled={!aiPlanDraftText.trim()}
+                    onClick={importAiPlanDraft}
+                    type="button"
+                  >
+                    <Upload size={14} />
+                    Import Draft
+                  </button>
+                  {aiPlanStatus && (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {aiPlanStatus}
+                    </div>
+                  )}
+                </div>
               </div>
               <div
                 style={{

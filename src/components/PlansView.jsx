@@ -707,7 +707,7 @@ function WorkoutSummarySheet({
 function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
   const compactPrefix = getCompactPlanTypeLabel(planType);
 
-  if (planType === "type-3" && workout?.workoutTypeLabel) {
+  if (["type-3", "type-5"].includes(planType) && workout?.workoutTypeLabel) {
     return `${compactPrefix} W${workoutIndex + 1} ${workout.workoutTypeLabel}`;
   }
 
@@ -800,6 +800,16 @@ const PLAN_TYPE_DEFAULTS = {
     rir: "2",
     sets: "3",
   },
+  "type-5": {
+    deload: true,
+    daysPerWeek: "5",
+    durationWeeks: "5",
+    goal: "progress",
+    rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
+    reps: "8",
+    rir: "3",
+    sets: "3",
+  },
 };
 
 function getPlanTypeDefaults(planType) {
@@ -840,6 +850,34 @@ function buildEditablePlanWorkouts(plan, templates) {
           : null),
     };
   });
+}
+
+function buildRecentPlanHistoryWorkouts(plans, templates, excludedPlanId) {
+  const templateById = new Map(
+    (templates || []).map((template) => [String(template.id), template])
+  );
+
+  return (plans || [])
+    .filter((plan) => String(plan.id) !== String(excludedPlanId || ""))
+    .sort((a, b) => {
+      const statusScore = (plan) => (plan.status === "active" ? 0 : 1);
+      const scoreDifference = statusScore(a) - statusScore(b);
+
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+
+      return (
+        new Date(b.updatedAt || b.createdAt || 0).getTime() -
+        new Date(a.updatedAt || a.createdAt || 0).getTime()
+      );
+    })
+    .slice(0, 4)
+    .flatMap((plan) =>
+      (plan.workouts || [])
+        .map((workout) => templateById.get(String(workout.templateId)))
+        .filter(Boolean)
+    );
 }
 
 function sortObjectKeys(value) {
@@ -1143,6 +1181,7 @@ function getPlanTypeLabel(planType) {
     "type-2": "Plan Type 2 'Sam'",
     "type-3": "Plan Type 3 'Ira'",
     "type-4": "Plan Type 4 'General'",
+    "type-5": "Plan Type 5 'App'",
   };
 
   return labels[planType] || labels["type-2"];
@@ -1154,6 +1193,7 @@ function getCompactPlanTypeLabel(planType) {
     "type-2": "P2",
     "type-3": "P3",
     "type-4": "P4",
+    "type-5": "P5",
   };
 
   return labels[planType] || labels["type-2"];
@@ -2326,7 +2366,8 @@ export default function PlansView({
   const isCreateDraftEditMode =
     !editingPlan && generationMode === "plan" && createPreviewEditMode;
   const showPlanSetPicker =
-    generationMode === "plan" && ["type-3", "type-4"].includes(planType);
+    generationMode === "plan" &&
+    ["type-3", "type-4", "type-5"].includes(planType);
 
   useEffect(() => {
     let cancelled = false;
@@ -2454,6 +2495,11 @@ export default function PlansView({
     trainerPreferences,
   ]);
 
+  const recentPlanHistoryWorkouts = useMemo(
+    () => buildRecentPlanHistoryWorkouts(plans, templates, editingPlan?.id),
+    [editingPlan?.id, plans, templates]
+  );
+
   const generatedPlan = useMemo(
     () => {
       if (editPreviewWorkouts) {
@@ -2471,6 +2517,7 @@ export default function PlansView({
         generationMode,
         goal,
         history,
+        planHistoryWorkouts: recentPlanHistoryWorkouts,
         planType,
         reps,
         rir,
@@ -2489,6 +2536,7 @@ export default function PlansView({
       generationMode,
       goal,
       history,
+      recentPlanHistoryWorkouts,
       planType,
       reps,
       rir,
@@ -2632,7 +2680,6 @@ export default function PlansView({
       reps,
       rir,
       rirPeriodization,
-      sets,
       weeklyPrescriptionBySlot,
       workoutNameBySlot,
       generationMode,
@@ -2762,7 +2809,7 @@ export default function PlansView({
       ...workout,
       dayNumber: workoutIndex + 1,
       name:
-        planType === "type-4"
+        ["type-4", "type-5"].includes(planType)
           ? `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1} ${
               workout.workoutTypeLabel || getWorkoutTypeLabel(workoutTypeValue)
             }`
@@ -3819,6 +3866,7 @@ export default function PlansView({
               <option value="type-2">{getPlanTypeLabel("type-2")}</option>
               <option value="type-3">{getPlanTypeLabel("type-3")}</option>
               <option value="type-4">{getPlanTypeLabel("type-4")}</option>
+              <option value="type-5">{getPlanTypeLabel("type-5")}</option>
             </select>
           </label>
         )}

@@ -18,9 +18,13 @@ const PLAN_CONFIGS = {
   "type-4": {
     label: "Plan Type 4 'General'",
   },
+  "type-5": {
+    label: "Plan Type 5 'App'",
+  },
 };
 
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
+const TYPE_5_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
 
 const WORKOUT_TYPE_CONFIGS = {
   "type-1": {
@@ -228,6 +232,255 @@ function createGroup(label, muscles, sets, supersetGroup = label) {
   return { label, muscles, sets, supersetGroup };
 }
 
+function createSlot(muscle, options = {}) {
+  return {
+    muscle,
+    ...options,
+  };
+}
+
+function resolveGroupSlot(slot) {
+  if (!slot || typeof slot !== "object") {
+    return {
+      muscle: slot,
+    };
+  }
+
+  return slot;
+}
+
+function getRestDurationForReps(reps) {
+  const numericReps = Number.parseInt(String(reps ?? ""), 10);
+
+  if (!Number.isFinite(numericReps)) {
+    return 120;
+  }
+
+  if (numericReps <= 6) {
+    return 180;
+  }
+
+  if (numericReps <= 8) {
+    return 150;
+  }
+
+  if (numericReps <= 10) {
+    return 120;
+  }
+
+  if (numericReps <= 12) {
+    return 90;
+  }
+
+  return 60;
+}
+
+function getSlotSetCount(slot, group) {
+  const slotConfig = resolveGroupSlot(slot);
+  return Math.max(1, Number(slotConfig.sets || group.sets) || 1);
+}
+
+function getSlotReps(slot, fallbackReps = 8) {
+  const slotConfig = resolveGroupSlot(slot);
+  return slotConfig.reps || fallbackReps;
+}
+
+function estimateWorkoutDurationMinutes(groups, options = {}) {
+  const secondsPerSet = Number(options.secondsPerSet) || 45;
+  const transitionSeconds = Number(options.transitionSeconds) || 45;
+  const totalSeconds = groups.reduce((workoutTotal, group) => {
+    const groupSeconds = group.muscles.reduce((groupTotal, slot) => {
+      const setCount = getSlotSetCount(slot, group);
+      const restSeconds = getRestDurationForReps(getSlotReps(slot));
+
+      return (
+        groupTotal +
+        transitionSeconds +
+        setCount * secondsPerSet +
+        Math.max(0, setCount - 1) * restSeconds
+      );
+    }, 0);
+
+    return workoutTotal + groupSeconds;
+  }, 0);
+
+  return Math.round(totalSeconds / 60);
+}
+
+function getRecentPlanContext(planHistoryWorkouts = []) {
+  const recentExerciseIds = new Map();
+  const recentEquipmentByMuscle = new Map();
+  const recentSetTotalsByMuscle = new Map();
+  const recentVariantByMuscle = new Map();
+
+  (planHistoryWorkouts || []).forEach((workout) => {
+    (workout?.exercises || []).forEach((exercise) => {
+      const exerciseId = exercise.exerciseId || exercise.id;
+      const muscle = exercise.planMuscle || exercise.muscles?.[0];
+
+      if (!muscle) {
+        return;
+      }
+
+      if (exerciseId != null) {
+        const exerciseKey = String(exerciseId);
+        recentExerciseIds.set(
+          exerciseKey,
+          (recentExerciseIds.get(exerciseKey) || 0) + 1
+        );
+      }
+
+      const muscleKey = getMuscleUsageKey(muscle);
+      const equipment = recentEquipmentByMuscle.get(muscleKey) || new Map();
+      const equipmentKey = getExerciseEquipmentKey(exercise);
+      equipment.set(equipmentKey, (equipment.get(equipmentKey) || 0) + 1);
+      recentEquipmentByMuscle.set(muscleKey, equipment);
+
+      const variant = recentVariantByMuscle.get(muscleKey) || new Map();
+      const variantKey = getExerciseVariantKey(exercise);
+      variant.set(variantKey, (variant.get(variantKey) || 0) + 1);
+      recentVariantByMuscle.set(muscleKey, variant);
+
+      recentSetTotalsByMuscle.set(
+        muscleKey,
+        (recentSetTotalsByMuscle.get(muscleKey) || 0) +
+          Math.max(1, exercise.sets?.length || 1)
+      );
+    });
+  });
+
+  return {
+    recentEquipmentByMuscle,
+    recentExerciseIds,
+    recentSetTotalsByMuscle,
+    recentVariantByMuscle,
+  };
+}
+
+function getRecentSetTotal(recentPlanContext, muscle) {
+  return (
+    recentPlanContext?.recentSetTotalsByMuscle?.get(getMuscleUsageKey(muscle)) ||
+    0
+  );
+}
+
+function adjustType5VolumeForRecentContext(groups, recentPlanContext) {
+  if (!recentPlanContext) {
+    return groups;
+  }
+
+  const optionalGroups = new Set([
+    "Abs",
+    "Accessory",
+    "Biceps",
+    "Biceps Heavy",
+    "Biceps Volume",
+    "Calves",
+    "Chest Accessory",
+    "Core",
+    "Hamstrings",
+    "Quad Accessory",
+    "Rear Delts",
+    "Side Delts",
+    "Traps",
+    "Triceps",
+  ]);
+
+  return groups.map((group) => {
+    if (!optionalGroups.has(group.label)) {
+      return group;
+    }
+
+    return {
+      ...group,
+      muscles: group.muscles.map((slot) => {
+        const slotConfig = resolveGroupSlot(slot);
+        const currentSets = getSlotSetCount(slotConfig, group);
+        const recentSets = getRecentSetTotal(
+          recentPlanContext,
+          slotConfig.muscle
+        );
+        let nextSets = currentSets;
+
+        if (recentSets <= 6 && currentSets < 4) {
+          nextSets = currentSets + 1;
+        } else if (recentSets >= 16 && currentSets > 3) {
+          nextSets = currentSets - 1;
+        }
+
+        if (nextSets === currentSets) {
+          return slot;
+        }
+
+        return {
+          ...slotConfig,
+          sets: nextSets,
+        };
+      }),
+    };
+  });
+}
+
+function trimWorkoutDuration(groups, targetMinutes) {
+  const nextGroups = groups.map((group) => ({
+    ...group,
+    muscles: group.muscles.map((slot) =>
+      typeof slot === "object" && slot
+        ? {
+            ...slot,
+          }
+        : slot
+    ),
+  }));
+  const groupPriority = [
+    "Accessory",
+    "Core",
+    "Abs",
+    "Biceps Volume",
+    "Traps",
+    "Side Delts",
+    "Rear Delts",
+    "Chest Accessory",
+    "Quad Accessory",
+    "Calves",
+  ];
+  let guard = 0;
+
+  while (
+    estimateWorkoutDurationMinutes(nextGroups) > targetMinutes &&
+    guard < 20
+  ) {
+    guard += 1;
+    const group = groupPriority
+      .map((label) => nextGroups.find((item) => item.label === label))
+      .find((item) =>
+        item?.muscles.some((slot) => getSlotSetCount(slot, item) > 3)
+      );
+
+    if (!group) {
+      break;
+    }
+
+    const slotIndex = group.muscles.findIndex(
+      (slot) => getSlotSetCount(slot, group) > 3
+    );
+    const slot = group.muscles[slotIndex];
+    const currentSets = getSlotSetCount(slot, group);
+
+    group.muscles[slotIndex] =
+      typeof slot === "object" && slot
+        ? {
+            ...slot,
+            sets: currentSets - 1,
+          }
+        : createSlot(slot, {
+            sets: currentSets - 1,
+          });
+  }
+
+  return nextGroups;
+}
+
 function chooseArmPair(seed, workoutIndex) {
   const startsWithTriceps = stableHash(seed, workoutIndex, "arms") % 2 === 0;
   return startsWithTriceps ? ["Triceps", "Biceps"] : ["Biceps", "Triceps"];
@@ -371,9 +624,274 @@ function buildNamedWorkout(workoutType, setCount = 3) {
   };
 }
 
+function buildType5Workout(workoutIndex, recentPlanContext) {
+  const workoutType =
+    TYPE_5_WORKOUT_SEQUENCE[workoutIndex % TYPE_5_WORKOUT_SEQUENCE.length];
+  const isSecondLowerDay =
+    workoutType === "lower" &&
+    workoutIndex % TYPE_5_WORKOUT_SEQUENCE.length === 4;
+  const workoutDefinitionsByType = {
+    push: {
+      groups: [
+        createGroup(
+          "Bench",
+          [
+            createSlot("Chest", {
+              anchor: true,
+              prefer: ["bench press barbell"],
+              avoid: ["close grip", "decline", "dumbbell"],
+              reps: 6,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Upper Chest",
+          [
+            createSlot("Upper Chest", {
+              prefer: ["incline bench press"],
+              avoid: ["60", "close grip"],
+              reps: 9,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Chest Accessory",
+          [
+            createSlot("Chest", {
+              prefer: ["flys", "high cable flys"],
+              reps: 11,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Rear Delts",
+          [
+            createSlot("Rear Delts", {
+              prefer: ["reverse flys", "incline reverse flys"],
+              reps: 10,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup("Side Delts", [createSlot("Side Delts", { reps: 12 })], 3, null),
+        createGroup("Triceps", [createSlot("Triceps", { reps: 10, sets: 4 })], 4, null),
+        createGroup("Traps", [createSlot("Traps", { reps: 12 })], 3, null),
+      ],
+    },
+    pull: {
+      groups: [
+        createGroup(
+          "Vertical Pull",
+          [
+            createSlot("Lats", {
+              anchor: true,
+              prefer: ["pull-ups", "lat pulldowns"],
+              reps: 6,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Rows",
+          [
+            createSlot("Upper Back", {
+              anchor: true,
+              prefer: ["rows", "t-bar rows"],
+              reps: 8,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Second Vertical Pull",
+          [
+            createSlot("Lats", {
+              prefer: ["lat pulldowns", "pull-ups"],
+              reps: 10,
+              sets: 3,
+            }),
+          ],
+          3,
+          null
+        ),
+        createGroup("Side Delts", [createSlot("Side Delts", { reps: 10, sets: 4 })], 4, null),
+        createGroup("Rear Delts", [createSlot("Rear Delts", { reps: 12, sets: 4 })], 4, null),
+        createGroup("Biceps Heavy", [createSlot("Biceps", { reps: 9, sets: 4 })], 4, null),
+        createGroup("Biceps Volume", [createSlot("Biceps", { reps: 11 })], 3, null),
+        createGroup("Abs", [createSlot("Abs", { reps: 10, sets: 4 })], 4, null),
+      ],
+    },
+    lower: {
+      groups: [
+        createGroup(
+          "Hinge",
+          [
+            createSlot("Glutes", {
+              anchor: true,
+              prefer: isSecondLowerDay
+                ? ["sumo deadlifts", "deadlifts"]
+                : ["deadlifts", "romanian deadlifts"],
+              avoid: ["deficit"],
+              reps: 6,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Squat",
+          [
+            createSlot("Quads", {
+              prefer: isSecondLowerDay
+                ? ["split squats", "lunges"]
+                : ["front squats", "landmine front squat", "squats"],
+              reps: isSecondLowerDay ? 11 : 8,
+              sets: isSecondLowerDay ? 3 : 4,
+            }),
+          ],
+          3,
+          null
+        ),
+        createGroup(
+          "Hamstrings",
+          [
+            createSlot("Hamstrings", {
+              prefer: ["leg curls", "seated leg curls"],
+              reps: isSecondLowerDay ? 9 : 10,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        ...(isSecondLowerDay
+          ? []
+          : [
+              createGroup(
+                "Quad Accessory",
+                [
+                  createSlot("Quads", {
+                    prefer: ["leg extensions", "lunges"],
+                    reps: 10,
+                  }),
+                ],
+                3,
+                null
+              ),
+            ]),
+        createGroup("Calves", [createSlot("Calves", { reps: isSecondLowerDay ? 12 : 10 })], 3, null),
+        createGroup(
+          "Accessory",
+          isSecondLowerDay
+            ? [createSlot("Obliques", { reps: 10, sets: 4 })]
+            : [
+                createSlot("Front Delts", {
+                  prefer: ["landmine press", "shoulder press"],
+                  reps: 10,
+                  sets: 4,
+                }),
+              ],
+          isSecondLowerDay ? 4 : 4,
+          null
+        ),
+        createGroup("Core", [createSlot("Abs", { reps: isSecondLowerDay ? 12 : 10 })], 3, null),
+      ],
+    },
+    upper: {
+      groups: [
+        createGroup(
+          "Bench Variation",
+          [
+            createSlot("Chest", {
+              anchor: true,
+              prefer: ["bench press", "incline bench press"],
+              avoid: ["decline"],
+              reps: 8,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Incline Chest",
+          [
+            createSlot("Upper Chest", {
+              prefer: ["incline bench press 20", "incline bench press"],
+              reps: 12,
+              sets: 4,
+            }),
+          ],
+          4,
+          null
+        ),
+        createGroup(
+          "Row",
+          [
+            createSlot("Upper Back", {
+              prefer: ["incline rows", "rows"],
+              reps: 9,
+            }),
+          ],
+          3,
+          null
+        ),
+        createGroup(
+          "Vertical Pull",
+          [
+            createSlot("Lats", {
+              prefer: ["pull-ups", "lat pulldowns"],
+              reps: 11,
+            }),
+          ],
+          3,
+          null
+        ),
+        createGroup("Shoulders", [createSlot("Side Delts", { reps: 15 })], 3, null),
+        createGroup("Triceps", [createSlot("Triceps", { prefer: ["dips"], reps: 12, sets: 4 })], 4, null),
+        createGroup("Biceps", [createSlot("Biceps", { reps: 15, sets: 4 })], 4, null),
+      ],
+    },
+  };
+
+  const targetMinutes = workoutType === "lower" ? 82 : 90;
+  const groups = trimWorkoutDuration(
+    adjustType5VolumeForRecentContext(
+      workoutDefinitionsByType[workoutType].groups,
+      recentPlanContext
+    ),
+    targetMinutes
+  );
+
+  return {
+    estimatedDurationMinutes: estimateWorkoutDurationMinutes(groups),
+    name: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
+    groups,
+    workoutType,
+    workoutTypeLabel: WORKOUT_TYPE_CONFIGS[workoutType]?.label || "Workout",
+  };
+}
+
 function buildWorkoutDefinitions({
   daysPerWeek,
   planType,
+  recentPlanContext,
   seed,
   setCount,
   workoutTypeByDay,
@@ -392,6 +910,12 @@ function buildWorkoutDefinitions({
   if (planType === "type-4") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>
       buildNamedWorkout(workoutTypeByDay?.[workoutIndex] || "full-body", setCount)
+    );
+  }
+
+  if (planType === "type-5") {
+    return Array.from({ length: workoutCount }, (_, workoutIndex) =>
+      buildType5Workout(workoutIndex, recentPlanContext)
     );
   }
 
@@ -417,7 +941,7 @@ function buildSingleWorkoutDefinition({ planType, seed, setCount, workoutType })
   return buildNamedWorkout(workoutType || planType || "full-body", setCount);
 }
 
-function chooseExercise(exerciseLibrary, muscle, usage, offset) {
+function chooseExercise(exerciseLibrary, muscle, usage, offset, options = {}) {
   const matchingCandidates = exerciseLibrary.filter((exercise) =>
     exerciseHasMuscle(exercise, muscle)
   );
@@ -444,6 +968,7 @@ function chooseExercise(exerciseLibrary, muscle, usage, offset) {
   const scoredPool = pool
     .map((exercise) => {
       let score = 0;
+      const searchText = getExerciseSearchText(exercise);
 
       if (!usedEquipment.has(getExerciseEquipmentKey(exercise))) {
         score += 2;
@@ -456,6 +981,39 @@ function chooseExercise(exerciseLibrary, muscle, usage, offset) {
       if (exercisePrimaryMuscleMatches(exercise, muscle)) {
         score += 3;
       }
+
+      if (
+        options.prefer?.some((term) =>
+          searchText.includes(String(term).toLowerCase())
+        )
+      ) {
+        score += 5;
+      }
+
+      if (
+        options.avoid?.some((term) =>
+          searchText.includes(String(term).toLowerCase())
+        )
+      ) {
+        score -= 4;
+      }
+
+      const recentPlanContext = usage.recentPlanContext;
+      const recentExerciseUseCount =
+        recentPlanContext?.recentExerciseIds?.get(String(exercise.id)) || 0;
+      const recentVariantUseCount =
+        recentPlanContext?.recentVariantByMuscle
+          ?.get(muscleKey)
+          ?.get(getExerciseVariantKey(exercise)) || 0;
+      const recentEquipmentUseCount =
+        recentPlanContext?.recentEquipmentByMuscle
+          ?.get(muscleKey)
+          ?.get(getExerciseEquipmentKey(exercise)) || 0;
+      const anchorMultiplier = options.anchor ? 0.4 : 1;
+
+      score -= Math.min(8, recentExerciseUseCount * 3) * anchorMultiplier;
+      score -= Math.min(5, recentVariantUseCount * 2) * anchorMultiplier;
+      score -= Math.min(3, recentEquipmentUseCount) * anchorMultiplier;
 
       if (CHEST_MUSCLES.includes(muscle)) {
         const usedChestVariants = usage.chestVariants || new Set();
@@ -567,6 +1125,7 @@ export function generatePlanWorkouts({
   generationMode = "plan",
   goal = "maintain",
   history,
+  planHistoryWorkouts,
   planType,
   reps,
   rir,
@@ -578,6 +1137,10 @@ export function generatePlanWorkouts({
   const config = PLAN_CONFIGS[planType] || PLAN_CONFIGS["type-2"];
   const resolvedPlanType = PLAN_CONFIGS[planType] ? planType : "type-2";
   const isWorkoutMode = generationMode === "workout";
+  const recentPlanContext =
+    resolvedPlanType === "type-5"
+      ? getRecentPlanContext(planHistoryWorkouts)
+      : null;
   const workoutConfig =
     WORKOUT_TYPE_CONFIGS[workoutType] || WORKOUT_TYPE_CONFIGS["full-body"];
   const workoutDefinitions = isWorkoutMode
@@ -592,6 +1155,7 @@ export function generatePlanWorkouts({
     : buildWorkoutDefinitions({
         daysPerWeek,
         planType: resolvedPlanType,
+        recentPlanContext,
         seed,
         setCount: sets,
         workoutTypeByDay,
@@ -603,18 +1167,22 @@ export function generatePlanWorkouts({
     equipmentByMuscle: new Map(),
     exerciseIds: new Set(),
     pullVariants: new Set(),
+    recentPlanContext,
     variantByMuscle: new Map(),
   };
   const gaps = [];
 
   const workouts = workoutDefinitions.map((workout, workoutIndex) => {
     const exercises = workout.groups.flatMap((group, groupIndex) =>
-      group.muscles.flatMap((muscle, muscleIndex) => {
+      group.muscles.flatMap((slot, muscleIndex) => {
+        const slotConfig = resolveGroupSlot(slot);
+        const muscle = slotConfig.muscle;
         const exercise = chooseExercise(
           activeExerciseLibrary,
           muscle,
           usage,
-          seed + workoutIndex + groupIndex + muscleIndex
+          seed + workoutIndex + groupIndex + muscleIndex,
+          slotConfig
         );
 
         if (!exercise) {
@@ -630,9 +1198,9 @@ export function generatePlanWorkouts({
             goal,
             history,
             planMuscle: muscle,
-            reps,
-            rir,
-            setCount: group.sets,
+            reps: slotConfig.reps || reps,
+            rir: slotConfig.rir || rir,
+            setCount: slotConfig.sets || group.sets,
             supersetGroup: group.supersetGroup === null ? null : group.label,
           }),
         ];
@@ -644,6 +1212,7 @@ export function generatePlanWorkouts({
       durationWeeks: Number(durationWeeks) || null,
       daysPerWeek: workoutCount,
       exercises,
+      estimatedDurationMinutes: workout.estimatedDurationMinutes || null,
       lastCompleted: null,
       name: isWorkoutMode
         ? `${workoutConfig.label} Workout`

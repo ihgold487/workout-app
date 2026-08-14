@@ -545,32 +545,36 @@ export async function uploadWorkoutHistory(
     }
   }
 
-  const { data: existingSessions, error: existingSessionsError } =
-    await supabase
-      .from("workout_sessions")
-      .select("id,source_key")
-      .eq("user_id", userId)
-      .eq("source", LOCAL_APP_SOURCE)
-      .is("deleted_at", null);
+  let removedSessionIds = [];
 
-  if (existingSessionsError) {
-    throw existingSessionsError;
-  }
+  if (!options.preserveCloudHistory) {
+    const { data: existingSessions, error: existingSessionsError } =
+      await supabase
+        .from("workout_sessions")
+        .select("id,source_key")
+        .eq("user_id", userId)
+        .eq("source", LOCAL_APP_SOURCE)
+        .is("deleted_at", null);
 
-  const removedSessionIds = existingSessions
-    .filter((workout) => !sourceKeys.includes(workout.source_key))
-    .map((workout) => workout.id);
+    if (existingSessionsError) {
+      throw existingSessionsError;
+    }
 
-  if (removedSessionIds.length > 0) {
-    const { error } = await supabase
-      .from("workout_sessions")
-      .update({
-        deleted_at: new Date().toISOString(),
-      })
-      .in("id", removedSessionIds);
+    removedSessionIds = existingSessions
+      .filter((workout) => !sourceKeys.includes(workout.source_key))
+      .map((workout) => workout.id);
 
-    if (error) {
-      throw error;
+    if (removedSessionIds.length > 0) {
+      const { error } = await supabase
+        .from("workout_sessions")
+        .update({
+          deleted_at: new Date().toISOString(),
+        })
+        .in("id", removedSessionIds);
+
+      if (error) {
+        throw error;
+      }
     }
   }
 

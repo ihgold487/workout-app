@@ -1,0 +1,38 @@
+This document will describe workout plan details, preferences, and goals. It is meant to be used in support of AI-driven plan creation.
+
+1. Goals:
+
+The overall goal is strength gain and hypertrophy. Strength gain can be measured and tracked based on estimated 1 rep maximum (e1RM) for a given exercise. Hypertrophy, for now, will be a bit more subjective, as in "look in the mirror". Perhaps in the future we can consider body measurements.
+
+2. Benchmark Exercises
+
+Because of the number of exercises, and the fact that each workout will stress the same muscles with multiple exercises, it makes sense to consider some benchmark exercises to monitor strength gain progress. How about barbell bench press and incline barbell bench press for chest, deadlift and sumo deadlift for legs (note that deadlifts can be performed using barbell or trap bar, with or without deficit), and various pull-up exercises for back (note that pull-ups can also be performed with wide grip, neutral grip, etc.).
+
+Each benchmark exercise should be performed as the first exercise for its muscle group in a given workout, as that's when it's most likely to achieve maximum e1RM. At least one variation of each benchmark exercise should be included one time in a workout in a plan.
+
+3. Workouts
+
+Workout types. We can consider five types of workouts:
+a. Push: push exercises, like bench presses and flys and triceps
+b. Pull: pull exercises, like lat and upperback, and biceps
+c. Upper body: combinations of 1. and 2.
+d. Lower body: glutes, hamstrings, quads, and calves
+e. Full body: any of the above
+
+I will ususally include abs in lower body workouts.
+I will include shoulders in push, pull, and upper body workouts. And the definitions are not strictly enforced, in that we can supplement, say add one additional shoulder or arm exercise on any day in order to balance the number of sets over the course of the plan or to increase volume as desired.
+
+Push, pull and full body workouts will typically consist of 7 or 8 exercises. Lower body days, typically 6 or 7 exercises.
+
+We will typically prescribe 3 or 4 sets for each exercise; we will prescribe the number of reps and number of reps in reserve (RIR). The AI-driven plan creation should choose these values based on the overall goals and desired number of sets and/or volume for a particular muscle in order to progress with respect the goals.
+
+4. Plans
+
+A plan will consist of a number of workouts performed over a given period of time. Typically, my plans will be 5 days per week, run for 5 weeks, plus one deload week. The 5 workout days will be
+a. push or pull
+b. pull or push
+c. lower body
+d. upper body
+e. lower body
+
+The plan prescription will use a stepped RIR, often 3, 3, 2, 2, 1, where that refers to the RIR for each exercise in a given week. Decreasing the RIR for a given number of reps is meant to force heavier weights to be lifted over time, thus progress with respect to the main goals.

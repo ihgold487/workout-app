@@ -40,24 +40,24 @@ local_id,name,equipment,lift_manual_url
 107,Drag Curls,Barbell,https://liftmanual.com/barbell-drag-curl/
 108,Face Pulls with Rope,Cable,https://liftmanual.com/band-face-pull/
 109,Flys,Cable,https://liftmanual.com/cable-middle-fly/
-110,Flys,Dumbbells,
-111,Forward Lunges,Dumbbells,
-230,Front Raises,Barbell,
-231,Front Raises,Dumbbells,
-232,Front Raises,EZ Curl Bar,
-112,Front Squats,Barbell,
+110,Flys,Dumbbells,https://liftmanual.com/dumbbell-fly/
+111,Forward Lunges,Dumbbells,https://liftmanual.com/dumbbell-lunge/
+230,Front Raises,Barbell,https://liftmanual.com/barbell-front-raise/
+231,Front Raises,Dumbbells,https://liftmanual.com/dumbbell-front-raise/
+232,Front Raises,EZ Curl Bar,https://liftmanual.com/barbell-front-raise/
+112,Front Squats,Barbell,https://liftmanual.com/barbell-front-squat/
 235,Goblet Split Squat,Dumbbells,https://liftmanual.com/dumbbell-goblet-split-squat/
-234,Goblet Squat 2 Sec Hold,Dumbbells,
-236,Goblet Squat Jump,Dumbbells,
-113,Goblet Squats,Dumbbells,
-114,Good Mornings,Barbell,
+234,Goblet Squat 2 Sec Hold,Dumbbells,https://liftmanual.com/dumbbell-goblet-2-sec-hold-squat/
+236,Goblet Squat Jump,Dumbbells,https://liftmanual.com/kettlebell-goblet-squat-jump/
+113,Goblet Squats,Dumbbells,https://liftmanual.com/dumbbell-goblet-squat/
+114,Good Mornings,Barbell,https://liftmanual.com/barbell-good-morning/
 115,Hammer Curls,Dumbbells,https://liftmanual.com/dumbbell-hammer-curl/
 116,Hammer Curls (Tri bar),EZ Curl Bar,https://liftmanual.com/olympic-barbell-hammer-curl/
-117,Hanging Leg Raises,Bodyweight,
-118,Hanging Leg Raises with Twist,Bodyweight,
-119,High Cable Flys,Cable,
-120,Hip Thrusts,Barbell,
-121,Hyperextensions on Roman Chair,Bodyweight,
+117,Hanging Leg Raises,Bodyweight,https://liftmanual.com/hanging-leg-raise/
+118,Hanging Leg Raises with Twist,Bodyweight,https://liftmanual.com/hanging-straight-twisting-leg-hip-raise/
+119,High Cable Flys,Cable,https://liftmanual.com/cable-standing-fly/
+120,Hip Thrusts,Barbell,https://liftmanual.com/barbell-hip-thrust/
+121,Hyperextensions on Roman Chair,Bodyweight,https://liftmanual.com/weighted-hyperextension/
 122,Incline Bench Hex Press,Dumbbells,https://liftmanual.com/dumbbell-incline-squeeze-press/
 3,Incline Bench Press,Barbell,https://liftmanual.com/barbell-incline-bench-press/
 4,Incline Bench Press,Dumbbells,https://liftmanual.com/dumbbell-incline-bench-press/
@@ -65,24 +65,24 @@ local_id,name,equipment,lift_manual_url
 124,Incline Bench Press 60°,Dumbbells,
 125,Incline Bench Press with Close Grip,Barbell,
 126,Incline Curls,Dumbbells,https://liftmanual.com/dumbbell-incline-curl/
-127,Incline Flys,Dumbbells,
+127,Incline Flys,Dumbbells,https://liftmanual.com/dumbbell-incline-fly/
 128,Incline Flys 20-deg,Dumbbells,
 129,Incline Hammer Curls,Dumbbells,https://liftmanual.com/dumbbell-incline-hammer-curl/
-130,Incline Lateral Raises,Dumbbells,
-131,Incline Reverse Flys,Dumbbells,
-132,Incline Rows,Dumbbells,
+130,Incline Lateral Raises,Dumbbells,https://liftmanual.com/dumbbell-incline-one-arm-lateral-raise/
+131,Incline Reverse Flys,Dumbbells,https://liftmanual.com/dumbbell-incline-rear-fly/
+132,Incline Rows,Dumbbells,https://liftmanual.com/dumbbell-hammer-grip-incline-bench-two-arm-row/
 133,Incline Shrugs,Dumbbells,https://liftmanual.com/dumbbell-decline-shrug/
 134,Incline Skull Crushers,Dumbbells,
 135,Incline Skull Crushers,EZ Curl Bar,https://liftmanual.com/barbell-incline-triceps-extension-skull-crusher/
-136,Incline Twist Curls,Dumbbells,
-137,JM Press,Barbell,
-138,JM Press,EZ Curl Bar,
-139,Kneeling Crunches,Cable,
-140,Kneeling Side Crunches,Cable,
-239,Landmine Front Squat,Landmine,
-141,Landmine Hack Squats,Landmine,
-237,Landmine Press,Landmine,
-238,Landmine Single Arm Press,Landmine,
+136,Incline Twist Curls,Dumbbells,https://liftmanual.com/dumbbell-incline-biceps-curl/
+137,JM Press,Barbell,https://liftmanual.com/barbell-jm-bench-press/
+138,JM Press,EZ Curl Bar,https://liftmanual.com/ez-barbell-jm-bench-press/
+139,Kneeling Crunches,Cable,https://liftmanual.com/cable-kneeling-crunch/
+140,Kneeling Side Crunches,Cable,https://liftmanual.com/band-kneeling-twisting-crunch/
+239,Landmine Front Squat,Landmine,https://liftmanual.com/landmine-front-squat/
+141,Landmine Hack Squats,Landmine,https://liftmanual.com/landmine-hack-squat/
+237,Landmine Press,Landmine,https://liftmanual.com/landmine-press/
+238,Landmine Single Arm Press,Landmine,https://liftmanual.com/landmine-single-arm-press/
 142,Lat Pulldowns with Close Neutral Grip,Cable,
 143,Lat Pulldowns with Close Overhand Grip,Cable,
 144,Lat Pulldowns with Reverse Grip,Cable,
@@ -146,7 +146,7 @@ local_id,name,equipment,lift_manual_url
 200,Skull Crushers,EZ Curl Bar,https://liftmanual.com/barbell-lying-triceps-extension-skull-crusher/
 201,Skull Crushers with Rope,Cable,
 202,Spider Curls,Barbell,
-203,Split Squats,Dumbbells,
+203,Split Squats,Dumbbells,https://liftmanual.com/dumbbell-split-squat/
 204,Squats,Barbell,
 205,Squats (Belt),Bodyweight,
 206,Standing Calf Raises,Bodyweight,
@@ -158,7 +158,7 @@ local_id,name,equipment,lift_manual_url
 212,Step-Ups,Dumbbells,
 213,Sumo Deadlifts,Barbell,
 233,Sumo Goblet Squats,Dumbbells,
-214,T-Bar Reverse Lunges,Landmine,
+214,T-Bar Reverse Lunges,Landmine,https://liftmanual.com/landmine-rear-lunge/
 229,T-Bar Rows with Narrow Grip,Landmine,
 215,T-Bar Rows with Wide Grip,Landmine,
 216,Triceps Kickbacks,Cable,

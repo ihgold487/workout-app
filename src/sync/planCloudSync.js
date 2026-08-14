@@ -3,6 +3,7 @@ import { uploadWorkouts } from "./workoutCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
+const TYPE_5_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
 const WORKOUT_TYPE_LABELS = {
   push: "Push",
   pull: "Pull",
@@ -10,6 +11,70 @@ const WORKOUT_TYPE_LABELS = {
   lower: "Lower",
   "full-body": "Full Body",
 };
+const WORKOUT_TYPE_BY_LABEL = {
+  "full body": "full-body",
+  "full-body": "full-body",
+  lower: "lower",
+  pull: "pull",
+  push: "push",
+  upper: "upper",
+};
+
+function normalizeWorkoutTypeValue(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, " ");
+
+  return WORKOUT_TYPE_BY_LABEL[normalized] || "";
+}
+
+function normalizeWorkoutName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, " ")
+    .trim();
+}
+
+function inferWorkoutTypeFromName(name) {
+  const normalized = ` ${normalizeWorkoutName(name)} `;
+
+  if (/\bfull body\b|\bfull-body\b/.test(normalized)) {
+    return "full-body";
+  }
+
+  return ["push", "pull", "lower", "upper"].find((type) =>
+    new RegExp(`\\b${type}\\b`).test(normalized)
+  ) || "";
+}
+
+function getSequenceWorkoutType(planType, position) {
+  const sequence =
+    planType === "type-3"
+      ? TYPE_3_WORKOUT_SEQUENCE
+      : planType === "type-5"
+        ? TYPE_5_WORKOUT_SEQUENCE
+        : null;
+
+  return sequence?.[((Number(position) || 1) - 1) % sequence.length] || "";
+}
+
+function getNormalizedPlanWorkoutType({
+  name,
+  planType,
+  position,
+  storedType,
+  templateType,
+}) {
+  return (
+    inferWorkoutTypeFromName(name) ||
+    getSequenceWorkoutType(planType, position) ||
+    normalizeWorkoutTypeValue(storedType) ||
+    normalizeWorkoutTypeValue(templateType) ||
+    null
+  );
+}
 
 function assertCloudReady(session) {
   if (!isSupabaseConfigured) {
@@ -141,6 +206,13 @@ function localPlanWorkoutToCloud({
     },
     {}
   );
+  const workoutType = getNormalizedPlanWorkoutType({
+    name: planWorkout.name || template?.name,
+    planType: plan.planType,
+    position,
+    storedType: planWorkout.workoutType,
+    templateType: template?.workoutType,
+  });
 
   return {
     day_number: planWorkout.dayNumber || position,
@@ -159,9 +231,9 @@ function localPlanWorkoutToCloud({
       planWorkoutId: planWorkout.planWorkoutId || null,
       templateId: templateId || planWorkout.templateId || null,
       weeklyPrescriptionsByPosition,
-      workoutType: planWorkout.workoutType || template?.workoutType || null,
+      workoutType,
       workoutTypeLabel:
-        planWorkout.workoutTypeLabel || template?.workoutTypeLabel || null,
+        workoutType ? WORKOUT_TYPE_LABELS[workoutType] || null : null,
     },
   };
 }
@@ -435,13 +507,12 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
     status: plan.status || "inactive",
     workouts: planWorkouts.map((workout) => {
       const rules = workout.workout_rules || {};
-      const inferredType =
-        planType === "type-3"
-          ? TYPE_3_WORKOUT_SEQUENCE[
-              ((workout.position || 1) - 1) % TYPE_3_WORKOUT_SEQUENCE.length
-            ]
-          : null;
-      const workoutType = rules.workoutType || inferredType || null;
+      const workoutType = getNormalizedPlanWorkoutType({
+        name: workout.name,
+        planType,
+        position: workout.position,
+        storedType: rules.workoutType,
+      });
       const templateId =
         workout.workout_id && workoutSourceKeyById.has(workout.workout_id)
           ? parseLocalSourceKey(workoutSourceKeyById.get(workout.workout_id))
@@ -462,8 +533,7 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
           rules.weeklyPrescriptionsByPosition || {},
         workoutType,
         workoutTypeLabel:
-          rules.workoutTypeLabel ||
-          (workoutType ? WORKOUT_TYPE_LABELS[workoutType] || null : null),
+          workoutType ? WORKOUT_TYPE_LABELS[workoutType] || null : null,
       };
     }),
   };

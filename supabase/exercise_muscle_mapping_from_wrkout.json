@@ -1,0 +1,3608 @@
+{
+  "source": "https://github.com/wrkout/exercises.json",
+  "summary": {
+    "total": 160,
+    "high": 74,
+    "low": 58,
+    "seed-exact": 6,
+    "medium": 22
+  },
+  "rows": [
+    {
+      "confidence": "high",
+      "count": 10,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Triceps"
+      ],
+      "name": "Arnold Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Arnold Dumbbell Press",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [
+        "Forearms",
+        "Upper Back"
+      ],
+      "name": "Behind-the-Back Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Shrug Behind The Back",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 0.5,
+        "secondaryMuscles": [
+          "forearms",
+          "middle back"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 71,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 61,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Bench Press with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Close-Grip Barbell Bench Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 1.2,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 18,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Bent-Over Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Seated Bent-Over Rear Delt Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.629,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over One-Arm Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Bent Over Barbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Bent Over Barbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Bent Over Barbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Rows with Reverse Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Reverse Grip Bent-Over Rows",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.2,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Rows with Reverse Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Reverse Grip Bent-Over Rows",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 1,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Rows with Wide Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Bent Over Barbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.92,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Bent Over Barbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Bent-Over Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Bent Over Two-Dumbbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Bulgarian Split Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Split Squat with Dumbbells",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.787,
+        "secondaryMuscles": [
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 18,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Bulgarian Split Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Split Squat with Dumbbells",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": [
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 7,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Forearms",
+        "Upper Back"
+      ],
+      "name": "Chin-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Chin-Up",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": [
+          "biceps",
+          "forearms",
+          "middle back"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Concentration Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Concentration Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Concentration Hammer Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Hammer Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 10,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Concentration Twist Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Concentration Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.867,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Cross body curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Cross Body Hammer Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.95,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 18,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Crunches on Exercise Ball",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 10,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 15,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Curls (one arm)",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 1,
+      "equipment": "Machine",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Cycling on Stationary Bike",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Machine",
+        "name": "Bicycling, Stationary",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.45,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 18,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Forearms",
+        "Glutes",
+        "Hamstrings",
+        "Lats",
+        "Upper Back",
+        "Quads",
+        "Upper Traps"
+      ],
+      "name": "Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Deadlift",
+        "primaryMuscles": [
+          "lower back"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "forearms",
+          "glutes",
+          "hamstrings",
+          "lats",
+          "middle back",
+          "quadriceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Trap Bar",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Forearms",
+        "Glutes",
+        "Hamstrings",
+        "Lats",
+        "Upper Back",
+        "Quads",
+        "Upper Traps"
+      ],
+      "name": "Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Deadlift",
+        "primaryMuscles": [
+          "lower back"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "calves",
+          "forearms",
+          "glutes",
+          "hamstrings",
+          "lats",
+          "middle back",
+          "quadriceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 7,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Lower Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Decline Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Lower Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Decline Barbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 17,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Lower Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Decline Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Lower Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Decline Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 10,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Decline Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 18,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Decline Side Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Decline Side Sit-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Frog Sit-Ups",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 7,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Decline Sit-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Frog Sit-Ups",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 10,
+      "equipment": "Trap Bar",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Forearms",
+        "Glutes",
+        "Hamstrings",
+        "Upper Back",
+        "Quads",
+        "Upper Traps"
+      ],
+      "name": "Deficit Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Deficit Deadlift",
+        "primaryMuscles": [
+          "lower back"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms",
+          "glutes",
+          "hamstrings",
+          "middle back",
+          "quadriceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 1,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Dips",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Bench Dips",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Drag Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Drag Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 18,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Upper Back"
+      ],
+      "name": "Face Pulls with Rope",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Face Pull",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.57,
+        "secondaryMuscles": [
+          "middle back"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Abs",
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "EZ Curl Bar",
+        "name": "Bodyweight Flyes",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "abdominals",
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 29,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [],
+      "name": "Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Flyes",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Forward Lunges",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Lunges",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 21,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Front Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Front Barbell Squat",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings",
+        "Front Delts"
+      ],
+      "name": "Goblet Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "kettlebells",
+        "name": "Goblet Squat",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 11,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Glutes"
+      ],
+      "name": "Good Mornings",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Seated Good Mornings",
+        "primaryMuscles": [
+          "lower back"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": [
+          "glutes"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Hammer Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Hammer Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 10,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Hammer Curls (Tri bar)",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Hammer Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 37,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Hanging Leg Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Hanging Leg Raise",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 13,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Hanging Leg Raises with Twist",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Hanging Leg Raise",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 1.07,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 8,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Abs",
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "High Cable Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "EZ Curl Bar",
+        "name": "Bodyweight Flyes",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": [
+          "abdominals",
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 41,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Glutes",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Hamstrings"
+      ],
+      "name": "Hip Thrusts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Hip Thrust",
+        "primaryMuscles": [
+          "glutes"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": [
+          "calves",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 12,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Hyperextensions on Roman Chair",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Hyperextensions With No Hyperextension Bench",
+        "primaryMuscles": [
+          "lower back"
+        ],
+        "score": 0.367,
+        "secondaryMuscles": [
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "Incline Bench Hex Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 55,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Upper Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Incline Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Upper Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Incline Bench Press - Medium Grip",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.92,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "seed-exact",
+      "count": 38,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Upper Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "name": "Incline Bench Press",
+      "seedMuscles": [
+        "Chest",
+        "Upper Chest",
+        "Triceps",
+        "Front Delts"
+      ],
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 16,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "Incline Bench Press 20°",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.72,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 18,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "Incline Bench Press 60°",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.72,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 17,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Incline Bench Press with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Close-Grip Barbell Bench Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 1,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Incline Dumbbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 22,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts"
+      ],
+      "name": "Incline Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Incline Dumbbell Flyes",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts"
+      ],
+      "name": "Incline Flys 20-deg",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Incline Dumbbell Flyes",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 13,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Hammer Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Incline Hammer Curls",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 13,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "One-Arm Incline Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 40,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Reverse Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Reverse Flyes",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 4,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Forearms",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Incline Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Incline Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "biceps",
+          "forearms",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 4,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Shrugs",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Forearms",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "Incline Skull Crushers",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Incline Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.45,
+        "secondaryMuscles": [
+          "biceps",
+          "forearms",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 4,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Skull Crushers",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Incline Pushdown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.25,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 1,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Incline Twist Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Incline Dumbbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.867,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 24,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "JM Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "JM Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "JM Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "JM Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 33,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Kneeling Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 19,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Kneeling Side Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.453,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 6,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Forearms",
+        "Hamstrings"
+      ],
+      "name": "Landmine Hack Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Hack Squat",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.787,
+        "secondaryMuscles": [
+          "calves",
+          "forearms",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 8,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Lat Pulldowns with Close Neutral Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Close-Grip Front Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.629,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 37,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Lat Pulldowns with Close Overhand Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Close-Grip Front Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.629,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 12,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Lat Pulldowns with Reverse Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Reverse Grip Triceps Pushdown",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 29,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Lat Pulldowns with Wide Neutral Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Wide-Grip Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 35,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Lat Pulldowns with Wide Overhand Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Wide-Grip Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 36,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Lying One-Arm Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Upper Back",
+        "Upper Traps"
+      ],
+      "name": "Lean Away Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Seated Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": [
+          "middle back",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 1,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Lean Away Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Lying One-Arm Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 65,
+      "equipment": "Machine",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [],
+      "name": "Leg Extensions",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Machine",
+        "name": "Leg Extensions",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Resistance Band",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [],
+      "name": "Lying Leg Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Machine",
+        "name": "Lying Leg Curls",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 4,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Upper Back",
+        "Upper Traps"
+      ],
+      "name": "One-Arm Lateral Raises at Hip Height",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Seated Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": [
+          "middle back",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 27,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "One-Arm Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "One-Arm Dumbbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 13,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "One-Arm Rows with Reverse Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "One-Arm Dumbbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats",
+        "Front Delts"
+      ],
+      "name": "One-Arm Rows with Wide Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "One-Arm Dumbbell Row",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": [
+          "biceps",
+          "lats",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [],
+      "name": "Overhead Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Shrugs",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 7,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Lats"
+      ],
+      "name": "Overhead Triceps Extensions",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Overhead Triceps",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.787,
+        "secondaryMuscles": [
+          "lats"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 26,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Lats"
+      ],
+      "name": "Overhead Triceps Extensions",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Overhead Triceps",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.787,
+        "secondaryMuscles": [
+          "lats"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 5,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Lats"
+      ],
+      "name": "Overhead Triceps Extensions",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Overhead Triceps",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.787,
+        "secondaryMuscles": [
+          "lats"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 8,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Preacher Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Preacher Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Preacher Hammer Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Preacher Hammer Dumbbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Preacher Twist Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "One Arm Dumbbell Preacher Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.867,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 1,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Pull-Ups with Close Neutral Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Incline Push-Up Close-Grip",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.45,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 4,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Pull-Ups with Close Overhand Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Incline Push-Up Close-Grip",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.45,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Pull-Ups with Wide Overhand Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Wide-Grip Rear Pull-Up",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.629,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 9,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Triceps"
+      ],
+      "name": "Pullovers",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Alternating Cable Shoulder Press",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.2,
+        "secondaryMuscles": [
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 1,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Chest",
+      "mappedSecondaryMuscles": [
+        "Front Delts",
+        "Triceps"
+      ],
+      "name": "Pullovers on Bench",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Bench Press",
+        "primaryMuscles": [
+          "chest"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": [
+          "shoulders",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 3,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Pullovers on Bench",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Bench Dips",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.333,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 17,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Pullovers with Rope",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Rope Crunch",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Push-Ups with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Incline Push-Up Close-Grip",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 1,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Reverse Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Reverse Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Reverse Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Reverse Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Reverse Flys",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Reverse Flyes",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 19,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Reverse Lunges",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Lunges",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Reverse Spider Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "EZ Curl Bar",
+        "name": "Spider Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 47,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Upper Back"
+      ],
+      "name": "Romanian Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Romanian Deadlift",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "lower back"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 23,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Upper Back"
+      ],
+      "name": "Romanian Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Romanian Deadlift",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "lower back"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 8,
+      "equipment": "Trap Bar",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Upper Back"
+      ],
+      "name": "Romanian Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Romanian Deadlift",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "lower back"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 28,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Rows with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Close-Grip Front Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 13,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Rows with Reverse Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Reverse Grip Triceps Pushdown",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 19,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Rows with Wide Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Wide-Grip Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 29,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Lats",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Back",
+        "Front Delts"
+      ],
+      "name": "Rows with Wide Neutral Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Wide-Grip Lat Pulldown",
+        "primaryMuscles": [
+          "lats"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": [
+          "biceps",
+          "middle back",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 4,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Russian Twists",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Russian Twists",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [],
+      "name": "Seated Bent-Over Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Seated Bent-Over Rear Delt Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.771,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Calves",
+      "mappedSecondaryMuscles": [],
+      "name": "Seated Calf Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Seated Calf Raise",
+        "primaryMuscles": [
+          "calves"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 25,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Calves",
+      "mappedSecondaryMuscles": [],
+      "name": "Seated Calf Raises (BB)",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Seated Calf Raise",
+        "primaryMuscles": [
+          "calves"
+        ],
+        "score": 1.07,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 12,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Upper Back",
+        "Upper Traps"
+      ],
+      "name": "Seated Lateral Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Seated Lateral Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "middle back",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 37,
+      "equipment": "Machine",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [],
+      "name": "Seated Leg Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Machine",
+        "name": "Seated Leg Curl",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Triceps"
+      ],
+      "name": "Seated Shoulder Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Seated Cable Shoulder Press",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 1,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Triceps"
+      ],
+      "name": "Seated Shoulder Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Seated Cable Shoulder Press",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Seated Shoulder Press with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Close-Grip Dumbbell Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.8,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 19,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [],
+      "name": "Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Shrugs",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [],
+      "name": "Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Shrugs",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 2,
+      "equipment": "Trap Bar",
+      "mappedPrimaryMuscle": "Upper Traps",
+      "mappedSecondaryMuscles": [],
+      "name": "Shrugs",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Shrugs",
+        "primaryMuscles": [
+          "traps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Side Bends",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Side Bend",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 11,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Side Crunches",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Crunches",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 19,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Side Sit-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Frog Sit-Ups",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 4,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Sit-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Frog Sit-Ups",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Skull Crushers",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "bands",
+        "name": "Band Skull Crusher",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.25,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 12,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Skull Crushers",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "bands",
+        "name": "Band Skull Crusher",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.25,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 7,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Skull Crushers with Rope",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Rope Crunch",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.45,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Spider Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "EZ Curl Bar",
+        "name": "Spider Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 5,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Split Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Split Squat with Dumbbells",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 41,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings",
+        "Upper Back"
+      ],
+      "name": "Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Squat",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 21,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Squats (Belt)",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Bodyweight",
+        "name": "Bodyweight Squat",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 13,
+      "equipment": "Bodyweight",
+      "mappedPrimaryMuscle": "Calves",
+      "mappedSecondaryMuscles": [],
+      "name": "Standing Calf Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Standing Barbell Calf Raise",
+        "primaryMuscles": [
+          "calves"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 40,
+      "equipment": "Smith Machine",
+      "mappedPrimaryMuscle": "Calves",
+      "mappedSecondaryMuscles": [],
+      "name": "Standing Calf Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Standing Barbell Calf Raise",
+        "primaryMuscles": [
+          "calves"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 1,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [],
+      "name": "Standing Leg Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Machine",
+        "name": "Standing Leg Curl",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 6,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Abs",
+      "mappedSecondaryMuscles": [],
+      "name": "Standing Russian Twists",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Russian Twists",
+        "primaryMuscles": [
+          "abdominals"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 25,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Triceps"
+      ],
+      "name": "Standing Shoulder Press",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Shoulder Press",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.987,
+        "secondaryMuscles": [
+          "chest",
+          "triceps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [
+        "Chest",
+        "Front Delts"
+      ],
+      "name": "Standing Shoulder Press with Close Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Close-Grip Dumbbell Press",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.8,
+        "secondaryMuscles": [
+          "chest",
+          "shoulders"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 7,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Step-Ups",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Step Ups",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 20,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Hamstrings",
+      "mappedSecondaryMuscles": [
+        "Quads",
+        "Forearms",
+        "Glutes",
+        "Upper Back",
+        "Upper Traps"
+      ],
+      "name": "Sumo Deadlifts",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Sumo Deadlift",
+        "primaryMuscles": [
+          "hamstrings"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "adductors",
+          "forearms",
+          "glutes",
+          "lower back",
+          "middle back",
+          "quadriceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats"
+      ],
+      "name": "T-Bar Reverse Lunges",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "T-Bar Row with Handle",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": [
+          "biceps",
+          "lats"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Upper Back",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Lats"
+      ],
+      "name": "T-Bar Rows with Wide Grip",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "T-Bar Row with Handle",
+        "primaryMuscles": [
+          "middle back"
+        ],
+        "score": 0.7,
+        "secondaryMuscles": [
+          "biceps",
+          "lats"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 5,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Triceps Kickbacks",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Triceps Pushdown",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Triceps Kickbacks",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell One-Arm Triceps Extension",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.533,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 13,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Triceps Pushdowns",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Triceps Pushdown",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.653,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 6,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Triceps Pushdowns (Vbar)",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Triceps Pushdown",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.57,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 18,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Triceps",
+      "mappedSecondaryMuscles": [],
+      "name": "Triceps Pushdowns with Rope",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Cable",
+        "name": "Cable Rope Overhead Triceps Extension",
+        "primaryMuscles": [
+          "triceps"
+        ],
+        "score": 0.6,
+        "secondaryMuscles": []
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 29,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Biceps",
+      "mappedSecondaryMuscles": [
+        "Forearms"
+      ],
+      "name": "Twist Curls",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Barbell Curl",
+        "primaryMuscles": [
+          "biceps"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": [
+          "forearms"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 18,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Traps"
+      ],
+      "name": "Upright Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell One-Arm Upright Row",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "biceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 37,
+      "equipment": "EZ Curl Bar",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Biceps",
+        "Upper Traps"
+      ],
+      "name": "Upright Rows",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell One-Arm Upright Row",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 1.62,
+        "secondaryMuscles": [
+          "biceps",
+          "traps"
+        ]
+      }
+    },
+    {
+      "confidence": "medium",
+      "count": 17,
+      "equipment": "Dumbbells",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Walking Lunges",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Lunges",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 0.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    },
+    {
+      "confidence": "low",
+      "count": 18,
+      "equipment": "Cable",
+      "mappedPrimaryMuscle": "Front Delts",
+      "mappedSecondaryMuscles": [
+        "Biceps"
+      ],
+      "name": "Y Raises",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Dumbbells",
+        "name": "Dumbbell Raise",
+        "primaryMuscles": [
+          "shoulders"
+        ],
+        "score": 0.62,
+        "secondaryMuscles": [
+          "biceps"
+        ]
+      }
+    },
+    {
+      "confidence": "high",
+      "count": 14,
+      "equipment": "Barbell",
+      "mappedPrimaryMuscle": "Quads",
+      "mappedSecondaryMuscles": [
+        "Calves",
+        "Glutes",
+        "Hamstrings"
+      ],
+      "name": "Zercher Squats",
+      "seedMuscles": null,
+      "wrkout": {
+        "equipment": "Barbell",
+        "name": "Zercher Squats",
+        "primaryMuscles": [
+          "quadriceps"
+        ],
+        "score": 1.82,
+        "secondaryMuscles": [
+          "calves",
+          "glutes",
+          "hamstrings"
+        ]
+      }
+    }
+  ]
+}
