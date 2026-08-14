@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
+  Brain,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -2254,6 +2255,7 @@ export default function PlansView({
   exerciseMetadata,
   history,
   onCancel,
+  onShowAiPlanNotes,
   onSave,
   plans,
   setPlans,
@@ -3676,6 +3678,23 @@ export default function PlansView({
                 <Copy size={16} />
                 Save As
               </button>
+
+              {editingPlan.aiAnalysis && (
+                <button
+                  onClick={() => onShowAiPlanNotes?.(editingPlan)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "6px",
+                    minHeight: "40px",
+                    padding: "6px 10px",
+                  }}
+                  type="button"
+                >
+                  <Brain size={16} />
+                  AI Notes
+                </button>
+              )}
 
               <button
                 onClick={onCancel}

@@ -169,6 +169,7 @@ function localPlanToCloud(plan, userId, existingCloudPlan = null) {
     is_open_ended: Boolean(plan.isOpenEnded),
     name: plan.name,
     plan_config: {
+      aiAnalysis: plan.aiAnalysis || existingPlanConfig.aiAnalysis || null,
       completions,
       config: plan.config || {},
       createdAt: plan.createdAt || null,
@@ -501,6 +502,7 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
     durationWeeks: plan.duration_weeks || existingPlan?.durationWeeks || null,
     goal: planConfig.goal || existingPlan?.goal || "maintain",
     id: parseLocalSourceKey(plan.source_key),
+    aiAnalysis: planConfig.aiAnalysis || existingPlan?.aiAnalysis || null,
     isOpenEnded: Boolean(plan.is_open_ended),
     name: plan.name,
     planType,

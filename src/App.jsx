@@ -2016,9 +2016,20 @@ function getAiPlanPrompt(context) {
 
 function parseAiPlanDraft(rawText) {
   let parsed;
+  const trimmedText = String(rawText || "").trim();
+  const fencedJsonMatch = trimmedText.match(
+    /```(?:json)?\s*([\s\S]*?)\s*```/i
+  );
+  const candidateText = fencedJsonMatch ? fencedJsonMatch[1].trim() : trimmedText;
+  const firstBraceIndex = candidateText.indexOf("{");
+  const lastBraceIndex = candidateText.lastIndexOf("}");
+  const jsonText =
+    firstBraceIndex >= 0 && lastBraceIndex > firstBraceIndex
+      ? candidateText.slice(firstBraceIndex, lastBraceIndex + 1)
+      : candidateText;
 
   try {
-    parsed = JSON.parse(rawText);
+    parsed = JSON.parse(jsonText);
   } catch {
     throw new Error("Paste valid JSON from ChatGPT before importing.");
   }
@@ -3187,6 +3198,7 @@ export default function App() {
   const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
   const [completedPlanActions, setCompletedPlanActions] = useState(null);
   const [extendPlanTarget, setExtendPlanTarget] = useState(null);
+  const [aiPlanNotesTarget, setAiPlanNotesTarget] = useState(null);
 
   const [updateStatus, setUpdateStatus] = useState("");
 
@@ -3302,6 +3314,7 @@ export default function App() {
 
   const previousHistoryLengthRef = useRef(history.length);
   const workoutCompletionSyncHistoryLengthRef = useRef(null);
+  const aiPlanAnalysisSyncQueuedRef = useRef(false);
 
   const userEmail = authSession?.user?.email || "";
   const normalizedUserEmail = userEmail.toLowerCase();
@@ -4561,6 +4574,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (aiPlanAnalysisSyncQueuedRef.current || !indexedDbReady) {
+      return;
+    }
+
+    if (!plans.some((plan) => plan.aiAnalysis)) {
+      return;
+    }
+
+    aiPlanAnalysisSyncQueuedRef.current = true;
+    markNormalizedSyncDirty(["plans"]);
+  }, [indexedDbReady, plans]);
+
+  useEffect(() => {
     if (!authSession?.user?.id || !indexedDbReady) {
       return;
     }
@@ -4956,6 +4982,33 @@ export default function App() {
   function openChatGptForAiPlan() {
     window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     setAiPlanStatus("ChatGPT opened. Use Copy Prompt and attach the JSON context.");
+  }
+
+  function loadAiPlanDraftFile(file) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      setAiPlanDraftText(String(reader.result || ""));
+      setAiPlanStatus(`Loaded ${file.name}. Review it, then import the draft.`);
+    };
+    reader.onerror = () => {
+      setAiPlanStatus(`Could not read ${file.name}.`);
+    };
+    reader.readAsText(file);
+  }
+
+  function handleAiPlanDraftFileChange(event) {
+    loadAiPlanDraftFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
+
+  function handleAiPlanDraftDrop(event) {
+    event.preventDefault();
+    loadAiPlanDraftFile(event.dataTransfer.files?.[0]);
   }
 
   function importAiPlanDraft() {
@@ -6011,6 +6064,159 @@ export default function App() {
     );
   }
 
+  function renderAiPlanNotesDialog() {
+    const analysis = aiPlanNotesTarget?.aiAnalysis;
+
+    if (!analysis) {
+      return null;
+    }
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${aiPlanNotesTarget.name} AI notes`}
+        onClick={() => setAiPlanNotesTarget(null)}
+        style={{
+          alignItems: "flex-end",
+          background: "rgba(0,0,0,.42)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          position: "fixed",
+          zIndex: 1700,
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            background: "var(--surface-raised)",
+            borderRadius: "18px 18px 0 0",
+            boxSizing: "border-box",
+            display: "grid",
+            gap: "12px",
+            maxHeight: "82vh",
+            maxWidth: "640px",
+            overflow: "auto",
+            padding: "16px",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <h2
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: "18px",
+                  gap: "7px",
+                  margin: 0,
+                }}
+              >
+                <Brain size={18} />
+                AI Notes
+              </h2>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "3px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {aiPlanNotesTarget.name}
+              </div>
+            </div>
+            <button
+              aria-label="Close AI notes"
+              onClick={() => setAiPlanNotesTarget(null)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: "4px",
+              }}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {analysis.summary && (
+            <section>
+              <h3 style={{ fontSize: "13px", margin: "0 0 6px" }}>Summary</h3>
+              <p
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "13px",
+                  lineHeight: 1.45,
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {analysis.summary}
+              </p>
+            </section>
+          )}
+
+          {analysis.rationale?.length > 0 && (
+            <section>
+              <h3 style={{ fontSize: "13px", margin: "0 0 6px" }}>Rationale</h3>
+              <ul
+                style={{
+                  color: "var(--text-muted)",
+                  display: "grid",
+                  fontSize: "13px",
+                  gap: "6px",
+                  lineHeight: 1.45,
+                  margin: "0 0 0 18px",
+                  padding: 0,
+                }}
+              >
+                {analysis.rationale.map((item, index) => (
+                  <li key={`ai-note-rationale-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {analysis.watchNext?.length > 0 && (
+            <section>
+              <h3 style={{ fontSize: "13px", margin: "0 0 6px" }}>Watch Next</h3>
+              <ul
+                style={{
+                  color: "var(--text-muted)",
+                  display: "grid",
+                  fontSize: "13px",
+                  gap: "6px",
+                  lineHeight: 1.45,
+                  margin: "0 0 0 18px",
+                  padding: 0,
+                }}
+              >
+                {analysis.watchNext.map((item, index) => (
+                  <li key={`ai-note-watch-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderPlanCard(plan) {
     const displayWeek = planDisplayWeeks[plan.id] || plan.currentWeek || 1;
     const weekStatus = getPlanWeekStatus(plan, displayWeek, history);
@@ -6106,6 +6312,25 @@ export default function App() {
             >
               <Pencil size={15} />
             </button>
+            {plan.aiAnalysis && (
+              <button
+                aria-label={`Show AI notes for ${plan.name}`}
+                onClick={() => setAiPlanNotesTarget(plan)}
+                title="AI notes"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "5px",
+                  justifyContent: "center",
+                  minHeight: "32px",
+                  padding: "4px 7px",
+                }}
+                type="button"
+              >
+                <Brain size={15} />
+                <span style={{ fontSize: "12px" }}>AI</span>
+              </button>
+            )}
           </div>
 
           <div
@@ -6241,9 +6466,11 @@ export default function App() {
                     background: "var(--surface-muted)",
                     border: "1px solid var(--border)",
                     borderRadius: "6px",
-                    color: "var(--text)",
-                    display: "grid",
-                    gap: "6px",
+                    alignItems: "center",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    gap: "8px",
+                    justifyContent: "space-between",
                     padding: "8px",
                   }}
                 >
@@ -6253,42 +6480,20 @@ export default function App() {
                       fontWeight: "bold",
                     }}
                   >
-                    AI plan notes
+                    AI notes available
                   </div>
-                  {plan.aiAnalysis.summary && (
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {plan.aiAnalysis.summary}
-                    </div>
-                  )}
-                  {plan.aiAnalysis.rationale?.length > 0 && (
-                    <ul
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                        margin: "0 0 0 18px",
-                        padding: 0,
-                      }}
-                    >
-                      {plan.aiAnalysis.rationale.map((item, index) => (
-                        <li key={`rationale-${index}`}>{item}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {plan.aiAnalysis.watchNext?.length > 0 && (
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                      }}
-                    >
-                      Watch next: {plan.aiAnalysis.watchNext.join("; ")}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setAiPlanNotesTarget(plan)}
+                    style={{
+                      minHeight: "30px",
+                      padding: "3px 9px",
+                      whiteSpace: "nowrap",
+                    }}
+                    type="button"
+                  >
+                    <Brain size={14} />
+                    View
+                  </button>
                 </div>
               )}
               {(plan.workouts || []).map((planWorkout) => {
@@ -6763,6 +6968,7 @@ export default function App() {
       >
         {content}
         {renderPlanCompletionPrompt()}
+        {renderAiPlanNotesDialog()}
         {renderBottomNav(activeView)}
       </div>
     );
@@ -8435,38 +8641,79 @@ export default function App() {
                       Open ChatGPT
                     </button>
                   </div>
-                  <textarea
-                    aria-label="AI plan draft JSON"
-                    onChange={(event) => {
-                      setAiPlanDraftText(event.target.value);
-                      setAiPlanStatus("");
-                    }}
-                    placeholder="Paste ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
-                    value={aiPlanDraftText}
+                  <div
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={handleAiPlanDraftDrop}
                     style={{
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      boxSizing: "border-box",
-                      color: "var(--text)",
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      fontSize: "11px",
-                      lineHeight: 1.45,
-                      minHeight: "150px",
-                      padding: "8px",
-                      resize: "vertical",
-                      width: "100%",
+                      display: "grid",
+                      gap: "8px",
                     }}
-                  />
-                  <button
-                    disabled={!aiPlanDraftText.trim()}
-                    onClick={importAiPlanDraft}
-                    type="button"
                   >
-                    <Upload size={14} />
-                    Import Draft
-                  </button>
+                    <textarea
+                      aria-label="AI plan draft JSON"
+                      onChange={(event) => {
+                        setAiPlanDraftText(event.target.value);
+                        setAiPlanStatus("");
+                      }}
+                      placeholder="Paste or drop ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
+                      value={aiPlanDraftText}
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px dashed var(--border)",
+                        borderRadius: "6px",
+                        boxSizing: "border-box",
+                        color: "var(--text)",
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        fontSize: "11px",
+                        lineHeight: 1.45,
+                        minHeight: "150px",
+                        padding: "8px",
+                        resize: "vertical",
+                        width: "100%",
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "8px",
+                        gridTemplateColumns: "1fr 1fr",
+                      }}
+                    >
+                      <label
+                        style={{
+                          alignItems: "center",
+                          background: "var(--button-bg)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--button-text)",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          fontSize: "13px",
+                          gap: "6px",
+                          justifyContent: "center",
+                          padding: "8px",
+                        }}
+                      >
+                        <Upload size={14} />
+                        Load File
+                        <input
+                          accept="application/json,.json,.txt"
+                          onChange={handleAiPlanDraftFileChange}
+                          style={{ display: "none" }}
+                          type="file"
+                        />
+                      </label>
+                      <button
+                        disabled={!aiPlanDraftText.trim()}
+                        onClick={importAiPlanDraft}
+                        type="button"
+                      >
+                        <Upload size={14} />
+                        Import Draft
+                      </button>
+                    </div>
+                  </div>
                   {aiPlanStatus && (
                     <div
                       role="status"
@@ -9636,6 +9883,7 @@ export default function App() {
                 : "plan save"
           );
         }}
+        onShowAiPlanNotes={setAiPlanNotesTarget}
         plans={plans}
         setPlans={setPlans}
         setTemplates={setTemplates}
