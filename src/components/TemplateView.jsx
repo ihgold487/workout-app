@@ -447,12 +447,33 @@ export default function TemplateView({
     );
   }
 
+  function getSetPrescriptionRestSeconds(set, fallback = null) {
+    const parsed = Number(
+      firstPresentValue(
+        set?.prescribedRestSeconds,
+        set?.restSeconds,
+        set?.rest_seconds,
+        fallback
+      )
+    );
+
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+  }
+
   function getPlannedSetPrescription({ plan, set, weekPrescription }) {
+    const restSeconds = getSetPrescriptionRestSeconds(
+      {
+        restSeconds: weekPrescription?.restSeconds ?? weekPrescription?.rest_seconds,
+      },
+      getSetPrescriptionRestSeconds(set)
+    );
+
     return {
       reps: formatTargetValue(
         weekPrescription?.reps ??
           getSetPrescriptionReps(set, plan?.config?.reps ?? "")
       ),
+      restSeconds,
       rir: formatTargetValue(
         weekPrescription?.rir ??
           getPlanWeekRir(
@@ -995,8 +1016,10 @@ export default function TemplateView({
             const targetSet = {
               ...set,
               prescribedReps: plannedPrescription.reps,
+              prescribedRestSeconds: plannedPrescription.restSeconds || undefined,
               prescribedRir: plannedPrescription.rir,
               reps: plannedPrescription.reps,
+              restSeconds: plannedPrescription.restSeconds || set.restSeconds,
               rir: plannedPrescription.rir,
               targetWeight: formatTargetValue(dynamicTarget?.weight),
 

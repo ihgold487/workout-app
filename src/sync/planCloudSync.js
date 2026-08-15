@@ -207,6 +207,22 @@ function localPlanWorkoutToCloud({
     },
     {}
   );
+  const setRestSecondsByPosition = (template?.exercises || []).reduce(
+    (restByPosition, exercise, exerciseIndex) => {
+      const restSeconds = (exercise.sets || []).map((set) => {
+        const parsed = Number(set.restSeconds ?? set.rest_seconds);
+
+        return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+      });
+
+      if (restSeconds.some(Boolean)) {
+        restByPosition[exerciseIndex + 1] = restSeconds;
+      }
+
+      return restByPosition;
+    },
+    { ...(planWorkout.setRestSecondsByPosition || {}) }
+  );
   const workoutType = getNormalizedPlanWorkoutType({
     name: planWorkout.name || template?.name,
     planType: plan.planType,
@@ -230,6 +246,7 @@ function localPlanWorkoutToCloud({
     workout_id: cloudWorkoutId || null,
     workout_rules: {
       planWorkoutId: planWorkout.planWorkoutId || null,
+      setRestSecondsByPosition,
       templateId: templateId || planWorkout.templateId || null,
       weeklyPrescriptionsByPosition,
       workoutType,
@@ -529,6 +546,7 @@ function cloudPlanToLocal(plan, planWorkouts, workoutSourceKeyById, existingPlan
         planWorkoutId:
           rules.planWorkoutId ||
           `${parseLocalSourceKey(plan.source_key)}:workout-${workout.position}`,
+        setRestSecondsByPosition: rules.setRestSecondsByPosition || {},
         templateId,
         weekNumber: workout.week_number || null,
         weeklyPrescriptionsByPosition:

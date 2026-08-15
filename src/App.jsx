@@ -1309,6 +1309,26 @@ function getPlanSetRir(set, weekPrescription, plan, weekNumber) {
   });
 }
 
+function normalizeRestSeconds(value) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+}
+
+function getPlanSetRestSeconds(set, weekPrescription, exercise) {
+  return normalizeRestSeconds(
+    firstExportValue(
+      weekPrescription?.restSeconds,
+      weekPrescription?.rest_seconds,
+      set?.prescribedRestSeconds,
+      set?.restSeconds,
+      set?.rest_seconds,
+      exercise?.restSeconds,
+      exercise?.rest_seconds
+    )
+  );
+}
+
 function buildPlanExportOptions(plans = []) {
   return [...plans]
     .sort((left, right) =>
@@ -1391,6 +1411,7 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                 prescribed_sets: "",
                 prescribed_reps: "",
                 prescribed_rir: "",
+                rest_seconds: "",
               });
               return;
             }
@@ -1450,6 +1471,8 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                     plan,
                     weekNumber
                   ),
+                  rest_seconds:
+                    getPlanSetRestSeconds(set, weekPrescription, exercise) || "",
                 };
               }).forEach((row) => rows.push(row));
             });
@@ -1459,6 +1482,878 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
     });
 
   return rows;
+}
+
+function getExerciseExposureKey(exercise) {
+  return `${normalizeExportText(exercise?.name)}|${normalizeExportText(
+    getExerciseEquipmentLabel(exercise)
+  )}`;
+}
+
+function buildRecentPlanExposureContext({
+  exerciseLibrary = [],
+  history = [],
+  plans = [],
+  templates = [],
+}) {
+  const sortedPlans = [...plans]
+    .filter(
+      (plan) =>
+        plan.status !== "draft-deleted" &&
+        !(plan.status === "inactive" && plan.aiAnalysis)
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.updatedAt || left.createdAt || "");
+      const rightTime = Date.parse(right.updatedAt || right.createdAt || "");
+
+      return (
+        (Number.isFinite(rightTime) ? rightTime : 0) -
+        (Number.isFinite(leftTime) ? leftTime : 0)
+      );
+    });
+  const exposureByKey = new Map();
+  const performanceByKey = new Map();
+
+  history.forEach((workout) => {
+    const workoutTime = getHistoryWorkoutTime(workout);
+    const workoutDate = getHistoryWorkoutIso(workout).slice(0, 10);
+
+    (workout.exercises || []).forEach((historyExercise) => {
+      const exercise = findExerciseForHistoryExercise(
+        historyExercise,
+        exerciseLibrary
+      );
+      const key = getExerciseExposureKey(exercise);
+      const current = performanceByKey.get(key) || {
+        completedSets: 0,
+        completedWorkoutCount: 0,
+        latestDate: "",
+        latestTime: 0,
+        workoutTimes: [],
+      };
+      const completedSets = (historyExercise.sets || []).filter(
+        (set) => set.completed !== false && set.completed !== "false"
+      ).length;
+
+      if (completedSets === 0) {
+        return;
+      }
+
+      current.completedSets += completedSets;
+      current.completedWorkoutCount += 1;
+      current.workoutTimes.push(workoutTime);
+
+      if (workoutTime > current.latestTime) {
+        current.latestDate = workoutDate;
+        current.latestTime = workoutTime;
+      }
+
+      performanceByKey.set(key, current);
+    });
+  });
+
+  const latestPerformanceTime = Math.max(
+    0,
+    ...[...performanceByKey.values()].flatMap((performance) =>
+      performance.workoutTimes.filter((time) => Number.isFinite(time))
+    )
+  );
+  const recentPerformanceCutoff = latestPerformanceTime - 120 * 24 * 60 * 60 * 1000;
+
+  sortedPlans.forEach((plan, planIndex) => {
+    const totalWeeks = getPlanExportTotalWeeks(plan);
+    const exercisesInPlan = new Map();
+
+    (plan.workouts || []).forEach((planWorkout) => {
+      const template = getPlanExportWorkoutTemplate(plan, planWorkout, templates);
+
+      (template?.exercises || planWorkout.exercises || []).forEach((exercise) => {
+        if (!exercise?.name) {
+          return;
+        }
+
+        const key = getExerciseExposureKey(exercise);
+        const current = exercisesInPlan.get(key) || {
+          equipment: getExerciseEquipmentLabel(exercise),
+          exerciseId: exercise.exerciseId || exercise.id || "",
+          name: exercise.name,
+          workouts: new Set(),
+        };
+
+        current.workouts.add(template?.name || planWorkout.name || "");
+        exercisesInPlan.set(key, current);
+      });
+    });
+
+    exercisesInPlan.forEach((planExposure, key) => {
+      const current = exposureByKey.get(key) || {
+        equipment: planExposure.equipment,
+        exerciseId: planExposure.exerciseId,
+        name: planExposure.name,
+        planIndexes: [],
+        planNames: [],
+        programmedTrainingWeeks: 0,
+        programmedTotalWeeks: 0,
+        programmedWorkoutExposures: 0,
+      };
+
+      current.planIndexes.push(planIndex);
+      current.planNames.push(plan.name || "Training Plan");
+      current.programmedTrainingWeeks += getPlanExportTrainingWeeks(plan);
+      current.programmedTotalWeeks += totalWeeks;
+      current.programmedWorkoutExposures += planExposure.workouts.size;
+      exposureByKey.set(key, current);
+    });
+  });
+
+  return [...exposureByKey.values()]
+    .map((exposure) => {
+      let consecutiveRecentPlans = 0;
+
+      while (exposure.planIndexes.includes(consecutiveRecentPlans)) {
+        consecutiveRecentPlans += 1;
+      }
+
+      const recentPlans = exposure.planNames.slice(0, consecutiveRecentPlans);
+      const performance = performanceByKey.get(
+        `${normalizeExportText(exposure.name)}|${normalizeExportText(
+          exposure.equipment
+        )}`
+      );
+
+      return {
+        completedSets: performance?.completedSets || 0,
+        completedWorkoutCount: performance?.completedWorkoutCount || 0,
+        consecutiveRecentPlans,
+        consecutiveRecentTrainingWeeks: sortedPlans
+          .slice(0, consecutiveRecentPlans)
+          .reduce(
+            (sum, plan) => sum + getPlanExportTrainingWeeks(plan),
+            0
+          ),
+        equipment: exposure.equipment,
+        exerciseId: exposure.exerciseId,
+        lastPerformedDate: performance?.latestDate || "",
+        name: exposure.name,
+        note:
+          "Counts programmed exposure in saved plans/templates plus completed workout recency. Use this to identify non-benchmark exercises that may be stale and candidates for rotation.",
+        programmedPlanCount: exposure.planIndexes.length,
+        programmedTotalWeeks: exposure.programmedTotalWeeks,
+        programmedTrainingWeeks: exposure.programmedTrainingWeeks,
+        programmedWorkoutExposures: exposure.programmedWorkoutExposures,
+        recentPlanNames: recentPlans,
+        workoutsPast120Days: performance
+          ? performance.workoutTimes.filter(
+              (time) => time >= recentPerformanceCutoff
+            ).length
+          : 0,
+      };
+    })
+    .filter(
+      (exposure) =>
+        exposure.consecutiveRecentPlans > 0 || exposure.programmedPlanCount > 1
+    )
+    .sort((left, right) => {
+      const consecutiveDiff =
+        right.consecutiveRecentTrainingWeeks -
+        left.consecutiveRecentTrainingWeeks;
+
+      if (consecutiveDiff !== 0) {
+        return consecutiveDiff;
+      }
+
+      return right.programmedTrainingWeeks - left.programmedTrainingWeeks;
+    })
+    .slice(0, 80);
+}
+
+function buildPreviousPlanAiContext({ plans = [] }) {
+  return [...plans]
+    .filter((plan) => {
+      if (!plan.aiAnalysis || plan.status === "draft-deleted") {
+        return false;
+      }
+
+      return (
+        plan.status === "active" ||
+        plan.status === "completed" ||
+        (plan.completions || []).length > 0
+      );
+    })
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.updatedAt || left.createdAt || "");
+      const rightTime = Date.parse(right.updatedAt || right.createdAt || "");
+
+      return (
+        (Number.isFinite(rightTime) ? rightTime : 0) -
+        (Number.isFinite(leftTime) ? leftTime : 0)
+      );
+    })
+    .slice(0, 5)
+    .map((plan) => {
+      const completedWeeks = [
+        ...new Set(
+          (plan.completions || [])
+            .map((completion) => Number(completion.weekNumber) || null)
+            .filter(Boolean)
+        ),
+      ].sort((left, right) => left - right);
+
+      return {
+        completedWeeks,
+        currentWeek: plan.currentWeek || 1,
+        planId: String(plan.id),
+        planName: plan.name || "Training Plan",
+        planStatus: plan.status || "inactive",
+        rationale: plan.aiAnalysis.rationale || [],
+        summary: plan.aiAnalysis.summary || "",
+        trainingWeeks: getPlanExportTrainingWeeks(plan),
+        watchNext: plan.aiAnalysis.watchNext || [],
+      };
+    });
+}
+
+function roundAiMetric(value, digits = 1) {
+  return Number.isFinite(value) ? Number(value.toFixed(digits)) : null;
+}
+
+function parseAiTargetRange(value) {
+  const text = String(value ?? "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  const matches = [...text.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) =>
+    Number.parseFloat(match[0])
+  );
+
+  if (matches.length === 0 || matches.some((number) => !Number.isFinite(number))) {
+    return null;
+  }
+
+  return {
+    max: Math.max(...matches),
+    min: Math.min(...matches),
+  };
+}
+
+function getExerciseLibraryMatchFromExport(row, exerciseLibrary = []) {
+  const rowExerciseId = row.exercise_id || row.exerciseId;
+
+  if (rowExerciseId !== undefined && rowExerciseId !== null && rowExerciseId !== "") {
+    const idMatch = exerciseLibrary.find(
+      (exercise) => String(exercise.id) === String(rowExerciseId)
+    );
+
+    if (idMatch) {
+      return idMatch;
+    }
+  }
+
+  const rowName = normalizeExportText(row.exercise_name || row.name);
+  const rowEquipment = normalizeExportText(row.equipment);
+
+  return (
+    exerciseLibrary.find(
+      (exercise) =>
+        normalizeExportText(exercise.name) === rowName &&
+        normalizeExportText(getExerciseEquipmentLabel(exercise)) === rowEquipment
+    ) ||
+    exerciseLibrary.find((exercise) => normalizeExportText(exercise.name) === rowName) ||
+    null
+  );
+}
+
+function getPrimaryMuscleForExportRow(row, exerciseLibrary = []) {
+  const exercise = getExerciseLibraryMatchFromExport(row, exerciseLibrary);
+
+  return exercise?.muscles?.[0] || row.plan_muscle || "Unknown";
+}
+
+function getPlanSortTime(plan) {
+  const parsed = Date.parse(plan?.updatedAt || plan?.createdAt || "");
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isRealPlanForAiContext(plan) {
+  return (
+    plan?.status !== "draft-deleted" &&
+    !(plan?.status === "inactive" && plan?.aiAnalysis)
+  );
+}
+
+function isPerformedPlanForAiContext(plan) {
+  return (
+    isRealPlanForAiContext(plan) &&
+    (plan?.status === "active" ||
+      plan?.status === "completed" ||
+      (plan?.completions || []).length > 0)
+  );
+}
+
+function summarizePlanWeeklyMuscleVolume({
+  exerciseLibrary = [],
+  plan,
+  rows = [],
+}) {
+  if (!plan) {
+    return null;
+  }
+
+  const weekMap = new Map();
+
+  rows
+    .filter(
+      (row) =>
+        String(row.plan_id) === String(plan.id) &&
+        row.week_role === "training" &&
+        row.exercise_name &&
+        row.set_number !== ""
+    )
+    .forEach((row) => {
+      const weekNumber = Number(row.week_number) || 0;
+      const muscle = getPrimaryMuscleForExportRow(row, exerciseLibrary);
+
+      if (!weekNumber || !muscle) {
+        return;
+      }
+
+      const current = weekMap.get(weekNumber) || {};
+
+      current[muscle] = (current[muscle] || 0) + 1;
+      weekMap.set(weekNumber, current);
+    });
+
+  const weekly = [...weekMap.entries()]
+    .sort(([leftWeek], [rightWeek]) => leftWeek - rightWeek)
+    .map(([weekNumber, muscleSets]) => ({
+      muscleSets,
+      weekNumber,
+    }));
+  const averageByMuscle = {};
+
+  weekly.forEach((week) => {
+    Object.entries(week.muscleSets).forEach(([muscle, sets]) => {
+      averageByMuscle[muscle] = (averageByMuscle[muscle] || 0) + sets;
+    });
+  });
+
+  Object.keys(averageByMuscle).forEach((muscle) => {
+    averageByMuscle[muscle] = roundAiMetric(
+      averageByMuscle[muscle] / Math.max(weekly.length, 1),
+      1
+    );
+  });
+
+  return {
+    averageWeeklySetsByPrimaryMuscle: averageByMuscle,
+    planId: String(plan.id),
+    planName: plan.name || "Training Plan",
+    planStatus: plan.status || "inactive",
+    trainingWeeks: getPlanExportTrainingWeeks(plan),
+    weekly,
+  };
+}
+
+function buildWeeklyMuscleVolumeSummary({
+  exerciseLibrary = [],
+  plans = [],
+  templates = [],
+}) {
+  const realPlans = [...plans]
+    .filter(isRealPlanForAiContext)
+    .sort((left, right) => getPlanSortTime(right) - getPlanSortTime(left));
+  const activePlan = realPlans.find((plan) => plan.status === "active") || null;
+  const previousPlan =
+    realPlans.find(
+      (plan) =>
+        (!activePlan || String(plan.id) !== String(activePlan.id)) &&
+        isPerformedPlanForAiContext(plan)
+    ) || null;
+  const selectedPlanIds = [activePlan, previousPlan]
+    .filter(Boolean)
+    .map((plan) => String(plan.id));
+  const rows = selectedPlanIds.length
+    ? buildPlanExportRows({
+        plans,
+        selectedPlanIds,
+        templates,
+      })
+    : [];
+
+  return {
+    currentBlock: summarizePlanWeeklyMuscleVolume({
+      exerciseLibrary,
+      plan: activePlan,
+      rows,
+    }),
+    note:
+      "Counts prescribed working sets by primary muscle only. Secondary muscles are not counted here; use activePlanPrescriptionRows for exercise-level details.",
+    previousBlock: summarizePlanWeeklyMuscleVolume({
+      exerciseLibrary,
+      plan: previousPlan,
+      rows,
+    }),
+  };
+}
+
+function getBenchmarkFamilyForExercise(exercise) {
+  const name = normalizeExportText(exercise?.name || exercise?.exercise_name);
+  const equipment = normalizeExportText(getExerciseEquipmentLabel(exercise));
+
+  if (
+    equipment.includes("barbell") &&
+    (name === "bench press" || name === "incline bench press")
+  ) {
+    return "Chest barbell press";
+  }
+
+  if (
+    (equipment.includes("barbell") || equipment.includes("trap bar")) &&
+    /(^| )deadlifts?$|sumo deadlifts?|deficit deadlifts?/.test(name)
+  ) {
+    return "Lower/posterior-chain deadlift";
+  }
+
+  if (/pull[- ]?ups?|chin[- ]?ups?/.test(name)) {
+    return "Back pull-up/chin-up";
+  }
+
+  return "";
+}
+
+function getRepRangeBucket(reps) {
+  if (!Number.isFinite(reps)) {
+    return null;
+  }
+
+  if (reps >= 4 && reps <= 6) {
+    return "4-6";
+  }
+
+  if (reps >= 7 && reps <= 9) {
+    return "7-9";
+  }
+
+  if (reps >= 10 && reps <= 12) {
+    return "10-12";
+  }
+
+  return `${Math.round(reps)} reps`;
+}
+
+function buildHistoryPerformanceRows({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+}) {
+  const rows = [];
+
+  [...history]
+    .sort((left, right) => getHistoryWorkoutTime(left) - getHistoryWorkoutTime(right))
+    .forEach((workout) => {
+      const completedAt = getHistoryWorkoutIso(workout);
+      const bodyWeight = getLatestBodyWeightForDate(
+        bodyWeightEntries,
+        completedAt || workout.completedAt || workout.completed_at
+      );
+
+      (workout.exercises || []).forEach((historyExercise, exerciseIndex) => {
+        const exercise = findExerciseForHistoryExercise(historyExercise, exerciseLibrary);
+
+        (historyExercise.sets || []).forEach((set, setIndex) => {
+          if (set.completed === false || set.completed === "false") {
+            return;
+          }
+
+          const weight = parseHistoryMetricValue(set.actualWeight ?? set.actual_weight);
+          const reps = parseHistoryMetricValue(set.actualReps ?? set.actual_reps);
+          const rir = parseHistoryMetricValue(set.actualRir ?? set.actual_rir);
+          const e1rm = getHistorySetE1RM(set, exercise, bodyWeight);
+
+          rows.push({
+            completedAt,
+            date: completedAt ? completedAt.slice(0, 10) : "",
+            e1rm,
+            equipment: getExerciseEquipmentLabel(exercise),
+            exercise,
+            exerciseId: exercise.exerciseId ?? exercise.exercise_id ?? exercise.id ?? "",
+            exerciseIndex,
+            exerciseKey: getHistoryExerciseKey(exercise),
+            exerciseName: getHistoryExerciseName(exercise),
+            planId: workout.planId || workout.plan_id || "",
+            planWeek: Number(workout.planWeek || workout.plan_week) || null,
+            planWorkoutId: workout.planWorkoutId || workout.plan_workout_id || "",
+            reps,
+            rir,
+            set,
+            setIndex,
+            weight,
+            workoutId: workout.id || workout.source_key || "",
+            workoutName: getWorkoutName(workout),
+            workoutTime: getHistoryWorkoutTime(workout),
+          });
+        });
+      });
+    });
+
+  return rows;
+}
+
+function buildBenchmarkRepRangeTrends({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+}) {
+  const grouped = new Map();
+
+  buildHistoryPerformanceRows({ bodyWeightEntries, exerciseLibrary, history }).forEach(
+    (row) => {
+      if (!Number.isFinite(row.e1rm) || !Number.isFinite(row.reps)) {
+        return;
+      }
+
+      const benchmarkFamily = getBenchmarkFamilyForExercise(row.exercise);
+      const repRange = getRepRangeBucket(row.reps);
+
+      if (!benchmarkFamily || !repRange) {
+        return;
+      }
+
+      const key = `${benchmarkFamily}|${row.exerciseKey}|${repRange}`;
+      const current = grouped.get(key) || {
+        benchmarkFamily,
+        equipment: row.equipment,
+        exerciseId: row.exerciseId,
+        exerciseName: row.exerciseName,
+        observations: [],
+        repRange,
+      };
+
+      current.observations.push(row);
+      grouped.set(key, current);
+    }
+  );
+
+  return [...grouped.values()]
+    .filter((group) => group.observations.length >= 2)
+    .map((group) => {
+      const observations = group.observations.sort(
+        (left, right) => left.workoutTime - right.workoutTime
+      );
+      const first = observations[0];
+      const latest = observations.at(-1);
+      const best = observations.reduce((currentBest, row) =>
+        row.e1rm > currentBest.e1rm ? row : currentBest
+      );
+
+      return {
+        benchmarkFamily: group.benchmarkFamily,
+        best: {
+          date: best.date,
+          e1rm: roundAiMetric(best.e1rm),
+          reps: best.reps,
+          rir: best.rir,
+          weight: best.weight,
+        },
+        changeFromFirstToLatest: roundAiMetric(latest.e1rm - first.e1rm),
+        equipment: group.equipment,
+        exerciseId: group.exerciseId,
+        exerciseName: group.exerciseName,
+        first: {
+          date: first.date,
+          e1rm: roundAiMetric(first.e1rm),
+          reps: first.reps,
+          rir: first.rir,
+          weight: first.weight,
+        },
+        latest: {
+          date: latest.date,
+          e1rm: roundAiMetric(latest.e1rm),
+          reps: latest.reps,
+          rir: latest.rir,
+          weight: latest.weight,
+        },
+        observationCount: observations.length,
+        repRange: group.repRange,
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.benchmarkFamily.localeCompare(right.benchmarkFamily) ||
+        left.exerciseName.localeCompare(right.exerciseName) ||
+        left.repRange.localeCompare(right.repRange)
+    );
+}
+
+function buildPerformanceDropOffSummaries({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+}) {
+  const sessionsByExercise = new Map();
+  const rows = buildHistoryPerformanceRows({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+  const groupedBySessionExercise = new Map();
+
+  rows.forEach((row) => {
+    if (!Number.isFinite(row.e1rm)) {
+      return;
+    }
+
+    const key = `${row.workoutId}|${row.exerciseKey}`;
+    const current = groupedBySessionExercise.get(key) || {
+      equipment: row.equipment,
+      exerciseId: row.exerciseId,
+      exerciseKey: row.exerciseKey,
+      exerciseName: row.exerciseName,
+      rows: [],
+      workoutName: row.workoutName,
+    };
+
+    current.rows.push(row);
+    groupedBySessionExercise.set(key, current);
+  });
+
+  groupedBySessionExercise.forEach((session) => {
+    const setRows = session.rows.sort((left, right) => left.setIndex - right.setIndex);
+
+    if (setRows.length < 2) {
+      return;
+    }
+
+    const first = setRows[0];
+    const latest = setRows.at(-1);
+    const best = setRows.reduce((currentBest, row) =>
+      row.e1rm > currentBest.e1rm ? row : currentBest
+    );
+    const dropPercent =
+      first.e1rm > 0 ? ((first.e1rm - latest.e1rm) / first.e1rm) * 100 : null;
+    const current = sessionsByExercise.get(session.exerciseKey) || {
+      equipment: session.equipment,
+      exerciseId: session.exerciseId,
+      exerciseName: session.exerciseName,
+      sessions: [],
+    };
+
+    current.sessions.push({
+      bestSetE1RM: roundAiMetric(best.e1rm),
+      date: first.date,
+      dropPercent: roundAiMetric(dropPercent, 1),
+      firstSetE1RM: roundAiMetric(first.e1rm),
+      lastSetE1RM: roundAiMetric(latest.e1rm),
+      setCount: setRows.length,
+      workoutName: session.workoutName,
+    });
+    sessionsByExercise.set(session.exerciseKey, current);
+  });
+
+  return [...sessionsByExercise.values()]
+    .map((exercise) => {
+      const recentSessions = exercise.sessions
+        .sort((left, right) => String(right.date).localeCompare(String(left.date)))
+        .slice(0, 6);
+      const drops = recentSessions
+        .map((session) => session.dropPercent)
+        .filter((value) => value != null);
+
+      return {
+        averageRecentDropPercent:
+          drops.length > 0
+            ? roundAiMetric(
+                drops.reduce((sum, value) => sum + value, 0) / drops.length,
+                1
+              )
+            : null,
+        equipment: exercise.equipment,
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+        recentSessions,
+        sessionCount: exercise.sessions.length,
+      };
+    })
+    .filter((exercise) => exercise.sessionCount >= 2)
+    .sort(
+      (left, right) =>
+        (right.averageRecentDropPercent || 0) -
+          (left.averageRecentDropPercent || 0) ||
+        right.sessionCount - left.sessionCount
+    )
+    .slice(0, 20);
+}
+
+function buildPrescriptionAdherenceSummaries({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+}) {
+  const grouped = new Map();
+
+  buildHistoryPerformanceRows({ bodyWeightEntries, exerciseLibrary, history }).forEach(
+    (row) => {
+      const targetReps =
+        parseAiTargetRange(
+          row.set?.prescribedReps ?? row.set?.targetReps ?? row.set?.reps
+        ) || null;
+      const targetRir =
+        parseAiTargetRange(
+          row.set?.prescribedRir ?? row.set?.targetRir ?? row.set?.rir
+        ) || null;
+
+      if (!targetReps && !targetRir) {
+        return;
+      }
+
+      const current = grouped.get(row.exerciseKey) || {
+        equipment: row.equipment,
+        exerciseId: row.exerciseId,
+        exerciseName: row.exerciseName,
+        repsHigh: 0,
+        repsLow: 0,
+        repsMatched: 0,
+        repsTargets: 0,
+        rirHigherThanTarget: 0,
+        rirLowerThanTarget: 0,
+        rirMatched: 0,
+        rirTargets: 0,
+        totalSets: 0,
+      };
+
+      current.totalSets += 1;
+
+      if (targetReps && Number.isFinite(row.reps)) {
+        current.repsTargets += 1;
+        if (row.reps < targetReps.min) {
+          current.repsLow += 1;
+        } else if (row.reps > targetReps.max) {
+          current.repsHigh += 1;
+        } else {
+          current.repsMatched += 1;
+        }
+      }
+
+      if (targetRir && Number.isFinite(row.rir)) {
+        current.rirTargets += 1;
+        if (row.rir < targetRir.min) {
+          current.rirLowerThanTarget += 1;
+        } else if (row.rir > targetRir.max) {
+          current.rirHigherThanTarget += 1;
+        } else {
+          current.rirMatched += 1;
+        }
+      }
+
+      grouped.set(row.exerciseKey, current);
+    }
+  );
+
+  return [...grouped.values()]
+    .filter((summary) => summary.totalSets >= 4)
+    .map((summary) => ({
+      ...summary,
+      repsMatchRate:
+        summary.repsTargets > 0
+          ? roundAiMetric(summary.repsMatched / summary.repsTargets, 2)
+          : null,
+      rirMatchRate:
+        summary.rirTargets > 0
+          ? roundAiMetric(summary.rirMatched / summary.rirTargets, 2)
+          : null,
+    }))
+    .sort(
+      (left, right) =>
+        right.totalSets - left.totalSets ||
+        String(left.exerciseName).localeCompare(String(right.exerciseName))
+    )
+    .slice(0, 40);
+}
+
+function buildBlockOutcomeSummaries({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+  plans = [],
+  templates = [],
+}) {
+  const performedPlans = [...plans]
+    .filter(isPerformedPlanForAiContext)
+    .sort((left, right) => getPlanSortTime(right) - getPlanSortTime(left))
+    .slice(0, 3);
+  const planRows = performedPlans.length
+    ? buildPlanExportRows({
+        plans,
+        selectedPlanIds: performedPlans.map((plan) => String(plan.id)),
+        templates,
+      })
+    : [];
+  const performanceRows = buildHistoryPerformanceRows({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+
+  return performedPlans.map((plan) => {
+    const matchingRows = performanceRows.filter(
+      (row) => String(row.planId) === String(plan.id)
+    );
+    const workoutKeys = new Set(
+      matchingRows.map((row) => row.workoutId).filter(Boolean)
+    );
+    const benchmarkRows = matchingRows.filter((row) =>
+      getBenchmarkFamilyForExercise(row.exercise)
+    );
+    const bestBenchmarkByFamily = new Map();
+
+    benchmarkRows.forEach((row) => {
+      if (!Number.isFinite(row.e1rm)) {
+        return;
+      }
+
+      const family = getBenchmarkFamilyForExercise(row.exercise);
+      const current = bestBenchmarkByFamily.get(family);
+
+      if (!current || row.e1rm > current.e1rm) {
+        bestBenchmarkByFamily.set(family, row);
+      }
+    });
+
+    return {
+      benchmarkBestByFamily: [...bestBenchmarkByFamily.entries()].map(
+        ([family, row]) => ({
+          date: row.date,
+          e1rm: roundAiMetric(row.e1rm),
+          exerciseName: row.exerciseName,
+          family,
+          reps: row.reps,
+          rir: row.rir,
+          weight: row.weight,
+        })
+      ),
+      completedWeeks: [
+        ...new Set(
+          (plan.completions || [])
+            .map((completion) => Number(completion.weekNumber) || null)
+            .filter(Boolean)
+        ),
+      ].sort((left, right) => left - right),
+      completedWorkoutCount: workoutKeys.size,
+      planId: String(plan.id),
+      planName: plan.name || "Training Plan",
+      planStatus: plan.status || "inactive",
+      prescribedAverageWeeklySetsByPrimaryMuscle:
+        summarizePlanWeeklyMuscleVolume({
+          exerciseLibrary,
+          plan,
+          rows: planRows,
+        })?.averageWeeklySetsByPrimaryMuscle || {},
+      trainingWeeks: getPlanExportTrainingWeeks(plan),
+    };
+  });
 }
 
 function buildAiPlanDraftInstructions() {
@@ -1489,20 +2384,28 @@ function buildAiPlanDraftInstructions() {
               equipment: "string or string[]",
               name: "string matching the exercise library when possible",
               sets: [
-                {
-                  reps: "number or string",
-                  rir: "number or string",
-                },
-              ],
-              weeklyPrescriptions:
-                "optional [{ weekNumber, sets, reps, rir, isDeload }]",
+            {
+              restSeconds:
+                "optional number; prescribed rest after completing this set, in seconds. If omitted, the app uses exercise.restSeconds or the current rep-based defaults.",
+              reps: "number or string",
+              rir: "number or string",
             },
           ],
+          restSeconds:
+            "optional number; default prescribed rest after sets for this exercise, in seconds",
+          weeklyPrescriptions:
+            "optional [{ weekNumber, sets, reps, rir, restSeconds, isDeload }]",
+        },
+      ],
           name: "string",
           workoutType: "push | pull | lower | upper | full-body | optional string",
         },
       ],
     },
+    fileOutput:
+      "Create the completed draft as a .json file named workout-ai-plan-draft.json when the interface supports file/artifact creation. The file contents must be exactly one valid JSON object matching importSchema, with no Markdown fences or prose outside the JSON. If you cannot create a file, return only the JSON file contents so it can be saved as workout-ai-plan-draft.json and imported into the app.",
+    continuity:
+      "Imported analysis.summary, analysis.rationale, and analysis.watchNext are stored with the draft plan. After the plan is activated and performed, later context exports include those notes in previousPlanAIContext so the next plan can evaluate the prior hypothesis, rationale, and watch items.",
     safety:
       "The app imports drafts as inactive plans only. Review the plan before activating it.",
   };
@@ -1588,8 +2491,12 @@ function buildTrainingProfileContext() {
         "Choose one or more allowed variants from each benchmark family based on history, fatigue, equipment, and plan intent; do not force every listed variant into the same week.",
       benchmarkPlacement:
         "When a benchmark exercise is included, place it before other direct exercises for that benchmark's primary muscle group in that workout so its e1RM signal is meaningful. It does not have to be the first exercise in the workout when the plan intentionally prioritizes another muscle or movement first.",
+      benchmarkIsolation:
+        "A benchmark exercise intended for longitudinal e1RM tracking should normally be performed before other exercises that substantially fatigue its primary movers. When multiple benchmark exercises target the same muscle group, prefer placing their primary benchmark exposures first on separate training days rather than performing them sequentially in the same workout. If one same-muscle benchmark must follow another, only the first should generally be treated as the primary performance benchmark for that session.",
       benchmarkPurpose:
         "Benchmark exercises are the primary exercises used to evaluate strength progression through e1RM. Supporting exercises should still progress where practical, but their e1RM trends are secondary and should not override benchmark performance, hypertrophy goals, fatigue management, or exercise-role considerations.",
+      primaryVsSupportingBenchmarkExposure:
+        "An exercise designated as a benchmark may also appear elsewhere in the week as supporting strength or hypertrophy volume. Only exposures performed under appropriate low-fatigue conditions should be treated as primary benchmark exposures for evaluating e1RM progression.",
       benchmarkRecurrence:
         "Benchmark exercises should normally recur consistently enough during the training block to provide a meaningful e1RM trend, but variations may be rotated when justified.",
       inactiveDraft:
@@ -1874,9 +2781,30 @@ function buildNutritionTrendContext({
     };
   }
 
-  const latestDate = allRows.at(-1).date;
+  const excludedNoGoalDays = allRows.filter((row) => row.calorieGoal <= 0).length;
+  const excludedPartialDays = allRows.filter(
+    (row) => row.calorieGoal > 0 && row.calories < row.calorieGoal * 0.5
+  ).length;
+  const usableRows = allRows.filter(
+    (row) => row.calorieGoal > 0 && row.calories >= row.calorieGoal * 0.5
+  );
+
+  if (usableRows.length === 0) {
+    return {
+      available: false,
+      excludedDays: {
+        belowHalfCalorieGoal: excludedPartialDays,
+        missingCalorieGoal: excludedNoGoalDays,
+      },
+      note:
+        "Nutrition entries existed, but no days met the completeness filter. Days without a calorie goal or with less than 50% of the calorie target logged are excluded from AI context.",
+      rawLoggedDays: allRows.length,
+    };
+  }
+
+  const latestDate = usableRows.at(-1).date;
   const rowsSinceDays = (days) =>
-    allRows.filter((row) => daysBetweenDateKeys(row.date, latestDate) < days);
+    usableRows.filter((row) => daysBetweenDateKeys(row.date, latestDate) < days);
   const dailyRows = rowsSinceDays(lookbackDays);
   const rowsWithGoals = dailyRows.filter((row) => row.calorieGoal > 0);
   const daysUnderGoal = rowsWithGoals.filter(
@@ -1897,6 +2825,10 @@ function buildNutritionTrendContext({
       thirtyDay: averageNutritionRows(rowsSinceDays(30)),
     },
     dailyRows,
+    excludedDays: {
+      belowHalfCalorieGoal: excludedPartialDays,
+      missingCalorieGoal: excludedNoGoalDays,
+    },
     goalAdherence: {
       daysOverGoal,
       daysUnderGoal,
@@ -1907,7 +2839,8 @@ function buildNutritionTrendContext({
     latestDate,
     lookbackDays,
     note:
-      "Daily rows are macro totals, not individual foods. Use nutrition trend as context for strength, recovery, and hypertrophy recommendations.",
+      "Daily rows are macro totals, not individual foods. Days without a calorie goal or with less than 50% of the calorie target logged are excluded to avoid treating incomplete logs as intake data.",
+    rawLoggedDays: allRows.length,
   };
 }
 
@@ -1957,6 +2890,40 @@ function buildAiPlanContext({
     calorieGoalHistory,
     nutritionEntries,
   });
+  const weeklyMuscleVolumeSummary = buildWeeklyMuscleVolumeSummary({
+    exerciseLibrary,
+    plans,
+    templates,
+  });
+  const benchmarkRepRangeTrends = buildBenchmarkRepRangeTrends({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+  const performanceDropOffSummaries = buildPerformanceDropOffSummaries({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+  const prescriptionAdherenceSummaries = buildPrescriptionAdherenceSummaries({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+  });
+  const blockOutcomeSummaries = buildBlockOutcomeSummaries({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+    plans,
+    templates,
+  });
+  const recentPlanExposure = buildRecentPlanExposureContext({
+    exerciseLibrary,
+    history,
+    plans,
+    templates,
+  });
+  const previousPlanAIContext = buildPreviousPlanAiContext({ plans });
   const activeExercises = exerciseLibrary
     .filter((exercise) => exercise.active !== "inactive")
     .map((exercise) => ({
@@ -1974,22 +2941,35 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Return only valid JSON using draftInstructions.importSchema so I can paste it back into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
+      benchmarkRepRangeTrendRows: benchmarkRepRangeTrends.length,
+      blockOutcomeRows: blockOutcomeSummaries.length,
       completedSetRows: historyRows.length,
       nutritionDays:
         nutritionTrend.available ? nutritionTrend.goalAdherence.daysWithEntries : 0,
+      performanceDropOffRows: performanceDropOffSummaries.length,
       planPrescriptionRows: planRows.length,
+      prescriptionAdherenceRows: prescriptionAdherenceSummaries.length,
+      previousPlanAIContextRows: previousPlanAIContext.length,
+      recentPlanExposureRows: recentPlanExposure.length,
       trackedExerciseCount: brief.trackedExercises.length,
       workoutCount: brief.workoutCount,
     },
     bodyWeightTrend,
     nutritionTrend,
+    weeklyMuscleVolumeSummary,
+    benchmarkRepRangeTrends,
+    performanceDropOffSummaries,
+    prescriptionAdherenceSummaries,
+    blockOutcomeSummaries,
     trainingProfile: buildTrainingProfileContext(),
     coachBrief: buildAiContextCoachBrief(brief),
     activeExercises,
+    previousPlanAIContext,
+    recentPlanExposure,
     activePlanPrescriptionRows: planRows,
     completedSetRows: historyRows,
   };
@@ -2001,11 +2981,17 @@ function getAiPlanPrompt(context) {
     "",
     "Please evaluate my progress and create the next plan/workout draft from it.",
     "Use the exercise names/equipment in activeExercises when possible.",
+    "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
+    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as the primary derived metrics before falling back to raw completedSetRows.",
+    "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
-    "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
+    "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
+    "You may prescribe restSeconds at the exercise or set level. If omitted, the app will use its current rep-based rest defaults.",
     "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
     "Put any observations, rationale, and watch items inside the optional analysis object so the entire response remains importable JSON.",
     "Use plan.trainingWeeks for normal training weeks and plan.deloadWeeks for deload weeks. Do not use plan.durationWeeks unless you are maintaining backward compatibility with an older draft.",
+    "Create the completed draft as a .json file named workout-ai-plan-draft.json when this chat interface supports file or artifact creation.",
+    "The .json file contents must be exactly one valid JSON object with no Markdown fences or prose outside the JSON. If you cannot create a file, return only the JSON file contents so I can save it as workout-ai-plan-draft.json and import it.",
     "",
     "Return only valid JSON with this top-level shape:",
     JSON.stringify(buildAiPlanDraftInstructions().requiredShape, null, 2),
@@ -2085,6 +3071,18 @@ function normalizeAiDraftEquipment(value) {
     .filter(Boolean);
 }
 
+function getAiDraftRestSeconds(...values) {
+  for (const value of values) {
+    const restSeconds = normalizeRestSeconds(value);
+
+    if (restSeconds) {
+      return restSeconds;
+    }
+  }
+
+  return null;
+}
+
 function findAiDraftExercise(exerciseDraft, exerciseLibrary = []) {
   const draftName = normalizeExportText(exerciseDraft?.name);
   const draftEquipment = normalizeExportText(
@@ -2143,6 +3141,10 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
                 rir: exerciseDraft.rir,
               })
             );
+        const exerciseRestSeconds = getAiDraftRestSeconds(
+          exerciseDraft.restSeconds,
+          exerciseDraft.rest_seconds
+        );
 
         if (!libraryExercise) {
           unmatchedExercises.push(exerciseDraft.name || `Exercise ${exerciseIndex + 1}`);
@@ -2160,11 +3162,25 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
           sets: setDrafts.map((setDraft, setIndex) => ({
             id: importedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
             reps: String(setDraft?.reps ?? exerciseDraft.reps ?? ""),
+            restSeconds:
+              getAiDraftRestSeconds(
+                setDraft?.restSeconds,
+                setDraft?.rest_seconds,
+                exerciseRestSeconds
+              ) || undefined,
             rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
           })),
           supersetGroup: exerciseDraft.supersetGroup || null,
           weeklyPrescriptions: Array.isArray(exerciseDraft.weeklyPrescriptions)
-            ? exerciseDraft.weeklyPrescriptions
+            ? exerciseDraft.weeklyPrescriptions.map((week) => ({
+                ...week,
+                restSeconds:
+                  getAiDraftRestSeconds(
+                    week?.restSeconds,
+                    week?.rest_seconds,
+                    exerciseRestSeconds
+                  ) || undefined,
+              }))
             : [],
         };
       }),
@@ -2204,6 +3220,20 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
       dayNumber: template.dayNumber || index + 1,
       name: template.name,
       planWorkoutId: template.planWorkoutId,
+      setRestSecondsByPosition: (template.exercises || []).reduce(
+        (restByPosition, exercise, exerciseIndex) => {
+          const restSeconds = (exercise.sets || []).map((set) =>
+            normalizeRestSeconds(set.restSeconds)
+          );
+
+          if (restSeconds.some(Boolean)) {
+            restByPosition[exerciseIndex + 1] = restSeconds;
+          }
+
+          return restByPosition;
+        },
+        {}
+      ),
       templateId: template.id,
       workoutType: template.workoutType,
       workoutTypeLabel: template.workoutTypeLabel,
@@ -2331,6 +3361,7 @@ function attachPlanLinksToTemplates(templates, plans) {
       planLinksByTemplateId.set(String(workout.templateId), {
         planId: plan.id,
         planWorkoutId: workout.planWorkoutId,
+        setRestSecondsByPosition: workout.setRestSecondsByPosition || {},
         weeklyPrescriptionsByPosition:
           workout.weeklyPrescriptionsByPosition || {},
         workoutType: workout.workoutType || null,
@@ -2355,13 +3386,30 @@ function attachPlanLinksToTemplates(templates, plans) {
         (exercise, exerciseIndex) => {
           const weeklyPrescriptions =
             link.weeklyPrescriptionsByPosition?.[exerciseIndex + 1];
+          const setRestSeconds =
+            link.setRestSecondsByPosition?.[exerciseIndex + 1];
+          const exerciseWithRest = Array.isArray(setRestSeconds)
+            ? {
+                ...exercise,
+                sets: (exercise.sets || []).map((set, setIndex) => ({
+                  ...set,
+                  ...(normalizeRestSeconds(setRestSeconds[setIndex])
+                    ? {
+                        restSeconds: normalizeRestSeconds(
+                          setRestSeconds[setIndex]
+                        ),
+                      }
+                    : {}),
+                })),
+              }
+            : exercise;
 
           if (!Array.isArray(weeklyPrescriptions)) {
-            return exercise;
+            return exerciseWithRest;
           }
 
           return {
-            ...exercise,
+            ...exerciseWithRest,
             weeklyPrescriptions,
           };
         }
@@ -5214,6 +6262,7 @@ export default function App() {
         "prescribed_sets",
         "prescribed_reps",
         "prescribed_rir",
+        "rest_seconds",
       ],
       rows
     );

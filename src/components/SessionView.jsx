@@ -922,6 +922,19 @@ export default function SessionView({
     return firstPresentValue(set?.prescribedRir, set?.rir, set?.targetRir, fallback);
   }
 
+  function getSetPrescribedRestSeconds(set, fallback = null) {
+    const parsed = Number(
+      firstPresentValue(
+        set?.prescribedRestSeconds,
+        set?.restSeconds,
+        set?.rest_seconds,
+        fallback
+      )
+    );
+
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+  }
+
   function getSetTargetReps(set, fallback = "") {
     return firstPresentValue(set?.targetReps, getSetPrescribedReps(set), fallback);
   }
@@ -2634,6 +2647,7 @@ export default function SessionView({
   function addSet(exerciseId, lastSet) {
     const prescribedReps = getSetPrescribedReps(lastSet);
     const prescribedRir = getSetPrescribedRir(lastSet);
+    const prescribedRestSeconds = getSetPrescribedRestSeconds(lastSet);
     const newSet = {
       id: Date.now(),
 
@@ -2645,9 +2659,13 @@ export default function SessionView({
 
       prescribedReps,
 
+      prescribedRestSeconds: prescribedRestSeconds || undefined,
+
       prescribedRir,
 
       reps: prescribedReps,
+
+      restSeconds: prescribedRestSeconds || undefined,
 
       rir: prescribedRir,
 
@@ -2991,6 +3009,21 @@ export default function SessionView({
     return parseTimerReps(nextTargetReps);
   }
 
+  function getNextSetTimerRestSeconds(nextActiveSet) {
+    if (!nextActiveSet) {
+      return null;
+    }
+
+    const nextExercise = session.exercises.find(
+      (exercise) => exercise.id === nextActiveSet.exerciseId
+    );
+    const nextSet = nextExercise?.sets.find(
+      (set) => set.id === nextActiveSet.setId
+    );
+
+    return getSetPrescribedRestSeconds(nextSet);
+  }
+
   function setRestTimerForNextSet(
     nextActiveSet,
     completedSetContext = {},
@@ -3017,13 +3050,14 @@ export default function SessionView({
       return;
     }
 
+    const prescribedRestSeconds = getNextSetTimerRestSeconds(nextActiveSet);
     const reps = getNextSetTimerReps(nextActiveSet, completedSetContext);
 
-    if (reps == null) {
+    if (prescribedRestSeconds == null && reps == null) {
       return;
     }
 
-    const duration = getRestDurationForReps(reps);
+    const duration = prescribedRestSeconds || getRestDurationForReps(reps);
 
     setRestMinutes(Math.floor(duration / 60));
     setRestRemainder(duration % 60);
@@ -3600,6 +3634,7 @@ export default function SessionView({
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
           reps: getSetPrescribedReps(set),
+          restSeconds: getSetPrescribedRestSeconds(set) || undefined,
           rir: getSetPrescribedRir(set),
         })),
       };
@@ -4342,6 +4377,12 @@ export default function SessionView({
         ? {
             prescribedReps: getSetPrescribedReps(sessionSet),
             reps: getSetPrescribedReps(sessionSet),
+          }
+        : {}),
+      ...(getSetPrescribedRestSeconds(sessionSet)
+        ? {
+            prescribedRestSeconds: getSetPrescribedRestSeconds(sessionSet),
+            restSeconds: getSetPrescribedRestSeconds(sessionSet),
           }
         : {}),
       ...(selectedFields?.has("rir")
