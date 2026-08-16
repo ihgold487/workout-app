@@ -185,6 +185,7 @@ export default function ExerciseView({
   bodyWeightEntries = [],
   exerciseLibrary,
   history = [],
+  onUpdateHistoryWorkoutSet,
   session = null,
   setExerciseLibrary,
 }) {
@@ -1847,6 +1848,7 @@ export default function ExerciseView({
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
+          onUpdateHistoryWorkoutSet={onUpdateHistoryWorkoutSet}
         />
       )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Brain,
@@ -761,6 +761,7 @@ function buildTrainerWorkoutPayload(workout) {
 const WEEKLY_RIR_VALUES = [0, 1, 2, 3, 4, 5, 6];
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
+const AI_PLAN_DRAFT_STORAGE_KEY = "workoutAppLastAiPlanDraftJson";
 
 const PLAN_TYPE_DEFAULTS = {
   "type-1": {
@@ -811,10 +812,48 @@ const PLAN_TYPE_DEFAULTS = {
     rir: "3",
     sets: "3",
   },
+  ai: {
+    deload: true,
+    daysPerWeek: "5",
+    durationWeeks: "5",
+    goal: "progress",
+    rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
+    reps: "8",
+    rir: "3",
+    sets: "3",
+  },
 };
 
 function getPlanTypeDefaults(planType) {
   return PLAN_TYPE_DEFAULTS[planType] || PLAN_TYPE_DEFAULTS["type-2"];
+}
+
+function readStoredAiPlanDraftText() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  try {
+    return window.localStorage.getItem(AI_PLAN_DRAFT_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredAiPlanDraftText(text) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (String(text || "").trim()) {
+      window.localStorage.setItem(AI_PLAN_DRAFT_STORAGE_KEY, text);
+    } else {
+      window.localStorage.removeItem(AI_PLAN_DRAFT_STORAGE_KEY);
+    }
+  } catch {
+    // Local draft restore is optional; ignore storage failures.
+  }
 }
 
 function buildEditablePlanWorkouts(plan, templates) {
@@ -1183,6 +1222,7 @@ function getPlanTypeLabel(planType) {
     "type-3": "Plan Type 3 'Ira'",
     "type-4": "Plan Type 4 'General'",
     "type-5": "Plan Type 5 'App'",
+    ai: "Plan Type AI",
   };
 
   return labels[planType] || labels["type-2"];
@@ -1195,6 +1235,7 @@ function getCompactPlanTypeLabel(planType) {
     "type-3": "P3",
     "type-4": "P4",
     "type-5": "P5",
+    ai: "AI",
   };
 
   return labels[planType] || labels["type-2"];
@@ -2254,7 +2295,11 @@ export default function PlansView({
   exerciseLibrary,
   exerciseMetadata,
   history,
+  onBuildAiPlanDraft,
   onCancel,
+  onCopyAiPlanPrompt,
+  onDownloadAiPlanContext,
+  onOpenChatGptForAiPlan,
   onShowAiPlanNotes,
   onSave,
   plans,
@@ -2262,7 +2307,7 @@ export default function PlansView({
   setTemplates,
   templates,
 }) {
-  const initialPlanType = editingPlan?.planType || "type-4";
+  const initialPlanType = editingPlan?.planType || "ai";
   const initialPlanDefaults = getPlanTypeDefaults(initialPlanType);
   const editingPlanConfig = editingPlan?.config || {};
   const initialDaysPerWeek = formatPlanSetting(
@@ -2338,6 +2383,14 @@ export default function PlansView({
   const [pickerMuscle, setPickerMuscle] = useState("");
   const [summaryWorkout, setSummaryWorkout] = useState(null);
   const [planSummaryOpen, setPlanSummaryOpen] = useState(false);
+  const [aiPlanDraftText, setAiPlanDraftText] = useState(() =>
+    editingPlan ? "" : readStoredAiPlanDraftText()
+  );
+  const [aiPlanStatus, setAiPlanStatus] = useState("");
+  const [aiPlanAnalysis, setAiPlanAnalysis] = useState(editingPlan?.aiAnalysis || null);
+  const [aiPlanDeloadWeeks, setAiPlanDeloadWeeks] = useState(
+    editingPlanConfig.deloadWeeks ?? null
+  );
   const [detailExercise, setDetailExercise] = useState(null);
   const [activeValuePicker, setActiveValuePicker] = useState(null);
   const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
@@ -2346,6 +2399,7 @@ export default function PlansView({
   const [dayOrder, setDayOrder] = useState(null);
   const planStickyHeaderRef = useRef(null);
   const planDayStripRef = useRef(null);
+  const aiPlanDraftRestoredRef = useRef(false);
   const [trainerUsers, setTrainerUsers] = useState([]);
   const [selectedTrainerUserId, setSelectedTrainerUserId] = useState("");
   const [trainerPreferences, setTrainerPreferences] = useState([]);
@@ -2367,6 +2421,7 @@ export default function PlansView({
   const isPlanEditMode = Boolean(editingPlan) || createPreviewEditMode;
   const isCreateDraftEditMode =
     !editingPlan && generationMode === "plan" && createPreviewEditMode;
+  const isAiPlanType = generationMode === "plan" && planType === "ai";
   const showPlanSetPicker =
     generationMode === "plan" &&
     ["type-3", "type-4", "type-5"].includes(planType);
@@ -2511,6 +2566,13 @@ export default function PlansView({
         };
       }
 
+      if (isAiPlanType) {
+        return {
+          gaps: [],
+          workouts: [],
+        };
+      }
+
       return generatePlanWorkouts({
         daysPerWeek,
         durationWeeks,
@@ -2538,6 +2600,7 @@ export default function PlansView({
       generationMode,
       goal,
       history,
+      isAiPlanType,
       recentPlanHistoryWorkouts,
       planType,
       reps,
@@ -2745,6 +2808,8 @@ export default function PlansView({
   const displayedWorkoutKey = displayedWorkout?.previewWorkoutKey ?? 0;
   const canEditPlanDays = generationMode === "plan";
   const canAddPlanDay = generationMode === "plan" && isPlanEditMode;
+  const canSaveGeneratedPlan =
+    generationMode === "workout" || orderedPreviewWorkouts.length > 0;
   const weeklyPrescriptionExercise = useMemo(() => {
     if (!weeklyPrescriptionTarget) {
       return null;
@@ -3207,6 +3272,112 @@ export default function PlansView({
     resetPlanPreviewEdits();
   }
 
+  const applyAiPlanDraftText = useCallback((text, sourceName = "AI plan draft") => {
+    if (typeof onBuildAiPlanDraft !== "function") {
+      setAiPlanStatus("AI plan draft import is unavailable.");
+      return;
+    }
+
+    try {
+      const imported = onBuildAiPlanDraft(text);
+      const importedPlan = imported.plan || {};
+      const importedConfig = importedPlan.config || {};
+      const importedWorkouts = clonePlanEditWorkouts(imported.templates || []);
+
+      setAiPlanDraftText(text);
+      writeStoredAiPlanDraftText(text);
+      setPlanType("ai");
+      setGenerationMode("plan");
+      setPlanName(importedPlan.name || sourceName || "AI Plan Draft");
+      setIsPlanNameCustom(true);
+      setDaysPerWeek(String(importedPlan.daysPerWeek || importedWorkouts.length || "5"));
+      setDurationWeeks(String(importedPlan.durationWeeks || "5"));
+      setDeload(Boolean(importedConfig.deload));
+      setAiPlanDeloadWeeks(importedConfig.deloadWeeks ?? null);
+      setGoal(importedPlan.goal || "progress");
+      setReps(formatPlanSetting(importedConfig.reps, "8"));
+      setRir(formatPlanSetting(importedConfig.rir, "3"));
+      setSets(formatPlanSetting(importedConfig.sets, "3"));
+      setRirPeriodization(
+        importedConfig.rirPeriodization ||
+          getDefaultRirPeriodizationMode("ai")
+      );
+      setAiPlanAnalysis(importedPlan.aiAnalysis || null);
+      setEditPreviewWorkouts(importedWorkouts);
+      setCreatePreviewEditMode(true);
+      setCreatePreviewEditSnapshot(null);
+      setActiveWorkoutIndex(importedWorkouts[0]?.previewWorkoutKey || 0);
+      setDayOrder(null);
+      setWorkoutNameBySlot({});
+      setWorkoutTypeByDay({});
+      setReplacementBySlot({});
+      setExerciseLayoutByWorkout(null);
+      setSupersetGroupBySlot({});
+      setWeeklyPrescriptionBySlot({});
+      setSaveStatus("");
+      setAiPlanStatus(
+        `Loaded ${sourceName} with ${importedWorkouts.length} workouts.${
+          importedPlan.aiAnalysis ? " AI notes will be saved with the plan." : ""
+        }${
+          imported.unmatchedExercises?.length
+            ? ` Review unmatched exercises: ${imported.unmatchedExercises
+                .slice(0, 5)
+                .join(", ")}${imported.unmatchedExercises.length > 5 ? "..." : ""}.`
+            : ""
+        }`
+      );
+    } catch (error) {
+      setAiPlanStatus(error.message);
+    }
+  }, [onBuildAiPlanDraft]);
+
+  useEffect(() => {
+    if (
+      aiPlanDraftRestoredRef.current ||
+      editingPlan ||
+      !isAiPlanType ||
+      editPreviewWorkouts ||
+      !aiPlanDraftText.trim()
+    ) {
+      return;
+    }
+
+    aiPlanDraftRestoredRef.current = true;
+    applyAiPlanDraftText(aiPlanDraftText, "saved AI plan draft");
+  }, [
+    aiPlanDraftText,
+    applyAiPlanDraftText,
+    editPreviewWorkouts,
+    editingPlan,
+    isAiPlanType,
+  ]);
+
+  function loadAiPlanDraftFile(file) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      applyAiPlanDraftText(String(reader.result || ""), file.name);
+    };
+    reader.onerror = () => {
+      setAiPlanStatus(`Could not read ${file.name}.`);
+    };
+    reader.readAsText(file);
+  }
+
+  function handleAiPlanDraftFileChange(event) {
+    loadAiPlanDraftFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
+
+  function handleAiPlanDraftDrop(event) {
+    event.preventDefault();
+    loadAiPlanDraftFile(event.dataTransfer.files?.[0]);
+  }
+
   function preservePlanDraftEditMode() {
     if (generationMode === "plan" && isPlanEditMode) {
       enterPlanDraftEditMode();
@@ -3266,6 +3437,16 @@ export default function PlansView({
 
   async function saveGeneratedPlan({ saveAs = false } = {}) {
     const isWorkoutMode = generationMode === "workout";
+
+    if (!isWorkoutMode && orderedPreviewWorkouts.length === 0) {
+      setSaveStatus(
+        isAiPlanType
+          ? "Load an AI plan draft before saving."
+          : "Add at least one workout before saving."
+      );
+      return;
+    }
+
     const isEditingExistingPlan = Boolean(editingPlan && !isWorkoutMode && !saveAs);
     const savedAt = Date.now();
     const planId = isEditingExistingPlan ? editingPlan.id : savedAt;
@@ -3375,6 +3556,7 @@ export default function PlansView({
     const plan = {
       ...(editingPlan || {}),
       id: planId,
+      aiAnalysis: aiPlanAnalysis,
       name:
         saveAs && editingPlan && planName.trim() === editingPlan.name
           ? `${editingPlan.name} Copy`
@@ -3398,6 +3580,9 @@ export default function PlansView({
         rir,
         rirPeriodization,
         sets: showPlanSetPicker ? sets : undefined,
+        ...(isAiPlanType && aiPlanDeloadWeeks != null
+          ? { deloadWeeks: aiPlanDeloadWeeks }
+          : {}),
         workoutTypeByDay:
           planType === "type-4"
             ? orderedPreviewWorkouts.reduce((types, workout, workoutIndex) => {
@@ -3651,34 +3836,6 @@ export default function PlansView({
         >
           {editingPlan ? (
             <>
-              <button
-                onClick={() => saveGeneratedPlan()}
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  gap: "6px",
-                  minHeight: "40px",
-                  padding: "6px 10px",
-                }}
-              >
-                <Save size={16} />
-                Update Plan
-              </button>
-
-              <button
-                onClick={() => saveGeneratedPlan({ saveAs: true })}
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  gap: "6px",
-                  minHeight: "40px",
-                  padding: "6px 10px",
-                }}
-              >
-                <Copy size={16} />
-                Save As
-              </button>
-
               {editingPlan.aiAnalysis && (
                 <button
                   onClick={() => onShowAiPlanNotes?.(editingPlan)}
@@ -3697,6 +3854,36 @@ export default function PlansView({
               )}
 
               <button
+                disabled={!canSaveGeneratedPlan}
+                onClick={() => saveGeneratedPlan()}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Save size={16} />
+                Update Plan
+              </button>
+
+              <button
+                disabled={!canSaveGeneratedPlan}
+                onClick={() => saveGeneratedPlan({ saveAs: true })}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+              >
+                <Copy size={16} />
+                Save As
+              </button>
+
+              <button
                 onClick={onCancel}
                 style={{
                   alignItems: "center",
@@ -3712,7 +3899,30 @@ export default function PlansView({
             </>
           ) : isCreateDraftEditMode ? (
             <>
+              {aiPlanAnalysis && (
+                <button
+                  onClick={() =>
+                    onShowAiPlanNotes?.({
+                      aiAnalysis: aiPlanAnalysis,
+                      name: planName || "AI Plan Draft",
+                    })
+                  }
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "6px",
+                    minHeight: "40px",
+                    padding: "6px 10px",
+                  }}
+                  type="button"
+                >
+                  <Brain size={16} />
+                  AI Notes
+                </button>
+              )}
+
               <button
+                disabled={!canSaveGeneratedPlan}
                 onClick={() => saveGeneratedPlan()}
                 style={{
                   alignItems: "center",
@@ -3742,25 +3952,28 @@ export default function PlansView({
             </>
           ) : (
             <>
-              <button
-                onClick={() => {
-                  setSeed((value) => value + 1);
-                  regeneratePlanPreview();
-                  setSaveStatus("");
-                }}
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  gap: "6px",
-                  minHeight: "40px",
-                  padding: "6px 10px",
-                }}
-              >
-                <RefreshCw size={16} />
-                Regenerate
-              </button>
+              {!isAiPlanType && (
+                <button
+                  onClick={() => {
+                    setSeed((value) => value + 1);
+                    regeneratePlanPreview();
+                    setSaveStatus("");
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "6px",
+                    minHeight: "40px",
+                    padding: "6px 10px",
+                  }}
+                >
+                  <RefreshCw size={16} />
+                  Regenerate
+                </button>
+              )}
 
               <button
+                disabled={!canSaveGeneratedPlan}
                 onClick={() => saveGeneratedPlan()}
                 style={{
                   alignItems: "center",
@@ -3859,6 +4072,10 @@ export default function PlansView({
                 setReps(nextDefaults.reps);
                 setRir(nextDefaults.rir);
                 setSets(nextDefaults.sets || "3");
+                setAiPlanStatus("");
+                setAiPlanDraftText("");
+                setAiPlanAnalysis(null);
+                setAiPlanDeloadWeeks(null);
                 if (!isPlanNameCustom) {
                   setPlanName(
                     getDefaultPlanName(
@@ -3886,6 +4103,7 @@ export default function PlansView({
               <option value="type-3">{getPlanTypeLabel("type-3")}</option>
               <option value="type-4">{getPlanTypeLabel("type-4")}</option>
               <option value="type-5">{getPlanTypeLabel("type-5")}</option>
+              <option value="ai">{getPlanTypeLabel("ai")}</option>
             </select>
           </label>
         )}
@@ -3929,35 +4147,37 @@ export default function PlansView({
           </label>
         )}
 
-        <label
-          style={{
-            display: "grid",
-            gap: "4px",
-            textAlign: "left",
-          }}
-        >
-          Goal
-          <select
-            value={goal}
-            onChange={(event) => {
-              setGoal(event.target.value);
-              regeneratePlanPreview();
-              setSaveStatus("");
-            }}
+        {!isAiPlanType && (
+          <label
             style={{
-              boxSizing: "border-box",
-              font: "inherit",
-              minHeight: "40px",
-              padding: "6px 10px",
-              width: "100%",
+              display: "grid",
+              gap: "4px",
+              textAlign: "left",
             }}
           >
-            <option value="maintain">{getGoalLabel("maintain")}</option>
-            <option value="progress">{getGoalLabel("progress")}</option>
-          </select>
-        </label>
+            Goal
+            <select
+              value={goal}
+              onChange={(event) => {
+                setGoal(event.target.value);
+                regeneratePlanPreview();
+                setSaveStatus("");
+              }}
+              style={{
+                boxSizing: "border-box",
+                font: "inherit",
+                minHeight: "40px",
+                padding: "6px 10px",
+                width: "100%",
+              }}
+            >
+              <option value="maintain">{getGoalLabel("maintain")}</option>
+              <option value="progress">{getGoalLabel("progress")}</option>
+            </select>
+          </label>
+        )}
 
-        {generationMode === "plan" && (
+        {generationMode === "plan" && !isAiPlanType && (
           <>
             {!isPlanEditMode && (
               <PlanPickerButton
@@ -4002,6 +4222,136 @@ export default function PlansView({
           </>
         )}
 
+        {isAiPlanType && (
+          <div
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleAiPlanDraftDrop}
+            style={{
+              border: "1px dashed var(--border)",
+              borderRadius: "8px",
+              display: "grid",
+              gap: "8px",
+              padding: "10px",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: "6px",
+                justifyContent: "center",
+              }}
+            >
+              <Brain size={16} />
+              <strong>AI Plan Draft</strong>
+            </div>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                textAlign: "left",
+              }}
+            >
+              Download the context, attach it in ChatGPT, then load the returned
+              workout-app AI plan JSON here. No plan days are generated until a
+              draft file is loaded.
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "center",
+              }}
+            >
+              <button onClick={onDownloadAiPlanContext} type="button">
+                Context
+              </button>
+              <button onClick={onCopyAiPlanPrompt} type="button">
+                <Copy size={14} />
+                Prompt
+              </button>
+              <button onClick={onOpenChatGptForAiPlan} type="button">
+                Open ChatGPT
+              </button>
+            </div>
+            <textarea
+              aria-label="AI plan draft JSON"
+              onChange={(event) => {
+                setAiPlanDraftText(event.target.value);
+                setAiPlanStatus("");
+              }}
+              placeholder="Paste or drop ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
+              value={aiPlanDraftText}
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                boxSizing: "border-box",
+                color: "var(--text)",
+                fontFamily:
+                  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: "11px",
+                lineHeight: 1.45,
+                minHeight: "130px",
+                padding: "8px",
+                resize: "vertical",
+                width: "100%",
+              }}
+            />
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <label
+                style={{
+                  alignItems: "center",
+                  background: "var(--button-bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "var(--button-text)",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  fontSize: "13px",
+                  gap: "6px",
+                  justifyContent: "center",
+                  padding: "8px",
+                }}
+              >
+                Load File
+                <input
+                  accept="application/json,.json,.txt"
+                  onChange={handleAiPlanDraftFileChange}
+                  style={{ display: "none" }}
+                  type="file"
+                />
+              </label>
+              <button
+                disabled={!aiPlanDraftText.trim()}
+                onClick={() => applyAiPlanDraftText(aiPlanDraftText, "pasted draft")}
+                type="button"
+              >
+                Load Draft
+              </button>
+            </div>
+            {aiPlanStatus && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {aiPlanStatus}
+              </div>
+            )}
+          </div>
+        )}
+
         {showPlanSetPicker && (
           <PlanPickerButton
             label="Sets"
@@ -4010,47 +4360,51 @@ export default function PlansView({
           />
         )}
 
-        <PlanPickerButton
-          label="Reps"
-          value={reps}
-          onClick={() => setActiveValuePicker("reps")}
-        />
-
-        <div
-          style={{
-            alignItems: "end",
-            display: "grid",
-            gap: "8px",
-            gridTemplateColumns:
-              generationMode === "plan" ? "1fr auto" : "1fr",
-          }}
-        >
+        {!isAiPlanType && (
           <PlanPickerButton
-            label="RIR"
-            value={rir}
-            onClick={() => setActiveValuePicker("rir")}
+            label="Reps"
+            value={reps}
+            onClick={() => setActiveValuePicker("reps")}
           />
+        )}
 
-          {generationMode === "plan" && (
-            <label
-              style={{
-                display: "grid",
-                gap: "4px",
-                justifyItems: "end",
-              }}
-            >
-              <span style={{ textAlign: "right" }}>Periodization</span>
-              <RirPeriodizationButton
-                mode={rirPeriodization}
-                onChange={(nextMode) => {
-                  preservePlanDraftEditMode();
-                  setRirPeriodization(nextMode);
-                  setSaveStatus("");
+        {!isAiPlanType && (
+          <div
+            style={{
+              alignItems: "end",
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns:
+                generationMode === "plan" ? "1fr auto" : "1fr",
+            }}
+          >
+            <PlanPickerButton
+              label="RIR"
+              value={rir}
+              onClick={() => setActiveValuePicker("rir")}
+            />
+
+            {generationMode === "plan" && (
+              <label
+                style={{
+                  display: "grid",
+                  gap: "4px",
+                  justifyItems: "end",
                 }}
-              />
-            </label>
-          )}
-        </div>
+              >
+                <span style={{ textAlign: "right" }}>Periodization</span>
+                <RirPeriodizationButton
+                  mode={rirPeriodization}
+                  onChange={(nextMode) => {
+                    preservePlanDraftEditMode();
+                    setRirPeriodization(nextMode);
+                    setSaveStatus("");
+                  }}
+                />
+              </label>
+            )}
+          </div>
+        )}
 
         {generatedPlan.gaps.length > 0 && (
           <div
@@ -4259,6 +4613,21 @@ export default function PlansView({
           )}
         </SortableContext>
       </DndContext>
+
+      {isAiPlanType && orderedPreviewWorkouts.length === 0 && (
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            color: "var(--text-muted)",
+            fontSize: "13px",
+            padding: "14px",
+            textAlign: "center",
+          }}
+        >
+          Load an AI plan draft JSON file to populate the plan days.
+        </div>
+      )}
 
       {workoutTypePickerTarget && (
         <WorkoutTypePickerSheet

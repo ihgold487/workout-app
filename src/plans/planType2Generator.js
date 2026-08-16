@@ -21,6 +21,9 @@ const PLAN_CONFIGS = {
   "type-5": {
     label: "Plan Type 5 'App'",
   },
+  ai: {
+    label: "Plan Type AI",
+  },
 };
 
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
@@ -897,6 +900,10 @@ function buildWorkoutDefinitions({
   workoutTypeByDay,
 }) {
   const workoutCount = Math.max(1, Math.min(6, Number(daysPerWeek) || 2));
+
+  if (planType === "ai") {
+    return [];
+  }
 
   if (planType === "type-3") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>

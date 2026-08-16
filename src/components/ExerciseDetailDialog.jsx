@@ -8,13 +8,16 @@ import {
   ImagePlus,
   LineChart,
   ListChecks,
+  Pencil,
   TrendingUp,
   Trophy,
   X,
 } from "lucide-react";
 import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import MuscleMap from "./MuscleMap";
+import WeightPickerModal from "./WeightPickerModal";
 
 const RANGE_OPTIONS = [
   { label: "1 week", value: 7 },
@@ -37,6 +40,7 @@ const CHART_SETTINGS_STORAGE_KEY = "exerciseHistoryChartSettings";
 const CHART_METRIC_OPTIONS = ["maxWeight", "e1rm"];
 const TREND_COLOR_CHANGE_THRESHOLD_LB = 5;
 const TREND_COLOR_CHANGE_THRESHOLD_PERCENT = 0.025;
+const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TREND_COLORS = {
   decreasing: "#e53935",
   flat: "#fdd835",
@@ -292,9 +296,11 @@ function getRegressionTrendDirection(points) {
 function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
   return [...(history || [])]
     .flatMap((workout) => {
-      const matchingExercise = workout.exercises?.find((item) =>
+      const matchingExerciseIndex = workout.exercises?.findIndex((item) =>
         exercisesMatch(item, exercise)
       );
+      const matchingExercise =
+        matchingExerciseIndex >= 0 ? workout.exercises[matchingExerciseIndex] : null;
 
       if (!matchingExercise) {
         return [];
@@ -317,6 +323,8 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
           e1rm,
           reps,
           rir,
+          setId: set.id || set.setId || null,
+          setIndex: index,
           setNumber: index + 1,
           weight,
         };
@@ -336,14 +344,26 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
           completedDateKey: getDateKey(
             workout.completedAtIso || workout.completed_at || workout.completedAt
           ),
+          exerciseId: matchingExercise.id || matchingExercise.exerciseId || null,
+          exerciseIndex: matchingExerciseIndex,
+          bodyWeight,
           sets,
           templateName: workout.templateName || workout.name || "Workout",
           maxWeight: maxWeight || null,
           maxE1RM: maxE1RM || null,
+          workoutId: workout.id || null,
         },
       ];
     })
     .reverse();
+}
+
+function getHistoryEntryKey(entry) {
+  return `${entry.workoutId || entry.completedAt}-${entry.exerciseId || entry.exerciseIndex}`;
+}
+
+function getHistorySetKey(set) {
+  return set.setId == null ? `index-${set.setIndex}` : `id-${set.setId}`;
 }
 
 function buildHistorySummary(exerciseHistory) {
@@ -1950,13 +1970,19 @@ export default function ExerciseDetailDialog({
   history = [],
   onClose,
   onSelect,
+  onUpdateHistoryWorkoutSet,
   zIndex = 1400,
 }) {
   const [activeTab, setActiveTab] = useState("info");
   const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
+  const [editingHistoryKey, setEditingHistoryKey] = useState(null);
+  const [editingHistoryDraft, setEditingHistoryDraft] = useState(null);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [weightPickerData, setWeightPickerData] = useState(null);
+  const [repsPickerData, setRepsPickerData] = useState(null);
+  const [rirPickerData, setRirPickerData] = useState(null);
   const exerciseHistory = useMemo(
     () => buildExerciseHistory(exercise, history, bodyWeightEntries),
     [bodyWeightEntries, exercise, history]
@@ -1999,6 +2025,97 @@ export default function ExerciseDetailDialog({
 
   function closeExerciseDetail() {
     setIsClosing(true);
+  }
+
+  function startEditingHistoryEntry(entry) {
+    const entryKey = getHistoryEntryKey(entry);
+
+    setEditingHistoryKey(entryKey);
+    setEditingHistoryDraft({
+      entryKey,
+      sets: Object.fromEntries(
+        entry.sets.map((set) => [
+          getHistorySetKey(set),
+          {
+            actualReps: set.reps,
+            actualRir: set.rir,
+            actualWeight: set.weight,
+          },
+        ])
+      ),
+    });
+  }
+
+  function cancelEditingHistoryEntry() {
+    setEditingHistoryKey(null);
+    setEditingHistoryDraft(null);
+    setWeightPickerData(null);
+    setRepsPickerData(null);
+    setRirPickerData(null);
+  }
+
+  function commitEditingHistoryEntry(entry) {
+    if (!editingHistoryDraft || editingHistoryDraft.entryKey !== getHistoryEntryKey(entry)) {
+      cancelEditingHistoryEntry();
+      return;
+    }
+
+    const updates = entry.sets.flatMap((set) => {
+      const draftSet = editingHistoryDraft.sets[getHistorySetKey(set)];
+
+      if (!draftSet) {
+        return [];
+      }
+
+      return [
+        ["actualWeight", set.weight],
+        ["actualReps", set.reps],
+        ["actualRir", set.rir],
+      ]
+        .filter(([field, originalValue]) => draftSet[field] !== originalValue)
+        .map(([field]) => ({
+          exerciseId: entry.exerciseId,
+          exerciseIndex: entry.exerciseIndex,
+          field,
+          setId: set.setId,
+          setIndex: set.setIndex,
+          value: draftSet[field],
+        }));
+    });
+
+    if (updates.length > 0) {
+      onUpdateHistoryWorkoutSet?.({
+        updates,
+        workoutId: entry.workoutId,
+      });
+    }
+
+    cancelEditingHistoryEntry();
+  }
+
+  function updateHistorySetDraft(pickerData, field, value) {
+    if (!pickerData) {
+      return;
+    }
+
+    setEditingHistoryDraft((currentDraft) => {
+      if (!currentDraft || currentDraft.entryKey !== pickerData.entryKey) {
+        return currentDraft;
+      }
+
+      const currentSet = currentDraft.sets[pickerData.setKey] || {};
+
+      return {
+        ...currentDraft,
+        sets: {
+          ...currentDraft.sets,
+          [pickerData.setKey]: {
+            ...currentSet,
+            [field]: value,
+          },
+        },
+      };
+    });
   }
 
   if (!exercise) {
@@ -2478,71 +2595,245 @@ export default function ExerciseDetailDialog({
               exerciseHistory
                 .slice()
                 .reverse()
-                .map((entry) => (
-                  <div
-                    key={`${entry.completedAt}-${entry.templateName}`}
-                    style={{
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      padding: "10px",
-                    }}
-                  >
+                .map((entry) => {
+                  const entryKey = getHistoryEntryKey(entry);
+                  const isEditingEntry = editingHistoryKey === entryKey;
+
+                  return (
                     <div
+                      key={`${entryKey}-${entry.templateName}`}
                       style={{
-                        fontWeight: "bold",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "10px",
                       }}
                     >
-                      {entry.completedAt}
-                    </div>
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {entry.templateName}
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "6px",
-                        marginTop: "8px",
-                      }}
-                    >
-                      {entry.sets.map((set) => (
+                      <div
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          gap: "8px",
+                          justifyContent: "space-between",
+                        }}
+                      >
                         <div
-                          key={set.setNumber}
                           style={{
-                            alignItems: "center",
-                            columnGap: "4px",
-                            display: "grid",
-                            fontSize: "12px",
-                            gridTemplateColumns:
-                              "34px minmax(46px, .85fr) minmax(46px, .85fr) minmax(42px, .75fr) minmax(66px, 1.2fr)",
+                            fontWeight: "bold",
                             minWidth: 0,
                           }}
                         >
-                          <strong style={{ whiteSpace: "nowrap" }}>
-                            Set {set.setNumber}
-                          </strong>
-                          <span style={{ whiteSpace: "nowrap" }}>
-                            {set.weight || "—"} lb
-                          </span>
-                          <span style={{ whiteSpace: "nowrap" }}>
-                            {set.reps || "—"} reps
-                          </span>
-                          <span style={{ whiteSpace: "nowrap" }}>
-                            RIR {set.rir === "" ? "—" : set.rir}
-                          </span>
-                          <span style={{ whiteSpace: "nowrap" }}>
-                            e1RM {formatE1RM(set.e1rm)}
-                          </span>
+                          {entry.completedAt}
                         </div>
-                      ))}
+                        {onUpdateHistoryWorkoutSet && (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              flexShrink: 0,
+                              gap: "6px",
+                            }}
+                          >
+                            {isEditingEntry && (
+                              <button
+                                aria-label={`Discard edits for ${entry.completedAt}`}
+                                onClick={cancelEditingHistoryEntry}
+                                style={{
+                                  alignItems: "center",
+                                  color: "var(--text-muted)",
+                                  display: "inline-flex",
+                                  height: "32px",
+                                  justifyContent: "center",
+                                  padding: 0,
+                                  width: "32px",
+                                }}
+                                title="Discard edits"
+                                type="button"
+                              >
+                                <X size={15} />
+                              </button>
+                            )}
+                            <button
+                              aria-label={
+                                isEditingEntry
+                                  ? `Save edits for ${entry.completedAt}`
+                                  : `Edit ${entry.completedAt} history`
+                              }
+                              onClick={() =>
+                                isEditingEntry
+                                  ? commitEditingHistoryEntry(entry)
+                                  : startEditingHistoryEntry(entry)
+                              }
+                              style={{
+                                alignItems: "center",
+                                borderColor: isEditingEntry
+                                  ? "var(--accent)"
+                                  : "var(--border)",
+                                color: isEditingEntry
+                                  ? "var(--accent)"
+                                  : "var(--button-text)",
+                                display: "inline-flex",
+                                height: "32px",
+                                justifyContent: "center",
+                                padding: 0,
+                                width: "32px",
+                              }}
+                              title={isEditingEntry ? "Save edits" : "Edit sets"}
+                              type="button"
+                            >
+                              {isEditingEntry ? (
+                                <Check size={15} />
+                              ) : (
+                                <Pencil size={15} />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          marginTop: "2px",
+                        }}
+                      >
+                        {entry.templateName}
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "6px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        {entry.sets.map((set) => {
+                          const setKey = getHistorySetKey(set);
+                          const draftSet =
+                            isEditingEntry && editingHistoryDraft?.entryKey === entryKey
+                              ? editingHistoryDraft.sets[setKey]
+                              : null;
+                          const displayWeight = draftSet?.actualWeight ?? set.weight;
+                          const displayReps = draftSet?.actualReps ?? set.reps;
+                          const displayRir = draftSet?.actualRir ?? set.rir;
+                          const displayE1RM = isEditingEntry
+                            ? calculateE1RM(
+                                displayWeight,
+                                displayReps,
+                                displayRir,
+                                null,
+                                null,
+                                null,
+                                {
+                                  bodyWeight: entry.bodyWeight,
+                                  exercise,
+                                }
+                              )
+                            : set.e1rm;
+
+                          return (
+                            <div
+                              key={set.setNumber}
+                              style={{
+                                alignItems: "center",
+                                columnGap: "4px",
+                                display: "grid",
+                                fontSize: "12px",
+                                gridTemplateColumns:
+                                  "34px minmax(46px, .85fr) minmax(46px, .85fr) minmax(42px, .75fr) minmax(66px, 1.2fr)",
+                                minWidth: 0,
+                              }}
+                            >
+                              <strong style={{ whiteSpace: "nowrap" }}>
+                                Set {set.setNumber}
+                              </strong>
+                              {isEditingEntry ? (
+                                <button
+                                  onClick={() =>
+                                    setWeightPickerData({
+                                      entryKey,
+                                      increment: getExerciseWeightIncrement(
+                                        exercise,
+                                        undefined,
+                                        displayWeight
+                                      ),
+                                      setKey,
+                                      value: displayWeight,
+                                    })
+                                  }
+                                  style={{
+                                    fontSize: "12px",
+                                    minHeight: "30px",
+                                    minWidth: 0,
+                                    padding: "4px 6px",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  type="button"
+                                >
+                                  {displayWeight || "—"} lb
+                                </button>
+                              ) : (
+                                <span style={{ whiteSpace: "nowrap" }}>
+                                  {displayWeight || "—"} lb
+                                </span>
+                              )}
+                              {isEditingEntry ? (
+                                <button
+                                  onClick={() =>
+                                    setRepsPickerData({
+                                      entryKey,
+                                      setKey,
+                                      value: displayReps,
+                                    })
+                                  }
+                                  style={{
+                                    fontSize: "12px",
+                                    minHeight: "30px",
+                                    minWidth: 0,
+                                    padding: "4px 6px",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  type="button"
+                                >
+                                  {displayReps || "—"} reps
+                                </button>
+                              ) : (
+                                <span style={{ whiteSpace: "nowrap" }}>
+                                  {displayReps || "—"} reps
+                                </span>
+                              )}
+                              {isEditingEntry ? (
+                                <button
+                                  onClick={() =>
+                                    setRirPickerData({
+                                      entryKey,
+                                      setKey,
+                                      value: displayRir,
+                                    })
+                                  }
+                                  style={{
+                                    fontSize: "12px",
+                                    minHeight: "30px",
+                                    minWidth: 0,
+                                    padding: "4px 6px",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  type="button"
+                                >
+                                  RIR {displayRir === "" ? "—" : displayRir}
+                                </button>
+                              ) : (
+                                <span style={{ whiteSpace: "nowrap" }}>
+                                  RIR {displayRir === "" ? "—" : displayRir}
+                                </span>
+                              )}
+                              <span style={{ whiteSpace: "nowrap" }}>
+                                e1RM {formatE1RM(displayE1RM)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
             )}
           </div>
         )}
@@ -2570,6 +2861,43 @@ export default function ExerciseDetailDialog({
           title="Exercise trend"
         />
       )}
+      <WeightPickerModal
+        isOpen={Boolean(weightPickerData)}
+        onClose={() => setWeightPickerData(null)}
+        onSelect={(value) => {
+          updateHistorySetDraft(weightPickerData, "actualWeight", value);
+          setWeightPickerData(null);
+        }}
+        title="Select Weight"
+        value={weightPickerData?.value}
+        increment={weightPickerData?.increment}
+        zIndex={zIndex + 300}
+      />
+      <WeightPickerModal
+        increment={1}
+        isOpen={Boolean(repsPickerData)}
+        onClose={() => setRepsPickerData(null)}
+        onSelect={(value) => {
+          updateHistorySetDraft(repsPickerData, "actualReps", value);
+          setRepsPickerData(null);
+        }}
+        title="Select Reps"
+        value={repsPickerData?.value}
+        values={Array.from({ length: 20 }, (_, index) => index + 1)}
+        zIndex={zIndex + 300}
+      />
+      <WeightPickerModal
+        isOpen={Boolean(rirPickerData)}
+        onClose={() => setRirPickerData(null)}
+        onSelect={(value) => {
+          updateHistorySetDraft(rirPickerData, "actualRir", value);
+          setRirPickerData(null);
+        }}
+        title="Select RIR"
+        value={rirPickerData?.value}
+        values={RIR_PICKER_VALUES}
+        zIndex={zIndex + 300}
+      />
     </div>
   );
 }

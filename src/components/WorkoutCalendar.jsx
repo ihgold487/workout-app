@@ -22,6 +22,7 @@ import {
 } from "../sync/bodyMeasurementCloudSync";
 import { isSupabaseConfigured } from "../sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const BASE_MEAL_OPTIONS = [
@@ -697,6 +698,11 @@ export function CompletedWorkoutSheet({
                             event.stopPropagation();
                             setWeightPickerData({
                               exerciseId: exercise.id,
+                              increment: getExerciseWeightIncrement(
+                                exercise,
+                                undefined,
+                                actualWeight
+                              ),
                               setId: set.id,
                               value: Number(actualWeight || 0),
                             });
@@ -1037,6 +1043,7 @@ export function CompletedWorkoutSheet({
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setSelectedWorkoutExerciseDetail(null)}
+          onUpdateHistoryWorkoutSet={onUpdateSet}
           zIndex={zIndex + 200}
         />
       )}
@@ -1045,6 +1052,7 @@ export function CompletedWorkoutSheet({
         isOpen={Boolean(weightPickerData)}
         onClose={() => setWeightPickerData(null)}
         value={weightPickerData?.value}
+        increment={weightPickerData?.increment}
         title="Select Weight"
         onSelect={(value) => {
           if (!weightPickerData) {
@@ -1129,26 +1137,68 @@ export default function WorkoutCalendar({
 
   const today = new Date();
 
-  const updateSelectedWorkoutSet = ({ exerciseId, field, setId, value }) => {
+  const updateSelectedWorkoutSet = ({
+    exerciseId,
+    exerciseIndex,
+    field,
+    setId,
+    setIndex,
+    updates,
+    value,
+  }) => {
+    const pendingUpdates = Array.isArray(updates)
+      ? updates
+      : [
+          {
+            exerciseId,
+            exerciseIndex,
+            field,
+            setId,
+            setIndex,
+            value,
+          },
+        ];
+
     setSelectedWorkout((current) =>
       current
         ? {
             ...current,
-            exercises: (current.exercises || []).map((exercise) =>
-              String(exercise.id) === String(exerciseId)
+            exercises: (current.exercises || []).map((exercise, currentExerciseIndex) => {
+              const exerciseUpdates = pendingUpdates.filter(
+                (update) =>
+                  String(exercise.id) === String(update.exerciseId) ||
+                  (update.exerciseId == null &&
+                    Number.isInteger(update.exerciseIndex) &&
+                    currentExerciseIndex === update.exerciseIndex)
+              );
+
+              return exerciseUpdates.length > 0
                 ? {
                     ...exercise,
-                    sets: (exercise.sets || []).map((set) =>
-                      String(set.id) === String(setId)
-                        ? {
-                            ...set,
-                            [field]: value,
-                          }
-                        : set
-                    ),
+                    sets: (exercise.sets || []).map((set, currentSetIndex) => {
+                      const setUpdates = exerciseUpdates.filter(
+                        (update) =>
+                          String(set.id) === String(update.setId) ||
+                          (update.setId == null &&
+                            Number.isInteger(update.setIndex) &&
+                            currentSetIndex === update.setIndex)
+                      );
+
+                      if (setUpdates.length === 0) {
+                        return set;
+                      }
+
+                      return setUpdates.reduce(
+                        (nextSet, update) => ({
+                          ...nextSet,
+                          [update.field]: update.value,
+                        }),
+                        set
+                      );
+                    }),
                   }
                 : exercise
-            ),
+            }),
           }
         : current
     );

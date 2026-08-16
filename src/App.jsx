@@ -21,7 +21,6 @@ import {
   RotateCcw,
   Search,
   Settings,
-  Share2,
   Trash2,
   Trophy,
   Upload,
@@ -59,7 +58,6 @@ import {
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
-import { buildCoachBrief } from "./utils/coachBrief";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import {
   downloadExerciseLibraryWithPreferences,
@@ -1944,6 +1942,43 @@ function getRepRangeBucket(reps) {
   return `${Math.round(reps)} reps`;
 }
 
+function formatBenchmarkTrendSet(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    date: row.date,
+    e1rm: roundAiMetric(row.e1rm),
+    reps: row.reps,
+    rir: row.rir,
+    weight: row.weight,
+  };
+}
+
+function summarizeBenchmarkTrendWindow(observations) {
+  if (!Array.isArray(observations) || observations.length < 2) {
+    return null;
+  }
+
+  const sortedObservations = [...observations].sort(
+    (left, right) => left.workoutTime - right.workoutTime
+  );
+  const first = sortedObservations[0];
+  const latest = sortedObservations.at(-1);
+  const best = sortedObservations.reduce((currentBest, row) =>
+    row.e1rm > currentBest.e1rm ? row : currentBest
+  );
+
+  return {
+    best: formatBenchmarkTrendSet(best),
+    changeFromFirstToLatest: roundAiMetric(latest.e1rm - first.e1rm),
+    first: formatBenchmarkTrendSet(first),
+    latest: formatBenchmarkTrendSet(latest),
+    observationCount: sortedObservations.length,
+  };
+}
+
 function buildHistoryPerformanceRows({
   bodyWeightEntries = [],
   exerciseLibrary = [],
@@ -2043,40 +2078,33 @@ function buildBenchmarkRepRangeTrends({
       const observations = group.observations.sort(
         (left, right) => left.workoutTime - right.workoutTime
       );
-      const first = observations[0];
-      const latest = observations.at(-1);
-      const best = observations.reduce((currentBest, row) =>
-        row.e1rm > currentBest.e1rm ? row : currentBest
+      const lifetime = summarizeBenchmarkTrendWindow(observations);
+      const recentObservations = observations.slice(-12);
+      const rirFilteredObservations = observations.filter(
+        (row) => Number.isFinite(row.rir) && row.rir <= 3
       );
+      const recentRirFilteredObservations = rirFilteredObservations.slice(-12);
 
       return {
         benchmarkFamily: group.benchmarkFamily,
-        best: {
-          date: best.date,
-          e1rm: roundAiMetric(best.e1rm),
-          reps: best.reps,
-          rir: best.rir,
-          weight: best.weight,
-        },
-        changeFromFirstToLatest: roundAiMetric(latest.e1rm - first.e1rm),
+        best: lifetime.best,
+        changeFromFirstToLatest: lifetime.changeFromFirstToLatest,
         equipment: group.equipment,
         exerciseId: group.exerciseId,
         exerciseName: group.exerciseName,
-        first: {
-          date: first.date,
-          e1rm: roundAiMetric(first.e1rm),
-          reps: first.reps,
-          rir: first.rir,
-          weight: first.weight,
-        },
-        latest: {
-          date: latest.date,
-          e1rm: roundAiMetric(latest.e1rm),
-          reps: latest.reps,
-          rir: latest.rir,
-          weight: latest.weight,
-        },
+        first: lifetime.first,
+        latest: lifetime.latest,
+        lifetime,
+        lifetimeChangeFromFirstToLatest: lifetime.changeFromFirstToLatest,
+        note:
+          "Prefer recentWindow and recentRirFilteredWindow for current progress decisions. Lifetime first-to-latest can span different programming phases, rep/RIR combinations, and fatigue contexts.",
         observationCount: observations.length,
+        recentRirFilteredWindow: summarizeBenchmarkTrendWindow(
+          recentRirFilteredObservations
+        ),
+        recentWindow: summarizeBenchmarkTrendWindow(recentObservations),
+        rirFilter:
+          "recentRirFilteredWindow includes only observations with actual RIR <= 3, then takes the latest 12 observations in this rep bucket.",
         repRange: group.repRange,
       };
     })
@@ -2844,17 +2872,6 @@ function buildNutritionTrendContext({
   };
 }
 
-function buildAiContextCoachBrief(brief) {
-  const prompt = String(brief?.prompt || "");
-  const returnIndex = prompt.indexOf("\nReturn:");
-
-  return {
-    note:
-      "Orientation only. Do not follow any output-format instructions from this brief; use draftInstructions.importSchema for the response format.",
-    text: returnIndex >= 0 ? prompt.slice(0, returnIndex).trim() : prompt,
-  };
-}
-
 function buildAiPlanContext({
   bodyWeightEntries = [],
   calorieGoal = 0,
@@ -2865,12 +2882,6 @@ function buildAiPlanContext({
   plans = [],
   templates = [],
 }) {
-  const brief = buildCoachBrief({
-    bodyWeightEntries,
-    exerciseLibrary,
-    history,
-    plans,
-  });
   const activePlanIds = plans
     .filter((plan) => plan.status === "active")
     .map((plan) => String(plan.id));
@@ -2941,7 +2952,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -2955,8 +2966,8 @@ function buildAiPlanContext({
       prescriptionAdherenceRows: prescriptionAdherenceSummaries.length,
       previousPlanAIContextRows: previousPlanAIContext.length,
       recentPlanExposureRows: recentPlanExposure.length,
-      trackedExerciseCount: brief.trackedExercises.length,
-      workoutCount: brief.workoutCount,
+      trackedExerciseCount: activeExercises.length,
+      workoutCount: history.length,
     },
     bodyWeightTrend,
     nutritionTrend,
@@ -2966,7 +2977,6 @@ function buildAiPlanContext({
     prescriptionAdherenceSummaries,
     blockOutcomeSummaries,
     trainingProfile: buildTrainingProfileContext(),
-    coachBrief: buildAiContextCoachBrief(brief),
     activeExercises,
     previousPlanAIContext,
     recentPlanExposure,
@@ -2983,6 +2993,7 @@ function getAiPlanPrompt(context) {
     "Use the exercise names/equipment in activeExercises when possible.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
     "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as the primary derived metrics before falling back to raw completedSetRows.",
+    "Within benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current strength progress.",
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
@@ -3213,7 +3224,7 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
     id: planId,
     aiAnalysis,
     name: planName,
-    planType: draft.plan?.planType || "type-5",
+    planType: draft.plan?.planType || "ai",
     status: "inactive",
     updatedAt: new Date().toISOString(),
     workouts: templates.map((template, index) => ({
@@ -4309,9 +4320,6 @@ export default function App() {
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
 
-  const [coachBriefPrompt, setCoachBriefPrompt] = useState("");
-
-  const [coachBriefStatus, setCoachBriefStatus] = useState("");
   const [aiPlanDraftText, setAiPlanDraftText] = useState("");
   const [aiPlanStatus, setAiPlanStatus] = useState("");
   const [exportExpanded, setExportExpanded] = useState(false);
@@ -5892,85 +5900,6 @@ export default function App() {
     }
   }
 
-  function generateCoachBrief() {
-    const brief = buildCoachBrief({
-      bodyWeightEntries: localBodyWeightEntries,
-      exerciseLibrary,
-      history,
-      plans,
-    });
-
-    setCoachBriefPrompt(brief.prompt);
-    setCoachBriefStatus(
-      `Coach brief generated from ${brief.workoutCount} recent workouts and ${brief.trackedExercises.length} tracked exercises.`
-    );
-  }
-
-  async function copyCoachBrief() {
-    if (!coachBriefPrompt) {
-      generateCoachBrief();
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(coachBriefPrompt);
-      setCoachBriefStatus("Coach brief copied. Paste it into ChatGPT.");
-    } catch (error) {
-      console.error("Coach brief copy failed:", error);
-      setCoachBriefStatus("Copy failed. Select the text and copy it manually.");
-    }
-  }
-
-  async function shareCoachBrief() {
-    const text = coachBriefPrompt || buildCoachBrief({
-      bodyWeightEntries: localBodyWeightEntries,
-      exerciseLibrary,
-      history,
-      plans,
-    }).prompt;
-
-    setCoachBriefPrompt(text);
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          text,
-          title: "Workout Coach Brief",
-        });
-        setCoachBriefStatus("Coach brief shared.");
-        return;
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          setCoachBriefStatus("Share canceled.");
-          return;
-        }
-
-        console.error("Coach brief share failed:", error);
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setCoachBriefStatus("Sharing is unavailable. Coach brief copied instead.");
-    } catch (error) {
-      console.error("Coach brief fallback copy failed:", error);
-      setCoachBriefStatus("Sharing is unavailable. Select the text and copy it manually.");
-    }
-  }
-
-  function openChatGptForCoachBrief() {
-    const text = coachBriefPrompt || buildCoachBrief({
-      bodyWeightEntries: localBodyWeightEntries,
-      exerciseLibrary,
-      history,
-      plans,
-    }).prompt;
-
-    setCoachBriefPrompt(text);
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-    setCoachBriefStatus("ChatGPT opened. Copy or share the coach brief there.");
-  }
-
   function getAiPlanContext() {
     const userId = authSession?.user?.id || null;
     const calorieGoal = readDailyCalorieGoalForAi(
@@ -6101,6 +6030,15 @@ export default function App() {
     } catch (error) {
       setAiPlanStatus(error.message);
     }
+  }
+
+  function buildAiPlanDraftFromText(text) {
+    const draft = parseAiPlanDraft(text);
+
+    return buildImportedAiPlanDraft({
+      draft,
+      exerciseLibrary,
+    });
   }
 
   function getExerciseHistoryExportCsv() {
@@ -6827,8 +6765,29 @@ export default function App() {
     requestSyncCheckpoint(["history"], "history delete");
   }
 
-  function updateHistoryWorkoutSet({ workoutId, exerciseId, setId, field, value }) {
+  function updateHistoryWorkoutSet({
+    workoutId,
+    exerciseId,
+    exerciseIndex,
+    setId,
+    setIndex,
+    field,
+    updates,
+    value,
+  }) {
     const editedExerciseIds = new Set();
+    const pendingUpdates = Array.isArray(updates)
+      ? updates
+      : [
+          {
+            exerciseId,
+            exerciseIndex,
+            field,
+            setId,
+            setIndex,
+            value,
+          },
+        ];
     const nextHistory = history.map((workout) => {
       if (String(workout.id) !== String(workoutId)) {
         return workout;
@@ -6836,8 +6795,17 @@ export default function App() {
 
       return {
         ...workout,
-        exercises: (workout.exercises || []).map((exercise) => {
-          if (String(exercise.id) !== String(exerciseId)) {
+        exercises: (workout.exercises || []).map((exercise, currentExerciseIndex) => {
+          const exerciseUpdates = pendingUpdates.filter((update) => {
+            return (
+              String(exercise.id) === String(update.exerciseId) ||
+              (update.exerciseId == null &&
+                Number.isInteger(update.exerciseIndex) &&
+                currentExerciseIndex === update.exerciseIndex)
+            );
+          });
+
+          if (exerciseUpdates.length === 0) {
             return exercise;
           }
 
@@ -6847,14 +6815,28 @@ export default function App() {
 
           return {
             ...exercise,
-            sets: (exercise.sets || []).map((set) =>
-              String(set.id) === String(setId)
-                ? {
-                    ...set,
-                    [field]: value,
-                  }
-                : set
-            ),
+            sets: (exercise.sets || []).map((set, currentSetIndex) => {
+              const setUpdates = exerciseUpdates.filter((update) => {
+                return (
+                  String(set.id) === String(update.setId) ||
+                  (update.setId == null &&
+                    Number.isInteger(update.setIndex) &&
+                    currentSetIndex === update.setIndex)
+                );
+              });
+
+              if (setUpdates.length === 0) {
+                return set;
+              }
+
+              return setUpdates.reduce(
+                (nextSet, update) => ({
+                  ...nextSet,
+                  [update.field]: update.value,
+                }),
+                set
+              );
+            }),
           };
         }),
       };
@@ -7453,7 +7435,12 @@ export default function App() {
                   minWidth: 0,
                 }}
               >
-                {plan.goal === "progress" ? "Progress" : "Maintain"} · Week{" "}
+                {(plan.planType || plan.config?.planType) === "ai"
+                  ? "AI"
+                  : plan.goal === "progress"
+                    ? "Progress"
+                    : "Maintain"}{" "}
+                · Week{" "}
                 {weekStatus.currentWeekLabel} of {weekStatus.totalWeeks} ·{" "}
                 {weekStatus.completedThisWeek}/{weekStatus.totalThisWeek} this week
               </span>
@@ -9550,6 +9537,8 @@ export default function App() {
               <div
                 style={{
                   borderTop: "1px solid var(--border)",
+                  display: "grid",
+                  gap: "8px",
                   marginTop: "10px",
                   paddingTop: "10px",
                 }}
@@ -9561,22 +9550,21 @@ export default function App() {
                     fontSize: "15px",
                     gap: "6px",
                     justifyContent: "center",
-                    margin: "0 0 6px",
+                    margin: 0,
                   }}
                 >
-                  <Brain size={16} />
-                  AI Coach Brief
+                  <ClipboardList size={16} />
+                  AI Plan Draft
                 </h3>
-                <p
+                <div
                   style={{
                     color: "var(--text-muted)",
                     fontSize: "12px",
-                    margin: "0 0 8px",
                   }}
                 >
-                  Builds a local workout-history prompt for ChatGPT. No API key
-                  and no cloud request are used.
-                </p>
+                  Download a JSON context file, attach it in your existing
+                  ChatGPT discussion, then paste the returned draft JSON here.
+                </div>
                 <div
                   style={{
                     display: "flex",
@@ -9585,45 +9573,37 @@ export default function App() {
                     justifyContent: "center",
                   }}
                 >
-                  <button onClick={generateCoachBrief} type="button">
-                    Generate Brief
+                  <button onClick={downloadAiPlanContext} type="button">
+                    <Download size={14} />
+                    Context
                   </button>
-                  <button
-                    disabled={!coachBriefPrompt}
-                    onClick={copyCoachBrief}
-                    type="button"
-                  >
+                  <button onClick={copyAiPlanPrompt} type="button">
                     <Copy size={14} />
-                    Copy
+                    Prompt
                   </button>
-                  <button onClick={shareCoachBrief} type="button">
-                    <Share2 size={14} />
-                    Share
-                  </button>
-                  <button onClick={openChatGptForCoachBrief} type="button">
+                  <button onClick={openChatGptForAiPlan} type="button">
                     Open ChatGPT
                   </button>
                 </div>
-                {coachBriefStatus && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "6px",
-                    }}
-                  >
-                    {coachBriefStatus}
-                  </div>
-                )}
-                {coachBriefPrompt && (
+                <div
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleAiPlanDraftDrop}
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                  }}
+                >
                   <textarea
-                    readOnly
-                    value={coachBriefPrompt}
+                    aria-label="AI plan draft JSON"
+                    onChange={(event) => {
+                      setAiPlanDraftText(event.target.value);
+                      setAiPlanStatus("");
+                    }}
+                    placeholder="Paste or drop ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
+                    value={aiPlanDraftText}
                     style={{
                       background: "var(--surface-muted)",
-                      border: "1px solid var(--border)",
+                      border: "1px dashed var(--border)",
                       borderRadius: "6px",
                       boxSizing: "border-box",
                       color: "var(--text)",
@@ -9631,151 +9611,65 @@ export default function App() {
                         "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                       fontSize: "11px",
                       lineHeight: 1.45,
-                      marginTop: "8px",
-                      minHeight: "180px",
+                      minHeight: "150px",
                       padding: "8px",
                       resize: "vertical",
                       width: "100%",
                     }}
                   />
-                )}
-                <div
-                  style={{
-                    borderTop: "1px solid var(--border)",
-                    display: "grid",
-                    gap: "8px",
-                    marginTop: "10px",
-                    paddingTop: "10px",
-                  }}
-                >
-                  <h3
+                  <div
                     style={{
-                      alignItems: "center",
-                      display: "flex",
-                      fontSize: "15px",
-                      gap: "6px",
-                      justifyContent: "center",
-                      margin: 0,
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "1fr 1fr",
                     }}
                   >
-                    <ClipboardList size={16} />
-                    AI Plan Draft
-                  </h3>
+                    <label
+                      style={{
+                        alignItems: "center",
+                        background: "var(--button-bg)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        color: "var(--button-text)",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        fontSize: "13px",
+                        gap: "6px",
+                        justifyContent: "center",
+                        padding: "8px",
+                      }}
+                    >
+                      <Upload size={14} />
+                      Load File
+                      <input
+                        accept="application/json,.json,.txt"
+                        onChange={handleAiPlanDraftFileChange}
+                        style={{ display: "none" }}
+                        type="file"
+                      />
+                    </label>
+                    <button
+                      disabled={!aiPlanDraftText.trim()}
+                      onClick={importAiPlanDraft}
+                      type="button"
+                    >
+                      <Upload size={14} />
+                      Import Draft
+                    </button>
+                  </div>
+                </div>
+                {aiPlanStatus && (
                   <div
+                    role="status"
+                    aria-live="polite"
                     style={{
                       color: "var(--text-muted)",
                       fontSize: "12px",
                     }}
                   >
-                    Download a JSON context file, attach it in your existing
-                    ChatGPT discussion, then paste the returned draft JSON here.
+                    {aiPlanStatus}
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "8px",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <button onClick={downloadAiPlanContext} type="button">
-                      <Download size={14} />
-                      Context
-                    </button>
-                    <button onClick={copyAiPlanPrompt} type="button">
-                      <Copy size={14} />
-                      Prompt
-                    </button>
-                    <button onClick={openChatGptForAiPlan} type="button">
-                      Open ChatGPT
-                    </button>
-                  </div>
-                  <div
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={handleAiPlanDraftDrop}
-                    style={{
-                      display: "grid",
-                      gap: "8px",
-                    }}
-                  >
-                    <textarea
-                      aria-label="AI plan draft JSON"
-                      onChange={(event) => {
-                        setAiPlanDraftText(event.target.value);
-                        setAiPlanStatus("");
-                      }}
-                      placeholder="Paste or drop ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
-                      value={aiPlanDraftText}
-                      style={{
-                        background: "var(--surface-muted)",
-                        border: "1px dashed var(--border)",
-                        borderRadius: "6px",
-                        boxSizing: "border-box",
-                        color: "var(--text)",
-                        fontFamily:
-                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                        fontSize: "11px",
-                        lineHeight: 1.45,
-                        minHeight: "150px",
-                        padding: "8px",
-                        resize: "vertical",
-                        width: "100%",
-                      }}
-                    />
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "8px",
-                        gridTemplateColumns: "1fr 1fr",
-                      }}
-                    >
-                      <label
-                        style={{
-                          alignItems: "center",
-                          background: "var(--button-bg)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "6px",
-                          color: "var(--button-text)",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          fontSize: "13px",
-                          gap: "6px",
-                          justifyContent: "center",
-                          padding: "8px",
-                        }}
-                      >
-                        <Upload size={14} />
-                        Load File
-                        <input
-                          accept="application/json,.json,.txt"
-                          onChange={handleAiPlanDraftFileChange}
-                          style={{ display: "none" }}
-                          type="file"
-                        />
-                      </label>
-                      <button
-                        disabled={!aiPlanDraftText.trim()}
-                        onClick={importAiPlanDraft}
-                        type="button"
-                      >
-                        <Upload size={14} />
-                        Import Draft
-                      </button>
-                    </div>
-                  </div>
-                  {aiPlanStatus && (
-                    <div
-                      role="status"
-                      aria-live="polite"
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {aiPlanStatus}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
               <div
                 style={{
@@ -10892,6 +10786,7 @@ export default function App() {
         bodyWeightEntries={localBodyWeightEntries}
         exerciseLibrary={exerciseLibrary}
         history={history}
+        onUpdateHistoryWorkoutSet={updateHistoryWorkoutSet}
         session={authSession}
         setExerciseLibrary={(nextExerciseLibrary) => {
           setExerciseLibrary(nextExerciseLibrary);
@@ -10912,10 +10807,14 @@ export default function App() {
         exerciseLibrary={exerciseLibrary}
         exerciseMetadata={exerciseMetadata}
         history={history}
+        onBuildAiPlanDraft={buildAiPlanDraftFromText}
         onCancel={() => {
           setEditingPlanId(null);
           goHome();
         }}
+        onCopyAiPlanPrompt={copyAiPlanPrompt}
+        onDownloadAiPlanContext={downloadAiPlanContext}
+        onOpenChatGptForAiPlan={openChatGptForAiPlan}
         onSave={(result) => {
           setEditingPlanId(null);
           goHome();

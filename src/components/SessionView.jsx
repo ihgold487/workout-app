@@ -6142,11 +6142,17 @@ export default function SessionView({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    const calculationExercise =
+                                      getExerciseForCalculation(exercise);
+
                                     setWeightPickerData({
                                       exerciseId: exercise.id,
-
+                                      increment: getExerciseWeightIncrement(
+                                        calculationExercise,
+                                        undefined,
+                                        set.actualWeight
+                                      ),
                                       setId: set.id,
-
                                       value: set.actualWeight,
                                     });
 
@@ -7756,6 +7762,7 @@ export default function SessionView({
               setShowWeightPicker(false);
               setWeightPickerData(null);
             }}
+            increment={weightPickerData?.increment}
             value={weightPickerData?.value}
             weightUnit={weightUnit}
             onSelect={(value) => {
