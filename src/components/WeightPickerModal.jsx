@@ -5,6 +5,7 @@ function WeightPickerModalContent({
   current,
   onClose,
   onSelect,
+  optionLabel,
   options,
   title,
   zIndex = 1000,
@@ -203,7 +204,7 @@ function WeightPickerModalContent({
                 opacity: Number(manualValue) === option ? 1 : 0.6,
               }}
             >
-              {option}
+              {optionLabel ? optionLabel(option) : option}
             </button>
           ))}
         </div>
@@ -217,6 +218,7 @@ export default function WeightPickerModal({
   onClose,
   value,
   onSelect,
+  optionLabel,
   weightUnit,
   increment,
   range,
@@ -252,6 +254,7 @@ export default function WeightPickerModal({
       current={current}
       onClose={onClose}
       onSelect={onSelect}
+      optionLabel={optionLabel}
       options={options}
       title={title}
       zIndex={zIndex}

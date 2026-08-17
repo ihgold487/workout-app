@@ -761,6 +761,7 @@ function buildTrainerWorkoutPayload(workout) {
 const WEEKLY_RIR_VALUES = [0, 1, 2, 3, 4, 5, 6];
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
+const WEEKLY_REST_SECOND_VALUES = [45, 60, 75, 90, 120, 150, 180, 210, 240, 300];
 const AI_PLAN_DRAFT_STORAGE_KEY = "workoutAppLastAiPlanDraftJson";
 
 const PLAN_TYPE_DEFAULTS = {
@@ -865,13 +866,42 @@ function buildEditablePlanWorkouts(plan, templates) {
     const template = templates.find(
       (item) => String(item.id) === String(planWorkout.templateId)
     );
+    const weeklyPrescriptionsByPosition =
+      planWorkout.weeklyPrescriptionsByPosition || {};
+    const setRestSecondsByPosition = planWorkout.setRestSecondsByPosition || {};
+    const exercises = (template?.exercises || []).map(
+      (exercise, exerciseIndex) => {
+        const weeklyPrescriptions =
+          weeklyPrescriptionsByPosition[exerciseIndex + 1];
+        const setRestSeconds = setRestSecondsByPosition[exerciseIndex + 1];
+
+        return {
+          ...exercise,
+          sets: Array.isArray(setRestSeconds)
+            ? (exercise.sets || []).map((set, setIndex) => ({
+                ...set,
+                ...(setRestSeconds[setIndex]
+                  ? { restSeconds: setRestSeconds[setIndex] }
+                  : {}),
+              }))
+            : exercise.sets || [],
+          ...(Array.isArray(weeklyPrescriptions)
+            ? {
+                weeklyPrescriptions: weeklyPrescriptions.map((week) => ({
+                  ...week,
+                })),
+              }
+            : {}),
+        };
+      }
+    );
 
     return {
       ...(template || {
         exercises: [],
       }),
       dayNumber: planWorkout.dayNumber || workoutIndex + 1,
-      exercises: template?.exercises || [],
+      exercises,
       id: template?.id || planWorkout.templateId || `${plan.id}:template-${workoutIndex + 1}`,
       name: template?.name || planWorkout.name || `Workout ${workoutIndex + 1}`,
       planId: plan.id,
@@ -1404,11 +1434,94 @@ function formatRange(values) {
   return min === max ? formatValue(min) : `${formatValue(min)}-${formatValue(max)}`;
 }
 
+function normalizeRestSeconds(value) {
+  const seconds = Number(value);
+
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : null;
+}
+
+function getDefaultRestSecondsForReps(reps) {
+  const numericReps = Number.parseInt(String(reps ?? ""), 10);
+
+  if (!Number.isFinite(numericReps)) {
+    return 120;
+  }
+
+  if (numericReps <= 6) {
+    return 180;
+  }
+
+  if (numericReps <= 8) {
+    return 150;
+  }
+
+  if (numericReps <= 10) {
+    return 120;
+  }
+
+  if (numericReps <= 12) {
+    return 90;
+  }
+
+  return 60;
+}
+
+function formatRestDuration(seconds) {
+  const normalizedSeconds = normalizeRestSeconds(seconds);
+
+  if (!normalizedSeconds) {
+    return "";
+  }
+
+  const minutes = Math.floor(normalizedSeconds / 60);
+  const remainder = normalizedSeconds % 60;
+
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatRestRange(values) {
+  const normalizedValues = [
+    ...new Set(values.map(normalizeRestSeconds).filter(Boolean)),
+  ].sort((left, right) => left - right);
+
+  if (normalizedValues.length === 0) {
+    return "";
+  }
+
+  const first = normalizedValues[0];
+  const last = normalizedValues.at(-1);
+
+  return first === last
+    ? formatRestDuration(first)
+    : `${formatRestDuration(first)}-${formatRestDuration(last)}`;
+}
+
+function formatWeeklyPrescriptionValue(field, value) {
+  return field === "restSeconds" ? formatRestDuration(value) || "Default" : value;
+}
+
 function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
   const firstSet = exercise?.sets?.[0] || {};
+  const reps = firstPresentValue(
+    firstSet.prescribedReps,
+    firstSet.reps,
+    firstSet.targetReps,
+    fallbackReps
+  );
+  const restSeconds =
+    normalizeRestSeconds(
+      firstPresentValue(
+        firstSet.prescribedRestSeconds,
+        firstSet.restSeconds,
+        firstSet.rest_seconds,
+        exercise?.restSeconds,
+        exercise?.rest_seconds
+      )
+    ) || getDefaultRestSecondsForReps(reps);
 
   return {
-    reps: firstPresentValue(firstSet.prescribedReps, firstSet.reps, firstSet.targetReps, fallbackReps),
+    reps,
+    restSeconds: String(restSeconds),
     rir: firstPresentValue(firstSet.prescribedRir, firstSet.rir, firstSet.targetRir, fallbackRir),
     sets: String(exercise?.sets?.length || 1),
   };
@@ -1472,6 +1585,7 @@ function getDefaultWeeklyPrescriptions({
 
     return {
       reps: String(base.reps),
+      restSeconds: String(base.restSeconds),
       rir: getRirForPlanWeek({
         durationWeeks: weekCount,
         initialRir: base.rir,
@@ -1493,6 +1607,7 @@ function getDefaultWeeklyPrescriptions({
       isDeload: true,
       label: "D",
       reps: String(trainingWeeks[0]?.reps || base.reps),
+      restSeconds: String(trainingWeeks[0]?.restSeconds || base.restSeconds),
       rir: "5",
       sets: "2",
       weekNumber: weekCount + 1,
@@ -1555,9 +1670,12 @@ function getPrescriptionSummary(weeklyPrescriptions) {
   const setRange = formatRange(primaryWeeks.map((week) => week.sets));
   const repRange = formatRange(primaryWeeks.map((week) => week.reps));
   const rirRange = formatRange(primaryWeeks.map((week) => week.rir));
+  const restRange = formatRestRange(primaryWeeks.map((week) => week.restSeconds));
   const setLabel = setRange === "1" ? "set" : "sets";
 
-  return `${setRange} ${setLabel} | ${repRange} reps | ${rirRange} RIR`;
+  return `${setRange} ${setLabel} | ${repRange} reps | ${rirRange} RIR${
+    restRange ? `\n${restRange} rest` : ""
+  }`;
 }
 
 function WeeklyPrescriptionSheet({
@@ -1699,7 +1817,7 @@ function WeeklyPrescriptionSheet({
               fontSize: "12px",
               fontWeight: "bold",
               gap: "6px",
-              gridTemplateColumns: "52px 1fr 1fr 1fr",
+              gridTemplateColumns: "48px 1fr 1fr 1fr 1.2fr",
               textTransform: "uppercase",
             }}
           >
@@ -1707,6 +1825,7 @@ function WeeklyPrescriptionSheet({
             <span>Sets</span>
             <span>Reps</span>
             <span>RIR</span>
+            <span>Rest</span>
           </div>
 
           {weeklyPrescriptions.map((week) => (
@@ -1716,11 +1835,11 @@ function WeeklyPrescriptionSheet({
                 alignItems: "center",
                 display: "grid",
                 gap: "6px",
-                gridTemplateColumns: "52px 1fr 1fr 1fr",
+                gridTemplateColumns: "48px 1fr 1fr 1fr 1.2fr",
               }}
             >
               <strong>{week.isDeload ? "D" : `W${week.weekNumber}`}</strong>
-              {["sets", "reps", "rir"].map((field) => (
+              {["sets", "reps", "rir", "restSeconds"].map((field) => (
                 <button
                   key={field}
                   disabled={week.isDeload}
@@ -1736,7 +1855,7 @@ function WeeklyPrescriptionSheet({
                     textAlign: "center",
                   }}
                 >
-                  {week[field]}
+                  {formatWeeklyPrescriptionValue(field, week[field])}
                 </button>
               ))}
             </div>
@@ -1805,9 +1924,17 @@ function WeeklyPrescriptionValuePicker({
       ? WEEKLY_SET_VALUES
       : field === "reps"
         ? WEEKLY_REP_VALUES
-        : WEEKLY_RIR_VALUES;
+        : field === "restSeconds"
+          ? WEEKLY_REST_SECOND_VALUES
+          : WEEKLY_RIR_VALUES;
   const title =
-    field === "sets" ? "sets" : field === "reps" ? "reps" : "RIR";
+    field === "sets"
+      ? "sets"
+      : field === "reps"
+        ? "reps"
+        : field === "restSeconds"
+          ? "rest"
+          : "RIR";
 
   useEffect(() => {
     if (!scrollRef.current) {
@@ -1905,7 +2032,9 @@ function WeeklyPrescriptionValuePicker({
             marginBottom: "12px",
           }}
         >
-          <strong>Week {weekNumber} {title}</strong>
+          <strong>
+            Week {weekNumber} {title}
+          </strong>
           <button
             aria-label="Close value picker"
             onClick={closeWithAnimation}
@@ -1991,7 +2120,7 @@ function WeeklyPrescriptionValuePicker({
                 width: "100%",
               }}
             >
-              {option}
+              {field === "restSeconds" ? formatRestDuration(option) : option}
             </button>
           ))}
         </div>
@@ -2017,7 +2146,7 @@ function WeeklyPrescriptionValuePicker({
           </button>
 
           <input
-            inputMode="decimal"
+            inputMode={field === "restSeconds" ? "numeric" : "decimal"}
             min="0"
             value={manualValue}
             onChange={(event) => setManualValue(event.target.value)}

@@ -36,6 +36,7 @@ export function WorkoutExercisePreviewRow({
 }) {
   const isTemplateCompact = layout === "templateCompact";
   const equipmentLabel = exercise.equipment?.[0] || "";
+  const hasMultiLinePrescription = String(prescriptionSummary || "").includes("\n");
   const exerciseTitle = (
     <>
       <span style={{ fontWeight: "bold" }}>{exercise.name}</span>
@@ -97,11 +98,12 @@ export function WorkoutExercisePreviewRow({
         fontSize: isTemplateCompact ? "12.5px" : "13px",
         minHeight: isTemplateCompact ? "28px" : compact ? "30px" : "34px",
         minWidth: 0,
-        overflow: isTemplateCompact ? "hidden" : undefined,
+        overflow: isTemplateCompact && !hasMultiLinePrescription ? "hidden" : undefined,
         padding: compact ? "4px 7px" : "6px 8px",
         textAlign: "left",
-        textOverflow: isTemplateCompact ? "ellipsis" : undefined,
-        whiteSpace: isTemplateCompact ? "nowrap" : undefined,
+        textOverflow: isTemplateCompact && !hasMultiLinePrescription ? "ellipsis" : undefined,
+        whiteSpace:
+          isTemplateCompact && !hasMultiLinePrescription ? "nowrap" : "pre-line",
       }}
     >
       {prescriptionSummary}

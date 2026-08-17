@@ -55,6 +55,25 @@ function getExerciseSeedKey(exercise) {
   return `${exercise?.id ?? ""}::${exercise?.name || ""}::${equipment}`;
 }
 
+function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
+  if (!savedExercise) {
+    return seedExercise;
+  }
+
+  const mergedExercise = {
+    ...seedExercise,
+    active: savedExercise.active,
+  };
+
+  if (
+    Object.prototype.hasOwnProperty.call(savedExercise, "bodyweightLoadPercent")
+  ) {
+    mergedExercise.bodyweightLoadPercent = savedExercise.bodyweightLoadPercent;
+  }
+
+  return mergedExercise;
+}
+
 function normalizeWorkoutData(data, { seedExercises }) {
   return {
     exerciseLibrary: mergeExerciseLibraryWithSeed(
@@ -74,16 +93,18 @@ function normalizeWorkoutData(data, { seedExercises }) {
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const savedExercises = arrayOrEmpty(exerciseLibrary);
   const seedKeys = new Set(seedExercises.map(getExerciseSeedKey));
-  const savedStatusBySeedKey = new Map(
+  const savedBuiltInBySeedKey = new Map(
     savedExercises
       .filter((exercise) => exercise.builtin)
-      .map((exercise) => [getExerciseSeedKey(exercise), exercise.active])
+      .map((exercise) => [getExerciseSeedKey(exercise), exercise])
   );
   const seededExercises = seedExercises.map((exercise) =>
-    withDefaultExerciseStatus({
-      ...exercise,
-      active: savedStatusBySeedKey.get(getExerciseSeedKey(exercise)),
-    })
+    withDefaultExerciseStatus(
+      mergeSavedBuiltinExercise(
+        exercise,
+        savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise))
+      )
+    )
   );
   const customExercises = savedExercises.filter(
     (exercise) => !exercise.builtin

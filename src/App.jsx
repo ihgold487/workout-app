@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import {
   AlertTriangle,
+  BarChart3,
   Brain,
   Cable,
   CalendarPlus,
@@ -1268,6 +1269,34 @@ function getPlanExportWorkoutTemplate(plan, planWorkout, templates = []) {
     ) ||
     null
   );
+}
+
+function getPlanPrimaryMuscleSetSummary(plan, templates = []) {
+  const muscleSets = {};
+
+  (plan?.workouts || []).forEach((planWorkout) => {
+    const template = getPlanExportWorkoutTemplate(plan, planWorkout, templates);
+    const exercises = template?.exercises || planWorkout.exercises || [];
+
+    exercises.forEach((exercise) => {
+      const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
+      const setCount = (exercise.sets || []).length;
+
+      muscleSets[muscle] = (muscleSets[muscle] || 0) + setCount;
+    });
+  });
+
+  return muscleSets;
+}
+
+function getPlanCompareLabel(plan) {
+  const name = plan?.name || "Plan";
+
+  if (plan?.status === "active") {
+    return `${name} (Active)`;
+  }
+
+  return name;
 }
 
 function getPlanExportSetCount(exercise, weekPrescription) {
@@ -4254,6 +4283,8 @@ export default function App() {
   const [planDisplayWeeks, setPlanDisplayWeeks] = useState({});
   const [weekPickerPlanId, setWeekPickerPlanId] = useState(null);
   const [plansExpanded, setPlansExpanded] = useState(true);
+  const [planComparisonOpen, setPlanComparisonOpen] = useState(false);
+  const [selectedPlanComparisonIds, setSelectedPlanComparisonIds] = useState([]);
   const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
   const [completedPlanActions, setCompletedPlanActions] = useState(null);
   const [extendPlanTarget, setExtendPlanTarget] = useState(null);
@@ -6882,6 +6913,335 @@ export default function App() {
     ).length;
   }
 
+  function getSortedPlansForComparison() {
+    return [...plans].sort((a, b) => {
+      if (a.status === "active" && b.status !== "active") return -1;
+      if (b.status === "active" && a.status !== "active") return 1;
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
+    });
+  }
+
+  function openPlanComparison() {
+    const selectedIds = getSortedPlansForComparison()
+      .slice(0, 4)
+      .map((plan) => String(plan.id));
+
+    setSelectedPlanComparisonIds((currentIds) => {
+      const validCurrentIds = currentIds
+        .filter((id) => plans.some((plan) => String(plan.id) === String(id)))
+        .slice(0, 4);
+
+      return validCurrentIds.length >= 2 ? validCurrentIds : selectedIds;
+    });
+    setPlanComparisonOpen(true);
+  }
+
+  function renderPlanComparisonDialog() {
+    if (!planComparisonOpen) {
+      return null;
+    }
+
+    const sortedPlans = getSortedPlansForComparison();
+    const selectedIdSet = new Set(selectedPlanComparisonIds.map(String));
+    const selectedPlans = sortedPlans.filter((plan) =>
+      selectedIdSet.has(String(plan.id))
+    );
+    const planSummaries = selectedPlans.map((plan) => ({
+      muscleSets: getPlanPrimaryMuscleSetSummary(plan, templates),
+      plan,
+    }));
+    const muscles = [
+      ...new Set(
+        planSummaries.flatMap((summary) => Object.keys(summary.muscleSets))
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    const selectedCount = selectedPlans.length;
+
+    function togglePlanSelection(planId) {
+      const id = String(planId);
+
+      setSelectedPlanComparisonIds((currentIds) => {
+        if (currentIds.includes(id)) {
+          return currentIds.filter((item) => item !== id);
+        }
+
+        if (currentIds.length >= 4) {
+          return currentIds;
+        }
+
+        return [...currentIds, id];
+      });
+    }
+
+    function getComparisonCellStyle(values, value) {
+      const distinctValues = [...new Set(values)];
+
+      if (distinctValues.length <= 1) {
+        return {};
+      }
+
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      if (value === max) {
+        return {
+          background: "color-mix(in srgb, var(--success-bg) 72%, transparent)",
+          color: "var(--success-text)",
+          fontWeight: "bold",
+        };
+      }
+
+      if (value === min) {
+        return {
+          background: "color-mix(in srgb, var(--warning-bg) 72%, transparent)",
+          color: "var(--warning-text)",
+          fontWeight: "bold",
+        };
+      }
+
+      return {
+        background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+        fontWeight: "bold",
+      };
+    }
+
+    return (
+      <div
+        aria-label="Plan muscle set comparison"
+        aria-modal="true"
+        onClick={() => setPlanComparisonOpen(false)}
+        role="dialog"
+        style={{
+          alignItems: "center",
+          background: "rgba(0,0,0,.48)",
+          display: "flex",
+          inset: 0,
+          justifyContent: "center",
+          padding: "18px",
+          position: "fixed",
+          zIndex: 2400,
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
+            boxSizing: "border-box",
+            color: "var(--text)",
+            display: "grid",
+            gap: "12px",
+            maxHeight: "calc(100dvh - 36px)",
+            maxWidth: "760px",
+            overflowY: "auto",
+            padding: "16px",
+            width: "min(100%, 760px)",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "10px",
+              justifyContent: "space-between",
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  fontSize: "18px",
+                  lineHeight: 1.15,
+                  margin: 0,
+                }}
+              >
+                Compare Plans
+              </h2>
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  marginTop: "3px",
+                }}
+              >
+                Primary-muscle sets per plan
+              </div>
+            </div>
+            <button
+              aria-label="Close plan comparison"
+              onClick={() => setPlanComparisonOpen(false)}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                justifyContent: "center",
+                minHeight: "36px",
+                minWidth: "36px",
+                padding: "4px",
+              }}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "6px",
+            }}
+          >
+            {sortedPlans.map((plan) => {
+              const selected = selectedIdSet.has(String(plan.id));
+              const disabled = !selected && selectedCount >= 4;
+              const selectedIndex = selectedPlans.findIndex(
+                (selectedPlan) => String(selectedPlan.id) === String(plan.id)
+              );
+
+              return (
+                <button
+                  aria-pressed={selected}
+                  disabled={disabled}
+                  key={plan.id}
+                  onClick={() => togglePlanSelection(plan.id)}
+                  style={{
+                    alignItems: "center",
+                    background: selected
+                      ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                      : "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: disabled ? "var(--text-muted)" : "var(--text)",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "auto minmax(0, 1fr)",
+                    minHeight: "38px",
+                    opacity: disabled ? 0.55 : 1,
+                    padding: "7px 9px",
+                    textAlign: "left",
+                  }}
+                  type="button"
+                >
+                  {selected ? (
+                    <CheckCircle2 size={17} color="var(--accent)" />
+                  ) : (
+                    <Circle size={17} color="var(--text-muted)" />
+                  )}
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {selectedIndex >= 0 ? `${selectedIndex + 1}. ` : ""}
+                    {getPlanCompareLabel(plan)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedPlans.length < 2 ? (
+            <div
+              style={{
+                border: "1px dashed var(--border)",
+                borderRadius: "8px",
+                color: "var(--text-muted)",
+                padding: "14px",
+                textAlign: "center",
+              }}
+            >
+              Select at least 2 plans to compare.
+            </div>
+          ) : (
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                overflowX: "auto",
+              }}
+            >
+              <table
+                style={{
+                  borderCollapse: "collapse",
+                  fontSize: "13px",
+                  minWidth: `${150 + selectedPlans.length * 58}px`,
+                  width: "100%",
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th
+                      style={{
+                        borderBottom: "1px solid var(--border)",
+                        padding: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      Muscle
+                    </th>
+                    {selectedPlans.map((plan, index) => (
+                      <th
+                        key={plan.id}
+                        style={{
+                          borderBottom: "1px solid var(--border)",
+                          padding: "8px",
+                          textAlign: "right",
+                          verticalAlign: "bottom",
+                        }}
+                      >
+                        {index + 1}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {muscles.map((muscle) => {
+                    const values = planSummaries.map(
+                      (summary) => summary.muscleSets[muscle] || 0
+                    );
+
+                    return (
+                      <tr key={muscle}>
+                        <th
+                          style={{
+                            borderBottom: "1px solid var(--border)",
+                            fontWeight: "bold",
+                            padding: "8px",
+                            textAlign: "left",
+                          }}
+                        >
+                          {muscle}
+                        </th>
+                        {planSummaries.map((summary, index) => {
+                          const value = values[index];
+
+                          return (
+                            <td
+                              key={summary.plan.id}
+                              style={{
+                                borderBottom: "1px solid var(--border)",
+                                padding: "8px",
+                                textAlign: "right",
+                                ...getComparisonCellStyle(values, value),
+                              }}
+                            >
+                              {value}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderCompletedPlanActions() {
     if (!completedPlanActions) {
       return null;
@@ -8004,6 +8364,7 @@ export default function App() {
       >
         {content}
         {renderPlanCompletionPrompt()}
+        {renderPlanComparisonDialog()}
         {renderAiPlanNotesDialog()}
         {renderBottomNav(activeView)}
       </div>
@@ -11140,40 +11501,55 @@ export default function App() {
 
       {plans.length > 0 && (
         <>
-          <button
-            aria-expanded={plansExpanded}
-            onClick={() => setPlansExpanded((expanded) => !expanded)}
+          <div
             style={{
               alignItems: "center",
-              background: "transparent",
-              border: "none",
               color: "var(--text-h)",
               display: "grid",
               font: "inherit",
-              gridTemplateColumns: "32px minmax(0, 1fr) 32px",
+              gridTemplateColumns: "32px minmax(0, 1fr) auto",
               margin: "0 0 10px",
-              padding: "4px 0",
+              padding: 0,
               width: "100%",
             }}
           >
-            <span
+            <button
+              aria-expanded={plansExpanded}
+              aria-label={`${plansExpanded ? "Collapse" : "Expand"} plans`}
+              onClick={() => setPlansExpanded((expanded) => !expanded)}
               style={{
                 alignItems: "center",
+                background: "transparent",
+                border: "none",
+                color: "var(--text-h)",
                 display: "inline-flex",
+                font: "inherit",
                 justifyContent: "center",
+                minHeight: "32px",
+                padding: "4px",
               }}
+              type="button"
             >
               {plansExpanded ? (
                 <ChevronDown size={18} />
               ) : (
                 <ChevronRight size={18} />
               )}
-            </span>
-            <span
+            </button>
+            <button
+              aria-expanded={plansExpanded}
+              onClick={() => setPlansExpanded((expanded) => !expanded)}
               style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-h)",
                 fontSize: "18px",
                 fontWeight: "bold",
+                minHeight: "32px",
+                padding: "4px 0",
+                textAlign: "center",
               }}
+              type="button"
             >
               Plans{" "}
               <span
@@ -11184,9 +11560,27 @@ export default function App() {
               >
                 ({plans.length} {plans.length === 1 ? "plan" : "plans"})
               </span>
-            </span>
-            <span />
-          </button>
+            </button>
+            <button
+              aria-label="Compare plan muscle sets"
+              disabled={plans.length < 2}
+              onClick={openPlanComparison}
+              style={{
+                alignItems: "center",
+                display: "inline-flex",
+                gap: "5px",
+                justifyContent: "center",
+                minHeight: "32px",
+                padding: "4px 8px",
+                whiteSpace: "nowrap",
+              }}
+              title="Compare plans"
+              type="button"
+            >
+              <BarChart3 size={15} />
+              <span style={{ fontSize: "12px" }}>Compare</span>
+            </button>
+          </div>
 
           {plansExpanded && (
             <>

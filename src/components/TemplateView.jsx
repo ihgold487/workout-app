@@ -673,6 +673,77 @@ export default function TemplateView({
     return min === max ? formatValue(min) : `${formatValue(min)}-${formatValue(max)}`;
   }
 
+  function getDefaultRestSecondsForReps(reps) {
+    const numericReps = Number.parseInt(String(reps ?? ""), 10);
+
+    if (!Number.isFinite(numericReps)) {
+      return 120;
+    }
+
+    if (numericReps <= 6) {
+      return 180;
+    }
+
+    if (numericReps <= 8) {
+      return 150;
+    }
+
+    if (numericReps <= 10) {
+      return 120;
+    }
+
+    if (numericReps <= 12) {
+      return 90;
+    }
+
+    return 60;
+  }
+
+  function formatRestDuration(seconds) {
+    const normalizedSeconds = Number(seconds);
+
+    if (!Number.isFinite(normalizedSeconds) || normalizedSeconds <= 0) {
+      return "";
+    }
+
+    const roundedSeconds = Math.round(normalizedSeconds);
+    const minutes = Math.floor(roundedSeconds / 60);
+    const remainder = roundedSeconds % 60;
+
+    return `${minutes}:${String(remainder).padStart(2, "0")}`;
+  }
+
+  function formatRestRange(values) {
+    const normalizedValues = [
+      ...new Set(
+        values
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value > 0)
+          .map((value) => Math.round(value))
+      ),
+    ].sort((left, right) => left - right);
+
+    if (normalizedValues.length === 0) {
+      return "";
+    }
+
+    const first = normalizedValues[0];
+    const last = normalizedValues.at(-1);
+
+    return first === last
+      ? formatRestDuration(first)
+      : `${formatRestDuration(first)}-${formatRestDuration(last)}`;
+  }
+
+  function getEffectiveSetRestSeconds(set) {
+    const reps = getSetPrescriptionReps(set);
+
+    return (
+      getSetPrescriptionRestSeconds(set) ||
+      getDefaultRestSecondsForReps(reps)
+    );
+  }
+
   function getWorkoutPrescriptionSummary(exercise) {
     const setCount = exercise?.sets?.length || 0;
     const reps = formatRange(
@@ -681,9 +752,14 @@ export default function TemplateView({
     const rir = formatRange(
       (exercise?.sets || []).map((set) => getSetPrescriptionRir(set))
     );
+    const rest = formatRestRange(
+      (exercise?.sets || []).map((set) => getEffectiveSetRestSeconds(set))
+    );
     const setLabel = setCount === 1 ? "set" : "sets";
 
-    return `${setCount} ${setLabel} | ${reps || "—"} reps | ${rir || "—"} RIR`;
+    return `${setCount} ${setLabel} | ${reps || "—"} reps | ${
+      rir || "—"
+    } RIR\n${rest || "—"} rest`;
   }
 
   function getExerciseWithCurrentInstancePrescription(exercise) {
@@ -718,6 +794,9 @@ export default function TemplateView({
       reps:
         getSetPrescriptionReps(originalFirstSet) !==
         getSetPrescriptionReps(draftFirstSet),
+      rest:
+        getEffectiveSetRestSeconds(originalFirstSet) !==
+        getEffectiveSetRestSeconds(draftFirstSet),
       rir:
         getSetPrescriptionRir(originalFirstSet) !==
         getSetPrescriptionRir(draftFirstSet),
@@ -745,6 +824,7 @@ export default function TemplateView({
     const firstSet = instanceExercise?.sets?.[0] || {};
     const editedSets = String(instanceExercise?.sets?.length || 1);
     const editedReps = getSetPrescriptionReps(firstSet);
+    const editedRestSeconds = getEffectiveSetRestSeconds(firstSet);
     const editedRir = getSetPrescriptionRir(firstSet);
     const nextWeeklyPrescriptions = baseExercise.weeklyPrescriptions.map((week) => {
       const weekNumber = Number(week.weekNumber);
@@ -760,6 +840,7 @@ export default function TemplateView({
       return {
         ...week,
         ...(changes.reps ? { reps: editedReps } : {}),
+        ...(changes.rest ? { restSeconds: String(editedRestSeconds) } : {}),
         ...(changes.sets ? { sets: editedSets } : {}),
         ...(weekNumber === Number(currentPlanWeek)
           ? {
@@ -789,6 +870,7 @@ export default function TemplateView({
         [
           getSetPrescriptionReps(set),
           getSetPrescriptionRir(set),
+          getEffectiveSetRestSeconds(set),
         ].join(":")
       )
       .join("|");
@@ -1206,6 +1288,10 @@ export default function TemplateView({
       return getSetPrescriptionRir(firstSet);
     }
 
+    if (field === "restSeconds") {
+      return String(getEffectiveSetRestSeconds(firstSet));
+    }
+
     return "";
   }
 
@@ -1221,6 +1307,7 @@ export default function TemplateView({
       const currentSets = updated.sets || [];
       const templateSet = currentSets.at(-1) || {
         reps: "",
+        restSeconds: "",
         rir: "",
       };
 
@@ -1232,6 +1319,7 @@ export default function TemplateView({
           : {
               id: Date.now() + Math.random() + index,
               reps: getSetPrescriptionReps(templateSet),
+              restSeconds: getEffectiveSetRestSeconds(templateSet),
               rir: getSetPrescriptionRir(templateSet),
             };
       });
@@ -1248,6 +1336,14 @@ export default function TemplateView({
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
         rir: String(value),
+      }));
+    }
+
+    if (field === "restSeconds") {
+      updated.sets = (updated.sets || []).map((set) => ({
+        ...set,
+        prescribedRestSeconds: Number(value),
+        restSeconds: Number(value),
       }));
     }
 
@@ -1936,70 +2032,86 @@ export default function TemplateView({
                 gap: "8px",
               }}
             >
-              <div
-                style={{
-                  color: "var(--text-muted)",
-                  display: "grid",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  gap: "8px",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  textTransform: "uppercase",
-                }}
-              >
-                <span>Sets</span>
-                <span>Reps</span>
-                <span>RIR</span>
-              </div>
+	              <div
+	                style={{
+	                  color: "var(--text-muted)",
+	                  display: "grid",
+	                  fontSize: "12px",
+	                  fontWeight: "bold",
+	                  gap: "8px",
+	                  gridTemplateColumns: "1fr 1fr 1fr 1.2fr",
+	                  textTransform: "uppercase",
+	                }}
+	              >
+	                <span>Sets</span>
+	                <span>Reps</span>
+	                <span>RIR</span>
+	                <span>Rest</span>
+	              </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gap: "8px",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                }}
-              >
-                {[
-                  ["sets", editingExerciseDraft?.sets?.length || 1],
-                  ["reps", getPrescriptionPickerValue("reps") || "—"],
-                  ["rir", getPrescriptionPickerValue("rir") || "—"],
-                ].map(([field, value]) => (
-                  <button
-                    key={field}
-                    onClick={() => setEditingPrescriptionField(field)}
-                    style={{
+	              <div
+	                style={{
+	                  display: "grid",
+	                  gap: "8px",
+	                  gridTemplateColumns: "1fr 1fr 1fr 1.2fr",
+	                }}
+	              >
+	                {[
+	                  ["sets", editingExerciseDraft?.sets?.length || 1],
+	                  ["reps", getPrescriptionPickerValue("reps") || "—"],
+	                  ["rir", getPrescriptionPickerValue("rir") || "—"],
+	                  [
+	                    "restSeconds",
+	                    formatRestDuration(
+	                      getPrescriptionPickerValue("restSeconds")
+	                    ) || "—",
+	                  ],
+	                ].map(([field, value]) => (
+	                  <button
+	                    key={field}
+	                    onClick={() => setEditingPrescriptionField(field)}
+	                    style={{
                       minHeight: "42px",
                       padding: "8px",
                       textAlign: "center",
                     }}
                     type="button"
                   >
-                    {value}
-                  </button>
-                ))}
-              </div>
+	                    {value}
+	                  </button>
+	                ))}
+	              </div>
             </div>
 
             {editingPrescriptionField && (
               <WeightPickerModal
-                isOpen={Boolean(editingPrescriptionField)}
-                onClose={() => setEditingPrescriptionField(null)}
-                value={getPrescriptionPickerValue(editingPrescriptionField)}
-                increment={editingPrescriptionField === "rir" ? 0.5 : 1}
-                title={`Select ${
-                  editingPrescriptionField === "sets"
-                    ? "Sets"
-                    : editingPrescriptionField === "reps"
-                      ? "Reps"
-                      : "RIR"
-                }`}
-                values={
-                  editingPrescriptionField === "sets"
-                    ? Array.from({ length: 10 }, (_, index) => index + 1)
-                    : editingPrescriptionField === "reps"
-                      ? Array.from({ length: 30 }, (_, index) => index + 1)
-                      : Array.from({ length: 13 }, (_, index) => index * 0.5)
-                }
+	                isOpen={Boolean(editingPrescriptionField)}
+	                onClose={() => setEditingPrescriptionField(null)}
+	                value={getPrescriptionPickerValue(editingPrescriptionField)}
+	                increment={editingPrescriptionField === "rir" ? 0.5 : 1}
+	                optionLabel={
+	                  editingPrescriptionField === "restSeconds"
+	                    ? formatRestDuration
+	                    : undefined
+	                }
+	                title={`Select ${
+	                  editingPrescriptionField === "sets"
+	                    ? "Sets"
+	                    : editingPrescriptionField === "reps"
+	                      ? "Reps"
+	                      : editingPrescriptionField === "restSeconds"
+	                        ? "Rest"
+	                        : "RIR"
+	                }`}
+	                values={
+	                  editingPrescriptionField === "sets"
+	                    ? Array.from({ length: 10 }, (_, index) => index + 1)
+	                    : editingPrescriptionField === "reps"
+	                      ? Array.from({ length: 30 }, (_, index) => index + 1)
+	                      : editingPrescriptionField === "restSeconds"
+	                        ? [45, 60, 75, 90, 120, 150, 180, 210, 240, 300]
+	                        : Array.from({ length: 13 }, (_, index) => index * 0.5)
+	                }
                 onSelect={(value) => {
                   updateEditingPrescription(editingPrescriptionField, value);
                 }}
