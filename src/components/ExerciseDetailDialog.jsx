@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CalendarDays,
   CalendarCheck,
@@ -148,6 +149,14 @@ function daysBetween(startDate, endDate) {
   return Math.round((end - start) / 86400000);
 }
 
+function addDaysToDateKey(dateKey, dayCount) {
+  const date = new Date(`${dateKey}T00:00:00`);
+
+  date.setDate(date.getDate() + dayCount);
+
+  return getDateKey(date);
+}
+
 function getOptionLabel(options, value) {
   return options.find((option) => option.value === value)?.label || "";
 }
@@ -214,11 +223,19 @@ function filterPointsByRange(points, rangeDays) {
   }
 
   const lastDate = points[points.length - 1].dateKey;
+  return filterPointsByRangeEndDate(points, rangeDays, lastDate);
+}
+
+function filterPointsByRangeEndDate(points, rangeDays, endDateKey) {
+  if (!rangeDays || points.length === 0 || !endDateKey) {
+    return points;
+  }
+
   const filtered = points.filter(
-    (point) => daysBetween(point.dateKey, lastDate) <= rangeDays
+    (point) => daysBetween(point.dateKey, endDateKey) <= rangeDays
   );
 
-  return filtered.length > 0 ? filtered : [points[points.length - 1]];
+  return filtered;
 }
 
 function buildTrendPoints(points, trendDays) {
@@ -490,6 +507,44 @@ function getLinearRegression(points) {
       dateKey: firstDate,
       value: intercept + slopePerDay * firstX,
     },
+  };
+}
+
+function buildBenchExperimentChartSeries(data, rangeDays) {
+  const latestDateKey = [
+    ...data.heavyPoints,
+    ...data.moderatePoints,
+    ...data.lowConfidencePoints,
+  ]
+    .map((point) => point.dateKey)
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+    .at(-1);
+  const heavyRangePoints = filterPointsByRangeEndDate(
+    data.heavyPoints,
+    rangeDays,
+    latestDateKey
+  );
+  const moderateRangePoints = filterPointsByRangeEndDate(
+    data.moderatePoints,
+    rangeDays,
+    latestDateKey
+  );
+  const lowConfidenceRangePoints = filterPointsByRangeEndDate(
+    data.lowConfidencePoints,
+    rangeDays,
+    latestDateKey
+  );
+  const heavyPoints = getRollingAveragePoints(heavyRangePoints);
+  const moderatePoints = getRollingAveragePoints(moderateRangePoints);
+
+  return {
+    heavyPoints,
+    heavyRegression: getLinearRegression(heavyPoints),
+    latestDateKey,
+    lowConfidencePoints: lowConfidenceRangePoints,
+    moderatePoints,
+    moderateRegression: getLinearRegression(moderatePoints),
   };
 }
 
@@ -819,17 +874,35 @@ function HistorySummaryItem({ icon: Icon, label, value }) {
 
 function SelectionSheet({
   colorTrend,
+  mode = "trend",
   onClose,
   onSelect,
+  onSelectRange,
   onToggleColorTrend,
+  onToggleRegression,
   options,
+  rangeOptions = [],
+  rangeSelectedValue,
+  regressionEnabled = false,
   selectedValue,
   showColorTrendToggle = false,
+  showRangeToggle = false,
+  showRegressionToggle = false,
   title,
 }) {
+  const [activeMode, setActiveMode] = useState(mode);
+  const activeOptions =
+    activeMode === "range" && showRangeToggle ? rangeOptions : options;
+  const activeSelectedValue =
+    activeMode === "range" && showRangeToggle ? rangeSelectedValue : selectedValue;
+  const activeOnSelect =
+    activeMode === "range" && showRangeToggle ? onSelectRange : onSelect;
+  const activeTitle =
+    activeMode === "range" && showRangeToggle ? "Exercise range" : title;
+
   return (
     <div
-      aria-label={title}
+      aria-label={activeTitle}
       aria-modal="true"
       onClick={onClose}
       role="dialog"
@@ -852,7 +925,9 @@ function SelectionSheet({
           boxSizing: "border-box",
           display: "grid",
           gap: "8px",
+          maxHeight: "82vh",
           maxWidth: "420px",
+          overflow: "auto",
           padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
           width: "100%",
         }}
@@ -870,7 +945,7 @@ function SelectionSheet({
               margin: 0,
             }}
           >
-            {title}
+            {activeTitle}
           </h3>
           <div
             style={{
@@ -944,19 +1019,85 @@ function SelectionSheet({
                 </span>
               </button>
             )}
-            <button aria-label={`Close ${title}`} onClick={onClose} type="button">
+            {showRangeToggle && (
+              <button
+                aria-label={
+                  activeMode === "range"
+                    ? "Show exercise trend options"
+                    : "Show exercise range options"
+                }
+                aria-pressed={activeMode === "range"}
+                onClick={() =>
+                  setActiveMode((currentMode) =>
+                    currentMode === "range" ? "trend" : "range"
+                  )
+                }
+                style={{
+                  alignItems: "center",
+                  borderColor:
+                    activeMode === "range" || rangeSelectedValue
+                      ? "var(--accent)"
+                      : undefined,
+                  color:
+                    activeMode === "range" || rangeSelectedValue
+                      ? "var(--accent)"
+                      : undefined,
+                  display: "grid",
+                  justifyContent: "center",
+                  minHeight: "34px",
+                  minWidth: "34px",
+                  padding: 0,
+                  placeItems: "center",
+                }}
+                title={`Range: ${getOptionLabel(rangeOptions, rangeSelectedValue)}`}
+                type="button"
+              >
+                <CalendarDays size={17} />
+              </button>
+            )}
+            {showRegressionToggle && (
+              <button
+                aria-label={
+                  regressionEnabled
+                    ? "Hide regression line"
+                    : "Show regression line"
+                }
+                aria-pressed={regressionEnabled}
+                onClick={onToggleRegression}
+                style={{
+                  alignItems: "center",
+                  borderColor: regressionEnabled ? "var(--accent)" : undefined,
+                  color: regressionEnabled ? "var(--accent)" : undefined,
+                  display: "grid",
+                  justifyContent: "center",
+                  minHeight: "34px",
+                  minWidth: "34px",
+                  padding: 0,
+                  placeItems: "center",
+                }}
+                title={
+                  regressionEnabled
+                    ? "Regression line is on"
+                    : "Regression line is off"
+                }
+                type="button"
+              >
+                <LineChart size={17} />
+              </button>
+            )}
+            <button aria-label={`Close ${activeTitle}`} onClick={onClose} type="button">
               <X size={17} />
             </button>
           </div>
         </div>
-        {options.map((option) => {
-          const selected = option.value === selectedValue;
+        {activeOptions.map((option) => {
+          const selected = option.value === activeSelectedValue;
 
           return (
             <button
               key={option.label}
               onClick={() => {
-                onSelect(option.value);
+                activeOnSelect?.(option.value);
                 onClose();
               }}
               style={{
@@ -978,6 +1119,14 @@ function SelectionSheet({
       </div>
     </div>
   );
+}
+
+function PortalSelectionSheet(props) {
+  if (typeof document === "undefined") {
+    return <SelectionSheet {...props} />;
+  }
+
+  return createPortal(<SelectionSheet {...props} />, document.body);
 }
 
 function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
@@ -1345,19 +1494,26 @@ function BenchExperimentStat({ label, sublabel, value }) {
   );
 }
 
-function BenchZoneChart({ data, showTrendLines = false }) {
+function BenchZoneChart({
+  data,
+  rangeDays,
+  showTrendLines = false,
+}) {
   const [selectedPointKey, setSelectedPointKey] = useState(null);
-  const rawHeavyPoints = data.heavyPoints;
-  const rawModeratePoints = data.moderatePoints;
-  const heavyPoints = getRollingAveragePoints(rawHeavyPoints);
-  const moderatePoints = getRollingAveragePoints(rawModeratePoints);
-  const lowConfidencePoints = data.lowConfidencePoints;
+  const {
+    heavyPoints,
+    heavyRegression,
+    latestDateKey,
+    lowConfidencePoints,
+    moderatePoints,
+    moderateRegression,
+  } = buildBenchExperimentChartSeries(data, rangeDays);
   const regressionEndpointPoints = showTrendLines
     ? [
-        data.heavyRegression?.start,
-        data.heavyRegression?.end,
-        data.moderateRegression?.start,
-        data.moderateRegression?.end,
+        heavyRegression?.start,
+        heavyRegression?.end,
+        moderateRegression?.start,
+        moderateRegression?.end,
       ].filter(Boolean)
     : [];
   const allDatedPoints = [
@@ -1398,8 +1554,13 @@ function BenchZoneChart({ data, showTrendLines = false }) {
   const sortedByDate = [...allDatedPoints].sort((left, right) =>
     left.dateKey.localeCompare(right.dateKey)
   );
-  const firstDate = sortedByDate[0].dateKey;
-  const lastDate = sortedByDate[sortedByDate.length - 1].dateKey;
+  const lastDate = rangeDays && latestDateKey
+    ? latestDateKey
+    : sortedByDate[sortedByDate.length - 1].dateKey;
+  const firstDate =
+    rangeDays && latestDateKey
+      ? addDaysToDateKey(latestDateKey, -rangeDays)
+      : sortedByDate[0].dateKey;
   const dateSpan = Math.max(1, daysBetween(firstDate, lastDate));
   const values = allDatedPoints.map((point) => point.value);
   const min = Math.min(...values);
@@ -1447,10 +1608,10 @@ function BenchZoneChart({ data, showTrendLines = false }) {
     };
   };
   const heavyRegressionLine = showTrendLines
-    ? plotRegression(data.heavyRegression)
+    ? plotRegression(heavyRegression)
     : null;
   const moderateRegressionLine = showTrendLines
-    ? plotRegression(data.moderateRegression)
+    ? plotRegression(moderateRegression)
     : null;
 
   function renderLine(points, color) {
@@ -1743,23 +1904,34 @@ function BenchReadItem({ label, read, detail }) {
 }
 
 function BenchPressExperiment({ exerciseHistory }) {
+  const [rangeDays, setRangeDays] = useState(null);
   const [showTrendLines, setShowTrendLines] = useState(false);
+  const [trendSheetOpen, setTrendSheetOpen] = useState(false);
   const data = useMemo(
     () => buildBenchPressExperiment(exerciseHistory),
     [exerciseHistory]
   );
-  const latestHeavy = getRollingAveragePoints(data.heavyPoints);
-  const latestModerate = getRollingAveragePoints(data.moderatePoints);
+  const chartSeries = useMemo(
+    () => buildBenchExperimentChartSeries(data, rangeDays),
+    [data, rangeDays]
+  );
+  const latestHeavy = chartSeries.heavyPoints;
+  const latestModerate = chartSeries.moderatePoints;
   const latestHeavyValue =
     latestHeavy.length > 0 ? latestHeavy[latestHeavy.length - 1].value : null;
   const latestModerateValue =
     latestModerate.length > 0
       ? latestModerate[latestModerate.length - 1].value
       : null;
-  const heavyRead = getBenchTrendRead(data.heavyRegression);
-  const moderateRead = getBenchTrendRead(data.moderateRegression);
-  const ratioRead = getBenchRatioRead(data.heavyExpressionRatio);
+  const visibleHeavyExpressionRatio =
+    latestHeavyValue && latestModerateValue
+      ? latestHeavyValue / latestModerateValue
+      : null;
+  const heavyRead = getBenchTrendRead(chartSeries.heavyRegression);
+  const moderateRead = getBenchTrendRead(chartSeries.moderateRegression);
+  const ratioRead = getBenchRatioRead(visibleHeavyExpressionRatio);
   const fatigueRead = getBenchFatigueRead(data.latestFatigue);
+  const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
 
   return (
     <section
@@ -1787,7 +1959,7 @@ function BenchPressExperiment({ exerciseHistory }) {
           }}
         >
           Temporary bench-only view comparing heavy strength expression against
-          moderate-rep performance. Trend lines use a rolling 3-workout average.
+          moderate-rep performance.
         </div>
       </div>
       <div
@@ -1804,26 +1976,40 @@ function BenchPressExperiment({ exerciseHistory }) {
             fontSize: "12px",
           }}
         >
-          Dashed trend lines use linear regression on the rolling points.
+          Running averages and regression use the selected calendar range.
         </div>
         <button
-          aria-pressed={showTrendLines}
-          onClick={() => setShowTrendLines((current) => !current)}
+          aria-label={`Set bench experiment range, current ${rangeLabel}`}
+          aria-pressed={Boolean(rangeDays || showTrendLines)}
+          onClick={() => setTrendSheetOpen(true)}
           style={{
             alignItems: "center",
+            borderColor:
+              rangeDays || showTrendLines
+                ? "var(--accent)"
+                : undefined,
+            color:
+              rangeDays || showTrendLines
+                ? "var(--accent)"
+                : undefined,
             display: "inline-flex",
             gap: "5px",
             minHeight: "32px",
             padding: "4px 9px",
             whiteSpace: "nowrap",
           }}
+          title={`Range: ${rangeLabel}`}
           type="button"
         >
           <TrendingUp size={14} />
           Trend
         </button>
       </div>
-      <BenchZoneChart data={data} showTrendLines={showTrendLines} />
+      <BenchZoneChart
+        data={data}
+        rangeDays={rangeDays}
+        showTrendLines={showTrendLines}
+      />
       <div
         style={{
           border: "1px solid var(--border)",
@@ -1849,17 +2035,17 @@ function BenchPressExperiment({ exerciseHistory }) {
           }}
         >
           <BenchReadItem
-            detail={formatBenchSlope(data.heavyRegression)}
+            detail={formatBenchSlope(chartSeries.heavyRegression)}
             label="Heavy trend"
             read={heavyRead}
           />
           <BenchReadItem
-            detail={formatBenchSlope(data.moderateRegression)}
+            detail={formatBenchSlope(chartSeries.moderateRegression)}
             label="Moderate trend"
             read={moderateRead}
           />
           <BenchReadItem
-            detail={formatBenchMetric(data.heavyExpressionRatio, 3)}
+            detail={formatBenchMetric(visibleHeavyExpressionRatio, 3)}
             label="Heavy expression"
             read={ratioRead}
           />
@@ -1890,12 +2076,12 @@ function BenchPressExperiment({ exerciseHistory }) {
         <BenchExperimentStat
           label="Heavy / moderate"
           sublabel="Rolling values"
-          value={formatBenchMetric(data.heavyExpressionRatio, 3)}
+          value={formatBenchMetric(visibleHeavyExpressionRatio, 3)}
         />
         <BenchExperimentStat
           label="Low-confidence sets"
           sublabel="Best >3 RIR points shown faintly"
-          value={data.lowConfidencePoints.length}
+          value={chartSeries.lowConfidencePoints.length}
         />
       </div>
       <div
@@ -1959,6 +2145,20 @@ function BenchPressExperiment({ exerciseHistory }) {
           }
         />
       </div>
+      {trendSheetOpen && (
+        <PortalSelectionSheet
+          onClose={() => setTrendSheetOpen(false)}
+          onSelect={setRangeDays}
+          onToggleRegression={() =>
+            setShowTrendLines((currentValue) => !currentValue)
+          }
+          options={RANGE_OPTIONS}
+          regressionEnabled={showTrendLines}
+          selectedValue={rangeDays}
+          showRegressionToggle
+          title="Exercise range"
+        />
+      )}
     </section>
   );
 }
