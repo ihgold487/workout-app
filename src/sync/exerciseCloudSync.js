@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { EXERCISE_STATUS, withDefaultExerciseStatus } from "../utils/exerciseStatus";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 
 const EXERCISES_TABLE = "exercises";
 const EXERCISE_PREFERENCES_TABLE = "user_exercise_preferences";
@@ -52,6 +53,7 @@ function cloudExerciseFromLocal(exercise, userId) {
     instruction_steps: Array.isArray(exercise.instructionSteps)
       ? exercise.instructionSteps
       : exercise.instruction_steps || [],
+    is_benchmark: isExerciseBenchmark(exercise),
     is_builtin: false,
     name: exercise.name,
     primary_muscle: muscles[0] || null,
@@ -86,6 +88,7 @@ function cloudBuiltinExerciseFromLocal(exercise, userId) {
     instruction_steps: Array.isArray(exercise.instructionSteps)
       ? exercise.instructionSteps
       : exercise.instruction_steps || [],
+    is_benchmark: isExerciseBenchmark(exercise),
     name: exercise.name,
     primary_muscle: muscles[0] || null,
     secondary_muscles: remainingArrayValues(muscles),
@@ -380,6 +383,10 @@ function cloudExerciseToLocal(exercise) {
   return withDefaultExerciseStatus({
     bodyweightLoadPercent: exercise.bodyweight_load_percent ?? null,
     builtin: !!exercise.is_builtin,
+    benchmark:
+      exercise.is_benchmark == null
+        ? isExerciseBenchmark(exercise)
+        : Boolean(exercise.is_benchmark),
     description: exercise.description || "",
     equipment: [exercise.equipment].filter(Boolean),
     exerciseId: exercise.id,
@@ -412,6 +419,10 @@ function getPreferenceStatus(preference) {
 function applyCloudExerciseMetadata(localExercise, cloudExercise) {
   return withDefaultExerciseStatus({
     ...localExercise,
+    benchmark:
+      cloudExercise.is_benchmark == null
+        ? isExerciseBenchmark(localExercise)
+        : Boolean(cloudExercise.is_benchmark),
     bodyweightLoadPercent:
       cloudExercise.bodyweight_load_percent ??
       localExercise.bodyweightLoadPercent ??
@@ -511,7 +522,7 @@ export async function downloadExerciseLibraryWithPreferences(
   const { data: cloudExercises, error: exerciseError } = await supabase
     .from(EXERCISES_TABLE)
     .select(
-      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_builtin,source,source_key"
+      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_benchmark,is_builtin,source,source_key"
     )
     .or(`user_id.eq.${userId},user_id.is.null`)
     .is("deleted_at", null);

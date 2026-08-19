@@ -12,6 +12,7 @@ import {
   updateBuiltInExercise,
 } from "../sync/exerciseCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
@@ -36,6 +37,7 @@ const muscleGroups = [
 ];
 
 const emptyDraft = {
+  benchmark: "no",
   bodyweightLoadPercent: "",
   description: "",
   equipment: "",
@@ -95,6 +97,7 @@ function getExerciseDraft(exercise = {}) {
     exercise.bodyweightLoadPercent ?? exercise.bodyweight_load_percent ?? "";
 
   return {
+    benchmark: isExerciseBenchmark(exercise) ? "yes" : "no",
     bodyweightLoadPercent:
       bodyweightLoadPercent == null || bodyweightLoadPercent === ""
         ? ""
@@ -118,6 +121,7 @@ function exerciseFromDraft(draft, existing = {}) {
 
   return {
     ...existing,
+    benchmark: draft.benchmark === "yes",
     bodyweightLoadPercent:
       draft.bodyweightLoadPercent === ""
         ? null
@@ -1256,6 +1260,41 @@ export default function ExerciseView({
         </select>
       </label>
     );
+    const benchmarkSelect = (
+      <label
+        style={{
+          display: "grid",
+          gap: "4px",
+          maxWidth: isImageLayout ? "180px" : undefined,
+        }}
+      >
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            fontWeight: "bold",
+          }}
+        >
+          Benchmark
+        </span>
+        <select
+          style={{
+            boxSizing: "border-box",
+            width: "100%",
+          }}
+          onChange={(event) =>
+            setFormDraft({
+              ...formDraft,
+              benchmark: event.target.value,
+            })
+          }
+          value={formDraft.benchmark || "no"}
+        >
+          <option value="no">No</option>
+          <option value="yes">Yes</option>
+        </select>
+      </label>
+    );
 
     return (
       <div
@@ -1266,7 +1305,7 @@ export default function ExerciseView({
             ? "112px minmax(0, calc(100% - 112px))"
             : compact
               ? "1fr"
-              : "minmax(0, 1fr) 140px 120px",
+              : "minmax(0, 1fr) 140px 120px 120px",
         }}
       >
         {isImageLayout ? (
@@ -1307,11 +1346,19 @@ export default function ExerciseView({
             >
               {primaryMuscleSelect}
             </div>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+              }}
+            >
+              {benchmarkSelect}
+            </div>
           </>
         ) : (
           <>
             {nameInput}
             {equipmentSelect}
+            {benchmarkSelect}
             {bodyweightSelect}
             <div
               style={{

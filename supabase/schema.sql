@@ -401,6 +401,7 @@ create table if not exists public.exercises (
   primary_muscle text,
   secondary_muscles text[] not null default '{}',
   bodyweight_load_percent numeric,
+  is_benchmark boolean not null default false,
   is_builtin boolean not null default false,
   source text not null default 'user',
   source_key text,
@@ -438,6 +439,27 @@ add column if not exists instruction_source_url text;
 
 alter table public.exercises
 add column if not exists bodyweight_load_percent numeric;
+
+alter table public.exercises
+add column if not exists is_benchmark boolean not null default false;
+
+update public.exercises
+set is_benchmark = true
+where is_benchmark = false
+  and (
+    (
+      lower(coalesce(equipment, '')) like '%barbell%'
+      and lower(name) in ('bench press', 'incline bench press')
+    )
+    or (
+      (
+        lower(coalesce(equipment, '')) like '%barbell%'
+        or lower(coalesce(equipment, '')) like '%trap bar%'
+      )
+      and lower(name) ~ '(^| )deadlifts?$|sumo deadlifts?|deficit deadlifts?'
+    )
+    or lower(name) ~ 'pull[- ]?ups?|chin[- ]?ups?'
+  );
 
 drop trigger if exists exercises_set_updated_at on public.exercises;
 create trigger exercises_set_updated_at
@@ -724,6 +746,7 @@ begin
     primary_muscle,
     secondary_muscles,
     bodyweight_load_percent,
+    is_benchmark,
     is_builtin,
     source,
     source_key,
@@ -753,6 +776,7 @@ begin
       '{}'::text[]
     ),
     nullif(exercise_payload->>'bodyweight_load_percent', '')::numeric,
+    coalesce((exercise_payload->>'is_benchmark')::boolean, false),
     true,
     coalesce(nullif(exercise_payload->>'source', ''), 'trainer_promoted'),
     coalesce(
@@ -776,6 +800,7 @@ begin
     primary_muscle = excluded.primary_muscle,
     secondary_muscles = excluded.secondary_muscles,
     bodyweight_load_percent = excluded.bodyweight_load_percent,
+    is_benchmark = excluded.is_benchmark,
     is_builtin = true,
     deleted_at = null
   returning id into promoted_exercise_id;
@@ -849,6 +874,10 @@ begin
       '{}'::text[]
     ),
     bodyweight_load_percent = nullif(exercise_payload->>'bodyweight_load_percent', '')::numeric,
+    is_benchmark = case
+      when exercise_payload ? 'is_benchmark' then coalesce((exercise_payload->>'is_benchmark')::boolean, false)
+      else is_benchmark
+    end,
     is_builtin = true,
     user_id = null,
     deleted_at = null

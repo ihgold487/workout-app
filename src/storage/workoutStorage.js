@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import { withDefaultExerciseStatus } from "../utils/exerciseStatus";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
@@ -63,6 +64,9 @@ function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
   const mergedExercise = {
     ...seedExercise,
     active: savedExercise.active,
+    benchmark: Object.prototype.hasOwnProperty.call(savedExercise, "benchmark")
+      ? Boolean(savedExercise.benchmark)
+      : isExerciseBenchmark(seedExercise),
   };
 
   if (
@@ -90,6 +94,13 @@ function normalizeWorkoutData(data, { seedExercises }) {
   };
 }
 
+function withDefaultExerciseBenchmark(exercise) {
+  return {
+    ...exercise,
+    benchmark: isExerciseBenchmark(exercise),
+  };
+}
+
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const savedExercises = arrayOrEmpty(exerciseLibrary);
   const seedKeys = new Set(seedExercises.map(getExerciseSeedKey));
@@ -99,10 +110,12 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
       .map((exercise) => [getExerciseSeedKey(exercise), exercise])
   );
   const seededExercises = seedExercises.map((exercise) =>
-    withDefaultExerciseStatus(
-      mergeSavedBuiltinExercise(
-        exercise,
-        savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise))
+    withDefaultExerciseBenchmark(
+      withDefaultExerciseStatus(
+        mergeSavedBuiltinExercise(
+          exercise,
+          savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise))
+        )
       )
     )
   );
@@ -115,8 +128,12 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
 
   return [
     ...seededExercises,
-    ...promotedBuiltInExercises.map(withDefaultExerciseStatus),
-    ...customExercises.map(withDefaultExerciseStatus),
+    ...promotedBuiltInExercises.map((exercise) =>
+      withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+    ),
+    ...customExercises.map((exercise) =>
+      withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+    ),
   ];
 }
 

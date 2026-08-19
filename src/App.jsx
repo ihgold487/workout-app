@@ -59,6 +59,7 @@ import {
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
+import { getBenchmarkFamilyForExercise, isExerciseBenchmark } from "./utils/exerciseBenchmark";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import {
   downloadExerciseLibraryWithPreferences,
@@ -1926,31 +1927,6 @@ function buildWeeklyMuscleVolumeSummary({
   };
 }
 
-function getBenchmarkFamilyForExercise(exercise) {
-  const name = normalizeExportText(exercise?.name || exercise?.exercise_name);
-  const equipment = normalizeExportText(getExerciseEquipmentLabel(exercise));
-
-  if (
-    equipment.includes("barbell") &&
-    (name === "bench press" || name === "incline bench press")
-  ) {
-    return "Chest barbell press";
-  }
-
-  if (
-    (equipment.includes("barbell") || equipment.includes("trap bar")) &&
-    /(^| )deadlifts?$|sumo deadlifts?|deficit deadlifts?/.test(name)
-  ) {
-    return "Lower/posterior-chain deadlift";
-  }
-
-  if (/pull[- ]?ups?|chin[- ]?ups?/.test(name)) {
-    return "Back pull-up/chin-up";
-  }
-
-  return "";
-}
-
 function getRepRangeBucket(reps) {
   if (!Number.isFinite(reps)) {
     return null;
@@ -2967,6 +2943,8 @@ function buildAiPlanContext({
   const activeExercises = exerciseLibrary
     .filter((exercise) => exercise.active !== "inactive")
     .map((exercise) => ({
+      benchmark: isExerciseBenchmark(exercise),
+      benchmarkFamily: getBenchmarkFamilyForExercise(exercise) || null,
       equipment: exercise.equipment || [],
       id: exercise.id,
       muscles: exercise.muscles || [],

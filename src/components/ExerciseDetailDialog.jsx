@@ -15,6 +15,10 @@ import {
   X,
 } from "lucide-react";
 import { calculateE1RM, formatE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import {
+  getBenchmarkFamilyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import MuscleMap from "./MuscleMap";
@@ -406,6 +410,30 @@ function buildHistorySummary(exerciseHistory) {
   };
 }
 
+function getLatestHistoryEntry(exerciseHistory) {
+  return [...exerciseHistory]
+    .filter((entry) => entry.completedDateKey)
+    .sort((left, right) =>
+      left.completedDateKey.localeCompare(right.completedDateKey)
+    )
+    .at(-1) || null;
+}
+
+function getBestHistorySet(exerciseHistory) {
+  return exerciseHistory
+    .flatMap((entry) =>
+      (entry.sets || []).map((set) => ({
+        ...set,
+        completedAt: entry.completedAt,
+      }))
+    )
+    .filter((set) => Number.isFinite(parseHistoryNumber(set.e1rm)))
+    .sort(
+      (left, right) =>
+        parseHistoryNumber(right.e1rm) - parseHistoryNumber(left.e1rm)
+    )[0] || null;
+}
+
 function parseHistoryNumber(value) {
   const parsed = Number.parseFloat(String(value ?? "").replace(/^\+/, ""));
 
@@ -747,10 +775,10 @@ function buildBenchPressExperiment(exerciseHistory) {
         sets.filter((set) => setInRange(set, { minReps: 3, maxReps: 7, maxRir: 2 }))
       );
       const moderateSet = getBestSet(
-        sets.filter((set) => setInRange(set, { minReps: 8, maxReps: 12, maxRir: 3 }))
+        sets.filter((set) => setInRange(set, { minReps: 8, maxReps: 12, maxRir: 2 }))
       );
       const lowConfidenceSet = getBestSet(
-        sets.filter((set) => Number.isFinite(set.e1rm) && set.rir > 3)
+        sets.filter((set) => Number.isFinite(set.e1rm) && set.rir >= 3)
       );
 
       return {
@@ -1597,6 +1625,22 @@ function BenchZoneChart({
     [...heavyPlotted, ...moderatePlotted, ...lowConfidencePlotted].find(
       (point) => point.key === selectedPointKey
     ) || null;
+  const selectedPointPrimaryLabel = selectedPoint
+    ? `${selectedPoint.zone}${
+        Number.isFinite(selectedPoint.rawValue) ? " rolling" : ""
+      }: ${formatBenchMetric(selectedPoint.value, 1, " lb")}`
+    : "";
+  const selectedPointDetailLabel = selectedPoint
+    ? Number.isFinite(selectedPoint.rawValue)
+      ? `${selectedPoint.dateKey} · Raw ${formatBenchMetric(
+          selectedPoint.rawValue,
+          1,
+          " lb"
+        )} · ${getSetLabel(
+          selectedPoint.set
+        )}`
+      : selectedPoint.label
+    : "";
   const plotRegression = (regression) => {
     if (!regression) {
       return null;
@@ -1662,6 +1706,39 @@ function BenchZoneChart({
         padding: "8px",
       }}
     >
+      {selectedPoint && (
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            display: "grid",
+            gap: "3px",
+            marginBottom: "8px",
+            padding: "8px",
+          }}
+        >
+          <div
+            style={{
+              color: selectedPoint.color,
+              fontSize: "13px",
+              fontWeight: 800,
+              lineHeight: 1.2,
+            }}
+          >
+            {selectedPointPrimaryLabel}
+          </div>
+          <div
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "12px",
+              lineHeight: 1.25,
+            }}
+          >
+            {selectedPointDetailLabel}
+          </div>
+        </div>
+      )}
       <svg
         aria-label="Bench press heavy and moderate zone e1RM trends"
         role="img"
@@ -1766,34 +1843,34 @@ function BenchZoneChart({
         ))}
         {selectedPoint && (
           <g pointerEvents="none">
-            <rect
-              x={Math.min(width - 150, Math.max(paddingLeft, selectedPoint.x - 70))}
-              y={Math.max(paddingTop, selectedPoint.y - 42)}
-              width="142"
-              height="38"
-              rx="7"
-              fill="var(--surface-raised)"
-              stroke="var(--border)"
+            <line
+              x1={paddingLeft}
+              x2={selectedPoint.x}
+              y1={selectedPoint.y}
+              y2={selectedPoint.y}
+              stroke={selectedPoint.color}
+              strokeDasharray="4 4"
+              strokeLinecap="round"
+              strokeWidth="1.5"
             />
-            <text
-              x={Math.min(width - 79, Math.max(paddingLeft + 71, selectedPoint.x))}
-              y={Math.max(paddingTop + 14, selectedPoint.y - 24)}
-              fill="var(--text-h)"
-              fontSize="11"
-              fontWeight="bold"
-              textAnchor="middle"
-            >
-              {selectedPoint.zone}: {formatBenchMetric(selectedPoint.value, 1, " lb")}
-            </text>
-            <text
-              x={Math.min(width - 79, Math.max(paddingLeft + 71, selectedPoint.x))}
-              y={Math.max(paddingTop + 28, selectedPoint.y - 10)}
-              fill="var(--text-muted)"
-              fontSize="9"
-              textAnchor="middle"
-            >
-              {selectedPoint.label}
-            </text>
+            <line
+              x1={selectedPoint.x}
+              x2={selectedPoint.x}
+              y1={selectedPoint.y}
+              y2={height - paddingBottom}
+              stroke={selectedPoint.color}
+              strokeDasharray="4 4"
+              strokeLinecap="round"
+              strokeWidth="1.5"
+            />
+            <circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              fill="var(--surface-raised)"
+              r="5.5"
+              stroke={selectedPoint.color}
+              strokeWidth="2"
+            />
           </g>
         )}
         <text
@@ -1825,8 +1902,8 @@ function BenchZoneChart({
       >
         {[
           ["Heavy 3-7 reps, 0-2 RIR", BENCH_ZONE_COLORS.heavy],
-          ["Moderate 8-12 reps, 0-3 RIR", BENCH_ZONE_COLORS.moderate],
-          ["Low-confidence >3 RIR", BENCH_ZONE_COLORS.lowConfidence],
+          ["Moderate 8-12 reps, 0-2 RIR", BENCH_ZONE_COLORS.moderate],
+          ["Low-confidence >=3 RIR", BENCH_ZONE_COLORS.lowConfidence],
         ].map(([label, color]) => (
           <span
             key={label}
@@ -1903,7 +1980,65 @@ function BenchReadItem({ label, read, detail }) {
   );
 }
 
+function BenchmarkPerformance({ benchmarkFamily, exerciseHistory }) {
+  const historySummary = buildHistorySummary(exerciseHistory);
+  const latestEntry = getLatestHistoryEntry(exerciseHistory);
+  const bestSet = getBestHistorySet(exerciseHistory);
+
+  return (
+    <BenchmarkZoneExperiment
+      benchmarkFamily={benchmarkFamily}
+      exerciseHistory={exerciseHistory}
+      summaryStats={[
+        {
+          label: "Benchmark family",
+          sublabel: "Current categorization",
+          value: benchmarkFamily || "Not categorized",
+        },
+        {
+          label: "Workouts",
+          sublabel: "Completed history",
+          value: historySummary.workouts,
+        },
+        {
+          label: "Best e1RM",
+          sublabel: bestSet?.completedAt || "No completed set",
+          value: formatE1RM(historySummary.maxE1RM),
+        },
+        {
+          label: "Latest e1RM",
+          sublabel: latestEntry?.completedAt || "No completed workout",
+          value: formatE1RM(latestEntry?.maxE1RM),
+        },
+        {
+          label: "Best set",
+          sublabel: bestSet?.completedAt || "No completed set",
+          value: getSetLabel(bestSet),
+        },
+      ]}
+      title="Benchmark"
+    />
+  );
+}
+
 function BenchPressExperiment({ exerciseHistory }) {
+  return (
+    <BenchmarkZoneExperiment
+      description="Temporary bench-only view comparing heavy strength expression against moderate-rep performance."
+      exerciseHistory={exerciseHistory}
+      showBenchPressStats
+      title="Bench Press Experiment"
+    />
+  );
+}
+
+function BenchmarkZoneExperiment({
+  description = "Exercise-specific benchmark history comparing heavy strength expression against moderate-rep performance.",
+  exerciseHistory,
+  showBenchPressStats = false,
+  summaryStats = [],
+  title,
+}) {
   const [rangeDays, setRangeDays] = useState(null);
   const [showTrendLines, setShowTrendLines] = useState(false);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
@@ -1950,7 +2085,7 @@ function BenchPressExperiment({ exerciseHistory }) {
             margin: "0 0 4px",
           }}
         >
-          Bench Press Experiment
+          {title}
         </h3>
         <div
           style={{
@@ -1958,8 +2093,7 @@ function BenchPressExperiment({ exerciseHistory }) {
             fontSize: "12px",
           }}
         >
-          Temporary bench-only view comparing heavy strength expression against
-          moderate-rep performance.
+          {description}
         </div>
       </div>
       <div
@@ -2070,7 +2204,7 @@ function BenchPressExperiment({ exerciseHistory }) {
         />
         <BenchExperimentStat
           label="Moderate rolling e1RM"
-          sublabel="8-12 reps, 0-3 RIR"
+          sublabel="8-12 reps, 0-2 RIR"
           value={formatBenchMetric(latestModerateValue, 1, " lb")}
         />
         <BenchExperimentStat
@@ -2080,71 +2214,93 @@ function BenchPressExperiment({ exerciseHistory }) {
         />
         <BenchExperimentStat
           label="Low-confidence sets"
-          sublabel="Best >3 RIR points shown faintly"
+          sublabel="Best >=3 RIR points shown faintly"
           value={chartSeries.lowConfidencePoints.length}
         />
       </div>
-      <div
-        style={{
-          display: "grid",
-          gap: "8px",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-        }}
-      >
-        <BenchExperimentStat
-          label="Best 6+ rep set"
-          sublabel="At least 1 RIR"
-          value={getSetLabel(data.benchmark6Rep)}
-        />
-        <BenchExperimentStat
-          label="Best 8+ rep set"
-          sublabel="At least 1 RIR"
-          value={getSetLabel(data.benchmark8Rep)}
-        />
-        <BenchExperimentStat
-          label="Best at 135 lb"
-          sublabel="0-3 RIR"
-          value={getSetLabel(data.benchmark135)}
-        />
-        <BenchExperimentStat
-          label="Best at 145 lb"
-          sublabel="0-3 RIR"
-          value={getSetLabel(data.benchmark145)}
-        />
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gap: "8px",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-        }}
-      >
-        <BenchExperimentStat
-          label="Latest set 1 -> 2 drop"
-          sublabel={data.latestFatigue?.date || "No comparable workout"}
-          value={
-            Number.isFinite(data.latestFatigue?.e1rmDropPercent)
-              ? `${formatBenchMetric(data.latestFatigue.e1rmDropPercent, 1)}%`
-              : "—"
-          }
-        />
-        <BenchExperimentStat
-          label="Latest same-weight retention"
-          sublabel={data.latestFatigue?.date || "No repeated weight"}
-          value={
-            data.latestFatigue?.repeatedWeight
-              ? `${formatBenchMetric(
-                  data.latestFatigue.repeatedWeight.weight,
-                  1,
-                  " lb"
-                )}: ${formatBenchMetric(
-                  data.latestFatigue.repeatedWeight.reps,
-                  0
-                )} reps`
-              : "—"
-          }
-        />
-      </div>
+      {summaryStats.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          }}
+        >
+          {summaryStats.map((stat) => (
+            <BenchExperimentStat
+              key={stat.label}
+              label={stat.label}
+              sublabel={stat.sublabel}
+              value={stat.value}
+            />
+          ))}
+        </div>
+      )}
+      {showBenchPressStats && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            }}
+          >
+            <BenchExperimentStat
+              label="Best 6+ rep set"
+              sublabel="At least 1 RIR"
+              value={getSetLabel(data.benchmark6Rep)}
+            />
+            <BenchExperimentStat
+              label="Best 8+ rep set"
+              sublabel="At least 1 RIR"
+              value={getSetLabel(data.benchmark8Rep)}
+            />
+            <BenchExperimentStat
+              label="Best at 135 lb"
+              sublabel="0-3 RIR"
+              value={getSetLabel(data.benchmark135)}
+            />
+            <BenchExperimentStat
+              label="Best at 145 lb"
+              sublabel="0-3 RIR"
+              value={getSetLabel(data.benchmark145)}
+            />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            }}
+          >
+            <BenchExperimentStat
+              label="Latest set 1 -> 2 drop"
+              sublabel={data.latestFatigue?.date || "No comparable workout"}
+              value={
+                Number.isFinite(data.latestFatigue?.e1rmDropPercent)
+                  ? `${formatBenchMetric(data.latestFatigue.e1rmDropPercent, 1)}%`
+                  : "—"
+              }
+            />
+            <BenchExperimentStat
+              label="Latest same-weight retention"
+              sublabel={data.latestFatigue?.date || "No repeated weight"}
+              value={
+                data.latestFatigue?.repeatedWeight
+                  ? `${formatBenchMetric(
+                      data.latestFatigue.repeatedWeight.weight,
+                      1,
+                      " lb"
+                    )}: ${formatBenchMetric(
+                      data.latestFatigue.repeatedWeight.reps,
+                      0
+                    )} reps`
+                  : "—"
+              }
+            />
+          </div>
+        </>
+      )}
       {trendSheetOpen && (
         <PortalSelectionSheet
           onClose={() => setTrendSheetOpen(false)}
@@ -2204,11 +2360,21 @@ export default function ExerciseDetailDialog({
     );
   }, [exercise, exerciseLibrary]);
   const instructionSteps = getInstructionSteps(exercise);
+  const benchmark = isExerciseBenchmark(exercise);
+  const benchmarkFamily = getBenchmarkFamilyForExercise(exercise);
   const { colorTrend, metric: chartMetric, rangeDays, trendDays } = chartSettings;
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
   const trendLabel = getOptionLabel(TREND_OPTIONS, trendDays);
   const e1RMTrendColoringActive = chartMetric === "e1rm" && colorTrend;
   const showBenchPressExperiment = isBarbellBenchPress(exercise);
+  const showBenchmarkTab = benchmark;
+  const activeDetailTab =
+    activeTab === "benchmark" && !showBenchmarkTab ? "history" : activeTab;
+  const detailTabs = [
+    ["info", "Info", ListChecks],
+    ["history", "History", LineChart],
+    ...(showBenchmarkTab ? [["benchmark", "Benchmark", Trophy]] : []),
+  ];
 
   function updateChartSettings(nextSettings) {
     setChartSettings((currentSettings) => {
@@ -2464,7 +2630,7 @@ export default function ExerciseDetailDialog({
           </div>
         </div>
 
-        {activeTab === "history" && (
+        {activeDetailTab === "history" && (
           <div
             aria-label="Exercise history summary"
             style={{
@@ -2505,26 +2671,23 @@ export default function ExerciseDetailDialog({
           style={{
             display: "grid",
             gap: "6px",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: `repeat(${detailTabs.length}, minmax(0, 1fr))`,
             marginTop: "12px",
           }}
         >
-          {[
-            ["info", "Info", ListChecks],
-            ["history", "History", LineChart],
-          ].map(([value, label, Icon]) => (
+          {detailTabs.map(([value, label, Icon]) => (
             <button
               key={value}
-              aria-selected={activeTab === value}
+              aria-selected={activeDetailTab === value}
               onClick={() => setActiveTab(value)}
               role="tab"
               style={{
                 alignItems: "center",
                 background:
-                  activeTab === value ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--button-bg)",
+                  activeDetailTab === value ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--button-bg)",
                 borderColor:
-                  activeTab === value ? "var(--accent)" : "var(--border)",
-                color: activeTab === value ? "var(--accent)" : "var(--button-text)",
+                  activeDetailTab === value ? "var(--accent)" : "var(--border)",
+                color: activeDetailTab === value ? "var(--accent)" : "var(--button-text)",
                 display: "inline-flex",
                 gap: "6px",
                 justifyContent: "center",
@@ -2537,7 +2700,7 @@ export default function ExerciseDetailDialog({
           ))}
         </div>
 
-        {activeTab === "info" ? (
+        {activeDetailTab === "info" ? (
           <div
             style={{
               display: "grid",
@@ -2620,6 +2783,28 @@ export default function ExerciseDetailDialog({
                   paddingTop: "8px",
                 }}
               >
+                <strong>Benchmark:</strong>
+                <span>{benchmark ? "Yes" : "No"}</span>
+              </div>
+              {benchmark && (
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <strong>Benchmark family:</strong>
+                  <span>{benchmarkFamily || "Not categorized"}</span>
+                </div>
+              )}
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
                 <strong>Bodyweight e1RM %:</strong>
                 <span>{getBodyweightLoadPercent(exercise)}%</span>
               </div>
@@ -2678,6 +2863,23 @@ export default function ExerciseDetailDialog({
                   ))}
                 </ol>
               </div>
+            )}
+          </div>
+        ) : activeDetailTab === "benchmark" ? (
+          <div
+            style={{
+              display: "grid",
+              gap: "12px",
+              marginTop: "12px",
+            }}
+          >
+            {showBenchPressExperiment ? (
+              <BenchPressExperiment exerciseHistory={exerciseHistory} />
+            ) : (
+              <BenchmarkPerformance
+                benchmarkFamily={benchmarkFamily}
+                exerciseHistory={exerciseHistory}
+              />
             )}
           </div>
         ) : (
@@ -2776,10 +2978,6 @@ export default function ExerciseDetailDialog({
               rangeDays={rangeDays}
               trendDays={trendDays}
             />
-
-            {showBenchPressExperiment && (
-              <BenchPressExperiment exerciseHistory={exerciseHistory} />
-            )}
 
             {exerciseHistory.length === 0 ? (
               <div
