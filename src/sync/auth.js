@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { assertRemoteWriteAllowed } from "./remoteWritePolicy";
 
 export async function getCurrentSession() {
   if (!isSupabaseConfigured) {
@@ -46,6 +47,8 @@ export async function signInWithPassword(email, password) {
 }
 
 export async function signUpWithPassword(email, password) {
+  assertRemoteWriteAllowed("account creation");
+
   if (!isSupabaseConfigured) {
     throw new Error("Supabase is not configured.");
   }
@@ -67,6 +70,8 @@ export async function changePasswordWithCurrentPassword(
   currentPassword,
   newPassword
 ) {
+  assertRemoteWriteAllowed("account password update");
+
   if (!isSupabaseConfigured) {
     throw new Error("Supabase is not configured.");
   }
@@ -120,6 +125,8 @@ export async function listAppUserApprovals() {
 }
 
 export async function updateAppUserApproval(userId, status, notes = null) {
+  assertRemoteWriteAllowed("app-user approval update");
+
   if (!isSupabaseConfigured) {
     throw new Error("Supabase is not configured.");
   }

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 import { uploadCustomExercises } from "./exerciseCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
@@ -312,6 +313,16 @@ function cloudWorkoutToLocal(workout, exercises, existingTemplate) {
 }
 
 export async function uploadWorkouts(templates, exerciseLibrary, session) {
+  const blockedResult = skipBlockedRemoteWrite("workout push", {
+    removedExercises: 0,
+    removedSets: 0,
+    removedWorkouts: 0,
+    syncedExercises: 0,
+    syncedSets: 0,
+    syncedWorkouts: 0,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const userId = session.user.id;

@@ -12,6 +12,7 @@ import {
   updateBuiltInExercise,
 } from "../sync/exerciseCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
+import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
@@ -609,6 +610,8 @@ export default function ExerciseView({
       setTrainerStatus("");
 
       try {
+        assertRemoteWriteAllowed("trainer exercise-preference update");
+
         const exerciseId =
           exerciseToToggle.exerciseId ||
           (isUuid(exerciseToToggle.id) ? exerciseToToggle.id : null);

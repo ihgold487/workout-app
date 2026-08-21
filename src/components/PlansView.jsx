@@ -46,6 +46,7 @@ import {
   generatePlanWorkouts,
 } from "../plans/planType2Generator";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
+import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
   RIR_PERIODIZATION_MODES,
   RIR_PERIODIZATION_ORDER,
@@ -3656,6 +3657,8 @@ export default function PlansView({
       if (!isTrainerTargetSelf) {
         setSaveStatus("Saving workout for selected user...");
 
+        assertRemoteWriteAllowed("trainer workout create");
+
         const { error } = await supabase.rpc("create_trainer_workout_for_user", {
           target_user_id: selectedTrainerUserId,
           workout_payload: buildTrainerWorkoutPayload(workouts[0]),
@@ -3732,6 +3735,8 @@ export default function PlansView({
 
     if (!isTrainerTargetSelf) {
       setSaveStatus("Saving plan for selected user...");
+
+      assertRemoteWriteAllowed("trainer plan create");
 
       const trainerWorkoutsPayload = workouts.map(buildTrainerWorkoutPayload);
 

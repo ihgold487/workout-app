@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 
 const NUTRITION_DAILY_TARGETS_TABLE = "nutrition_daily_targets";
 
@@ -59,6 +60,9 @@ export async function downloadNutritionTargets(session) {
 }
 
 export async function uploadNutritionTargets(targets, session) {
+  const blockedResult = skipBlockedRemoteWrite("nutrition-target push", { uploaded: 0 });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const validTargets = (targets || []).filter(

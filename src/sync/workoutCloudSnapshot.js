@@ -3,6 +3,7 @@ import {
   WORKOUT_DATA_SCHEMA_VERSION,
 } from "../storage/workoutStorage";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 
 const SNAPSHOT_TABLE = "workout_data_snapshots";
 
@@ -17,6 +18,8 @@ function assertCloudReady(session) {
 }
 
 export async function uploadWorkoutSnapshot(data, storageVersion, session) {
+  if (skipBlockedRemoteWrite("legacy workout snapshot push", true)) return;
+
   assertCloudReady(session);
 
   // First cloud milestone: one full app snapshot per user. This is intentionally

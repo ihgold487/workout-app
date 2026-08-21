@@ -11,105 +11,110 @@ function escapeHtmlAttribute(value) {
 }
 
 // VITE CONFIG
-export default defineConfig({
-  base: "/workout-app/",
+export default defineConfig(({ mode }) => {
+  const isNative = mode === "native";
 
-  define: {
-    __BUILD_TIME__: JSON.stringify(buildTime),
-  },
+  return {
+    base: isNative ? "./" : "/workout-app/",
 
-  build: {
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: "recipe-ocr",
-              priority: 20,
-              test: /node_modules[\\/](?:tesseract\.js|tesseract\.js-core|bmp-js|idb-keyval|is-electron|regenerator-runtime|wasm-feature-detect|zlibjs)[\\/]/,
-            },
-          ],
+    define: {
+      __BUILD_TIME__: JSON.stringify(buildTime),
+    },
+
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "recipe-ocr",
+                priority: 20,
+                test: /node_modules[\\/](?:tesseract\.js|tesseract\.js-core|bmp-js|idb-keyval|is-electron|regenerator-runtime|wasm-feature-detect|zlibjs)[\\/]/,
+              },
+            ],
+          },
         },
       },
     },
-  },
 
-  plugins: [
-    {
-      name: "workout-build-time-meta",
-      transformIndexHtml(html) {
-        return html.replace(
-          '<meta name="color-scheme" content="light" />',
-          `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
-        );
-      },
-    },
-
-    react(),
-
-    VitePWA({
-      registerType: "prompt",
-
-      includeAssets: ["icon-192.png", "icon-512.png"],
-
-      manifest: {
-        name: "Workout Tracker",
-
-        short_name: "Workout",
-
-        description: "Offline workout tracking",
-
-        theme_color: "#ffffff",
-
-        background_color: "#ffffff",
-
-        display: "standalone",
-
-        orientation: "portrait",
-
-        scope: "./",
-
-        start_url: "./",
-
-        icons: [
-          {
-            src: "icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-
-          {
-            src: "icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-        ],
+    plugins: [
+      {
+        name: "workout-build-time-meta",
+        transformIndexHtml(html) {
+          return html.replace(
+            '<meta name="color-scheme" content="light" />',
+            `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
+          );
+        },
       },
 
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,json}"],
+      react(),
 
-        cleanupOutdatedCaches: true,
+      VitePWA({
+        disable: isNative,
+        registerType: "prompt",
 
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) =>
-              url.pathname.includes("/workout-app/exercise-media/"),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "exercise-media-runtime",
-              expiration: {
-                maxEntries: 75,
-                maxAgeSeconds: 60 * 24 * 60 * 60,
+        includeAssets: ["icon-192.png", "icon-512.png"],
+
+        manifest: {
+          name: "Workout Tracker",
+
+          short_name: "Workout",
+
+          description: "Offline workout tracking",
+
+          theme_color: "#ffffff",
+
+          background_color: "#ffffff",
+
+          display: "standalone",
+
+          orientation: "portrait",
+
+          scope: "./",
+
+          start_url: "./",
+
+          icons: [
+            {
+              src: "icon-192.png",
+              sizes: "192x192",
+              type: "image/png",
+            },
+
+            {
+              src: "icon-512.png",
+              sizes: "512x512",
+              type: "image/png",
+            },
+          ],
+        },
+
+        workbox: {
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,json}"],
+
+          cleanupOutdatedCaches: true,
+
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) =>
+                url.pathname.includes("/workout-app/exercise-media/"),
+              handler: "CacheFirst",
+              options: {
+                cacheName: "exercise-media-runtime",
+                expiration: {
+                  maxEntries: 75,
+                  maxAgeSeconds: 60 * 24 * 60 * 60,
+                },
               },
             },
-          },
-        ],
+          ],
 
-        clientsClaim: false,
+          clientsClaim: false,
 
-        skipWaiting: false,
-      },
-    }),
-  ],
+          skipWaiting: false,
+        },
+      }),
+    ],
+  };
 });

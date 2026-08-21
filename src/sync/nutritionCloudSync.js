@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 
 const NUTRITION_ENTRIES_TABLE = "nutrition_entries";
 const LOCAL_APP_SOURCE = "local_app";
@@ -218,6 +219,9 @@ export async function downloadNutritionEntries(session) {
 }
 
 export async function uploadNutritionEntries(entries, session) {
+  const blockedResult = skipBlockedRemoteWrite("nutrition push", { uploaded: 0 });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const validEntries = (entries || []).filter(
@@ -255,6 +259,8 @@ export async function upsertNutritionEntry(entry, session) {
 }
 
 export async function deleteNutritionEntry(entryId, session) {
+  if (skipBlockedRemoteWrite("nutrition delete", true)) return;
+
   assertCloudReady(session);
 
   const { error } = await supabase
@@ -273,6 +279,12 @@ export async function deleteNutritionEntry(entryId, session) {
 }
 
 export async function retryPendingNutritionDeletes(session) {
+  const blockedResult = skipBlockedRemoteWrite("pending nutrition deletes", {
+    deleted: 0,
+    failed: readPendingNutritionDeletes(session?.user?.id).length,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const userId = session.user.id;

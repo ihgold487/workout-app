@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 import { EXERCISE_STATUS, withDefaultExerciseStatus } from "../utils/exerciseStatus";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 
@@ -148,6 +149,12 @@ async function findBuiltInExerciseId(exercise) {
 }
 
 export async function uploadCustomExercises(exerciseLibrary, session) {
+  const blockedResult = skipBlockedRemoteWrite("custom-exercise push", {
+    deleted: 0,
+    uploaded: 0,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const customExercises = getCustomExercises(exerciseLibrary);
@@ -209,6 +216,8 @@ export async function uploadCustomExercises(exerciseLibrary, session) {
 }
 
 export async function promoteCustomExerciseToBuiltIn(exercise, session) {
+  if (skipBlockedRemoteWrite("custom-exercise promotion", true)) return null;
+
   assertCloudReady(session);
 
   if (!exercise || exercise.builtin) {
@@ -234,6 +243,8 @@ export async function updateBuiltInExercise(
   session,
   lookupExercise = exercise
 ) {
+  if (skipBlockedRemoteWrite("built-in exercise update", true)) return null;
+
   assertCloudReady(session);
 
   if (!exercise?.builtin) {
@@ -455,6 +466,14 @@ export async function uploadExercisePreferences(
   exerciseMetadata,
   session
 ) {
+  const blockedResult = skipBlockedRemoteWrite("exercise-preference push", {
+    active: 0,
+    inactive: 0,
+    unmatched: [],
+    uploaded: 0,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const userId = session.user.id;

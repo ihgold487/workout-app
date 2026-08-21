@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 
 const PLATE_INVENTORIES_TABLE = "equipment_plate_inventories";
 
@@ -32,6 +33,9 @@ export async function downloadPlateInventory(session) {
 }
 
 export async function uploadPlateInventory(inventory, session) {
+  const blockedResult = skipBlockedRemoteWrite("plate-inventory push", { uploaded: 0 });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const { error } = await supabase

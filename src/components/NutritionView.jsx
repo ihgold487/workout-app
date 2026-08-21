@@ -53,6 +53,7 @@ import {
   upsertNutritionTarget,
 } from "../sync/nutritionTargetCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
+import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
@@ -1580,6 +1581,8 @@ async function findSupplementalFoodDuplicate(draft) {
 }
 
 async function addSupplementalFoodToLibrary(draft, session) {
+  assertRemoteWriteAllowed("supplemental-food create");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }
@@ -1609,6 +1612,8 @@ async function addSupplementalFoodToLibrary(draft, session) {
 }
 
 async function updateSupplementalFoodInLibrary(foodId, draft, session) {
+  assertRemoteWriteAllowed("supplemental-food update");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }
@@ -1639,6 +1644,8 @@ async function updateSupplementalFoodInLibrary(foodId, draft, session) {
 }
 
 async function deleteSupplementalFoodFromLibrary(foodId, session) {
+  assertRemoteWriteAllowed("supplemental-food delete");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }
@@ -1659,6 +1666,8 @@ async function deleteSupplementalFoodFromLibrary(foodId, session) {
 }
 
 async function addSupplementalRecipeToLibrary(recipeDraft, ingredients, session) {
+  assertRemoteWriteAllowed("supplemental-recipe create");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }
@@ -1739,6 +1748,8 @@ async function updateSupplementalRecipeInLibrary(
   ingredients,
   session
 ) {
+  assertRemoteWriteAllowed("supplemental-recipe update");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }
@@ -1761,6 +1772,8 @@ async function updateSupplementalRecipeInLibrary(
 }
 
 async function deleteSupplementalRecipeFromLibrary(recipeId, session) {
+  assertRemoteWriteAllowed("supplemental-recipe delete");
+
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured.");
   }

@@ -1,5 +1,6 @@
 import { calculateE1RM } from "../utils/e1rm";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 import { uploadWorkouts } from "./workoutCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
@@ -402,6 +403,16 @@ export async function uploadWorkoutHistory(
   session,
   options = {}
 ) {
+  const blockedResult = skipBlockedRemoteWrite("workout-history push", {
+    removedExercises: 0,
+    removedSessions: 0,
+    removedSets: 0,
+    syncedExercises: 0,
+    syncedSessions: 0,
+    syncedSets: 0,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const userId = session.user.id;

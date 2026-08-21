@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 
 const BODY_MEASUREMENTS_TABLE = "body_measurements";
 const LOCAL_APP_SOURCE = "local_app";
@@ -63,6 +64,9 @@ export async function downloadBodyWeightEntries(session) {
 }
 
 export async function uploadBodyWeightEntries(entries, session) {
+  const blockedResult = skipBlockedRemoteWrite("body-weight push", { uploaded: 0 });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const validEntries = (entries || []).filter(
@@ -100,6 +104,8 @@ export async function upsertBodyWeightEntry(entry, session) {
 }
 
 export async function deleteBodyWeightEntry(entryDate, session) {
+  if (skipBlockedRemoteWrite("body-weight delete", true)) return;
+
   assertCloudReady(session);
 
   const { error } = await supabase

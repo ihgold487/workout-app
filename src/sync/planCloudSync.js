@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 import { uploadWorkouts } from "./workoutCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
@@ -375,6 +376,14 @@ export async function uploadPlans(
   session,
   options = {}
 ) {
+  const blockedResult = skipBlockedRemoteWrite("training-plan push", {
+    removedPlanWorkouts: 0,
+    removedPlans: 0,
+    syncedPlanWorkouts: 0,
+    syncedPlans: 0,
+  });
+  if (blockedResult) return blockedResult;
+
   assertCloudReady(session);
 
   const userId = session.user.id;

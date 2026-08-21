@@ -84,6 +84,10 @@ import {
   uploadNutritionEntries,
 } from "./sync/nutritionCloudSync";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
+import {
+  isRemoteWriteAllowed,
+  skipBlockedRemoteWrite,
+} from "./sync/remoteWritePolicy";
 
 // STORAGE VERSION
 const STORAGE_VERSION = 12;
@@ -5437,6 +5441,9 @@ export default function App() {
   }
 
   async function performNormalizedSync(reason, session) {
+      // TEMPORARY native pull-only safeguard: native syncs always run the
+      // download phase and never enter the normalized upload phase.
+      const nativePullOnly = !isRemoteWriteAllowed();
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
       const shouldDeferForActiveWorkout =
         hasActiveWorkoutSession(data) &&
@@ -5473,7 +5480,7 @@ export default function App() {
         hasNormalizedCloudData(cloudSummary) &&
         !shouldSeedPlateInventory;
       const shouldUpload =
-        !shouldHydrateFirst && uploadDomains.length > 0;
+        !nativePullOnly && !shouldHydrateFirst && uploadDomains.length > 0;
       const mode = shouldHydrateFirst
         ? "hydrate"
         : shouldUpload
@@ -5491,7 +5498,7 @@ export default function App() {
       }
 
       const shouldDownload =
-        shouldHydrateFirst || (reason === "manual" && !shouldUpload);
+        nativePullOnly || shouldHydrateFirst || (reason === "manual" && !shouldUpload);
 
       if (!shouldDownload) {
         if (
@@ -5549,7 +5556,11 @@ export default function App() {
         savePlateInventoryOwner(session.user.id);
       }
       automaticSyncHydratedUserRef.current = session.user.id;
-      markNormalizedSyncClean();
+      // Keep native dirty markers so local development changes are not treated
+      // as remotely persisted while outbound sync is temporarily blocked.
+      if (!nativePullOnly) {
+        markNormalizedSyncClean();
+      }
       setSyncStatus(
         `${getAutoSyncSummary({
           exercisePreferences: downloaded.exercisePreferences,
@@ -5832,6 +5843,13 @@ export default function App() {
 
     if (!userId || !supabase) {
       setSyncStatus("Sign in before resetting workout sync data.");
+      return;
+    }
+
+    if (skipBlockedRemoteWrite("workout-sync reset", true)) {
+      setSyncStatus(
+        "Native pull-only mode: cloud workout sync data was not reset."
+      );
       return;
     }
 
