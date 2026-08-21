@@ -63,6 +63,10 @@ import {
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import {
+  cancelNativeRestTimerNotification,
+  scheduleNativeRestTimerNotification,
+} from "../native/restTimerNotifications";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
@@ -3068,6 +3072,7 @@ export default function SessionView({
     setTimerStartedAt(startedAt);
     restNotificationSentKeyRef.current = null;
     void requestRestNotificationPermission();
+    void scheduleNativeRestTimerNotification(duration);
     setTimerRunning(true);
   }
 
@@ -3078,6 +3083,7 @@ export default function SessionView({
     setTimerExpiredAt(null);
     setTimerFinished(false);
     restNotificationSentKeyRef.current = null;
+    void cancelNativeRestTimerNotification();
     setRestSeconds(restMinutes * 60 + restRemainder);
   }
 
@@ -5054,11 +5060,13 @@ export default function SessionView({
                 setTimerExpiredAt(null);
                 setTimerFinished(false);
                 restNotificationSentKeyRef.current = null;
+                void cancelNativeRestTimerNotification();
                 setRestSeconds(restMinutes * 60 + restRemainder);
               } else if (timerRunning) {
                 setTimerPaused(true);
 
                 setTimerRunning(false);
+                void cancelNativeRestTimerNotification();
               } else {
                 setTimerPaused(false);
                 setTimerExpiredAt(null);
@@ -5075,6 +5083,9 @@ export default function SessionView({
                 );
 
                 setTimerFinished(false);
+                void scheduleNativeRestTimerNotification(
+                  restSeconds > 0 ? restSeconds : restMinutes * 60 + restRemainder
+                );
                 setTimerRunning(true);
               }
             }}
@@ -5095,6 +5106,7 @@ export default function SessionView({
               setTimerExpiredAt(null);
               setTimerFinished(false);
               restNotificationSentKeyRef.current = null;
+              void cancelNativeRestTimerNotification();
 
               setRestSeconds(restMinutes * 60 + restRemainder);
             }}
