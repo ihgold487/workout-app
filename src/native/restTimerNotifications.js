@@ -49,6 +49,7 @@ export async function scheduleNativeRestTimerNotification(seconds) {
           id: REST_TIMER_NOTIFICATION_ID,
           title: "Rest complete",
           body: "Ready for next set",
+          sound: "default",
           schedule: {
             at: new Date(Date.now() + Math.ceil(seconds) * 1000),
           },
