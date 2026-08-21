@@ -64,6 +64,7 @@ import {
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import {
+  canUseNativeRestNotifications,
   cancelNativeRestTimerNotification,
   scheduleNativeRestTimerNotification,
 } from "../native/restTimerNotifications";
@@ -2306,7 +2307,7 @@ export default function SessionView({
   const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
 
   async function requestRestNotificationPermission() {
-    if (!("Notification" in window)) {
+    if (canUseNativeRestNotifications() || !("Notification" in window)) {
       return "unsupported";
     }
 
@@ -2318,7 +2319,11 @@ export default function SessionView({
   }
 
   async function showRestCompleteNotification() {
-    if (!("Notification" in window) || Notification.permission !== "granted") {
+    if (
+      canUseNativeRestNotifications() ||
+      !("Notification" in window) ||
+      Notification.permission !== "granted"
+    ) {
       return false;
     }
 

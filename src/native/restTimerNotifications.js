@@ -3,7 +3,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 const REST_TIMER_NOTIFICATION_ID = 1001;
 const LocalNotifications = registerPlugin("LocalNotifications");
 
-function canUseNativeRestNotifications() {
+export function canUseNativeRestNotifications() {
   return Capacitor.isNativePlatform();
 }
 
