@@ -48,6 +48,10 @@ import {
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
+  triggerNativePickerSelectionHaptic,
+  triggerNativeWarningHaptic,
+} from "../native/pickerHaptics";
+import {
   RIR_PERIODIZATION_MODES,
   RIR_PERIODIZATION_ORDER,
   getDefaultRirPeriodizationMode,
@@ -1920,6 +1924,8 @@ function WeeklyPrescriptionValuePicker({
   const [isClosing, setIsClosing] = useState(false);
   const [manualValue, setManualValue] = useState(String(value ?? ""));
   const scrollRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
+  const hapticIndexRef = useRef(null);
   const values =
     field === "sets"
       ? WEEKLY_SET_VALUES
@@ -1936,6 +1942,35 @@ function WeeklyPrescriptionValuePicker({
         : field === "restSeconds"
           ? "rest"
           : "RIR";
+
+  function handlePickerScroll() {
+    const scroller = scrollRef.current;
+
+    if (!scroller || !isUserScrollingRef.current || !scroller.children.length) {
+      return;
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const selectionY = scrollerRect.top + scrollerRect.height / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    Array.from(scroller.children).forEach((child, index) => {
+      const childRect = child.getBoundingClientRect();
+      const childCenter = childRect.top + childRect.height / 2;
+      const distance = Math.abs(childCenter - selectionY);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    if (hapticIndexRef.current !== closestIndex) {
+      hapticIndexRef.current = closestIndex;
+      void triggerNativePickerSelectionHaptic();
+    }
+  }
 
   useEffect(() => {
     if (!scrollRef.current) {
@@ -2095,6 +2130,13 @@ function WeeklyPrescriptionValuePicker({
 
         <div
           ref={scrollRef}
+          onPointerDown={() => {
+            isUserScrollingRef.current = true;
+          }}
+          onScroll={handlePickerScroll}
+          onWheel={() => {
+            isUserScrollingRef.current = true;
+          }}
           style={{
             border: "1px solid var(--border)",
             maxHeight: "260px",
@@ -3177,6 +3219,7 @@ export default function PlansView({
       return;
     }
 
+    void triggerNativeWarningHaptic();
     setConfirmDeleteDay(target);
   }
 
@@ -4697,12 +4740,13 @@ export default function PlansView({
                 setPickerSearch("");
                 setPickerMuscle("");
               }}
-              onDeleteExercise={(workout, exercise) =>
+              onDeleteExercise={(workout, exercise) => {
+                void triggerNativeWarningHaptic();
                 setConfirmDeleteExercise({
                   exercise,
                   workout,
-                })
-              }
+                });
+              }}
               onEditSuperset={(exercise) => {
                 const group = prompt(
                   "Superset group (A, B, etc). Leave empty to clear.",

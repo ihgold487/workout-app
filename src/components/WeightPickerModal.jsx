@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { triggerNativePickerSelectionHaptic } from "../native/pickerHaptics";
 
 function WeightPickerModalContent({
   current,
@@ -12,6 +13,37 @@ function WeightPickerModalContent({
 }) {
   const [manualValue, setManualValue] = useState(String(current));
   const scrollRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
+  const hapticIndexRef = useRef(null);
+
+  function handlePickerScroll() {
+    const scroller = scrollRef.current;
+
+    if (!scroller || !isUserScrollingRef.current || !scroller.children.length) {
+      return;
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const selectionY = scrollerRect.top + scrollerRect.height / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    Array.from(scroller.children).forEach((child, index) => {
+      const childRect = child.getBoundingClientRect();
+      const childCenter = childRect.top + childRect.height / 2;
+      const distance = Math.abs(childCenter - selectionY);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    if (hapticIndexRef.current !== closestIndex) {
+      hapticIndexRef.current = closestIndex;
+      void triggerNativePickerSelectionHaptic();
+    }
+  }
 
   useEffect(() => {
     const scrollY = window.scrollY || window.pageYOffset || 0;
@@ -170,6 +202,13 @@ function WeightPickerModalContent({
 
         <div
           ref={scrollRef}
+          onPointerDown={() => {
+            isUserScrollingRef.current = true;
+          }}
+          onScroll={handlePickerScroll}
+          onWheel={() => {
+            isUserScrollingRef.current = true;
+          }}
           style={{
             minHeight: 0,
             overflowY: "auto",

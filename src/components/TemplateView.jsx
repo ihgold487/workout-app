@@ -38,6 +38,7 @@ import {
 } from "../utils/targetRecommendation";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
 
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 
@@ -1035,6 +1036,7 @@ export default function TemplateView({
     );
 
     if (isPreviousPlanWeekIncomplete(plan)) {
+      void triggerNativeWarningHaptic();
       setConfirmPreviousWeekIncomplete(true);
       return;
     }

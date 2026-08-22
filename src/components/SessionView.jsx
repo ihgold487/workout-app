@@ -69,9 +69,17 @@ import {
   scheduleNativeRestTimerNotification,
 } from "../native/restTimerNotifications";
 import {
+  endNativeRestTimerLiveActivity,
+  getNativeRestTimerLiveActivityState,
+  pauseNativeRestTimerLiveActivity,
+  resumeNativeRestTimerLiveActivity,
+  startNativeRestTimerLiveActivity,
+} from "../native/restTimerLiveActivity";
+import {
   canUseNativeWorkoutIdleTimer,
   setNativeWorkoutAutoLockEnabled,
 } from "../native/workoutIdleTimer";
+import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
@@ -2410,6 +2418,57 @@ export default function SessionView({
     []
   );
 
+  useEffect(
+    () => () => {
+      void endNativeRestTimerLiveActivity();
+    },
+    []
+  );
+
+  useEffect(() => {
+    async function reconcileNativeRestTimer() {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      const nativeState = await getNativeRestTimerLiveActivityState();
+
+      if (!nativeState?.active) {
+        return;
+      }
+
+      const seconds = Math.max(0, Number(nativeState.seconds) || 0);
+
+      setRestSeconds(seconds);
+      setTimerExpiredAt(null);
+      setTimerFinished(false);
+      setTimerPaused(Boolean(nativeState.paused));
+      setTimerRunning(!nativeState.paused && seconds > 0);
+
+      if (nativeState.paused) {
+        setTimerStartedAt(null);
+        return;
+      }
+
+      const totalSeconds = restMinutes * 60 + restRemainder;
+      setTimerStartedAt(
+        Date.now() - Math.max(0, totalSeconds - seconds) * 1000
+      );
+    }
+
+    void reconcileNativeRestTimer();
+    document.addEventListener("visibilitychange", reconcileNativeRestTimer);
+    const reconciliationInterval = window.setInterval(
+      reconcileNativeRestTimer,
+      1000
+    );
+
+    return () => {
+      document.removeEventListener("visibilitychange", reconcileNativeRestTimer);
+      window.clearInterval(reconciliationInterval);
+    };
+  }, [restMinutes, restRemainder]);
+
   useEffect(() => {
     if (!timerRunning || !timerStartedAt) return;
 
@@ -2479,6 +2538,7 @@ export default function SessionView({
       }
 
       setTimeout(() => {
+        void endNativeRestTimerLiveActivity();
         setRestComplete(true);
 
         setTimeout(() => setRestComplete(false), 1200);
@@ -3090,6 +3150,13 @@ export default function SessionView({
     restNotificationSentKeyRef.current = null;
     void requestRestNotificationPermission();
     void scheduleNativeRestTimerNotification(duration);
+    void startNativeRestTimerLiveActivity(duration, {
+      exerciseName: nextExercise?.name,
+      setNumber: nextSetIndex >= 0 ? nextSetIndex + 1 : undefined,
+      totalSets: nextExercise?.sets?.length,
+      workoutName: session.templateName,
+      startedAtMs: startedAt,
+    });
     setTimerRunning(true);
   }
 
@@ -3101,6 +3168,7 @@ export default function SessionView({
     setTimerFinished(false);
     restNotificationSentKeyRef.current = null;
     void cancelNativeRestTimerNotification();
+    void endNativeRestTimerLiveActivity();
     setRestSeconds(restMinutes * 60 + restRemainder);
   }
 
@@ -5078,12 +5146,14 @@ export default function SessionView({
                 setTimerFinished(false);
                 restNotificationSentKeyRef.current = null;
                 void cancelNativeRestTimerNotification();
+                void endNativeRestTimerLiveActivity();
                 setRestSeconds(restMinutes * 60 + restRemainder);
               } else if (timerRunning) {
                 setTimerPaused(true);
 
                 setTimerRunning(false);
                 void cancelNativeRestTimerNotification();
+                void pauseNativeRestTimerLiveActivity(restSeconds);
               } else {
                 setTimerPaused(false);
                 setTimerExpiredAt(null);
@@ -5103,6 +5173,34 @@ export default function SessionView({
                 void scheduleNativeRestTimerNotification(
                   restSeconds > 0 ? restSeconds : restMinutes * 60 + restRemainder
                 );
+                const liveActivitySeconds =
+                  restSeconds > 0
+                    ? restSeconds
+                    : restMinutes * 60 + restRemainder;
+
+                if (timerPaused) {
+                  void resumeNativeRestTimerLiveActivity(liveActivitySeconds);
+                } else {
+                  const activeTimerExercise = session.exercises.find(
+                    (exercise) => exercise.id === activeSet?.exerciseId
+                  );
+                  const activeTimerSetIndex = activeTimerExercise?.sets?.findIndex(
+                    (set) => set.id === activeSet?.setId
+                  );
+
+                  void startNativeRestTimerLiveActivity(
+                    liveActivitySeconds,
+                    {
+                      exerciseName: activeTimerExercise?.name,
+                      setNumber:
+                        activeTimerSetIndex != null && activeTimerSetIndex >= 0
+                          ? activeTimerSetIndex + 1
+                          : undefined,
+                      totalSets: activeTimerExercise?.sets?.length,
+                      workoutName: session.templateName,
+                    }
+                  );
+                }
                 setTimerRunning(true);
               }
             }}
@@ -5124,6 +5222,7 @@ export default function SessionView({
               setTimerFinished(false);
               restNotificationSentKeyRef.current = null;
               void cancelNativeRestTimerNotification();
+              void endNativeRestTimerLiveActivity();
 
               setRestSeconds(restMinutes * 60 + restRemainder);
             }}
@@ -5619,7 +5718,10 @@ export default function SessionView({
                           label="Delete exercise"
                           size={34}
                           tone="danger"
-                          onClick={() => setPendingDeleteExercise(exercise)}
+                          onClick={() => {
+                            void triggerNativeWarningHaptic();
+                            setPendingDeleteExercise(exercise);
+                          }}
                         >
                           <Trash2 size={17} />
                         </IconButton>
@@ -6330,6 +6432,7 @@ export default function SessionView({
                                 onClick={(e) => {
                                   e.stopPropagation();
 
+                                  void triggerNativeWarningHaptic();
                                   setPendingDeleteSet({
                                     exerciseId: exercise.id,
                                     setId: set.id,
@@ -7150,6 +7253,7 @@ export default function SessionView({
 
                 <button
                   onClick={() => {
+                    void triggerNativeWarningHaptic();
                     setSessionActionsOpen(false);
                     setConfirmExitWorkout(true);
                   }}
@@ -7245,6 +7349,9 @@ export default function SessionView({
                 <button
                   ref={completeWorkoutButtonRef}
                   onClick={() => {
+                    if (!allSetsCompleted) {
+                      void triggerNativeWarningHaptic();
+                    }
                     setSessionActionsOpen(false);
                     setConfirmComplete(true);
                   }}

@@ -6,5 +6,10 @@ class MainViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
 
         bridge?.registerPluginInstance(WorkoutIdleTimerPlugin())
+        bridge?.registerPluginInstance(PickerHapticsPlugin())
+
+        if #available(iOS 16.2, *) {
+            bridge?.registerPluginInstance(RestTimerLiveActivityPlugin())
+        }
     }
 }
