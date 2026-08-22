@@ -193,6 +193,33 @@ function cloudEntryToLocal(row) {
   };
 }
 
+export async function downloadNutritionEntryChanges(session, since = null) {
+  assertCloudReady(session);
+
+  let query = supabase
+    .from(NUTRITION_ENTRIES_TABLE)
+    .select(
+      "id,entry_date,food_name,meal,quantity,quantity_unit,calories,protein_grams,carb_grams,fat_grams,recipe_id,source_key,metadata,created_at,updated_at,deleted_at"
+    )
+    .eq("user_id", session.user.id)
+    .eq("source", LOCAL_APP_SOURCE)
+    .order("updated_at", { ascending: true });
+
+  if (since) {
+    query = query.gt("updated_at", since);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    deletedAt: row.deleted_at || null,
+    entry: cloudEntryToLocal(row),
+    updatedAt: row.updated_at || row.deleted_at || null,
+  }));
+}
+
 export async function downloadNutritionEntries(session) {
   assertCloudReady(session);
 
@@ -253,28 +280,120 @@ export async function uploadNutritionEntries(entries, session) {
 }
 
 export async function upsertNutritionEntry(entry, session) {
-  const result = await uploadNutritionEntries([entry], session);
+  if (skipBlockedRemoteWrite("nutrition upsert", true)) {
+    return { remoteDeleted: false, uploaded: 0 };
+  }
 
-  return result.uploaded;
+  assertCloudReady(session);
+
+  const sourceKey = sourceKeyForEntry(entry.id);
+  const { data: existing, error: lookupError } = await supabase
+    .from(NUTRITION_ENTRIES_TABLE)
+    .select("deleted_at,updated_at")
+    .eq("user_id", session.user.id)
+    .eq("source", LOCAL_APP_SOURCE)
+    .eq("source_key", sourceKey)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw lookupError;
+  }
+
+  const localUpdatedAt = Date.parse(entry.updatedAt || entry.createdAt || "");
+  const cloudUpdatedAt = Date.parse(
+    existing?.deleted_at || existing?.updated_at || ""
+  );
+
+  if (
+    existing &&
+    Number.isFinite(cloudUpdatedAt) &&
+    (!Number.isFinite(localUpdatedAt) || cloudUpdatedAt > localUpdatedAt)
+  ) {
+    return {
+      remoteDeleted: Boolean(existing.deleted_at),
+      uploaded: 0,
+    };
+  }
+
+  const row = localEntryToCloud(entry, session.user.id);
+  const { error } = await supabase
+    .from(NUTRITION_ENTRIES_TABLE)
+    .upsert(row, {
+      onConflict: "user_id,source,source_key",
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    remoteDeleted: false,
+    uploaded: 1,
+  };
 }
 
-export async function deleteNutritionEntry(entryId, session) {
+export async function deleteNutritionEntry(
+  entryId,
+  session,
+  deletedEntry = null,
+  operationAt = null
+) {
   if (skipBlockedRemoteWrite("nutrition delete", true)) return;
 
   assertCloudReady(session);
 
-  const { error } = await supabase
+  const deletedAt = operationAt || new Date().toISOString();
+  const sourceKey = sourceKeyForEntry(entryId);
+  const { data: existing, error: lookupError } = await supabase
+    .from(NUTRITION_ENTRIES_TABLE)
+    .select("id,deleted_at,updated_at")
+    .eq("user_id", session.user.id)
+    .eq("source", LOCAL_APP_SOURCE)
+    .eq("source_key", sourceKey)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw lookupError;
+  }
+
+  if (
+    existing &&
+    Date.parse(existing.deleted_at || existing.updated_at || "") >
+      Date.parse(deletedAt)
+  ) {
+    return;
+  }
+
+  const { data, error } = await supabase
     .from(NUTRITION_ENTRIES_TABLE)
     .update({
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      deleted_at: deletedAt,
+      updated_at: deletedAt,
     })
     .eq("user_id", session.user.id)
     .eq("source", LOCAL_APP_SOURCE)
-    .eq("source_key", sourceKeyForEntry(entryId));
+    .eq("source_key", sourceKey)
+    .select("id");
 
   if (error) {
     throw error;
+  }
+
+  if ((data || []).length === 0 && deletedEntry) {
+    const tombstone = {
+      ...localEntryToCloud(deletedEntry, session.user.id),
+      deleted_at: deletedAt,
+      updated_at: deletedAt,
+    };
+    const { error: tombstoneError } = await supabase
+      .from(NUTRITION_ENTRIES_TABLE)
+      .upsert(tombstone, {
+        onConflict: "user_id,source,source_key",
+      });
+
+    if (tombstoneError) {
+      throw tombstoneError;
+    }
   }
 }
 

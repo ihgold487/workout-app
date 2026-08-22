@@ -33,25 +33,14 @@ import {
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import {
-  deleteBodyWeightEntry,
-  downloadBodyWeightEntries,
-  uploadBodyWeightEntries,
-  upsertBodyWeightEntry,
-} from "../sync/bodyMeasurementCloudSync";
-import {
-  addPendingNutritionDelete,
-  clearPendingNutritionDelete,
-  deleteNutritionEntry,
-  downloadNutritionEntries,
-  filterPendingDeletedNutritionEntries,
-  retryPendingNutritionDeletes,
-  uploadNutritionEntries,
-} from "../sync/nutritionCloudSync";
-import {
-  downloadNutritionTargets,
-  uploadNutritionTargets,
-  upsertNutritionTarget,
-} from "../sync/nutritionTargetCloudSync";
+  initializeNutritionPersistence,
+  loadNutritionSnapshot,
+  queueBodyWeightDelete,
+  queueBodyWeightUpsert,
+  queueNutritionDelete,
+  queueNutritionTargetUpsert,
+  queueNutritionUpserts,
+} from "../storage/nutritionStorage";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 
@@ -400,73 +389,6 @@ function saveNutritionEntries(entries, storageKey = NUTRITION_LOG_KEY) {
   localStorage.setItem(storageKey, JSON.stringify(entries));
 }
 
-function normalizeNutritionEntryForSync(entry) {
-  if (!entry?.id) {
-    return null;
-  }
-
-  return {
-    ...entry,
-    meal: normalizeMeal(entry.meal),
-  };
-}
-
-function getNutritionEntryTimestamp(entry) {
-  const updatedTime = Date.parse(entry?.updatedAt || "");
-  const createdTime = Date.parse(entry?.createdAt || "");
-
-  if (Number.isFinite(updatedTime)) {
-    return updatedTime;
-  }
-
-  if (Number.isFinite(createdTime)) {
-    return createdTime;
-  }
-
-  return 0;
-}
-
-function mergeNutritionEntries(localEntries, cloudEntries) {
-  const entriesById = new Map();
-
-  [...(localEntries || []), ...(cloudEntries || [])].forEach((entry) => {
-    const normalizedEntry = normalizeNutritionEntryForSync(entry);
-
-    if (!normalizedEntry) {
-      return;
-    }
-
-    const entryKey = String(normalizedEntry.id);
-    const existingEntry = entriesById.get(entryKey);
-
-    if (
-      !existingEntry ||
-      getNutritionEntryTimestamp(normalizedEntry) >=
-        getNutritionEntryTimestamp(existingEntry)
-    ) {
-      entriesById.set(entryKey, normalizedEntry);
-    }
-  });
-
-  return [...entriesById.values()].sort((a, b) => {
-    const dateComparison = String(a.date || "").localeCompare(String(b.date || ""));
-
-    if (dateComparison !== 0) {
-      return dateComparison;
-    }
-
-    return String(a.id).localeCompare(String(b.id), undefined, {
-      numeric: true,
-    });
-  });
-}
-
-function formatNutritionSyncFailure(error) {
-  const message = error?.message || "Unknown error";
-
-  return `Nutrition sync failed: ${message}. Local changes were kept.`;
-}
-
 function readBodyWeightEntries() {
   try {
     const entries = JSON.parse(localStorage.getItem(BODY_WEIGHT_LOG_KEY) || "[]");
@@ -673,36 +595,6 @@ function upsertDailyCalorieGoalHistory(history, date, goal) {
       updatedAt: new Date().toISOString(),
     },
   ].sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function getCalorieGoalHistoryTimestamp(entry) {
-  const parsed = Date.parse(entry?.updatedAt || "");
-
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function mergeCalorieGoalHistory(localHistory, cloudHistory) {
-  const targetsByDate = new Map();
-
-  [...(localHistory || []), ...(cloudHistory || [])].forEach((target) => {
-    if (!target?.date || !target.goal) {
-      return;
-    }
-
-    const existingTarget = targetsByDate.get(target.date);
-
-    if (
-      !existingTarget ||
-      getCalorieGoalHistoryTimestamp(target) >=
-        getCalorieGoalHistoryTimestamp(existingTarget)
-    ) {
-      targetsByDate.set(target.date, target);
-    }
-  });
-
-  return [...targetsByDate.values()].sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
 }
 
 function normalizeBarcodeSearchQuery(value) {
@@ -4092,7 +3984,6 @@ export default function NutritionView({ session = null }) {
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
-  const [nutritionSyncStatus, setNutritionSyncStatus] = useState("");
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState("fatsecret");
   const [foodAutocompleteSuggestions, setFoodAutocompleteSuggestions] = useState([]);
@@ -4165,6 +4056,7 @@ export default function NutritionView({ session = null }) {
     useState({});
   const entryFormRef = useRef(null);
   const foodNameInputRef = useRef(null);
+  const servingAmountInputRef = useRef(null);
   const recipeImageInputRef = useRef(null);
   const recipeCameraVideoRef = useRef(null);
   const recipeCameraStreamRef = useRef(null);
@@ -4507,80 +4399,35 @@ export default function NutritionView({ session = null }) {
   }, [dayRecipeIds, session]);
 
   useEffect(() => {
-    const scopedLocalEntries = readNutritionEntries(nutritionStorageKey);
-    const legacyLocalEntries =
-      signedInUserId && scopedLocalEntries.length === 0
-        ? readNutritionEntries(NUTRITION_LOG_KEY)
-        : [];
-    const seededLocalEntries =
-      scopedLocalEntries.length > 0 ? scopedLocalEntries : legacyLocalEntries;
-
-    latestNutritionEntriesRef.current = seededLocalEntries;
-    setEntries(seededLocalEntries);
-    saveNutritionEntries(seededLocalEntries, nutritionStorageKey);
-
-    if (!session?.user?.id || !isSupabaseConfigured) {
-      setNutritionSyncStatus("");
-      return undefined;
-    }
-
     let cancelled = false;
 
-    async function syncNutritionLogs() {
-      setNutritionSyncStatus("Syncing nutrition...");
+    async function hydrateNutrition() {
+      const scopedLocalEntries = readNutritionEntries(nutritionStorageKey);
+      const legacyLocalEntries =
+        signedInUserId && scopedLocalEntries.length === 0
+          ? readNutritionEntries(NUTRITION_LOG_KEY)
+          : [];
+      const legacyEntries =
+        scopedLocalEntries.length > 0 ? scopedLocalEntries : legacyLocalEntries;
+      const savedEntries =
+        (await loadNutritionSnapshot(signedInUserId)) ||
+        (await initializeNutritionPersistence(signedInUserId, legacyEntries));
 
-      try {
-        await retryPendingNutritionDeletes(session);
+      if (cancelled) return;
 
-        const currentLocalEntries = filterPendingDeletedNutritionEntries(
-          latestNutritionEntriesRef.current,
-          signedInUserId
-        );
-        const uploadableSeededEntries = filterPendingDeletedNutritionEntries(
-          seededLocalEntries,
-          signedInUserId
-        );
-
-        if (uploadableSeededEntries.length > 0) {
-          await uploadNutritionEntries(uploadableSeededEntries, session);
-        }
-
-        const cloudEntries = await downloadNutritionEntries(session);
-        const mergedEntries = filterPendingDeletedNutritionEntries(
-          mergeNutritionEntries(
-            mergeNutritionEntries(uploadableSeededEntries, currentLocalEntries),
-            cloudEntries
-          ),
-          signedInUserId
-        );
-
-        if (mergedEntries.length > 0) {
-          await uploadNutritionEntries(mergedEntries, session);
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        latestNutritionEntriesRef.current = mergedEntries;
-        setEntries(mergedEntries);
-        saveNutritionEntries(mergedEntries, nutritionStorageKey);
-        setNutritionSyncStatus("");
-      } catch (error) {
-        console.error("Failed to sync nutrition entries:", error);
-
-        if (!cancelled) {
-          setNutritionSyncStatus(formatNutritionSyncFailure(error));
-        }
-      }
+      latestNutritionEntriesRef.current = savedEntries;
+      setEntries(savedEntries);
+      saveNutritionEntries(savedEntries, nutritionStorageKey);
     }
 
-    syncNutritionLogs();
+    hydrateNutrition().catch((error) => {
+      console.error("Failed to hydrate nutrition data:", error);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [nutritionStorageKey, session, signedInUserId]);
+  }, [nutritionStorageKey, signedInUserId]);
 
   useEffect(() => {
     const scopedGoal = readDailyCalorieGoal(dailyCalorieGoalStorageKey);
@@ -4631,111 +4478,12 @@ export default function NutritionView({ session = null }) {
       dailyCalorieGoalHistoryStorageKey
     );
 
-    if (!session?.user?.id || !isSupabaseConfigured) {
-      setCalorieTargetSyncStatus("");
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function syncDailyCalorieTargets() {
-      setCalorieTargetSyncStatus("Syncing calorie goal...");
-
-      try {
-        if (effectiveSeededHistory.length > 0) {
-          await uploadNutritionTargets(effectiveSeededHistory, session);
-        }
-
-        const cloudHistory = await downloadNutritionTargets(session);
-        const mergedHistory = mergeCalorieGoalHistory(
-          effectiveSeededHistory,
-          cloudHistory
-        );
-        const mergedGoal = getGoalForDate(
-          mergedHistory,
-          selectedDate || getTodayKey(),
-          currentGoal || seededGoal
-        );
-
-        if (mergedHistory.length > 0) {
-          await uploadNutritionTargets(mergedHistory, session);
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        setDailyCalorieGoal(mergedGoal || "");
-        saveDailyCalorieGoal(mergedGoal || "", dailyCalorieGoalStorageKey);
-        setDailyCalorieGoalHistory(mergedHistory);
-        saveDailyCalorieGoalHistory(
-          mergedHistory,
-          dailyCalorieGoalHistoryStorageKey
-        );
-        setCalorieTargetSyncStatus("");
-      } catch (error) {
-        console.error("Failed to sync daily calorie targets:", error);
-
-        if (!cancelled) {
-          setCalorieTargetSyncStatus(formatNutritionSyncFailure(error));
-        }
-      }
-    }
-
-    syncDailyCalorieTargets();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     dailyCalorieGoalHistoryStorageKey,
     dailyCalorieGoalStorageKey,
     selectedDate,
-    session,
     signedInUserId,
   ]);
-
-  useEffect(() => {
-    if (!session?.user?.id || !isSupabaseConfigured) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function syncBodyWeights() {
-      setWeightSyncStatus("Syncing body weight...");
-
-      try {
-        const localEntries = readBodyWeightEntries();
-
-        if (localEntries.length > 0) {
-          await uploadBodyWeightEntries(localEntries, session);
-        }
-
-        const cloudEntries = await downloadBodyWeightEntries(session);
-
-        if (cancelled) {
-          return;
-        }
-
-        setBodyWeightEntries(cloudEntries);
-        saveBodyWeightEntries(cloudEntries);
-        setWeightSyncStatus("");
-      } catch (error) {
-        console.error("Failed to sync body weight entries:", error);
-
-        if (!cancelled) {
-          setWeightSyncStatus("Body weight sync failed. Local changes were kept.");
-        }
-      }
-    }
-
-    syncBodyWeights();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
 
   useEffect(() => {
     if (!recipeCameraOpen) {
@@ -5051,52 +4799,17 @@ export default function NutritionView({ session = null }) {
     };
   }, [recipeIngredientQuery, recipeIngredientSearchSource]);
 
-  function syncNutritionEntriesToCloud(entriesToSync) {
-    if (!session?.user?.id || !isSupabaseConfigured || entriesToSync.length === 0) {
-      return;
-    }
-
-    const uploadableEntries = filterPendingDeletedNutritionEntries(
-      entriesToSync,
-      session.user.id
-    );
-
-    if (uploadableEntries.length === 0) {
-      return;
-    }
-
-    uploadNutritionEntries(uploadableEntries, session)
-      .then(() => {
-        setNutritionSyncStatus("");
-      })
-      .catch((error) => {
-        console.error("Failed to upload nutrition entries:", error);
-        setNutritionSyncStatus(formatNutritionSyncFailure(error));
-      });
-  }
-
-  function syncNutritionDeleteToCloud(entryId) {
-    if (!session?.user?.id || !isSupabaseConfigured) {
-      return;
-    }
-
-    addPendingNutritionDelete(entryId, session.user.id);
-    deleteNutritionEntry(entryId, session)
-      .then(() => {
-        clearPendingNutritionDelete(entryId, session.user.id);
-        setNutritionSyncStatus("");
-      })
-      .catch((error) => {
-        console.error("Failed to delete nutrition entry from cloud:", error);
-        setNutritionSyncStatus(formatNutritionSyncFailure(error));
-      });
-  }
-
   function updateEntries(nextEntries, entriesToSync = nextEntries) {
     latestNutritionEntriesRef.current = nextEntries;
     setEntries(nextEntries);
     saveNutritionEntries(nextEntries, nutritionStorageKeyRef.current);
-    syncNutritionEntriesToCloud(entriesToSync);
+    queueNutritionUpserts(signedInUserId, entriesToSync, nextEntries)
+      .catch((error) => {
+        console.error("Failed to queue nutrition changes:", error);
+        setNutritionSyncStatus(
+          "Nutrition was saved to the compatibility cache, but its durable sync queue failed."
+        );
+      });
   }
 
   function openCopyFoodSheet() {
@@ -5658,12 +5371,28 @@ export default function NutritionView({ session = null }) {
         : selectedResult.description || "",
       protein: formatDraftMacro(scaledMacros.protein),
     }));
+    focusSelectedFoodAmount();
+  }
+
+  function focusSelectedFoodAmount() {
     window.requestAnimationFrame(() => {
-      entryFormRef.current?.scrollIntoView({
+      const amountInput = servingAmountInputRef.current;
+
+      amountInput?.focus();
+      amountInput?.select();
+      amountInput?.scrollIntoView({
         behavior: "smooth",
-        block: "start",
+        block: "center",
       });
-      foodNameInputRef.current?.focus();
+
+      // iOS resizes the visual viewport after focus. Re-center once that
+      // keyboard transition has settled so the active field stays visible.
+      window.setTimeout(() => {
+        servingAmountInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 300);
     });
   }
 
@@ -5695,13 +5424,7 @@ export default function NutritionView({ session = null }) {
       name: food.brand ? `${food.name} (${food.brand})` : food.name || "",
       protein: formatDraftMacro(macros.protein),
     }));
-    window.requestAnimationFrame(() => {
-      entryFormRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      foodNameInputRef.current?.focus();
-    });
+    focusSelectedFoodAmount();
   }
 
   function selectRecipeResult(recipe) {
@@ -5734,13 +5457,7 @@ export default function NutritionView({ session = null }) {
       name: recipe.name || "",
       protein: formatDraftMacro(scaledMacros.protein),
     }));
-    window.requestAnimationFrame(() => {
-      entryFormRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      foodNameInputRef.current?.focus();
-    });
+    focusSelectedFoodAmount();
   }
 
   function updateServingAmount(value) {
@@ -6586,9 +6303,19 @@ export default function NutritionView({ session = null }) {
   }
 
   function removeEntry(entryId) {
-    addPendingNutritionDelete(entryId, signedInUserId);
-    updateEntries(entries.filter((entry) => entry.id !== entryId), []);
-    syncNutritionDeleteToCloud(entryId);
+    const deletedEntry = entries.find((entry) => entry.id === entryId) || null;
+    const nextEntries = entries.filter((entry) => entry.id !== entryId);
+
+    latestNutritionEntriesRef.current = nextEntries;
+    setEntries(nextEntries);
+    saveNutritionEntries(nextEntries, nutritionStorageKeyRef.current);
+    queueNutritionDelete(signedInUserId, entryId, nextEntries, deletedEntry)
+      .catch((error) => {
+        console.error("Failed to queue nutrition deletion:", error);
+        setNutritionSyncStatus(
+          "Nutrition deletion was saved locally, but its durable sync queue failed."
+        );
+      });
 
     if (editingEntryId === entryId) {
       resetEntryForm();
@@ -6762,14 +6489,12 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
-    setWeightSyncStatus("Saving body weight...");
-
     try {
-      await upsertBodyWeightEntry(nextEntry, session);
+      await queueBodyWeightUpsert(session.user.id, nextEntry);
       setWeightSyncStatus("");
     } catch (error) {
-      console.error("Failed to save body weight to cloud:", error);
-      setWeightSyncStatus("Body weight saved locally; cloud save failed.");
+      console.error("Failed to queue body weight:", error);
+      setWeightSyncStatus("Body weight saved locally; sync queue failed.");
     }
   }
 
@@ -6782,14 +6507,12 @@ export default function NutritionView({ session = null }) {
       return;
     }
 
-    setWeightSyncStatus("Deleting body weight...");
-
     try {
-      await deleteBodyWeightEntry(entryDate, session);
+      await queueBodyWeightDelete(session.user.id, entryDate);
       setWeightSyncStatus("");
     } catch (error) {
-      console.error("Failed to delete body weight from cloud:", error);
-      setWeightSyncStatus("Body weight deleted locally; cloud delete failed.");
+      console.error("Failed to queue body-weight deletion:", error);
+      setWeightSyncStatus("Body weight deleted locally; sync queue failed.");
     }
   }
 
@@ -6898,21 +6621,22 @@ export default function NutritionView({ session = null }) {
     });
 
     if (session?.user?.id && isSupabaseConfigured) {
-      setCalorieTargetSyncStatus("Saving calorie goal...");
-      upsertNutritionTarget(
+      queueNutritionTargetUpsert(
+        session.user.id,
         {
           date: targetDate,
           goal,
           updatedAt: new Date().toISOString(),
-        },
-        session
+        }
       )
         .then(() => {
           setCalorieTargetSyncStatus("");
         })
         .catch((error) => {
-          console.error("Failed to save daily calorie target:", error);
-          setCalorieTargetSyncStatus(formatNutritionSyncFailure(error));
+          console.error("Failed to queue daily calorie target:", error);
+          setCalorieTargetSyncStatus(
+            "Calorie goal saved locally; sync queue failed."
+          );
         });
     }
   }
@@ -8876,6 +8600,7 @@ export default function NutritionView({ session = null }) {
                   }}
                 >
                   <input
+                    ref={servingAmountInputRef}
                     aria-label="Serving amount"
                     inputMode="decimal"
                     value={servingAmount}
@@ -9006,20 +8731,6 @@ export default function NutritionView({ session = null }) {
             <CalendarPlus size={18} />
             Add Food from another day
           </button>
-
-          {nutritionSyncStatus && (
-            <p
-              style={{
-                color: nutritionSyncStatus.includes("failed")
-                  ? "#8a1f11"
-                  : "#4b5563",
-                fontSize: "0.82rem",
-                margin: 0,
-              }}
-            >
-              {nutritionSyncStatus}
-            </p>
-          )}
 
           <button
             disabled={!entryDraft.name.trim()}

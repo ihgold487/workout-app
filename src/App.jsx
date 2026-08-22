@@ -25,7 +25,6 @@ import {
   Settings,
   Trash2,
   Trophy,
-  Upload,
   Utensils,
   X,
 } from "lucide-react";
@@ -79,12 +78,17 @@ import {
   uploadPlateInventory,
 } from "./sync/plateInventoryCloudSync";
 import {
-  downloadNutritionEntries,
-  filterPendingDeletedNutritionEntries,
-  retryPendingNutritionDeletes,
-  uploadNutritionEntries,
-} from "./sync/nutritionCloudSync";
+  flushNutritionOutbox,
+  getNutritionOutbox,
+  getNutritionPersistenceStatus,
+  initializeNutritionPersistence,
+  loadNutritionSnapshot,
+  persistNutritionEntries,
+  reconcileNutritionEntries,
+} from "./storage/nutritionStorage";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
+import { downloadBodyWeightEntries } from "./sync/bodyMeasurementCloudSync";
+import { downloadNutritionTargets } from "./sync/nutritionTargetCloudSync";
 import {
   isRemoteWriteAllowed,
   skipBlockedRemoteWrite,
@@ -111,7 +115,6 @@ const MANUAL_UPDATE_CHECK_TIMEOUT_MS = 20000;
 
 const STARTUP_SPLASH_MINIMUM_MS = 1000;
 const ACTIVE_WORKOUT_STARTUP_SPLASH_MINIMUM_MS = 150;
-const AUTO_SYNC_RESUME_INTERVAL = 60 * 60 * 1000;
 const AUTO_SYNC_CHECKPOINT_DELAY_MS = 350;
 const AUTO_SYNC_SUPPRESS_MS = 4000;
 const NORMALIZED_SYNC_TIMEOUT_MS = 90 * 1000;
@@ -130,6 +133,13 @@ const NORMALIZED_SYNC_DOMAINS = [
   "plans",
   "plateInventory",
 ];
+const NORMALIZED_SYNC_DOMAIN_LABELS = {
+  exercisePreferences: "exercise preferences",
+  workouts: "workouts",
+  history: "completed workouts",
+  plans: "plans",
+  plateInventory: "plate inventory",
+};
 const NORMALIZED_WORKOUT_RESET_TABLES = [
   "session_sets",
   "session_exercises",
@@ -652,6 +662,8 @@ function formatHistoryTimestamp(workout) {
 }
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
+const PENDING_SYNC_MAX_AGE_MS = 60 * 60 * 1000;
+const PENDING_SYNC_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const DAILY_CALORIE_GOAL_KEY = "dailyCalorieGoal";
 const DAILY_CALORIE_GOAL_HISTORY_KEY = "dailyCalorieGoalHistory";
@@ -686,51 +698,35 @@ function saveLocalArray(key, entries) {
   localStorage.setItem(key, JSON.stringify(entries));
 }
 
-function getNutritionEntryTimestamp(entry) {
-  const updatedTime = Date.parse(entry?.updatedAt || "");
-  const createdTime = Date.parse(entry?.createdAt || "");
+function preservePendingNutritionSupportChanges(bodyWeights, targets, pendingItems) {
+  const bodyWeightsByDate = new Map(
+    (bodyWeights || []).map((entry) => [entry.date, entry])
+  );
+  const targetsByDate = new Map(
+    (targets || []).map((target) => [target.date, target])
+  );
 
-  if (Number.isFinite(updatedTime)) {
-    return updatedTime;
-  }
-
-  if (Number.isFinite(createdTime)) {
-    return createdTime;
-  }
-
-  return 0;
-}
-
-function mergeNutritionEntries(localEntries, cloudEntries) {
-  const entriesById = new Map();
-
-  [...(localEntries || []), ...(cloudEntries || [])].forEach((entry) => {
-    if (!entry?.id) {
-      return;
-    }
-
-    const entryKey = String(entry.id);
-    const existingEntry = entriesById.get(entryKey);
-
-    if (
-      !existingEntry ||
-      getNutritionEntryTimestamp(entry) >= getNutritionEntryTimestamp(existingEntry)
+  pendingItems.forEach((item) => {
+    if (item.operation === "body-weight-delete") {
+      bodyWeightsByDate.delete(item.entryDate);
+    } else if (item.operation === "body-weight-upsert" && item.entry?.date) {
+      bodyWeightsByDate.set(item.entry.date, item.entry);
+    } else if (
+      item.operation === "nutrition-target-upsert" &&
+      item.target?.date
     ) {
-      entriesById.set(entryKey, entry);
+      targetsByDate.set(item.target.date, item.target);
     }
   });
 
-  return [...entriesById.values()].sort((a, b) => {
-    const dateComparison = String(a.date || "").localeCompare(String(b.date || ""));
-
-    if (dateComparison !== 0) {
-      return dateComparison;
-    }
-
-    return String(a.id).localeCompare(String(b.id), undefined, {
-      numeric: true,
-    });
-  });
+  return {
+    bodyWeights: [...bodyWeightsByDate.values()].sort((a, b) =>
+      String(a.date).localeCompare(String(b.date))
+    ),
+    targets: [...targetsByDate.values()].sort((a, b) =>
+      String(a.date).localeCompare(String(b.date))
+    ),
+  };
 }
 
 function getAuditLocalSummary(data) {
@@ -4289,6 +4285,9 @@ export default function App() {
   const [calendarNutritionEntries, setCalendarNutritionEntries] = useState(() =>
     readLocalArray(NUTRITION_LOG_KEY)
   );
+  const [nutritionSettingsStatus, setNutritionSettingsStatus] = useState("");
+  const [nutritionSettingsPending, setNutritionSettingsPending] = useState(0);
+  const [nutritionSettingsSyncing, setNutritionSettingsSyncing] = useState(false);
 
   const [authEmail, setAuthEmail] = useState("");
 
@@ -4331,6 +4330,9 @@ export default function App() {
   const [lastNormalizedSyncAt, setLastNormalizedSyncAt] = useState(
     readLastNormalizedSyncAt
   );
+  const [normalizedSyncDirtyDomains, setNormalizedSyncDirtyDomains] = useState(
+    readNormalizedSyncDirtyDomains
+  );
 
   const [showAdvancedSyncTools, setShowAdvancedSyncTools] = useState(false);
 
@@ -4338,8 +4340,7 @@ export default function App() {
 
   const [dataAuditSummary, setDataAuditSummary] = useState(null);
 
-  const [aiPlanDraftText, setAiPlanDraftText] = useState("");
-  const [aiPlanStatus, setAiPlanStatus] = useState("");
+  const [, setAiPlanStatus] = useState("");
   const [exportExpanded, setExportExpanded] = useState(false);
   const [exerciseExportMode, setExerciseExportMode] = useState("all");
   const [exerciseExportSearch, setExerciseExportSearch] = useState("");
@@ -4389,6 +4390,7 @@ export default function App() {
   const previousHistoryLengthRef = useRef(history.length);
   const workoutCompletionSyncHistoryLengthRef = useRef(null);
   const aiPlanAnalysisSyncQueuedRef = useRef(false);
+  const nutritionStartupHydratedUserRef = useRef(null);
 
   const userEmail = authSession?.user?.email || "";
   const normalizedUserEmail = userEmail.toLowerCase();
@@ -4595,48 +4597,76 @@ export default function App() {
       userId && scopedLocalEntries.length === 0
         ? readLocalArray(NUTRITION_LOG_KEY)
         : [];
-    const seededLocalEntries =
+    const legacyEntries =
       scopedLocalEntries.length > 0 ? scopedLocalEntries : legacyLocalEntries;
-
-    queueMicrotask(() => {
-      setCalendarNutritionEntries(seededLocalEntries);
-    });
-
-    if (!authSession?.user?.id || !isSupabaseConfigured || !appAccessAllowed) {
-      return undefined;
-    }
 
     let cancelled = false;
 
     async function syncCalendarNutritionEntries() {
       try {
-        await retryPendingNutritionDeletes(authSession);
+        const localEntries =
+          (await loadNutritionSnapshot(userId)) ||
+          (await initializeNutritionPersistence(userId, legacyEntries));
 
-        const uploadableSeededEntries = filterPendingDeletedNutritionEntries(
-          seededLocalEntries,
-          userId
-        );
-
-        if (uploadableSeededEntries.length > 0) {
-          await uploadNutritionEntries(uploadableSeededEntries, authSession);
+        if (!cancelled) {
+          setCalendarNutritionEntries(localEntries);
         }
 
-        const cloudEntries = await downloadNutritionEntries(authSession);
-        const mergedEntries = filterPendingDeletedNutritionEntries(
-          mergeNutritionEntries(uploadableSeededEntries, cloudEntries),
-          userId
-        );
-
-        if (mergedEntries.length > 0) {
-          await uploadNutritionEntries(mergedEntries, authSession);
+        if (
+          !authSession?.user?.id ||
+          !isSupabaseConfigured ||
+          !appAccessAllowed
+        ) {
+          return;
         }
+
+        if (nutritionStartupHydratedUserRef.current === userId) {
+          return;
+        }
+
+        const result = await reconcileNutritionEntries(userId, authSession, {
+          entries: localEntries,
+        });
 
         if (cancelled) {
           return;
         }
 
-        setCalendarNutritionEntries(mergedEntries);
-        saveLocalArray(storageKey, mergedEntries);
+        setCalendarNutritionEntries(result.entries);
+        saveLocalArray(storageKey, result.entries);
+        await persistNutritionEntries(userId, result.entries);
+
+        // Body weight and calorie targets are small domains. Reconcile them
+        // only at cold startup/login, after their queued writes are flushed.
+        if (nutritionStartupHydratedUserRef.current !== userId) {
+          const [bodyWeights, calorieTargets] = await Promise.all([
+            downloadBodyWeightEntries(authSession),
+            downloadNutritionTargets(authSession),
+          ]);
+          const pendingItems = await getNutritionOutbox(userId);
+          const preserved = preservePendingNutritionSupportChanges(
+            bodyWeights,
+            calorieTargets,
+            pendingItems
+          );
+
+          saveLocalArray(BODY_WEIGHT_LOG_KEY, preserved.bodyWeights);
+          saveLocalArray(
+            getDailyCalorieGoalHistoryStorageKey(userId),
+            preserved.targets
+          );
+          const latestTarget = [...preserved.targets].sort((a, b) =>
+            String(b.date).localeCompare(String(a.date))
+          )[0];
+
+          if (latestTarget?.goal) {
+            localStorage.setItem(
+              getDailyCalorieGoalStorageKey(userId),
+              String(latestTarget.goal)
+            );
+          }
+          nutritionStartupHydratedUserRef.current = userId;
+        }
       } catch (error) {
         console.error("Failed to sync calendar nutrition entries:", error);
       }
@@ -4661,6 +4691,142 @@ export default function App() {
       setCalendarNutritionEntries(readLocalArray(storageKey));
     });
   }, [authSession?.user?.id, showNutrition]);
+
+  useEffect(() => {
+    if (!showSettings || !authSession?.user?.id) return;
+
+    getNutritionPersistenceStatus(authSession.user.id)
+      .then((status) => setNutritionSettingsPending(status.pending))
+      .catch((error) =>
+        console.error("Failed to load nutrition sync status:", error)
+      );
+  }, [authSession?.user?.id, showSettings]);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+
+    if (!userId || !appAccessAllowed || approvalFromCache) return undefined;
+
+    async function flushAgedPendingChanges() {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+
+      const status = await getNutritionPersistenceStatus(userId);
+      const oldestPendingTime = Date.parse(status.oldestPendingAt || "");
+
+      if (
+        !Number.isFinite(oldestPendingTime) ||
+        getCurrentTimeMs() - oldestPendingTime < PENDING_SYNC_MAX_AGE_MS
+      ) {
+        return;
+      }
+
+      const result = await flushNutritionOutbox(userId, authSession);
+
+      setNutritionSettingsPending(result.remaining.length);
+      if (result.failed.length > 0) {
+        setNutritionSettingsStatus(
+          `${result.failed.length} aged nutrition change${
+            result.failed.length === 1 ? "" : "s"
+          } remain queued for retry.`
+        );
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      flushAgedPendingChanges().catch((error) =>
+        console.error("Aged nutrition sync failed:", error)
+      );
+    }, PENDING_SYNC_CHECK_INTERVAL_MS);
+
+    function handleOnline() {
+      flushAgedPendingChanges().catch((error) =>
+        console.error("Reconnect nutrition sync failed:", error)
+      );
+    }
+
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [appAccessAllowed, approvalFromCache, authSession]);
+
+  async function runSettingsNutritionSync({ pull = false } = {}) {
+    const userId = authSession?.user?.id;
+
+    if (!userId || !isSupabaseConfigured || !appAccessAllowed) {
+      setNutritionSettingsStatus("Sign in and connect before syncing nutrition.");
+      return;
+    }
+
+    setNutritionSettingsSyncing(true);
+    setNutritionSettingsStatus(
+      pull ? "Pulling recent nutrition changes..." : "Syncing queued nutrition changes..."
+    );
+
+    try {
+      const localEntries =
+        (await loadNutritionSnapshot(userId)) || calendarNutritionEntries;
+      const result = pull
+        ? await reconcileNutritionEntries(userId, authSession, {
+            entries: localEntries,
+          })
+        : await flushNutritionOutbox(userId, authSession).then((flushResult) => ({
+            entries: localEntries,
+            failed: flushResult.failed,
+            pending: flushResult.remaining.length,
+          }));
+
+      if (pull) {
+        setCalendarNutritionEntries(result.entries);
+        saveLocalArray(getNutritionLogStorageKey(userId), result.entries);
+        const [bodyWeights, calorieTargets] = await Promise.all([
+          downloadBodyWeightEntries(authSession),
+          downloadNutritionTargets(authSession),
+        ]);
+        const pendingItems = await getNutritionOutbox(userId);
+        const preserved = preservePendingNutritionSupportChanges(
+          bodyWeights,
+          calorieTargets,
+          pendingItems
+        );
+
+        saveLocalArray(BODY_WEIGHT_LOG_KEY, preserved.bodyWeights);
+        saveLocalArray(
+          getDailyCalorieGoalHistoryStorageKey(userId),
+          preserved.targets
+        );
+        const latestTarget = [...preserved.targets].sort((a, b) =>
+          String(b.date).localeCompare(String(a.date))
+        )[0];
+
+        if (latestTarget?.goal) {
+          localStorage.setItem(
+            getDailyCalorieGoalStorageKey(userId),
+            String(latestTarget.goal)
+          );
+        }
+      }
+      setNutritionSettingsPending(result.pending);
+      setNutritionSettingsStatus(
+        result.failed.length > 0
+          ? `${result.failed.length} nutrition change${
+              result.failed.length === 1 ? "" : "s"
+            } remain queued for retry.`
+          : pull
+            ? `Nutrition pull complete: ${result.changes} changed food-log row${
+                result.changes === 1 ? "" : "s"
+              } read.`
+            : "All queued nutrition changes are synced."
+      );
+    } catch (error) {
+      console.error("Settings nutrition sync failed:", error);
+      setNutritionSettingsStatus(`Nutrition sync failed: ${error.message}`);
+    } finally {
+      setNutritionSettingsSyncing(false);
+    }
+  }
 
   async function signInWithEmailPassword() {
     const email = authEmail.trim();
@@ -4716,7 +4882,24 @@ export default function App() {
     setAuthLoading(true);
 
     try {
+      const userId = authSession?.user?.id;
+
+      if (userId && appAccessAllowed && !approvalFromCache) {
+        setAuthStatus("Syncing queued changes before sign-out...");
+        if (normalizedSyncDirtyDomainsRef.current.size > 0) {
+          await performNormalizedSync("manual", authSession);
+        }
+        const result = await flushNutritionOutbox(userId, authSession);
+
+        if (result.failed.length > 0 || result.remaining.length > 0) {
+          throw new Error(
+            "Queued changes could not be uploaded. You remain signed in so they can retry."
+          );
+        }
+      }
+
       await signOut();
+      nutritionStartupHydratedUserRef.current = null;
       setAuthStatus("Signed out.");
     } catch (error) {
       console.error("Sign out failed:", error);
@@ -5105,6 +5288,7 @@ export default function App() {
       automaticSyncSuppressUntilRef.current = getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       normalizedSyncDirtyDomainsRef.current = new Set();
       writeNormalizedSyncDirtyDomains([]);
+      setNormalizedSyncDirtyDomains([]);
       resetLocalWorkoutDataForUser(nextUserId);
       setPlateInventory(defaultPlateInventory);
       plateInventoryRef.current = defaultPlateInventory;
@@ -5171,7 +5355,9 @@ export default function App() {
     });
 
     normalizedSyncDirtyDomainsRef.current = nextDomains;
-    writeNormalizedSyncDirtyDomains([...nextDomains]);
+    const nextDomainList = [...nextDomains];
+    writeNormalizedSyncDirtyDomains(nextDomainList);
+    setNormalizedSyncDirtyDomains(nextDomainList);
   }
 
   function markNormalizedSyncClean() {
@@ -5179,6 +5365,7 @@ export default function App() {
 
     normalizedSyncDirtyDomainsRef.current = new Set();
     writeNormalizedSyncDirtyDomains([]);
+    setNormalizedSyncDirtyDomains([]);
     safeSetLocalStorage(LAST_NORMALIZED_SYNC_KEY, syncedAt);
     setLastNormalizedSyncAt(syncedAt);
   }
@@ -5795,39 +5982,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history.length, authSession, indexedDbReady]);
 
-  useEffect(() => {
-    if (!authSession?.user?.id || !indexedDbReady) {
-      return undefined;
-    }
-
-    function syncAfterResume() {
-      if (document.visibilityState === "hidden") {
-        return;
-      }
-
-      if (
-        getCurrentTimeMs() - lastAutomaticSyncAttemptRef.current <
-        AUTO_SYNC_RESUME_INTERVAL
-      ) {
-        return;
-      }
-
-      runAutomaticNormalizedSync("resume");
-    }
-
-    window.addEventListener("focus", syncAfterResume);
-    window.addEventListener("online", syncAfterResume);
-    document.addEventListener("visibilitychange", syncAfterResume);
-
-    return () => {
-      window.removeEventListener("focus", syncAfterResume);
-      window.removeEventListener("online", syncAfterResume);
-      document.removeEventListener("visibilitychange", syncAfterResume);
-    };
-    // Latest sync state is read from refs inside runAutomaticNormalizedSync.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authSession, indexedDbReady]);
-
   async function checkNormalizedCloudData() {
     setSyncLoading(true);
 
@@ -5991,77 +6145,6 @@ export default function App() {
   function openChatGptForAiPlan() {
     window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     setAiPlanStatus("ChatGPT opened. Use Copy Prompt and attach the JSON context.");
-  }
-
-  function loadAiPlanDraftFile(file) {
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      setAiPlanDraftText(String(reader.result || ""));
-      setAiPlanStatus(`Loaded ${file.name}. Review it, then import the draft.`);
-    };
-    reader.onerror = () => {
-      setAiPlanStatus(`Could not read ${file.name}.`);
-    };
-    reader.readAsText(file);
-  }
-
-  function handleAiPlanDraftFileChange(event) {
-    loadAiPlanDraftFile(event.target.files?.[0]);
-    event.target.value = "";
-  }
-
-  function handleAiPlanDraftDrop(event) {
-    event.preventDefault();
-    loadAiPlanDraftFile(event.dataTransfer.files?.[0]);
-  }
-
-  function importAiPlanDraft() {
-    try {
-      const draft = parseAiPlanDraft(aiPlanDraftText);
-      const imported = buildImportedAiPlanDraft({
-        draft,
-        exerciseLibrary,
-      });
-      const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
-        [...plans, imported.plan],
-        [...templates, ...imported.templates]
-      );
-      const nextPlans = normalizedPlanData.plans;
-      const nextTemplates = normalizedPlanData.templates;
-      const nextData = {
-        ...getCurrentWorkoutData(),
-        plans: nextPlans,
-        templates: nextTemplates,
-      };
-
-      currentWorkoutDataRef.current = nextData;
-      localDataRevisionRef.current += 1;
-      setPlans(nextPlans);
-      setTemplates(nextTemplates);
-      markNormalizedSyncDirty(["plans", "workouts"]);
-      saveLocalWorkoutDataImmediately(nextData).catch((error) => {
-        console.error("Failed to save imported AI plan draft:", error);
-      });
-      setAiPlanDraftText("");
-      setAiPlanStatus(
-        `Imported inactive draft "${imported.plan.name}" with ${imported.templates.length} workouts.${
-          imported.plan.aiAnalysis ? " AI notes are shown on the plan card." : ""
-        }${
-          imported.unmatchedExercises.length
-            ? ` Review unmatched exercises: ${imported.unmatchedExercises
-                .slice(0, 5)
-                .join(", ")}${imported.unmatchedExercises.length > 5 ? "..." : ""}.`
-            : ""
-        }`
-      );
-    } catch (error) {
-      setAiPlanStatus(error.message);
-    }
   }
 
   function buildAiPlanDraftFromText(text) {
@@ -9848,14 +9931,38 @@ export default function App() {
               paddingTop: "10px",
             }}
           >
+            <h3 style={{ fontSize: "15px", margin: "0 0 8px" }}>
+              Workouts, Exercises, and Plans
+            </h3>
             <div
               style={{
                 color: "var(--text-muted)",
                 fontSize: "12px",
-                marginBottom: "8px",
+                marginBottom: "4px",
               }}
             >
               Last synced: {formatLastNormalizedSyncAt(lastNormalizedSyncAt)}
+            </div>
+            <div
+              style={{
+                color:
+                  normalizedSyncDirtyDomains.length > 0
+                    ? "var(--danger-text)"
+                    : "var(--text-muted)",
+                fontSize: "12px",
+                marginBottom: "8px",
+              }}
+            >
+              {normalizedSyncDirtyDomains.length} data area{
+                normalizedSyncDirtyDomains.length === 1 ? "" : "s"
+              } with queued changes
+              {normalizedSyncDirtyDomains.length > 0
+                ? `: ${normalizedSyncDirtyDomains
+                    .map(
+                      (domain) => NORMALIZED_SYNC_DOMAIN_LABELS[domain] || domain
+                    )
+                    .join(", ")}`
+                : ""}
             </div>
             <button
               disabled={
@@ -9894,145 +10001,73 @@ export default function App() {
               workout is completed or Sync Now is tapped.
             </div>
           </div>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              marginTop: "10px",
+              paddingTop: "10px",
+            }}
+          >
+            <h3 style={{ fontSize: "15px", margin: "0 0 8px" }}>
+              Nutrition, Body Weight, and Calorie Targets
+            </h3>
+            <div
+              style={{
+                color: nutritionSettingsPending > 0
+                  ? "var(--danger-text)"
+                  : "var(--text-muted)",
+                fontSize: "12px",
+                marginBottom: "8px",
+              }}
+            >
+              {nutritionSettingsPending} queued nutrition change{
+                nutritionSettingsPending === 1 ? "" : "s"
+              }
+            </div>
+            <button
+              disabled={
+                nutritionSettingsSyncing ||
+                !authSession ||
+                !appAccessAllowed ||
+                approvalFromCache
+              }
+              onClick={() => runSettingsNutritionSync()}
+              type="button"
+            >
+              {nutritionSettingsSyncing
+                ? "Syncing..."
+                : "Sync Pending Nutrition Changes"}
+            </button>
+            <button
+              disabled={
+                nutritionSettingsSyncing ||
+                !authSession ||
+                !appAccessAllowed ||
+                approvalFromCache
+              }
+              onClick={() => runSettingsNutritionSync({ pull: true })}
+              style={{ marginLeft: "8px" }}
+              type="button"
+            >
+              Pull Nutrition Data
+            </button>
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                color: nutritionSettingsStatus.includes("failed")
+                  ? "var(--danger-text)"
+                  : "var(--text-muted)",
+                fontSize: "12px",
+                marginTop: "6px",
+              }}
+            >
+              {nutritionSettingsStatus ||
+                "Edits use the durable queue. Food-log pulls are incremental; body weight and calorie targets are small-domain startup/manual pulls."}
+            </div>
+          </div>
           {isIraSettingsUser && (
             <>
-              <div
-                style={{
-                  borderTop: "1px solid var(--border)",
-                  display: "grid",
-                  gap: "8px",
-                  marginTop: "10px",
-                  paddingTop: "10px",
-                }}
-              >
-                <h3
-                  style={{
-                    alignItems: "center",
-                    display: "flex",
-                    fontSize: "15px",
-                    gap: "6px",
-                    justifyContent: "center",
-                    margin: 0,
-                  }}
-                >
-                  <ClipboardList size={16} />
-                  AI Plan Draft
-                </h3>
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                  }}
-                >
-                  Download a JSON context file, attach it in your existing
-                  ChatGPT discussion, then paste the returned draft JSON here.
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "8px",
-                    justifyContent: "center",
-                  }}
-                >
-                  <button onClick={downloadAiPlanContext} type="button">
-                    <Download size={14} />
-                    Context
-                  </button>
-                  <button onClick={copyAiPlanPrompt} type="button">
-                    <Copy size={14} />
-                    Prompt
-                  </button>
-                  <button onClick={openChatGptForAiPlan} type="button">
-                    Open ChatGPT
-                  </button>
-                </div>
-                <div
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={handleAiPlanDraftDrop}
-                  style={{
-                    display: "grid",
-                    gap: "8px",
-                  }}
-                >
-                  <textarea
-                    aria-label="AI plan draft JSON"
-                    onChange={(event) => {
-                      setAiPlanDraftText(event.target.value);
-                      setAiPlanStatus("");
-                    }}
-                    placeholder="Paste or drop ChatGPT's workout-app.ai-plan-draft.v1 JSON here"
-                    value={aiPlanDraftText}
-                    style={{
-                      background: "var(--surface-muted)",
-                      border: "1px dashed var(--border)",
-                      borderRadius: "6px",
-                      boxSizing: "border-box",
-                      color: "var(--text)",
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      fontSize: "11px",
-                      lineHeight: 1.45,
-                      minHeight: "150px",
-                      padding: "8px",
-                      resize: "vertical",
-                      width: "100%",
-                    }}
-                  />
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "8px",
-                      gridTemplateColumns: "1fr 1fr",
-                    }}
-                  >
-                    <label
-                      style={{
-                        alignItems: "center",
-                        background: "var(--button-bg)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        color: "var(--button-text)",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        fontSize: "13px",
-                        gap: "6px",
-                        justifyContent: "center",
-                        padding: "8px",
-                      }}
-                    >
-                      <Upload size={14} />
-                      Load File
-                      <input
-                        accept="application/json,.json,.txt"
-                        onChange={handleAiPlanDraftFileChange}
-                        style={{ display: "none" }}
-                        type="file"
-                      />
-                    </label>
-                    <button
-                      disabled={!aiPlanDraftText.trim()}
-                      onClick={importAiPlanDraft}
-                      type="button"
-                    >
-                      <Upload size={14} />
-                      Import Draft
-                    </button>
-                  </div>
-                </div>
-                {aiPlanStatus && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {aiPlanStatus}
-                  </div>
-                )}
-              </div>
               <div
                 style={{
                   borderTop: "1px solid var(--border)",

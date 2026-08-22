@@ -24,3 +24,12 @@ db.version(2).stores({
   templates: "++id,name",
   sessions: "++id,date",
 });
+
+db.version(3).stores({
+  appData: "&id,updatedAt",
+  exerciseLibrary: "++id,name,muscleGroup",
+  nutritionOutbox: "&id,userId,operation,updatedAt",
+  nutritionSnapshots: "&id,userId,updatedAt",
+  sessions: "++id,date",
+  templates: "++id,name",
+});
