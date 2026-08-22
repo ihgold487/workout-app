@@ -68,6 +68,10 @@ import {
   cancelNativeRestTimerNotification,
   scheduleNativeRestTimerNotification,
 } from "../native/restTimerNotifications";
+import {
+  canUseNativeWorkoutIdleTimer,
+  setNativeWorkoutAutoLockEnabled,
+} from "../native/workoutIdleTimer";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
@@ -2551,6 +2555,14 @@ export default function SessionView({
   }, [session.exercises]);
 
   useEffect(() => {
+    if (canUseNativeWorkoutIdleTimer()) {
+      setNativeWorkoutAutoLockEnabled(!keepScreenAwake);
+
+      return () => {
+        setNativeWorkoutAutoLockEnabled(true);
+      };
+    }
+
     if (!keepScreenAwake) {
       wakeLockRef.current?.release();
 
