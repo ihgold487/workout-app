@@ -5446,8 +5446,8 @@ export default function App() {
   }
 
   async function performNormalizedSync(reason, session) {
-      // TEMPORARY native pull-only safeguard: native syncs always run the
-      // download phase and never enter the normalized upload phase.
+      // The remote write policy can force pull-only sync if outbound writes
+      // need to be disabled for a platform or rollout.
       const nativePullOnly = !isRemoteWriteAllowed();
       const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
       const shouldDeferForActiveWorkout =
@@ -5561,8 +5561,8 @@ export default function App() {
         savePlateInventoryOwner(session.user.id);
       }
       automaticSyncHydratedUserRef.current = session.user.id;
-      // Keep native dirty markers so local development changes are not treated
-      // as remotely persisted while outbound sync is temporarily blocked.
+      // Keep dirty markers if outbound sync is temporarily blocked so local
+      // changes are not treated as remotely persisted.
       if (!nativePullOnly) {
         markNormalizedSyncClean();
       }

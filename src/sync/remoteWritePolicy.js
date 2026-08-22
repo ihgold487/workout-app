@@ -1,9 +1,5 @@
-import { Capacitor } from "@capacitor/core";
-
-// TEMPORARY native pull-only safeguard. Remove this policy when native writes
-// to the persisted database are ready to be enabled.
 export function isRemoteWriteAllowed() {
-  return !Capacitor.isNativePlatform();
+  return true;
 }
 
 export function skipBlockedRemoteWrite(operation, result) {
