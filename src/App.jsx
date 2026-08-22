@@ -1,5 +1,6 @@
 /* global __BUILD_TIME__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
+import { Capacitor } from "@capacitor/core";
 import {
   AlertTriangle,
   BarChart3,
@@ -95,6 +96,10 @@ const STORAGE_VERSION = 12;
 const APP_VERSION = "0.16";
 
 const BUILD_TIME = __BUILD_TIME__;
+
+const HOME_WORKOUT_ICON = `${import.meta.env.BASE_URL}${
+  Capacitor.isNativePlatform() ? "workout-icon-native.png" : "workout-icon.png"
+}`;
 
 const PENDING_UPDATE_KEY = "pendingPwaUpdate";
 const LAST_SEEN_BUILD_KEY = "lastSeenBuildTime";
@@ -11463,7 +11468,7 @@ export default function App() {
       >
         <img
           alt=""
-          src={`${import.meta.env.BASE_URL}workout-icon.png`}
+          src={HOME_WORKOUT_ICON}
           style={{
             borderRadius: "8px",
             height: "34px",
