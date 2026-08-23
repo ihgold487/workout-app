@@ -9535,37 +9535,43 @@ export default function App() {
             {" • built "}
             {BUILD_TIME}
           </div>
-          <button
-            onClick={checkForUpdate}
-            disabled={updateStatus === "checking" || updateStatus === "found"}
-          >
-            {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
-          </button>
-          {(updateStatus || buildNotice) && (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                marginTop: "6px",
-              }}
-            >
-              {updateStatus && (
-                <div>
-                  {UPDATE_STATUS_COPY[updateStatus]}
-                  {updateStatus === "current" && lastUpdateCheck
-                    ? ` (${lastUpdateCheck.toLocaleString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })})`
-                    : ""}
+          {!__IS_NATIVE_BUILD__ && (
+            <>
+              <button
+                onClick={checkForUpdate}
+                disabled={
+                  updateStatus === "checking" || updateStatus === "found"
+                }
+              >
+                {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
+              </button>
+              {(updateStatus || buildNotice) && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "6px",
+                  }}
+                >
+                  {updateStatus && (
+                    <div>
+                      {UPDATE_STATUS_COPY[updateStatus]}
+                      {updateStatus === "current" && lastUpdateCheck
+                        ? ` (${lastUpdateCheck.toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })})`
+                        : ""}
+                    </div>
+                  )}
+                  {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
                 </div>
               )}
-              {buildNotice && <div>{BUILD_NOTICE_COPY[buildNotice]}</div>}
-            </div>
+            </>
           )}
         </section>
 

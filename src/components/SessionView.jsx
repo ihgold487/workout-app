@@ -81,7 +81,11 @@ import {
   canUseNativeWorkoutIdleTimer,
   setNativeWorkoutAutoLockEnabled,
 } from "../native/workoutIdleTimer";
-import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
+import {
+  triggerNativeSetCompletionHaptic,
+  triggerNativeWarningHaptic,
+  triggerNativeWorkoutCompletionHaptic,
+} from "../native/pickerHaptics";
 import {
   addSpotifyPlaybackListener,
   canUseNativeSpotifyPlayback,
@@ -373,6 +377,7 @@ export default function SessionView({
   const targetLongPressRef = useRef(false);
   const appliedHistoryDefaultsRef = useRef(new Map());
   const restNotificationSentKeyRef = useRef(null);
+  const nativeRestCompletionHandledRef = useRef(null);
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
@@ -2551,6 +2556,26 @@ export default function SessionView({
 
       const seconds = Math.max(0, Number(nativeState.seconds) || 0);
 
+      if (!nativeState.paused && seconds <= 0) {
+        const endsAtMs = Number(nativeState.endsAtMs) || Date.now();
+        const completionKey = String(endsAtMs);
+
+        setRestSeconds(Math.max(0, Math.floor((Date.now() - endsAtMs) / 1000)));
+        setTimerExpiredAt(endsAtMs);
+        setTimerFinished(true);
+        setTimerPaused(false);
+        setTimerRunning(false);
+        setTimerStartedAt(null);
+        void endNativeRestTimerLiveActivity();
+
+        if (nativeRestCompletionHandledRef.current !== completionKey) {
+          nativeRestCompletionHandledRef.current = completionKey;
+          setRestComplete(true);
+          window.setTimeout(() => setRestComplete(false), 1200);
+        }
+        return;
+      }
+
       setRestSeconds(seconds);
       setTimerExpiredAt(null);
       setTimerFinished(false);
@@ -2619,29 +2644,24 @@ export default function SessionView({
     if (restSeconds === 0 && timerRunning) {
       const notificationKey = `${timerStartedAt || ""}:${restMinutes}:${restRemainder}`;
 
-      navigator.vibrate?.([200, 100, 200]);
+      if (!canUseNativeRestNotifications()) {
+        navigator.vibrate?.([200, 100, 200]);
 
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
 
-        const osc = ctx.createOscillator();
+          osc.connect(ctx.destination);
+          osc.frequency.value = 1000;
+          osc.start();
 
-        osc.connect(ctx.destination);
-
-        osc.frequency.value = 1000;
-
-        osc.start();
-
-        setTimeout(
-          () => {
+          setTimeout(() => {
             osc.stop();
             ctx.close();
-          },
-
-          200
-        );
-      } catch {
-        // Audio feedback is optional.
+          }, 200);
+        } catch {
+          // Audio feedback is optional.
+        }
       }
 
       if (restNotificationSentKeyRef.current !== notificationKey) {
@@ -3260,6 +3280,7 @@ export default function SessionView({
     setTimerPaused(false);
     setTimerStartedAt(startedAt);
     restNotificationSentKeyRef.current = null;
+    nativeRestCompletionHandledRef.current = null;
     void requestRestNotificationPermission();
     void scheduleNativeRestTimerNotification(duration);
     void startNativeRestTimerLiveActivity(duration, {
@@ -3279,6 +3300,7 @@ export default function SessionView({
     setTimerExpiredAt(null);
     setTimerFinished(false);
     restNotificationSentKeyRef.current = null;
+    nativeRestCompletionHandledRef.current = null;
     void cancelNativeRestTimerNotification();
     void endNativeRestTimerLiveActivity();
     setRestSeconds(restMinutes * 60 + restRemainder);
@@ -3495,6 +3517,7 @@ export default function SessionView({
     }
 
     setLastCompletedExerciseId(exerciseId);
+    void triggerNativeSetCompletionHaptic();
 
     if (timerFinished) {
       resetRestTimer();
@@ -3503,6 +3526,12 @@ export default function SessionView({
     const nextActiveSet = getNextActiveSetAfter(exerciseId, setId, {
       supersetOrdersOverride,
     });
+
+    if (!nextActiveSet) {
+      resetRestTimer();
+      setActiveWorkoutFocus(null);
+      return;
+    }
 
     setRestTimerForNextSet(
       nextActiveSet,
@@ -4690,6 +4719,9 @@ export default function SessionView({
   }
 
   function completeWorkout({ workoutUpdateSelections: selections = {} } = {}) {
+    resetRestTimer();
+    void triggerNativeWorkoutCompletionHaptic();
+
     const hasTemplateUpdates = hasWorkoutTemplateUpdates();
     const selectedTemplateExercises =
       hasTemplateUpdates && Object.values(selections).some(Boolean)

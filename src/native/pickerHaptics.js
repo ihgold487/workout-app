@@ -33,3 +33,31 @@ export async function triggerNativeWarningHaptic() {
     return false;
   }
 }
+
+export async function triggerNativeSetCompletionHaptic() {
+  if (!canUseNativePickerHaptics()) {
+    return false;
+  }
+
+  try {
+    await PickerHaptics.setCompleted();
+    return true;
+  } catch (error) {
+    console.warn("Native set-completion haptic failed:", error);
+    return false;
+  }
+}
+
+export async function triggerNativeWorkoutCompletionHaptic() {
+  if (!canUseNativePickerHaptics()) {
+    return false;
+  }
+
+  try {
+    await PickerHaptics.workoutCompleted();
+    return true;
+  } catch (error) {
+    console.warn("Native workout-completion haptic failed:", error);
+    return false;
+  }
+}

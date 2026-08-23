@@ -115,7 +115,8 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve([
             "active": true,
             "paused": state.pausedSeconds != nil,
-            "seconds": seconds
+            "seconds": seconds,
+            "endsAtMs": state.endsAt.timeIntervalSince1970 * 1000.0
         ])
     }
 
