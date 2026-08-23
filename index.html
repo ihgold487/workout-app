@@ -10,7 +10,7 @@
 
     <meta name="color-scheme" content="light" />
 
-    <meta name="app-build-time" content="8/23/2026, 6:31:49 AM" />
+    <meta name="app-build-time" content="8/23/2026, 6:43:26 AM" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
 
@@ -88,18 +88,6 @@
         z-index: 1;
       }
 
-      #app-startup-splash .startup-icon-native {
-        display: none;
-      }
-
-      html.capacitor-native #app-startup-splash .startup-icon-pwa {
-        display: none;
-      }
-
-      html.capacitor-native #app-startup-splash .startup-icon-native {
-        display: block;
-      }
-
       #app-startup-splash .startup-mark::before,
       #app-startup-splash .startup-mark::after {
         background: currentColor;
@@ -167,32 +155,19 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/workout-app/assets/index-BezVqBGv.js"></script>
+    <script type="module" crossorigin src="/workout-app/assets/index-KuvhbpmV.js"></script>
     <link rel="modulepreload" crossorigin href="/workout-app/assets/rolldown-runtime-BM3Ffeng.js">
     <link rel="stylesheet" crossorigin href="/workout-app/assets/index-BKapIT1U.css">
   <link rel="manifest" href="/workout-app/manifest.webmanifest"></head>
 
   <body>
-    <script>
-      if (
-        window.Capacitor?.isNativePlatform?.() ||
-        window.location.protocol === "capacitor:"
-      ) {
-        document.documentElement.classList.add("capacitor-native");
-      }
-    </script>
     <div
       id="app-startup-splash"
       role="status"
       aria-label="Loading Workout"
     >
       <div class="startup-mark" aria-hidden="true">
-        <img class="startup-icon-pwa" src="/workout-app/workout-icon.png?v=2" alt="" />
-        <img
-          class="startup-icon-native"
-          src="/workout-app/workout-icon-native.png?v=1"
-          alt=""
-        />
+        <img src="workout-icon.png?v=2" alt="" />
       </div>
       <div class="startup-title">Workout</div>
       <div class="startup-loader" aria-hidden="true"></div>
