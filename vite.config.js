@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
 
     define: {
       __BUILD_TIME__: JSON.stringify(buildTime),
+      __IS_NATIVE_BUILD__: JSON.stringify(isNative),
     },
 
     build: {
@@ -41,10 +42,15 @@ export default defineConfig(({ mode }) => {
       {
         name: "workout-build-time-meta",
         transformIndexHtml(html) {
-          return html.replace(
-            '<meta name="color-scheme" content="light" />',
-            `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
-          );
+          return html
+            .replace(
+              '<meta name="color-scheme" content="light" />',
+              `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
+            )
+            .replace(
+              "__STARTUP_WORKOUT_ICON__",
+              isNative ? "workout-icon-native.png?v=1" : "workout-icon.png?v=2"
+            );
         },
       },
 

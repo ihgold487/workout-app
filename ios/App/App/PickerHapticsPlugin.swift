@@ -9,18 +9,18 @@ public class PickerHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "selectionChanged", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "warning", returnType: CAPPluginReturnPromise)
     ]
-    private let selectionFeedbackGenerator = UISelectionFeedbackGenerator()
+    private let pickerImpactFeedbackGenerator = UIImpactFeedbackGenerator(style: .rigid)
     private let notificationFeedbackGenerator = UINotificationFeedbackGenerator()
 
     override public func load() {
-        selectionFeedbackGenerator.prepare()
+        pickerImpactFeedbackGenerator.prepare()
         notificationFeedbackGenerator.prepare()
     }
 
     @objc func selectionChanged(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.selectionFeedbackGenerator.selectionChanged()
-            self.selectionFeedbackGenerator.prepare()
+            self.pickerImpactFeedbackGenerator.impactOccurred(intensity: 0.75)
+            self.pickerImpactFeedbackGenerator.prepare()
             call.resolve()
         }
     }

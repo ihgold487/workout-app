@@ -1,4 +1,4 @@
-/* global __BUILD_TIME__ */
+/* global __BUILD_TIME__, __IS_NATIVE_BUILD__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { Capacitor } from "@capacitor/core";
 import {
@@ -102,7 +102,7 @@ const APP_VERSION = "0.16";
 const BUILD_TIME = __BUILD_TIME__;
 
 const HOME_WORKOUT_ICON = `${import.meta.env.BASE_URL}${
-  Capacitor.isNativePlatform() ? "workout-icon-native.png" : "workout-icon.png"
+  __IS_NATIVE_BUILD__ ? "workout-icon-native.png" : "workout-icon.png"
 }`;
 
 const PENDING_UPDATE_KEY = "pendingPwaUpdate";
@@ -9579,7 +9579,7 @@ export default function App() {
           }}
         >
           <h3>Profile & Sync</h3>
-          {authSession ? (
+          {authSession && (
             <div
               style={{
                 display: "grid",
@@ -9646,78 +9646,6 @@ export default function App() {
                 </div>
               )}
             </div>
-          ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                signInWithEmailPassword();
-              }}
-              style={{
-                alignItems: "center",
-                display: "grid",
-                gap: "6px",
-                gridTemplateColumns: "1fr auto",
-              }}
-            >
-              {/* Keep access control server-side; frontend allowlists are not security. */}
-              <input
-                autoCapitalize="none"
-                autoComplete="username"
-                id="auth-email"
-                inputMode="email"
-                name="username"
-                type="email"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="email"
-                disabled={!isSupabaseConfigured || authLoading}
-                style={{
-                  gridColumn: "1 / -1",
-                  minWidth: 0,
-                }}
-              />
-              <input
-                autoComplete="current-password"
-                id="auth-password"
-                name="password"
-                type="password"
-                value={authPassword}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                placeholder="password"
-                disabled={!isSupabaseConfigured || authLoading}
-                style={{
-                  minWidth: 0,
-                }}
-              />
-              <button
-                disabled={!isSupabaseConfigured || authLoading}
-                type="submit"
-              >
-                Sign In
-              </button>
-              <button
-                disabled={!isSupabaseConfigured || authLoading}
-                onClick={createAccountWithEmailPassword}
-                style={{
-                  gridColumn: "1 / -1",
-                }}
-                type="button"
-              >
-                Create Account
-              </button>
-              <img
-                alt=""
-                src={`${import.meta.env.BASE_URL}workout-icon.png`}
-                style={{
-                  borderRadius: "18px",
-                  gridColumn: "1 / -1",
-                  justifySelf: "center",
-                  marginTop: "18px",
-                  maxWidth: "240px",
-                  width: "58%",
-                }}
-              />
-            </form>
           )}
           <div
             role="status"
@@ -11106,30 +11034,128 @@ export default function App() {
           </p>
           {authSession && !appAccessAllowed && (
             <div
-              role="status"
-              aria-live="polite"
               style={{
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                color:
-                  approvalStatus?.status === "denied"
-                    ? "var(--danger-text)"
-                    : "var(--text-muted)",
-                fontSize: "13px",
-                marginBottom: "12px",
-                padding: "10px",
+                display: "grid",
+                gap: "10px",
               }}
             >
-              Approval status:{" "}
-              {approvalLoading
-                ? "checking..."
-                : approvalStatus?.status || "not verified"}
-              {approvalError ? ` (${approvalError})` : ""}
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  color:
+                    approvalStatus?.status === "denied"
+                      ? "var(--danger-text)"
+                      : "var(--text-muted)",
+                  fontSize: "13px",
+                  padding: "10px",
+                }}
+              >
+                Signed in as {authSession.user.email}
+                <br />
+                Approval status:{" "}
+                {approvalLoading
+                  ? "checking..."
+                  : approvalStatus?.status || "not verified"}
+                {approvalError ? ` (${approvalError})` : ""}
+              </div>
+              <button
+                disabled={authLoading}
+                onClick={handleSignOut}
+                type="button"
+              >
+                Sign Out
+              </button>
             </div>
           )}
+          {!authSession && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                signInWithEmailPassword();
+              }}
+              style={{
+                alignItems: "center",
+                display: "grid",
+                gap: "6px",
+                gridTemplateColumns: "1fr auto",
+              }}
+            >
+              <input
+                autoCapitalize="none"
+                autoComplete="username"
+                id="access-auth-email"
+                inputMode="email"
+                name="username"
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                placeholder="email"
+                disabled={!isSupabaseConfigured || authLoading}
+                style={{
+                  gridColumn: "1 / -1",
+                  minWidth: 0,
+                }}
+              />
+              <input
+                autoComplete="current-password"
+                id="access-auth-password"
+                name="password"
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                placeholder="password"
+                disabled={!isSupabaseConfigured || authLoading}
+                style={{
+                  minWidth: 0,
+                }}
+              />
+              <button
+                disabled={!isSupabaseConfigured || authLoading}
+                type="submit"
+              >
+                Sign In
+              </button>
+              <button
+                disabled={!isSupabaseConfigured || authLoading}
+                onClick={createAccountWithEmailPassword}
+                style={{
+                  gridColumn: "1 / -1",
+                }}
+                type="button"
+              >
+                Create Account
+              </button>
+              <img
+                alt=""
+                src={HOME_WORKOUT_ICON}
+                style={{
+                  borderRadius: "18px",
+                  gridColumn: "1 / -1",
+                  justifySelf: "center",
+                  marginTop: "18px",
+                  maxWidth: "240px",
+                  width: "58%",
+                }}
+              />
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                  gridColumn: "1 / -1",
+                  marginTop: "6px",
+                }}
+              >
+                {authStatus}
+              </div>
+            </form>
+          )}
         </div>
-        {renderSettings()}
       </div>
     );
   }

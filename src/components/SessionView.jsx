@@ -30,6 +30,8 @@ import {
   Play,
   Plus,
   RefreshCw,
+  SkipBack,
+  SkipForward,
   SlidersHorizontal,
   Target,
   Timer,
@@ -80,6 +82,16 @@ import {
   setNativeWorkoutAutoLockEnabled,
 } from "../native/workoutIdleTimer";
 import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
+import {
+  addSpotifyPlaybackListener,
+  canUseNativeSpotifyPlayback,
+  connectSpotifyPlayback,
+  getSpotifyPlaybackState,
+  openSpotifyApp,
+  skipSpotifyNext,
+  skipSpotifyPrevious,
+  toggleSpotifyPlayback,
+} from "../native/spotifyPlayback";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
@@ -279,6 +291,22 @@ function formatWorkoutDuration(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(
     remainingSeconds
   ).padStart(2, "0")}`;
+}
+
+function SpotifyIcon({ size = 28 }) {
+  return (
+    <svg
+      aria-hidden="true"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      <path
+        d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0Zm5.505 17.302a.747.747 0 0 1-1.028.249c-2.817-1.722-6.365-2.111-10.541-1.157a.748.748 0 1 1-.333-1.458c4.57-1.045 8.492-.595 11.653 1.337a.747.747 0 0 1 .249 1.029Zm1.469-3.268a.936.936 0 0 1-1.287.308c-3.225-1.982-8.137-2.557-11.953-1.399a.936.936 0 1 1-.543-1.79c4.363-1.324 9.776-.682 13.475 1.591.44.271.578.848.308 1.29Zm.126-3.404C15.233 8.333 8.85 8.121 5.159 9.242a1.123 1.123 0 1 1-.652-2.149c4.239-1.287 11.289-1.038 15.738 1.602a1.123 1.123 0 0 1-1.145 1.935Z"
+        fill="#1DB954"
+      />
+    </svg>
+  );
 }
 
 export default function SessionView({
@@ -2314,9 +2342,93 @@ export default function SessionView({
 
   const [timerExpiredAt, setTimerExpiredAt] = useState(null);
 
+  const [spotifyState, setSpotifyState] = useState({
+    available: false,
+    authorized: false,
+    connected: false,
+  });
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+
   const [restComplete, setRestComplete] = useState(false);
   const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
   const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
+
+  useEffect(() => {
+    if (!canUseNativeSpotifyPlayback()) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let listenerHandle;
+
+    void getSpotifyPlaybackState()
+      .then((state) => {
+        if (!disposed) setSpotifyState(state);
+      })
+      .catch((error) => {
+        if (!disposed) {
+          setSpotifyState((state) => ({
+            ...state,
+            available: true,
+            error: error?.message || "Unable to read Spotify playback state.",
+          }));
+        }
+      });
+
+    void addSpotifyPlaybackListener((state) => {
+      if (!disposed) {
+        setSpotifyState(state);
+        setSpotifyBusy(false);
+      }
+    }).then((handle) => {
+      listenerHandle = handle;
+      if (disposed) void handle.remove();
+    });
+
+    return () => {
+      disposed = true;
+      if (listenerHandle) void listenerHandle.remove();
+    };
+  }, []);
+
+  async function handleSpotifyPlayback() {
+    if (spotifyBusy) return;
+
+    setSpotifyBusy(true);
+    try {
+      const state = spotifyState.connected
+        ? await toggleSpotifyPlayback()
+        : await connectSpotifyPlayback();
+      setSpotifyState((current) => ({ ...current, ...state }));
+    } catch (error) {
+      setSpotifyState((state) => ({
+        ...state,
+        error: error?.message || "Spotify playback control failed.",
+      }));
+    } finally {
+      setSpotifyBusy(false);
+    }
+  }
+
+  async function handleSpotifySkip(direction) {
+    if (spotifyBusy || !spotifyState.connected) return;
+
+    setSpotifyBusy(true);
+    try {
+      const state =
+        direction === "next"
+          ? await skipSpotifyNext()
+          : await skipSpotifyPrevious();
+      setSpotifyState((current) => ({ ...current, ...state }));
+    } catch (error) {
+      setSpotifyState((state) => ({
+        ...state,
+        error: error?.message || "Spotify skip control failed.",
+      }));
+    } finally {
+      setSpotifyBusy(false);
+    }
+  }
 
   async function requestRestNotificationPermission() {
     if (canUseNativeRestNotifications() || !("Notification" in window)) {
@@ -5230,6 +5342,130 @@ export default function SessionView({
             ↺
           </button>
         </div>
+
+        {canUseNativeSpotifyPlayback() && (
+          <div
+            style={{
+              alignItems: "center",
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              display: "flex",
+              gap: "10px",
+              marginBottom: "12px",
+              padding: "8px 10px",
+            }}
+          >
+            <button
+              aria-label="Open Spotify"
+              onClick={() => void openSpotifyApp()}
+              style={{
+                alignItems: "center",
+                background: "transparent",
+                border: 0,
+                display: "inline-flex",
+                flexShrink: 0,
+                justifyContent: "center",
+                padding: "6px",
+              }}
+              type="button"
+            >
+              <SpotifyIcon />
+            </button>
+            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {spotifyState.trackName ||
+                  (spotifyState.connected
+                    ? "Spotify connected"
+                    : spotifyState.error
+                    ? "Reconnect Spotify"
+                    : spotifyState.authorized
+                    ? "Connecting to Spotify…"
+                    : "Connect Spotify")}
+              </div>
+              <div
+                style={{
+                  color: spotifyState.error
+                    ? "var(--danger, #b42318)"
+                    : "var(--text-muted)",
+                  fontSize: "11px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {spotifyState.error ||
+                  spotifyState.artistName ||
+                  "Control playback without leaving your workout"}
+              </div>
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexShrink: 0,
+                gap: "4px",
+              }}
+            >
+              <button
+                aria-label="Previous Spotify track"
+                disabled={
+                  spotifyBusy ||
+                  !spotifyState.connected ||
+                  !spotifyState.canSkipPrevious
+                }
+                onClick={() => void handleSpotifySkip("previous")}
+                style={{ padding: "8px" }}
+                title="Previous"
+                type="button"
+              >
+                <SkipBack size={18} />
+              </button>
+              <button
+                aria-label={
+                  spotifyState.connected
+                    ? spotifyState.isPaused
+                      ? "Resume Spotify"
+                      : "Pause Spotify"
+                    : "Connect Spotify"
+                }
+                disabled={spotifyBusy}
+                onClick={() => void handleSpotifyPlayback()}
+                style={{ padding: "8px" }}
+                title={spotifyState.connected ? "Play or pause" : "Connect Spotify"}
+                type="button"
+              >
+                {spotifyState.connected && spotifyState.isPaused === false ? (
+                  <Pause size={18} />
+                ) : (
+                  <Play size={18} />
+                )}
+              </button>
+              <button
+                aria-label="Next Spotify track"
+                disabled={
+                  spotifyBusy ||
+                  !spotifyState.connected ||
+                  !spotifyState.canSkipNext
+                }
+                onClick={() => void handleSpotifySkip("next")}
+                style={{ padding: "8px" }}
+                title="Next"
+                type="button"
+              >
+                <SkipForward size={18} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           style={{

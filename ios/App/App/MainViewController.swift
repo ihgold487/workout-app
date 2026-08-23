@@ -7,6 +7,7 @@ class MainViewController: CAPBridgeViewController {
 
         bridge?.registerPluginInstance(WorkoutIdleTimerPlugin())
         bridge?.registerPluginInstance(PickerHapticsPlugin())
+        bridge?.registerPluginInstance(SpotifyPlaybackPlugin())
 
         if #available(iOS 16.2, *) {
             bridge?.registerPluginInstance(RestTimerLiveActivityPlugin())
