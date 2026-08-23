@@ -96,5 +96,5 @@ export async function uploadNutritionTargets(targets, session) {
 export async function upsertNutritionTarget(target, session) {
   const result = await uploadNutritionTargets([target], session);
 
-  return result.uploaded;
+  return { applied: result.uploaded === 1 };
 }

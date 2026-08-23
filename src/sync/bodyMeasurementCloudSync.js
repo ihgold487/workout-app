@@ -100,11 +100,13 @@ export async function uploadBodyWeightEntries(entries, session) {
 export async function upsertBodyWeightEntry(entry, session) {
   const result = await uploadBodyWeightEntries([entry], session);
 
-  return result.uploaded;
+  return { applied: result.uploaded === 1 };
 }
 
 export async function deleteBodyWeightEntry(entryDate, session) {
-  if (skipBlockedRemoteWrite("body-weight delete", true)) return;
+  if (skipBlockedRemoteWrite("body-weight delete", true)) {
+    return { applied: false };
+  }
 
   assertCloudReady(session);
 
@@ -121,4 +123,6 @@ export async function deleteBodyWeightEntry(entryDate, session) {
   if (error) {
     throw error;
   }
+
+  return { applied: true };
 }

@@ -1207,52 +1207,16 @@ function normalizeStoredPlanWorkoutTypes(plans = [], templates = []) {
   };
 }
 
-function getPlanWorkoutTypeSignature(plans = [], templates = []) {
-  const planParts = plans.flatMap((plan) =>
-    (plan.workouts || []).map((workout, workoutIndex) =>
-      [
-        "plan",
-        plan?.id ?? "",
-        workout?.planWorkoutId ?? "",
-        workout?.templateId ?? "",
-        workoutIndex,
-        workout?.workoutType ?? "",
-        workout?.workoutTypeLabel ?? "",
-      ].join(":")
-    )
-  );
-  const templateParts = templates.map((template) =>
-    [
-      "template",
-      template?.id ?? "",
-      template?.planWorkoutId ?? "",
-      template?.workoutType ?? "",
-      template?.workoutTypeLabel ?? "",
-    ].join(":")
-  );
-
-  return [...planParts, ...templateParts].join("|");
-}
-
 function normalizeWorkoutDataPlanTypes(data) {
   const normalizedPlanData = normalizeStoredPlanWorkoutTypes(
     data?.plans,
     data?.templates
   );
-  const changed =
-    getPlanWorkoutTypeSignature(data?.plans, data?.templates) !==
-    getPlanWorkoutTypeSignature(
-      normalizedPlanData.plans,
-      normalizedPlanData.templates
-    );
 
   return {
-    changed,
-    data: {
-      ...data,
-      plans: normalizedPlanData.plans,
-      templates: normalizedPlanData.templates,
-    },
+    ...data,
+    plans: normalizedPlanData.plans,
+    templates: normalizedPlanData.templates,
   };
 }
 
@@ -4159,17 +4123,13 @@ const savedStorageVersion = getSavedStorageVersion();
 export default function App() {
   useModalScrollGuard();
 
-  const initialWorkoutDataResult = useState(() =>
+  const initialWorkoutData = useState(() =>
     normalizeWorkoutDataPlanTypes(
       loadWorkoutData({
         seedExercises,
       })
     )
   )[0];
-  const initialWorkoutData = initialWorkoutDataResult.data;
-  const initialPlanWorkoutTypeRepairNeededRef = useRef(
-    initialWorkoutDataResult.changed
-  );
 
   // STORAGE MIGRATIONS
   useEffect(() => {
@@ -4389,7 +4349,6 @@ export default function App() {
 
   const previousHistoryLengthRef = useRef(history.length);
   const workoutCompletionSyncHistoryLengthRef = useRef(null);
-  const aiPlanAnalysisSyncQueuedRef = useRef(false);
   const nutritionStartupHydratedUserRef = useRef(null);
 
   const userEmail = authSession?.user?.email || "";
@@ -5833,28 +5792,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!initialPlanWorkoutTypeRepairNeededRef.current) {
-      return;
-    }
-
-    initialPlanWorkoutTypeRepairNeededRef.current = false;
-    markNormalizedSyncDirty(["plans", "workouts"]);
-  }, []);
-
-  useEffect(() => {
-    if (aiPlanAnalysisSyncQueuedRef.current || !indexedDbReady) {
-      return;
-    }
-
-    if (!plans.some((plan) => plan.aiAnalysis)) {
-      return;
-    }
-
-    aiPlanAnalysisSyncQueuedRef.current = true;
-    markNormalizedSyncDirty(["plans"]);
-  }, [indexedDbReady, plans]);
-
-  useEffect(() => {
     if (!authSession?.user?.id || !indexedDbReady) {
       return;
     }
@@ -5898,6 +5835,13 @@ export default function App() {
       return;
     }
 
+    if (
+      !authSession?.user?.id ||
+      automaticSyncHydratedUserRef.current !== authSession.user.id
+    ) {
+      return;
+    }
+
     if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
@@ -5912,6 +5856,13 @@ export default function App() {
 
     if (!workoutDirtyReadyRef.current) {
       workoutDirtyReadyRef.current = true;
+      return;
+    }
+
+    if (
+      !authSession?.user?.id ||
+      automaticSyncHydratedUserRef.current !== authSession.user.id
+    ) {
       return;
     }
 
@@ -5932,6 +5883,13 @@ export default function App() {
       return;
     }
 
+    if (
+      !authSession?.user?.id ||
+      automaticSyncHydratedUserRef.current !== authSession.user.id
+    ) {
+      return;
+    }
+
     if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
@@ -5949,6 +5907,13 @@ export default function App() {
       return;
     }
 
+    if (
+      !authSession?.user?.id ||
+      automaticSyncHydratedUserRef.current !== authSession.user.id
+    ) {
+      return;
+    }
+
     if (getCurrentTimeMs() < automaticSyncSuppressUntilRef.current) {
       return;
     }
@@ -5962,6 +5927,10 @@ export default function App() {
     previousHistoryLengthRef.current = history.length;
 
     if (!authSession?.user?.id || !indexedDbReady) {
+      return;
+    }
+
+    if (automaticSyncHydratedUserRef.current !== authSession.user.id) {
       return;
     }
 
@@ -6420,18 +6389,14 @@ export default function App() {
           const normalizedIndexedDbData =
             normalizeWorkoutDataPlanTypes(indexedDbData);
 
-          if (normalizedIndexedDbData.changed) {
-            markNormalizedSyncDirty(["plans", "workouts"]);
-          }
-
-          setTemplates(normalizedIndexedDbData.data.templates);
-          setPlans(normalizedIndexedDbData.data.plans);
-          setHistory(normalizedIndexedDbData.data.history);
-          setSessions(normalizedIndexedDbData.data.sessions);
-          setExerciseLibrary(normalizedIndexedDbData.data.exerciseLibrary);
-          setExerciseMetadata(normalizedIndexedDbData.data.exerciseMetadata);
-          setLocalOwnerUserId(normalizedIndexedDbData.data.ownerUserId || null);
-          setSelectedSessionId(normalizedIndexedDbData.data.selectedSessionId);
+          setTemplates(normalizedIndexedDbData.templates);
+          setPlans(normalizedIndexedDbData.plans);
+          setHistory(normalizedIndexedDbData.history);
+          setSessions(normalizedIndexedDbData.sessions);
+          setExerciseLibrary(normalizedIndexedDbData.exerciseLibrary);
+          setExerciseMetadata(normalizedIndexedDbData.exerciseMetadata);
+          setLocalOwnerUserId(normalizedIndexedDbData.ownerUserId || null);
+          setSelectedSessionId(normalizedIndexedDbData.selectedSessionId);
         }
       } catch (error) {
         console.error("Failed to load workout data from IndexedDB:", error);

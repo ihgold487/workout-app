@@ -158,7 +158,6 @@ function localEntryToCloud(entry, userId) {
     recipe_id: entry.recipeId || null,
     source: LOCAL_APP_SOURCE,
     source_key: sourceKeyForEntry(entry.id),
-    updated_at: entry.updatedAt || now,
     user_id: userId,
   };
 }
@@ -281,39 +280,10 @@ export async function uploadNutritionEntries(entries, session) {
 
 export async function upsertNutritionEntry(entry, session) {
   if (skipBlockedRemoteWrite("nutrition upsert", true)) {
-    return { remoteDeleted: false, uploaded: 0 };
+    return { applied: false, remoteDeleted: false, uploaded: 0 };
   }
 
   assertCloudReady(session);
-
-  const sourceKey = sourceKeyForEntry(entry.id);
-  const { data: existing, error: lookupError } = await supabase
-    .from(NUTRITION_ENTRIES_TABLE)
-    .select("deleted_at,updated_at")
-    .eq("user_id", session.user.id)
-    .eq("source", LOCAL_APP_SOURCE)
-    .eq("source_key", sourceKey)
-    .maybeSingle();
-
-  if (lookupError) {
-    throw lookupError;
-  }
-
-  const localUpdatedAt = Date.parse(entry.updatedAt || entry.createdAt || "");
-  const cloudUpdatedAt = Date.parse(
-    existing?.deleted_at || existing?.updated_at || ""
-  );
-
-  if (
-    existing &&
-    Number.isFinite(cloudUpdatedAt) &&
-    (!Number.isFinite(localUpdatedAt) || cloudUpdatedAt > localUpdatedAt)
-  ) {
-    return {
-      remoteDeleted: Boolean(existing.deleted_at),
-      uploaded: 0,
-    };
-  }
 
   const row = localEntryToCloud(entry, session.user.id);
   const { error } = await supabase
@@ -327,6 +297,7 @@ export async function upsertNutritionEntry(entry, session) {
   }
 
   return {
+    applied: true,
     remoteDeleted: false,
     uploaded: 1,
   };
@@ -338,32 +309,14 @@ export async function deleteNutritionEntry(
   deletedEntry = null,
   operationAt = null
 ) {
-  if (skipBlockedRemoteWrite("nutrition delete", true)) return;
+  if (skipBlockedRemoteWrite("nutrition delete", true)) {
+    return { applied: false };
+  }
 
   assertCloudReady(session);
 
   const deletedAt = operationAt || new Date().toISOString();
   const sourceKey = sourceKeyForEntry(entryId);
-  const { data: existing, error: lookupError } = await supabase
-    .from(NUTRITION_ENTRIES_TABLE)
-    .select("id,deleted_at,updated_at")
-    .eq("user_id", session.user.id)
-    .eq("source", LOCAL_APP_SOURCE)
-    .eq("source_key", sourceKey)
-    .maybeSingle();
-
-  if (lookupError) {
-    throw lookupError;
-  }
-
-  if (
-    existing &&
-    Date.parse(existing.deleted_at || existing.updated_at || "") >
-      Date.parse(deletedAt)
-  ) {
-    return;
-  }
-
   const { data, error } = await supabase
     .from(NUTRITION_ENTRIES_TABLE)
     .update({
@@ -395,6 +348,8 @@ export async function deleteNutritionEntry(
       throw tombstoneError;
     }
   }
+
+  return { applied: true };
 }
 
 export async function retryPendingNutritionDeletes(session) {

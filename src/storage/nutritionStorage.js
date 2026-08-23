@@ -223,25 +223,31 @@ async function flushNutritionOutboxUnlocked(userId, session) {
 
   for (const item of queuedItems) {
     try {
+      let result = null;
+
       if (item.operation === "body-weight-delete") {
-        await deleteBodyWeightEntry(item.entryDate, session);
+        result = await deleteBodyWeightEntry(item.entryDate, session);
       } else if (item.operation === "body-weight-upsert") {
-        await upsertBodyWeightEntry(item.entry, session);
+        result = await upsertBodyWeightEntry(item.entry, session);
       } else if (item.operation === "nutrition-target-upsert") {
-        await upsertNutritionTarget(item.target, session);
+        result = await upsertNutritionTarget(item.target, session);
       } else if (item.operation === "delete") {
-        await deleteNutritionEntry(
+        result = await deleteNutritionEntry(
           item.entryId,
           session,
           item.entry,
           item.updatedAt
         );
       } else {
-        const result = await upsertNutritionEntry(item.entry, session);
+        result = await upsertNutritionEntry(item.entry, session);
 
         if (result.remoteDeleted) {
           remoteDeletedIds.push(String(item.entry.id));
         }
+      }
+
+      if (result?.applied !== true) {
+        throw new Error("Supabase did not confirm that the change was applied.");
       }
 
       await acknowledgeNutritionOutboxItem(item.id);
