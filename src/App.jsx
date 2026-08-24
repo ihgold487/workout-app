@@ -1,6 +1,8 @@
 /* global __BUILD_TIME__, __IS_NATIVE_BUILD__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { Capacitor } from "@capacitor/core";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import {
   AlertTriangle,
   BarChart3,
@@ -1241,7 +1243,11 @@ function getPlanExportWorkoutTemplate(plan, planWorkout, templates = []) {
   );
 }
 
-function getPlanPrimaryMuscleSetSummary(plan, templates = []) {
+function getPlanPrimaryMuscleSetSummary(
+  plan,
+  templates = [],
+  exerciseLibrary = []
+) {
   const muscleSets = {};
 
   (plan?.workouts || []).forEach((planWorkout) => {
@@ -1249,7 +1255,12 @@ function getPlanPrimaryMuscleSetSummary(plan, templates = []) {
     const exercises = template?.exercises || planWorkout.exercises || [];
 
     exercises.forEach((exercise) => {
-      const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
+      const currentExercise = findExerciseForHistoryExercise(
+        exercise,
+        exerciseLibrary
+      );
+      const muscle =
+        currentExercise.muscles?.[0] || exercise.planMuscle || "Unknown";
       const setCount = (exercise.sets || []).length;
 
       muscleSets[muscle] = (muscleSets[muscle] || 0) + setCount;
@@ -2254,7 +2265,7 @@ function buildPrescriptionAdherenceSummaries({
     }
   );
 
-  return [...grouped.values()]
+  const summaries = [...grouped.values()]
     .filter((summary) => summary.totalSets >= 4)
     .map((summary) => ({
       ...summary,
@@ -2273,6 +2284,23 @@ function buildPrescriptionAdherenceSummaries({
         String(left.exerciseName).localeCompare(String(right.exerciseName))
     )
     .slice(0, 40);
+
+  if (summaries.length === 0) {
+    return {
+      available: false,
+      reason:
+        grouped.size === 0
+          ? "Completed set history did not contain prescribed rep or RIR targets that could be compared with actual performance. Older history may predate preservation of prescription targets."
+          : "Prescription targets were found, but no exercise had at least four comparable completed sets.",
+      rows: [],
+    };
+  }
+
+  return {
+    available: true,
+    reason: null,
+    rows: summaries,
+  };
 }
 
 function buildBlockOutcomeSummaries({
@@ -2300,8 +2328,25 @@ function buildBlockOutcomeSummaries({
   });
 
   return performedPlans.map((plan) => {
+    const completionSessionIds = new Set(
+      (plan.completions || [])
+        .map((completion) =>
+          String(completion.sessionId || completion.session_id || "")
+        )
+        .filter(Boolean)
+    );
+    const completedPlanWorkoutIds = new Set(
+      (plan.completions || [])
+        .map((completion) =>
+          String(completion.planWorkoutId || completion.plan_workout_id || "")
+        )
+        .filter(Boolean)
+    );
     const matchingRows = performanceRows.filter(
-      (row) => String(row.planId) === String(plan.id)
+      (row) =>
+        String(row.planId) === String(plan.id) ||
+        completionSessionIds.has(String(row.workoutId)) ||
+        completedPlanWorkoutIds.has(String(row.planWorkoutId))
     );
     const workoutKeys = new Set(
       matchingRows.map((row) => row.workoutId).filter(Boolean)
@@ -2343,7 +2388,16 @@ function buildBlockOutcomeSummaries({
             .filter(Boolean)
         ),
       ].sort((left, right) => left - right),
-      completedWorkoutCount: workoutKeys.size,
+      completedWorkoutCount:
+        completionSessionIds.size || workoutKeys.size || (plan.completions || []).length,
+      historyMatching: {
+        available: workoutKeys.size > 0,
+        matchedCompletedWorkoutCount: workoutKeys.size,
+        note:
+          workoutKeys.size > 0
+            ? "Completed history matched using plan ID, completion session ID, or plan-workout ID."
+            : "Plan completion records exist, but no completed set history could be matched. Benchmark outcomes are unavailable for this plan.",
+      },
       planId: String(plan.id),
       planName: plan.name || "Training Plan",
       planStatus: plan.status || "inactive",
@@ -2361,6 +2415,8 @@ function buildBlockOutcomeSummaries({
 function buildAiPlanDraftInstructions() {
   return {
     importSchema: "workout-app.ai-plan-draft.v1",
+    repPrescriptionConvention:
+      'You may discuss and design exercises using rep ranges. The app requires a single numeric rep prescription per set. In finalized JSON, encode the upper bound of the intended rep range as the numeric `reps` value. For example, prescribe a discussed range of 7–9 as `"reps": 9`. Apply this convention consistently to both `sets` and `weeklyPrescriptions`. Never encode finalized prescriptions as rep-range strings. The upper-bound value is the initial target; during execution, normal set-to-set rep decline within the discussed range is acceptable when the same working weight is retained and prescribed RIR is respected.',
     requiredShape: {
       analysis: {
         rationale:
@@ -2405,7 +2461,7 @@ function buildAiPlanDraftInstructions() {
       ],
     },
     fileOutput:
-      "Create the completed draft as a .json file named workout-ai-plan-draft.json when the interface supports file/artifact creation. The file contents must be exactly one valid JSON object matching importSchema, with no Markdown fences or prose outside the JSON. If you cannot create a file, return only the JSON file contents so it can be saved as workout-ai-plan-draft.json and imported into the app.",
+      "After I explicitly approve finalization, create the completed draft as a .json file named workout-ai-plan-draft.json when the interface supports file/artifact creation. The file contents must be exactly one valid JSON object matching importSchema, with no Markdown fences or prose outside the JSON. If you cannot create a file, return only the JSON file contents so it can be saved as workout-ai-plan-draft.json and imported into the app.",
     continuity:
       "Imported analysis.summary, analysis.rationale, and analysis.watchNext are stored with the draft plan. After the plan is activated and performed, later context exports include those notes in previousPlanAIContext so the next plan can evaluate the prior hypothesis, rationale, and watch items.",
     safety:
@@ -2847,12 +2903,14 @@ function buildNutritionTrendContext({
 }
 
 function buildAiPlanContext({
+  athleteProfile = null,
   bodyWeightEntries = [],
   calorieGoal = 0,
   calorieGoalHistory = [],
   exerciseLibrary = [],
   history = [],
   nutritionEntries = [],
+  planningRequest = null,
   plans = [],
   templates = [],
 }) {
@@ -2928,7 +2986,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -2939,7 +2997,7 @@ function buildAiPlanContext({
         nutritionTrend.available ? nutritionTrend.goalAdherence.daysWithEntries : 0,
       performanceDropOffRows: performanceDropOffSummaries.length,
       planPrescriptionRows: planRows.length,
-      prescriptionAdherenceRows: prescriptionAdherenceSummaries.length,
+      prescriptionAdherenceRows: prescriptionAdherenceSummaries.rows.length,
       previousPlanAIContextRows: previousPlanAIContext.length,
       recentPlanExposureRows: recentPlanExposure.length,
       trackedExerciseCount: activeExercises.length,
@@ -2947,6 +3005,15 @@ function buildAiPlanContext({
     },
     bodyWeightTrend,
     nutritionTrend,
+    athleteProfile,
+    planningRequest,
+    planningGuidancePrecedence: [
+      "safety and trainingProfile.hardRules",
+      "explicit planningRequest requirements and constraints",
+      "athleteProfile long-term goals and planningRequest current priorities",
+      "trainingProfile.softPreferences",
+      "current plan structure",
+    ],
     weeklyMuscleVolumeSummary,
     benchmarkRepRangeTrends,
     performanceDropOffSummaries,
@@ -2955,6 +3022,13 @@ function buildAiPlanContext({
     trainingProfile: buildTrainingProfileContext(),
     activeExercises,
     previousPlanAIContext,
+    previousPlanAIContextStatus: {
+      available: previousPlanAIContext.length > 0,
+      reason:
+        previousPlanAIContext.length > 0
+          ? null
+          : "No performed AI-generated plan with stored analysis was available yet. This is expected before the first imported AI plan has been activated and performed.",
+    },
     recentPlanExposure,
     activePlanPrescriptionRows: planRows,
     completedSetRows: historyRows,
@@ -2965,22 +3039,27 @@ function getAiPlanPrompt(context) {
   return [
     "I attached a workout-app AI context export from my local app.",
     "",
-    "Please evaluate my progress and create the next plan/workout draft from it.",
+    "Please evaluate my progress and propose the next plan/workout draft from it.",
+    "First discuss the proposed plan with me in normal conversational form and revise it based on our discussion.",
+    "Do not create the final importable JSON until I explicitly tell you to finalize the plan.",
+    "Preserve athleteProfile.longTermGoals across blocks. Use planningRequest and current evidence to choose the emphasis for only the next block; do not create a speculative multi-block roadmap.",
+    "Follow planningGuidancePrecedence when fields conflict. Treat explicit user constraints as requirements and AI-decides fields as permission to use your judgment.",
     "Use the exercise names/equipment in activeExercises when possible.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
-    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries, and blockOutcomeSummaries as the primary derived metrics before falling back to raw completedSetRows.",
+    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as the primary derived metrics before falling back to raw completedSetRows.",
     "Within benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current strength progress.",
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
+    'You may discuss and design exercises using rep ranges. The app requires a single numeric rep prescription per set. In finalized JSON, encode the upper bound of the intended rep range as the numeric `reps` value. For example, prescribe a discussed range of 7–9 as `"reps": 9`. Apply this convention consistently to both `sets` and `weeklyPrescriptions`. Never encode finalized prescriptions as rep-range strings. The upper-bound value is the initial target; during execution, normal set-to-set rep decline within the discussed range is acceptable when the same working weight is retained and prescribed RIR is respected.',
     "You may prescribe restSeconds at the exercise or set level. If omitted, the app will use its current rep-based rest defaults.",
     "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
-    "Put any observations, rationale, and watch items inside the optional analysis object so the entire response remains importable JSON.",
+    "In the finalized JSON, put observations, rationale, and watch items inside the optional analysis object so the entire final response remains importable.",
     "Use plan.trainingWeeks for normal training weeks and plan.deloadWeeks for deload weeks. Do not use plan.durationWeeks unless you are maintaining backward compatibility with an older draft.",
-    "Create the completed draft as a .json file named workout-ai-plan-draft.json when this chat interface supports file or artifact creation.",
+    "When I explicitly approve finalization, create the completed draft as a .json file named workout-ai-plan-draft.json when this chat interface supports file or artifact creation.",
     "The .json file contents must be exactly one valid JSON object with no Markdown fences or prose outside the JSON. If you cannot create a file, return only the JSON file contents so I can save it as workout-ai-plan-draft.json and import it.",
     "",
-    "Return only valid JSON with this top-level shape:",
+    "After I explicitly approve finalization, return only valid JSON with this top-level shape:",
     JSON.stringify(buildAiPlanDraftInstructions().requiredShape, null, 2),
     "",
     `Context summary: ${JSON.stringify(context.summary)}`,
@@ -6055,7 +6134,7 @@ export default function App() {
     }
   }
 
-  function getAiPlanContext() {
+  function getAiPlanContext(aiPlanningContext = {}) {
     const userId = authSession?.user?.id || null;
     const calorieGoal = readDailyCalorieGoalForAi(
       getDailyCalorieGoalStorageKey(userId)
@@ -6066,19 +6145,21 @@ export default function App() {
     );
 
     return buildAiPlanContext({
+      athleteProfile: aiPlanningContext.athleteProfile || null,
       bodyWeightEntries: localBodyWeightEntries,
       calorieGoal,
       calorieGoalHistory,
       exerciseLibrary,
       history,
       nutritionEntries: calendarNutritionEntries,
+      planningRequest: aiPlanningContext.planningRequest || null,
       plans,
       templates,
     });
   }
 
-  async function copyAiPlanPrompt() {
-    const context = getAiPlanContext();
+  async function copyAiPlanPrompt(aiPlanningContext) {
+    const context = getAiPlanContext(aiPlanningContext);
     const prompt = getAiPlanPrompt(context);
 
     try {
@@ -6092,8 +6173,8 @@ export default function App() {
     }
   }
 
-  function downloadAiPlanContext() {
-    const context = getAiPlanContext();
+  function downloadAiPlanContext(aiPlanningContext) {
+    const context = getAiPlanContext(aiPlanningContext);
     const blob = new Blob([JSON.stringify(context, null, 2)], {
       type: "application/json;charset=utf-8",
     });
@@ -6109,6 +6190,73 @@ export default function App() {
     setAiPlanStatus(
       "AI context downloaded. Attach it to your existing ChatGPT discussion."
     );
+  }
+
+  async function shareAiPlanContext(aiPlanningContext) {
+    const context = getAiPlanContext(aiPlanningContext);
+    const prompt = getAiPlanPrompt(context);
+    const date = new Date().toISOString().slice(0, 10);
+    const fileName = `workout-ai-context-${date}.json`;
+    const json = JSON.stringify(context, null, 2);
+    let promptCopied = false;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      promptCopied = true;
+    } catch (error) {
+      console.error("AI plan prompt copy before share failed:", error);
+    }
+
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Filesystem.writeFile({
+          data: json,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+          path: fileName,
+        });
+        const { uri } = await Filesystem.getUri({
+          directory: Directory.Cache,
+          path: fileName,
+        });
+
+        await Share.share({
+          files: [uri],
+          title: "Create a workout plan in ChatGPT",
+        });
+        setAiPlanStatus(
+          `Context shared.${promptCopied ? " The prompt was also copied." : ""} Continue in ChatGPT, then return with the finalized JSON file.`
+        );
+        return;
+      }
+
+      const file = new File([json], fileName, { type: "application/json" });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Create a workout plan in ChatGPT",
+        });
+        setAiPlanStatus(
+          `Context shared.${promptCopied ? " The prompt was also copied." : ""}`
+        );
+        return;
+      }
+
+      downloadAiPlanContext(aiPlanningContext);
+      setAiPlanStatus(
+        `Native sharing is unavailable here. The context was downloaded${
+          promptCopied ? " and the prompt was copied" : ""
+        }. Attach it in ChatGPT.`
+      );
+    } catch (error) {
+      console.error("AI plan context share failed:", error);
+      setAiPlanStatus(
+        `Sharing did not complete.${
+          promptCopied ? " The prompt is copied;" : ""
+        } use Context and Open ChatGPT instead.`
+      );
+    }
   }
 
   function openChatGptForAiPlan() {
@@ -6996,7 +7144,11 @@ export default function App() {
       selectedIdSet.has(String(plan.id))
     );
     const planSummaries = selectedPlans.map((plan) => ({
-      muscleSets: getPlanPrimaryMuscleSetSummary(plan, templates),
+      muscleSets: getPlanPrimaryMuscleSetSummary(
+        plan,
+        templates,
+        exerciseLibrary
+      ),
       plan,
     }));
     const muscles = [
@@ -11209,6 +11361,7 @@ export default function App() {
         onCopyAiPlanPrompt={copyAiPlanPrompt}
         onDownloadAiPlanContext={downloadAiPlanContext}
         onOpenChatGptForAiPlan={openChatGptForAiPlan}
+        onShareAiPlanContext={shareAiPlanContext}
         onSave={(result) => {
           setEditingPlanId(null);
           goHome();

@@ -274,3 +274,51 @@ Strength and hypertrophy should be modeled as distinct, independently prioritize
 ### Discussion finding: next-block planning
 
 The AI should generate only the next plan rather than planning a series of future blocks. Long-term goals provide direction, while workout history, prior plan outcomes, prior AI rationale, and `watchNext` items tell the AI where the athlete currently stands. Each new generation can therefore select the next block's emphasis using current evidence. “Think ahead” is retained only as sensible next-block design and continuity, not as a speculative multi-plan roadmap. This is a working direction, not yet a finalized implementation decision.
+
+### Initial UI implementation
+
+An initial Plan Type AI guidance panel has been implemented for evaluation. It persists preferences locally and adds `athleteProfile` and `planningRequest` to the existing context without removing existing evidence or training-profile fields.
+
+The initial controls cover:
+
+- Independent long-term strength and hypertrophy priorities
+- Muscle-level hypertrophy and exercise-level strength priorities
+- AI-selected, balanced, strength, or hypertrophy next-block emphasis
+- Fixed, ranged, or AI-selected days per week and training weeks
+- Required, prohibited, or AI-selected deload handling
+- Optional estimated workout-duration limits
+- Working-set range per exercise
+- AI-selected rest intervals with an optional maximum, or app defaults
+- Superset permission
+- Required, preferred, and avoided exercises
+- Freeform notes for injuries, recovery, equipment, schedule details, and other constraints
+
+Defaults mirror the previously hard-coded direction: strength and hypertrophy are high priorities, chest hypertrophy and bench strength are emphasized, and the plan uses five days, five training weeks, a deload, and generally three to four sets per exercise. This allows comparison against prior output without silently changing the established baseline.
+
+### Native ChatGPT handoff: Phase 1
+
+The initial native handoff uses the iOS share sheet without the fee-based OpenAI API. “Send to ChatGPT” creates the current context as a JSON file, copies the prompt when clipboard access is available, and presents the system share sheet with only the JSON file. Keeping the prompt out of the share payload gives destination apps the best opportunity to qualify for the file share; the prompt can then be pasted into ChatGPT. Existing Context, Prompt, and Open ChatGPT actions remain as fallbacks.
+
+The prompt now asks ChatGPT to discuss its proposal conversationally and revise it with the user. ChatGPT must wait until the user explicitly approves finalization before creating `workout-ai-plan-draft.json`. The returned file is loaded through the existing plan-file import and remains an inactive draft until reviewed.
+
+This phase does not attempt to programmatically control a particular ChatGPT conversation or retrieve its response. Those actions are outside the documented no-API app-to-app interface.
+
+### Exporter feedback iteration
+
+The first exported context revealed two derived-data ambiguities. Block outcomes originally matched completed history only by plan ID, even though plan completion records also retain session and plan-workout identifiers. Matching now uses all three links, reports matched-history availability separately, and counts completed workouts from completion records when needed.
+
+Completed workout history previously removed prescribed rep and RIR targets, preventing adherence comparisons. New history preserves those two prescription fields. The adherence export now has an explicit `{ available, reason, rows }` shape so older history without comparable targets cannot be mistaken for zero or perfect adherence.
+
+The two-stage prompt now ends with “After I explicitly approve finalization, return only valid JSON...” to keep conversational planning distinct from final file generation. An empty `previousPlanAIContext` remains expected until an imported AI plan containing analysis has been activated and performed.
+
+### Benchmark-series intent
+
+Bench press benchmark series are classified from each set's prescribed rep range rather than its achieved reps. A prescription wholly within 3–7 reps belongs to the Heavy series, while one wholly within 8–12 reps belongs to the Moderate series. For each workout and series, the chart uses the highest-e1RM set whose actual reps satisfied its prescription and whose recorded RIR was 0–2. Prescription-classified sets at RIR 3 or higher remain available as low-confidence points.
+
+Sets without recoverable prescribed-rep intent are excluded for now, so legacy results are not assigned to a potentially misleading series. Point details show the set number, prescription, and actual performance to make the classification auditable.
+
+### Finalized rep-prescription convention
+
+The AI may discuss and design exercises using rep ranges, but the app currently requires one numeric rep prescription per set. Finalized JSON must encode the upper bound of the intended range as the numeric `reps` value—for example, a discussed range of 7–9 becomes `"reps": 9`. This applies consistently to both `sets` and `weeklyPrescriptions`; finalized prescriptions must never contain rep-range strings.
+
+The encoded upper bound is the initial target. During workout execution, normal set-to-set rep decline within the discussed range is acceptable when the athlete retains the same working weight and respects the prescribed RIR.

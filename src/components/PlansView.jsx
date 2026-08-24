@@ -34,6 +34,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
+import AiPlanningGuidancePanel from "./AiPlanningGuidancePanel";
 import MuscleMap from "./MuscleMap";
 import WeightPickerModal from "./WeightPickerModal";
 import {
@@ -45,6 +46,11 @@ import {
   createPlanExercise,
   generatePlanWorkouts,
 } from "../plans/planType2Generator";
+import {
+  buildAiPlanningContext,
+  readAiPlanningGuidance,
+  writeAiPlanningGuidance,
+} from "../plans/aiPlanningGuidance";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
@@ -2472,6 +2478,7 @@ export default function PlansView({
   onCopyAiPlanPrompt,
   onDownloadAiPlanContext,
   onOpenChatGptForAiPlan,
+  onShareAiPlanContext,
   onShowAiPlanNotes,
   onSave,
   plans,
@@ -2559,6 +2566,9 @@ export default function PlansView({
     editingPlan ? "" : readStoredAiPlanDraftText()
   );
   const [aiPlanStatus, setAiPlanStatus] = useState("");
+  const [aiPlanningGuidance, setAiPlanningGuidance] = useState(() =>
+    readAiPlanningGuidance()
+  );
   const [aiPlanAnalysis, setAiPlanAnalysis] = useState(editingPlan?.aiAnalysis || null);
   const [aiPlanDeloadWeeks, setAiPlanDeloadWeeks] = useState(
     editingPlanConfig.deloadWeeks ?? null
@@ -3505,6 +3515,10 @@ export default function PlansView({
   }, [onBuildAiPlanDraft]);
 
   useEffect(() => {
+    writeAiPlanningGuidance(aiPlanningGuidance);
+  }, [aiPlanningGuidance]);
+
+  useEffect(() => {
     if (
       aiPlanDraftRestoredRef.current ||
       editingPlan ||
@@ -4429,9 +4443,29 @@ export default function PlansView({
                 textAlign: "left",
               }}
             >
-              Download the context, attach it in ChatGPT, then load the returned
-              workout-app AI plan JSON here. No plan days are generated until a
-              draft file is loaded.
+              Send the context to ChatGPT, discuss and revise the proposed plan,
+              then ask ChatGPT to finalize it as JSON. Return here to import and
+              review the draft. No plan days are generated until a draft is loaded.
+            </div>
+            <AiPlanningGuidancePanel
+              guidance={aiPlanningGuidance}
+              onChange={(nextGuidance) => {
+                setAiPlanningGuidance(nextGuidance);
+                setAiPlanStatus("");
+              }}
+            />
+            <div
+              style={{ display: "grid", gap: "8px" }}
+            >
+              <button
+                onClick={() =>
+                  onShareAiPlanContext(buildAiPlanningContext(aiPlanningGuidance))
+                }
+                style={{ minHeight: "44px", width: "100%" }}
+                type="button"
+              >
+                Send to ChatGPT
+              </button>
             </div>
             <div
               style={{
@@ -4441,10 +4475,22 @@ export default function PlansView({
                 justifyContent: "center",
               }}
             >
-              <button onClick={onDownloadAiPlanContext} type="button">
+              <button
+                onClick={() =>
+                  onDownloadAiPlanContext(
+                    buildAiPlanningContext(aiPlanningGuidance)
+                  )
+                }
+                type="button"
+              >
                 Context
               </button>
-              <button onClick={onCopyAiPlanPrompt} type="button">
+              <button
+                onClick={() =>
+                  onCopyAiPlanPrompt(buildAiPlanningContext(aiPlanningGuidance))
+                }
+                type="button"
+              >
                 <Copy size={14} />
                 Prompt
               </button>
@@ -4498,7 +4544,7 @@ export default function PlansView({
                   padding: "8px",
                 }}
               >
-                Load File
+                Import Plan File
                 <input
                   accept="application/json,.json,.txt"
                   onChange={handleAiPlanDraftFileChange}

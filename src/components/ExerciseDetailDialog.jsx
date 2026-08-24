@@ -342,6 +342,8 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
 
         return {
           e1rm,
+          prescribedReps:
+            set.prescribedReps ?? set.targetReps ?? set.reps ?? null,
           reps,
           rir,
           setId: set.id || set.setId || null,
@@ -440,6 +442,37 @@ function parseHistoryNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parsePrescribedRepRange(value) {
+  const values = String(value ?? "")
+    .match(/\d+(?:\.\d+)?/g)
+    ?.map(Number)
+    .filter(Number.isFinite);
+
+  if (!values?.length) return null;
+
+  return {
+    label: String(value).trim(),
+    max: Math.max(...values),
+    min: Math.min(...values),
+  };
+}
+
+function getPrescriptionZone(prescription) {
+  if (!prescription) return null;
+  if (prescription.min >= 3 && prescription.max <= 7) return "heavy";
+  if (prescription.min >= 8 && prescription.max <= 12) return "moderate";
+  return null;
+}
+
+function setMeetsPrescription(set) {
+  return (
+    set.prescribedRepRange &&
+    Number.isFinite(set.reps) &&
+    set.reps >= set.prescribedRepRange.min &&
+    set.reps <= set.prescribedRepRange.max
+  );
+}
+
 function isBarbellBenchPress(exercise) {
   return (
     String(exercise?.name || "").trim().toLowerCase() === "bench press" &&
@@ -459,18 +492,6 @@ function formatBenchMetric(value, digits = 1, suffix = "") {
   return Number.isFinite(value)
     ? `${value.toFixed(digits).replace(/\.0$/, "")}${suffix}`
     : "—";
-}
-
-function setInRange(set, { maxReps, maxRir, minReps, minRir = 0 }) {
-  return (
-    Number.isFinite(set.reps) &&
-    Number.isFinite(set.rir) &&
-    Number.isFinite(set.e1rm) &&
-    set.reps >= minReps &&
-    set.reps <= maxReps &&
-    set.rir >= minRir &&
-    set.rir <= maxRir
-  );
 }
 
 function getBestSet(sets) {
@@ -761,24 +782,56 @@ function buildBenchPressExperiment(exerciseHistory) {
     )
     .map((entry, index) => {
       const sets = (entry.sets || [])
-        .map((set) => ({
-          dateKey: entry.completedDateKey,
-          e1rm: parseHistoryNumber(set.e1rm),
-          reps: parseHistoryNumber(set.reps),
-          rir: parseHistoryNumber(set.rir),
-          setNumber: set.setNumber,
-          weight: parseHistoryNumber(set.weight),
-          workoutIndex: index,
-        }))
+        .map((set) => {
+          const prescribedRepRange = parsePrescribedRepRange(
+            set.prescribedReps
+          );
+
+          return {
+            dateKey: entry.completedDateKey,
+            e1rm: parseHistoryNumber(set.e1rm),
+            prescribedRepRange,
+            prescribedReps: set.prescribedReps,
+            prescriptionZone: getPrescriptionZone(prescribedRepRange),
+            reps: parseHistoryNumber(set.reps),
+            rir: parseHistoryNumber(set.rir),
+            setNumber: set.setNumber,
+            weight: parseHistoryNumber(set.weight),
+            workoutIndex: index,
+          };
+        })
         .filter((set) => Number.isFinite(set.weight) && Number.isFinite(set.reps));
       const heavySet = getBestSet(
-        sets.filter((set) => setInRange(set, { minReps: 3, maxReps: 7, maxRir: 2 }))
+        sets.filter(
+          (set) =>
+            set.prescriptionZone === "heavy" &&
+            setMeetsPrescription(set) &&
+            Number.isFinite(set.e1rm) &&
+            Number.isFinite(set.rir) &&
+            set.rir >= 0 &&
+            set.rir <= 2
+        )
       );
       const moderateSet = getBestSet(
-        sets.filter((set) => setInRange(set, { minReps: 8, maxReps: 12, maxRir: 2 }))
+        sets.filter(
+          (set) =>
+            set.prescriptionZone === "moderate" &&
+            setMeetsPrescription(set) &&
+            Number.isFinite(set.e1rm) &&
+            Number.isFinite(set.rir) &&
+            set.rir >= 0 &&
+            set.rir <= 2
+        )
       );
       const lowConfidenceSet = getBestSet(
-        sets.filter((set) => Number.isFinite(set.e1rm) && set.rir >= 3)
+        sets.filter(
+          (set) =>
+            set.prescriptionZone &&
+            setMeetsPrescription(set) &&
+            Number.isFinite(set.e1rm) &&
+            Number.isFinite(set.rir) &&
+            set.rir >= 3
+        )
       );
 
       return {
@@ -1568,7 +1621,7 @@ function BenchZoneChart({
           textAlign: "center",
         }}
       >
-        Not enough qualifying bench data for zone trends yet.
+        Not enough prescription-classified bench data for zone trends yet.
       </div>
     );
   }
@@ -1636,9 +1689,9 @@ function BenchZoneChart({
           selectedPoint.rawValue,
           1,
           " lb"
-        )} · ${getSetLabel(
-          selectedPoint.set
-        )}`
+        )} · Set ${selectedPoint.set.setNumber} · Prescribed ${
+          selectedPoint.set.prescribedRepRange.label
+        } reps · Actual ${getSetLabel(selectedPoint.set)}`
       : selectedPoint.label
     : "";
   const plotRegression = (regression) => {

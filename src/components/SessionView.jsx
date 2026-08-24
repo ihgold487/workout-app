@@ -3970,8 +3970,6 @@ export default function SessionView({
             .filter((set) => set.completed)
             .map(
               ({
-                prescribedReps,
-                prescribedRir,
                 reps,
                 rir,
                 targetReps,
