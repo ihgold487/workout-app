@@ -173,15 +173,25 @@ function localExerciseToCloud(exercise, userId, workoutId, position, cloudId) {
 
 function localSetToCloud(set, userId, workoutExerciseId, setNumber) {
   const prescribedReps = set.prescribedReps || set.reps || set.targetReps || "";
+  const minimumReps =
+    set.prescribedMinimumReps ||
+    set.minimumReps ||
+    set.minimum_reps ||
+    set.targetMinimumReps ||
+    prescribedReps;
   const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
 
   return {
     deleted_at: null,
     is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
     set_number: setNumber,
-    target_reps_label: prescribedReps ? String(prescribedReps) : null,
+    target_reps_label: prescribedReps
+      ? String(minimumReps) !== String(prescribedReps)
+        ? `${minimumReps}-${prescribedReps}`
+        : String(prescribedReps)
+      : null,
     target_reps_max: parseInteger(prescribedReps),
-    target_reps_min: parseInteger(prescribedReps),
+    target_reps_min: parseInteger(minimumReps),
     target_rir_label: prescribedRir ? String(prescribedRir) : null,
     target_rir_value: parseRir(prescribedRir),
     target_weight_label: null,
@@ -262,15 +272,16 @@ function buildLocalExerciseLookup(exerciseLibrary) {
 }
 
 function cloudSetToLocal(set) {
-  const reps = formatCloudValue(
-    set.target_reps_label,
-    set.target_reps_min ?? set.target_reps_max
-  );
+  const reps = formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
+  const minimumReps = set.target_reps_min;
   const rir = formatCloudValue(set.target_rir_label, set.target_rir_value);
 
   return {
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
+    ...(minimumReps != null && Number(minimumReps) !== Number(reps)
+      ? { minimumReps: String(minimumReps) }
+      : {}),
     reps,
     rir,
   };

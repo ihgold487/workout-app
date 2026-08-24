@@ -319,6 +319,6 @@ Sets without recoverable prescribed-rep intent are excluded for now, so legacy r
 
 ### Finalized rep-prescription convention
 
-The AI may discuss and design exercises using rep ranges, but the app currently requires one numeric rep prescription per set. Finalized JSON must encode the upper bound of the intended range as the numeric `reps` value—for example, a discussed range of 7–9 becomes `"reps": 9`. This applies consistently to both `sets` and `weeklyPrescriptions`; finalized prescriptions must never contain rep-range strings.
+The app uses numeric `reps` as the upper-bound target. When an intended range extends more than two reps below that target, finalized JSON also supplies numeric `minimumReps`; for example, 10–15 becomes `"reps": 15, "minimumReps": 10`. Both fields are supported on individual `sets` and `weeklyPrescriptions`. Range strings are not used in finalized prescriptions.
 
-The encoded upper bound is the initial target. During workout execution, normal set-to-set rep decline within the discussed range is acceptable when the athlete retains the same working weight and respects the prescribed RIR.
+The upper bound remains the initial target and the basis for target-weight calculation. During execution, repetitions from `minimumReps` through the upper bound satisfy the intended range when prescribed RIR is respected. Falling below the explicit minimum, or recording a lower RIR than prescribed, can reduce the following set's target. Reaching the upper bound allows normal progression logic. When `minimumReps` is absent, the app preserves backward compatibility by using `reps - 2` as the minimum acceptable count.

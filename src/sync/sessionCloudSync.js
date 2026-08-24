@@ -183,6 +183,12 @@ function buildLocalExerciseLookup(exerciseLibrary) {
 }
 
 function cloudSetToLocal(set) {
+  const prescribedReps = formatCloudValue(
+    null,
+    set.target_reps_max ?? set.target_reps_min
+  );
+  const minimumReps = set.target_reps_min;
+
   return {
     actualReps: formatCloudValue(null, set.actual_reps),
     actualRir: formatCloudValue(set.actual_rir_label, set.actual_rir_value),
@@ -193,6 +199,28 @@ function cloudSetToLocal(set) {
     completed: Boolean(set.completed_at),
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
+    ...(minimumReps != null && Number(minimumReps) !== Number(prescribedReps)
+      ? {
+          minimumReps: String(minimumReps),
+          prescribedMinimumReps: String(minimumReps),
+        }
+      : {}),
+    ...(prescribedReps
+      ? {
+          prescribedReps,
+          reps: prescribedReps,
+        }
+      : {}),
+    ...(prescribedReps &&
+    (set.target_rir_label != null || set.target_rir_value != null)
+      ? {
+          prescribedRir: formatCloudValue(
+            set.target_rir_label,
+            set.target_rir_value
+          ),
+          rir: formatCloudValue(set.target_rir_label, set.target_rir_value),
+        }
+      : {}),
   };
 }
 
@@ -276,6 +304,14 @@ function localExerciseToCloud(exercise, userId, sessionId, position, cloudIds) {
 
 function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
   const actualRir = set.actualRir ?? "";
+  const prescribedReps = set.prescribedReps || set.reps || set.targetReps || "";
+  const minimumReps =
+    set.prescribedMinimumReps ||
+    set.minimumReps ||
+    set.minimum_reps ||
+    set.targetMinimumReps ||
+    prescribedReps;
+  const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
   const e1RM = calculateE1RM(
     set.actualWeight,
     set.actualReps,
@@ -294,11 +330,15 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
     session_exercise_id: sessionExerciseId,
     set_number: setNumber,
-    target_reps_label: null,
-    target_reps_max: null,
-    target_reps_min: null,
-    target_rir_label: null,
-    target_rir_value: 0,
+    target_reps_label: prescribedReps
+      ? String(minimumReps) !== String(prescribedReps)
+        ? `${minimumReps}-${prescribedReps}`
+        : String(prescribedReps)
+      : null,
+    target_reps_max: parseInteger(prescribedReps),
+    target_reps_min: parseInteger(minimumReps),
+    target_rir_label: prescribedRir !== "" ? String(prescribedRir) : null,
+    target_rir_value: parseRir(prescribedRir),
     target_weight_label: null,
     target_weight_value: null,
     updated_at: new Date().toISOString(),

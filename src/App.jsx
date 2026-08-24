@@ -1297,6 +1297,17 @@ function getPlanSetReps(set, weekPrescription, plan) {
   );
 }
 
+function getPlanSetMinimumReps(set, weekPrescription) {
+  return firstExportValue(
+    weekPrescription?.minimumReps,
+    weekPrescription?.minimum_reps,
+    set?.prescribedMinimumReps,
+    set?.minimumReps,
+    set?.minimum_reps,
+    set?.targetMinimumReps
+  );
+}
+
 function getPlanSetRir(set, weekPrescription, plan, weekNumber) {
   if (weekPrescription?.rir !== undefined && weekPrescription?.rir !== null && weekPrescription?.rir !== "") {
     return weekPrescription.rir;
@@ -1418,6 +1429,7 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                 set_number: "",
                 prescribed_sets: "",
                 prescribed_reps: "",
+                prescribed_minimum_reps: "",
                 prescribed_rir: "",
                 rest_seconds: "",
               });
@@ -1473,6 +1485,10 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                   set_number: setIndex + 1,
                   prescribed_sets: prescribedSets,
                   prescribed_reps: getPlanSetReps(set, weekPrescription, plan),
+                  prescribed_minimum_reps: getPlanSetMinimumReps(
+                    set,
+                    weekPrescription
+                  ),
                   prescribed_rir: getPlanSetRir(
                     set,
                     weekPrescription,
@@ -2213,6 +2229,15 @@ function buildPrescriptionAdherenceSummaries({
         parseAiTargetRange(
           row.set?.prescribedReps ?? row.set?.targetReps ?? row.set?.reps
         ) || null;
+      const explicitMinimumReps = Number(
+        row.set?.prescribedMinimumReps ??
+          row.set?.minimumReps ??
+          row.set?.minimum_reps ??
+          row.set?.targetMinimumReps
+      );
+      if (targetReps && Number.isFinite(explicitMinimumReps)) {
+        targetReps.min = Math.min(targetReps.max, explicitMinimumReps);
+      }
       const targetRir =
         parseAiTargetRange(
           row.set?.prescribedRir ?? row.set?.targetRir ?? row.set?.rir
@@ -2416,7 +2441,7 @@ function buildAiPlanDraftInstructions() {
   return {
     importSchema: "workout-app.ai-plan-draft.v1",
     repPrescriptionConvention:
-      'You may discuss and design exercises using rep ranges. The app requires a single numeric rep prescription per set. In finalized JSON, encode the upper bound of the intended rep range as the numeric `reps` value. For example, prescribe a discussed range of 7–9 as `"reps": 9`. Apply this convention consistently to both `sets` and `weeklyPrescriptions`. Never encode finalized prescriptions as rep-range strings. The upper-bound value is the initial target; during execution, normal set-to-set rep decline within the discussed range is acceptable when the same working weight is retained and prescribed RIR is respected.',
+      'The app requires a numeric upper-bound rep target in `reps`. When the intended range extends more than two reps below that target, also include numeric `minimumReps`. For example, encode 10–15 as `"reps": 15, "minimumReps": 10`. Apply this consistently to exercise sets and weekly prescriptions. When `minimumReps` is omitted, the app uses its default acceptable-repetition tolerance.',
     requiredShape: {
       analysis: {
         rationale:
@@ -2445,14 +2470,16 @@ function buildAiPlanDraftInstructions() {
             {
               restSeconds:
                 "optional number; prescribed rest after completing this set, in seconds. If omitted, the app uses exercise.restSeconds or the current rep-based defaults.",
-              reps: "number or string",
+              minimumReps:
+                "optional number; explicit acceptable lower bound when more than two reps below reps",
+              reps: "number; upper-bound rep target",
               rir: "number or string",
             },
           ],
           restSeconds:
             "optional number; default prescribed rest after sets for this exercise, in seconds",
           weeklyPrescriptions:
-            "optional [{ weekNumber, sets, reps, rir, restSeconds, isDeload }]",
+            "optional [{ weekNumber, sets, reps, minimumReps, rir, restSeconds, isDeload }]",
         },
       ],
           name: "string",
@@ -2986,7 +3013,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3051,7 +3078,7 @@ function getAiPlanPrompt(context) {
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
-    'You may discuss and design exercises using rep ranges. The app requires a single numeric rep prescription per set. In finalized JSON, encode the upper bound of the intended rep range as the numeric `reps` value. For example, prescribe a discussed range of 7–9 as `"reps": 9`. Apply this convention consistently to both `sets` and `weeklyPrescriptions`. Never encode finalized prescriptions as rep-range strings. The upper-bound value is the initial target; during execution, normal set-to-set rep decline within the discussed range is acceptable when the same working weight is retained and prescribed RIR is respected.',
+    'The app requires a numeric upper-bound rep target in `reps`. When the intended range extends more than two reps below that target, also include numeric `minimumReps`. For example, encode 10–15 as `"reps": 15, "minimumReps": 10`. Apply this consistently to exercise sets and weekly prescriptions. When `minimumReps` is omitted, the app uses its default acceptable-repetition tolerance.',
     "You may prescribe restSeconds at the exercise or set level. If omitted, the app will use its current rep-based rest defaults.",
     "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
     "In the finalized JSON, put observations, rationale, and watch items inside the optional analysis object so the entire final response remains importable.",
@@ -3149,6 +3176,23 @@ function getAiDraftRestSeconds(...values) {
   return null;
 }
 
+function getAiDraftMinimumReps(value, upperReps) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const minimumReps = Number(value);
+  const maximumReps = Number(upperReps);
+
+  if (!Number.isFinite(minimumReps) || minimumReps < 1) {
+    return null;
+  }
+
+  return Number.isFinite(maximumReps)
+    ? Math.min(minimumReps, maximumReps)
+    : minimumReps;
+}
+
 function findAiDraftExercise(exerciseDraft, exerciseLibrary = []) {
   const draftName = normalizeExportText(exerciseDraft?.name);
   const draftEquipment = normalizeExportText(
@@ -3225,21 +3269,45 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
           muscles: libraryExercise?.muscles || exerciseDraft.muscles || [],
           name: libraryExercise?.name || exerciseDraft.name || "Exercise",
           planMuscle: exerciseDraft.planMuscle || libraryExercise?.muscles?.[0] || "",
-          sets: setDrafts.map((setDraft, setIndex) => ({
-            id: importedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
-            reps: String(setDraft?.reps ?? exerciseDraft.reps ?? ""),
-            restSeconds:
-              getAiDraftRestSeconds(
-                setDraft?.restSeconds,
-                setDraft?.rest_seconds,
-                exerciseRestSeconds
-              ) || undefined,
-            rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
-          })),
+          sets: setDrafts.map((setDraft, setIndex) => {
+            const reps = setDraft?.reps ?? exerciseDraft.reps ?? "";
+            const minimumReps = getAiDraftMinimumReps(
+              setDraft?.minimumReps ??
+                setDraft?.minimum_reps ??
+                exerciseDraft.minimumReps ??
+                exerciseDraft.minimum_reps,
+              reps
+            );
+
+            return {
+              id:
+                importedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
+              ...(minimumReps == null ? {} : { minimumReps }),
+              reps: String(reps),
+              restSeconds:
+                getAiDraftRestSeconds(
+                  setDraft?.restSeconds,
+                  setDraft?.rest_seconds,
+                  exerciseRestSeconds
+                ) || undefined,
+              rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
+            };
+          }),
           supersetGroup: exerciseDraft.supersetGroup || null,
           weeklyPrescriptions: Array.isArray(exerciseDraft.weeklyPrescriptions)
             ? exerciseDraft.weeklyPrescriptions.map((week) => ({
                 ...week,
+                ...(getAiDraftMinimumReps(
+                  week?.minimumReps ?? week?.minimum_reps,
+                  week?.reps
+                ) == null
+                  ? {}
+                  : {
+                      minimumReps: getAiDraftMinimumReps(
+                        week?.minimumReps ?? week?.minimum_reps,
+                        week?.reps
+                      ),
+                    }),
                 restSeconds:
                   getAiDraftRestSeconds(
                     week?.restSeconds,
@@ -10376,8 +10444,8 @@ export default function App() {
                     marginTop: "6px",
                   }}
                 >
-                  {getCustomExercises(exerciseLibrary).length} custom exercises
-                  ready for the normalized exercise table.
+                  {getCustomExercises(exerciseLibrary).length} custom exercises in
+                  your exercise library.
                 </div>
               </div>
               <div

@@ -452,6 +452,16 @@ export default function TemplateView({
     );
   }
 
+  function getSetMinimumReps(set, fallback = "") {
+    return firstPresentValue(
+      set?.prescribedMinimumReps,
+      set?.minimumReps,
+      set?.minimum_reps,
+      set?.targetMinimumReps,
+      fallback
+    );
+  }
+
   function getSetPrescriptionRir(set, fallback = "") {
     return firstPresentValue(
       set?.prescribedRir,
@@ -483,6 +493,11 @@ export default function TemplateView({
     );
 
     return {
+      minimumReps: formatTargetValue(
+        weekPrescription?.minimumReps ??
+          weekPrescription?.minimum_reps ??
+          getSetMinimumReps(set)
+      ),
       reps: formatTargetValue(
         weekPrescription?.reps ??
           getSetPrescriptionReps(set, plan?.config?.reps ?? "")
@@ -761,7 +776,11 @@ export default function TemplateView({
   function getWorkoutPrescriptionSummary(exercise) {
     const setCount = exercise?.sets?.length || 0;
     const reps = formatRange(
-      (exercise?.sets || []).map((set) => getSetPrescriptionReps(set))
+      (exercise?.sets || []).flatMap((set) => {
+        const maximumReps = getSetPrescriptionReps(set);
+
+        return [getSetMinimumReps(set, maximumReps), maximumReps];
+      })
     );
     const rir = formatRange(
       (exercise?.sets || []).map((set) => getSetPrescriptionRir(set))
@@ -1134,6 +1153,13 @@ export default function TemplateView({
 
             const targetSet = {
               ...set,
+              ...(plannedPrescription.minimumReps
+                ? {
+                    minimumReps: plannedPrescription.minimumReps,
+                    prescribedMinimumReps: plannedPrescription.minimumReps,
+                    targetMinimumReps: plannedPrescription.minimumReps,
+                  }
+                : {}),
               prescribedReps: plannedPrescription.reps,
               prescribedRestSeconds: plannedPrescription.restSeconds || undefined,
               prescribedRir: plannedPrescription.rir,

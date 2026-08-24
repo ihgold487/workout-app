@@ -1015,6 +1015,16 @@ export default function SessionView({
     return firstPresentValue(set?.prescribedReps, set?.reps, set?.targetReps, fallback);
   }
 
+  function getSetMinimumReps(set, fallback = "") {
+    return firstPresentValue(
+      set?.prescribedMinimumReps,
+      set?.minimumReps,
+      set?.minimum_reps,
+      set?.targetMinimumReps,
+      fallback
+    );
+  }
+
   function getSetPrescribedRir(set, fallback = "") {
     return firstPresentValue(set?.prescribedRir, set?.rir, set?.targetRir, fallback);
   }
@@ -1034,6 +1044,15 @@ export default function SessionView({
 
   function getSetTargetReps(set, fallback = "") {
     return firstPresentValue(set?.targetReps, getSetPrescribedReps(set), fallback);
+  }
+
+  function getSetTargetRepDisplay(set) {
+    const maximumReps = getSetTargetReps(set);
+    const minimumReps = getSetMinimumReps(set);
+
+    return minimumReps && String(minimumReps) !== String(maximumReps)
+      ? `${minimumReps}–${maximumReps}`
+      : maximumReps;
   }
 
   function getSetTargetRir(set, fallback = "") {
@@ -1195,12 +1214,24 @@ export default function SessionView({
       return false;
     }
 
+    const maximumReps = parseSessionNumber(prescription.reps);
+    const minimumReps = Math.max(
+      1,
+      Math.min(
+        maximumReps,
+        parseSessionNumber(prescription.minimumReps) ??
+          maximumReps - SAME_WEIGHT_TARGET_REP_WINDOW
+      )
+    );
+    const actualReps = parseSessionNumber(set.actualReps);
+
     return (
       !isBlankValue(set.actualWeight) &&
       !isBlankValue(set.actualReps) &&
       !isBlankValue(set.actualRir) &&
       valuesMatch(set.actualWeight, prescription.weight) &&
-      valuesMatch(set.actualReps, prescription.reps) &&
+      actualReps >= minimumReps &&
+      actualReps <= maximumReps &&
       valuesMatch(set.actualRir, prescription.rir)
     );
   }
@@ -1297,6 +1328,7 @@ export default function SessionView({
     }
 
     const targetPrescription = {
+      minimumReps: getSetMinimumReps(set),
       reps: getSetTargetReps(set),
       rir: getSetTargetRir(set),
       weight: set.targetWeight,
@@ -1337,7 +1369,7 @@ export default function SessionView({
       exercise?.sets?.find((set) => !set.completed) || exercise?.sets?.[0];
 
     return {
-      reps: formatPrescriptionValue(getSetPrescribedReps(targetSet)),
+      reps: formatPrescriptionValue(getSetTargetRepDisplay(targetSet)),
       rir: formatPrescriptionValue(getSetPrescribedRir(targetSet)),
     };
   }
@@ -2906,6 +2938,7 @@ export default function SessionView({
 
   function addSet(exerciseId, lastSet) {
     const prescribedReps = getSetPrescribedReps(lastSet);
+    const minimumReps = getSetMinimumReps(lastSet);
     const prescribedRir = getSetPrescribedRir(lastSet);
     const prescribedRestSeconds = getSetPrescribedRestSeconds(lastSet);
     const newSet = {
@@ -2914,6 +2947,14 @@ export default function SessionView({
       targetWeight: lastSet?.targetWeight || lastSet?.actualWeight || "",
 
       targetReps: getSetTargetReps(lastSet, prescribedReps),
+
+      ...(minimumReps
+        ? {
+            minimumReps,
+            prescribedMinimumReps: minimumReps,
+            targetMinimumReps: minimumReps,
+          }
+        : {}),
 
       targetRir: getSetTargetRir(lastSet, prescribedRir),
 
@@ -3359,6 +3400,20 @@ export default function SessionView({
     const prescribedReps = parseSessionNumber(
       getSetPrescribedReps(nextSet, getSetPrescribedReps(currentSet))
     );
+    const explicitMinimumReps = parseSessionNumber(
+      getSetMinimumReps(nextSet, getSetMinimumReps(currentSet))
+    );
+    const minimumAcceptableReps =
+      prescribedReps == null
+        ? null
+        : Math.max(
+            1,
+            Math.min(
+              prescribedReps,
+              explicitMinimumReps ??
+                prescribedReps - SAME_WEIGHT_TARGET_REP_WINDOW
+            )
+          );
     const targetRir = getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet));
     const actualWeight = firstPresentValue(currentSet.actualWeight);
     const actualRir = firstPresentValue(currentSet.actualRir);
@@ -3376,6 +3431,64 @@ export default function SessionView({
       actualReps,
       actualRir
     );
+    const actualRirNumber = parseSessionNumber(actualRir);
+    const targetRirNumber = parseSessionNumber(targetRir);
+    const effortExceededPrescription =
+      actualRirNumber != null &&
+      targetRirNumber != null &&
+      actualRirNumber < targetRirNumber;
+    const rangeMissed =
+      actualReps != null &&
+      minimumAcceptableReps != null &&
+      actualReps < minimumAcceptableReps;
+    const rangeMetBelowUpperTarget =
+      actualReps != null &&
+      minimumAcceptableReps != null &&
+      prescribedReps != null &&
+      actualReps >= minimumAcceptableReps &&
+      actualReps < prescribedReps;
+
+    if (rangeMissed || effortExceededPrescription) {
+      const rawTargetWeight =
+        actualE1RM == null || prescribedReps == null
+          ? null
+          : estimateWeightForE1RM(
+              actualE1RM,
+              prescribedReps,
+              targetRirNumber || 0,
+              {
+                bodyWeight: sessionBodyWeight,
+                exercise: calculationExercise,
+              }
+            );
+      const reducedWeight =
+        rawTargetWeight == null
+          ? ""
+          : roundWeightToIncrement(
+              Math.max(0, rawTargetWeight),
+              getExerciseWeightIncrement(calculationExercise)
+            );
+
+      return {
+        targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
+        targetReps: getSetTargetReps(nextSet, String(prescribedReps ?? "")),
+        targetRir: targetRir || getSetTargetRir(nextSet),
+        targetWeight:
+          reducedWeight != null && reducedWeight !== ""
+            ? String(reducedWeight)
+            : nextSet.targetWeight,
+      };
+    }
+
+    if (rangeMetBelowUpperTarget) {
+      return {
+        targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
+        targetWeight:
+          currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
+        targetReps: getSetTargetReps(nextSet, getSetTargetReps(currentSet)),
+        targetRir: getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet)),
+      };
+    }
 
     if (getGoalMode() === "progress" && prescribedReps != null) {
       const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(
@@ -3422,6 +3535,7 @@ export default function SessionView({
 
       if (nextProgressionCandidate) {
         return {
+          targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
           targetReps: String(nextProgressionCandidate.reps),
           targetRir: targetRir || getSetTargetRir(nextSet),
           targetWeight: String(nextProgressionCandidate.weight),
@@ -3445,6 +3559,7 @@ export default function SessionView({
 
       if (progressedTarget?.weight != null) {
         return {
+          targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
           targetReps: String(progressedTarget.reps ?? prescribedReps),
           targetRir: targetRir || getSetTargetRir(nextSet),
           targetWeight: String(progressedTarget.weight),
@@ -3452,44 +3567,8 @@ export default function SessionView({
       }
     }
 
-    const shouldReduceWeight =
-      actualReps != null &&
-      prescribedReps != null &&
-      actualReps <= prescribedReps - 2;
-
-    if (shouldReduceWeight) {
-      const targetRirNumber = parseSessionNumber(targetRir) || 0;
-      const rawTargetWeight =
-        actualE1RM == null
-          ? null
-          : estimateWeightForE1RM(
-              actualE1RM,
-              prescribedReps,
-              targetRirNumber,
-              {
-                bodyWeight: sessionBodyWeight,
-                exercise: calculationExercise,
-              }
-            );
-      const reducedWeight =
-        rawTargetWeight == null
-          ? ""
-          : roundWeightToIncrement(
-              Math.max(0, rawTargetWeight),
-              getExerciseWeightIncrement(calculationExercise)
-            );
-
-      return {
-        targetReps: getSetTargetReps(nextSet, String(prescribedReps)),
-        targetRir: targetRir || getSetTargetRir(nextSet),
-        targetWeight:
-          reducedWeight != null && reducedWeight !== ""
-            ? String(reducedWeight)
-            : nextSet.targetWeight,
-      };
-    }
-
     return {
+      targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
       targetWeight:
         currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
       targetReps: getSetTargetReps(nextSet, getSetTargetReps(currentSet)),
@@ -3912,6 +3991,9 @@ export default function SessionView({
         ...exerciseWithUpdatedPlanPrescription,
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
+          ...(getSetMinimumReps(set)
+            ? { minimumReps: getSetMinimumReps(set) }
+            : {}),
           reps: getSetPrescribedReps(set),
           restSeconds: getSetPrescribedRestSeconds(set) || undefined,
           rir: getSetPrescribedRir(set),
@@ -4652,6 +4734,9 @@ export default function SessionView({
       ...originalSet,
       ...(selectedFields?.has("reps")
         ? {
+            ...(getSetMinimumReps(sessionSet)
+              ? { minimumReps: getSetMinimumReps(sessionSet) }
+              : {}),
             prescribedReps: getSetPrescribedReps(sessionSet),
             reps: getSetPrescribedReps(sessionSet),
           }

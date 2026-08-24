@@ -759,9 +759,21 @@ function buildTrainerWorkoutPayload(workout) {
       ...exercise,
       sets: (exercise.sets || []).map((set) => ({
         ...set,
+        prescribedMinimumReps: firstPresentValue(
+          set.prescribedMinimumReps,
+          set.minimumReps,
+          set.minimum_reps,
+          set.targetMinimumReps
+        ),
         prescribedReps: firstPresentValue(set.prescribedReps, set.reps, set.targetReps),
         prescribedRir: firstPresentValue(set.prescribedRir, set.rir, set.targetRir),
         targetReps: firstPresentValue(set.prescribedReps, set.reps, set.targetReps),
+        targetMinimumReps: firstPresentValue(
+          set.prescribedMinimumReps,
+          set.minimumReps,
+          set.minimum_reps,
+          set.targetMinimumReps
+        ),
         targetRir: firstPresentValue(set.prescribedRir, set.rir, set.targetRir),
         targetWeight: null,
       })),
@@ -1679,7 +1691,12 @@ function normalizeWeeklyPrescriptions({
 function getPrescriptionSummary(weeklyPrescriptions) {
   const primaryWeeks = weeklyPrescriptions.filter((week) => !week.isDeload);
   const setRange = formatRange(primaryWeeks.map((week) => week.sets));
-  const repRange = formatRange(primaryWeeks.map((week) => week.reps));
+  const repRange = formatRange(
+    primaryWeeks.flatMap((week) => [
+      week.minimumReps ?? week.minimum_reps ?? week.reps,
+      week.reps,
+    ])
+  );
   const rirRange = formatRange(primaryWeeks.map((week) => week.rir));
   const restRange = formatRestRange(primaryWeeks.map((week) => week.restSeconds));
   const setLabel = setRange === "1" ? "set" : "sets";
@@ -1866,7 +1883,10 @@ function WeeklyPrescriptionSheet({
                     textAlign: "center",
                   }}
                 >
-                  {formatWeeklyPrescriptionValue(field, week[field])}
+                  {field === "reps" &&
+                  (week.minimumReps ?? week.minimum_reps) != null
+                    ? `${week.minimumReps ?? week.minimum_reps}–${week.reps}`
+                    : formatWeeklyPrescriptionValue(field, week[field])}
                 </button>
               ))}
             </div>
