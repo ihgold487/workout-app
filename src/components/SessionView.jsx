@@ -100,6 +100,7 @@ import {
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
+const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
@@ -568,6 +569,19 @@ export default function SessionView({
     return plans.find((plan) => String(plan.id) === String(session.planId));
   }
 
+  function isDeloadPlanWorkout() {
+    const linkedPlan = getLinkedPlan();
+
+    if (!linkedPlan?.config?.deload) {
+      return false;
+    }
+
+    const planWeek = Number(session.planWeek || linkedPlan.currentWeek || 1);
+    const deloadWeek = Number(linkedPlan.durationWeeks || 0) + 1;
+
+    return planWeek === deloadWeek;
+  }
+
   const sessionBodyWeight = getLatestBodyWeightForDate(
     bodyWeightEntries,
     session.workoutStartedAtIso || session.startedAtIso || session.startedAt
@@ -617,6 +631,10 @@ export default function SessionView({
   }
 
   function getGoalMode() {
+    if (isDeloadPlanWorkout()) {
+      return "maintenance";
+    }
+
     const goal = getLinkedPlan()?.goal;
 
     return goal === "progress" ? "progress" : "maintenance";
@@ -634,8 +652,9 @@ export default function SessionView({
 
   function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
     const calculationExercise = getExerciseForCalculation(exercise);
+    const isDeload = isDeloadPlanWorkout();
     const latestMaxE1RM =
-      getGoalMode() === "progress" && setIndex === 0
+      isDeload || (getGoalMode() === "progress" && setIndex === 0)
         ? getLatestMatchingMaxE1RM(exercise)
         : null;
 
@@ -644,7 +663,13 @@ export default function SessionView({
         calculationExercise,
         latestMaxE1RM,
         reps,
-        rir
+        rir,
+        isDeload
+          ? {
+              maxE1RM: latestMaxE1RM,
+              progressionPercent: -DELOAD_TARGET_REDUCTION_PERCENT,
+            }
+          : undefined
       );
       const weight = recommendation?.weight;
 
@@ -672,49 +697,71 @@ export default function SessionView({
 
   function getRecommendationFromE1RM(exercise, previousE1RM, reps, rir, options = {}) {
     const calculationExercise = getExerciseForCalculation(exercise);
+    const result = recommendTargetPrescription({
+      allowedRepWindow: options.allowedRepWindow ?? 2,
+      bodyWeight: sessionBodyWeight,
+      exercise: calculationExercise,
+      goalMode: getGoalMode(),
+      normalizeWeight: (weight) =>
+        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+      preferredRepWindow: options.preferredRepWindow ?? 2,
+      previousE1RM,
+      progressionPercent:
+        options.progressionPercent ?? MAIN_TARGET_PROGRESSION_PERCENT,
+      targetReps: reps,
+      targetRir: rir,
+      weightIncrement: (weight) =>
+        getExerciseWeightIncrement(calculationExercise, undefined, weight),
+    });
 
-    return (
-      recommendTargetPrescription({
-        allowedRepWindow: options.allowedRepWindow ?? 2,
-        bodyWeight: sessionBodyWeight,
-        exercise: calculationExercise,
-        goalMode: getGoalMode(),
-        normalizeWeight: (weight) =>
-          getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
-        preferredRepWindow: options.preferredRepWindow ?? 2,
-        previousE1RM,
-        progressionPercent:
-          options.progressionPercent ?? MAIN_TARGET_PROGRESSION_PERCENT,
-        targetReps: reps,
-        targetRir: rir,
-        weightIncrement: (weight) =>
-          getExerciseWeightIncrement(calculationExercise, undefined, weight),
-      })?.recommendation || null
-    );
+    if (options.maxE1RM == null) {
+      return result?.recommendation || null;
+    }
+
+    return [result?.recommendation, ...(result?.alternatives || [])].find(
+      (candidate) => candidate?.e1rm < options.maxE1RM
+    ) || null;
   }
 
-  function getHistorySetE1RM(exercise, set) {
+  function getHistorySetE1RM(exercise, set, workout = null) {
     if (!set) {
       return null;
     }
 
-    const e1rm = calculateSessionE1RM(
-      exercise,
+    const historicalBodyWeight = workout
+      ? getLatestBodyWeightForDate(
+          bodyWeightEntries,
+          workout.completedAt ||
+            workout.workoutStartedAtIso ||
+            workout.startedAtIso ||
+            workout.startedAt
+        )
+      : sessionBodyWeight;
+    const e1rm = calculateE1RM(
       firstPresentValue(set.actualWeight),
       firstPresentValue(set.actualReps),
-      firstPresentValue(set.actualRir)
+      firstPresentValue(set.actualRir),
+      null,
+      null,
+      null,
+      {
+        bodyWeight: historicalBodyWeight,
+        exercise: getExerciseForCalculation(exercise),
+      }
     );
 
     return Number.isFinite(e1rm) ? e1rm : null;
   }
 
   function getLatestMatchingMaxE1RM(exercise) {
-    const latestSets =
-      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const latestPerformance = getLatestMatchingHistoryPerformance(exercise);
+    const latestSets = latestPerformance?.exercise?.sets || [];
     const maxE1RM = Math.max(
       0,
       ...latestSets
-        .map((set) => getHistorySetE1RM(exercise, set))
+        .map((set) =>
+          getHistorySetE1RM(exercise, set, latestPerformance?.workout)
+        )
         .filter(Number.isFinite)
     );
 

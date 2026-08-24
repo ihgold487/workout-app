@@ -41,6 +41,7 @@ import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
 
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
+const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
 
 function IconButton({
   children,
@@ -385,7 +386,19 @@ export default function TemplateView({
   }
 
   function getGoalMode(plan) {
+    if (isDeloadPlanWorkout(plan)) {
+      return "maintenance";
+    }
+
     return plan?.goal === "progress" ? "progress" : "maintenance";
+  }
+
+  function isDeloadPlanWorkout(plan) {
+    if (!plan?.config?.deload) {
+      return false;
+    }
+
+    return Number(currentPlanWeek) === Number(plan.durationWeeks || 0) + 1;
   }
 
   function getPlanWeekRir(plan, weekNumber, fallbackRir = "") {
@@ -884,7 +897,7 @@ export default function TemplateView({
     );
   }
 
-  function getLatestHistoryExercise(templateExercise) {
+  function getLatestHistoryPerformance(templateExercise) {
     return findLatestExercisePerformance({
       exercise: templateExercise,
       history,
@@ -893,7 +906,11 @@ export default function TemplateView({
       planWorkoutId: template.planWorkoutId,
       templateId: template.id,
       templates,
-    })?.exercise;
+    });
+  }
+
+  function getLatestHistoryExercise(templateExercise) {
+    return getLatestHistoryPerformance(templateExercise)?.exercise;
   }
 
   function getActualDefaultsForSet(templateExercise, setIndex, targetSet) {
@@ -935,8 +952,18 @@ export default function TemplateView({
       exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
     };
 
-    if (getGoalMode(plan) === "progress" && setIndex === 0) {
-      const latestHistoryExercise = getLatestHistoryExercise(exercise);
+    const isDeload = isDeloadPlanWorkout(plan);
+
+    if (isDeload || (getGoalMode(plan) === "progress" && setIndex === 0)) {
+      const latestPerformance = getLatestHistoryPerformance(exercise);
+      const latestHistoryExercise = latestPerformance?.exercise;
+      const historicalBodyWeight = getLatestBodyWeightForDate(
+        bodyWeightEntries,
+        latestPerformance?.workout?.completedAt ||
+          latestPerformance?.workout?.workoutStartedAtIso ||
+          latestPerformance?.workout?.startedAtIso ||
+          latestPerformance?.workout?.startedAt
+      );
       const latestMaxE1RM = Math.max(
         0,
         ...(latestHistoryExercise?.sets || [])
@@ -949,7 +976,7 @@ export default function TemplateView({
               null,
               null,
               {
-                bodyWeight: templateBodyWeight,
+                bodyWeight: historicalBodyWeight,
                 exercise: recommendationExercise,
               }
             )
@@ -958,21 +985,29 @@ export default function TemplateView({
       );
 
       if (latestMaxE1RM > 0) {
-        return (
-          recommendTargetPrescription({
-            allowedRepWindow: 2,
-            bodyWeight: templateBodyWeight,
-            exercise: recommendationExercise,
-            goalMode: getGoalMode(plan),
-            preferredRepWindow: 2,
-            previousE1RM: latestMaxE1RM,
-            progressionPercent: MAIN_TARGET_PROGRESSION_PERCENT,
-            targetReps,
-            targetRir,
-            weightIncrement: (weight) =>
-              getExerciseWeightIncrement(recommendationExercise, undefined, weight),
-          })?.recommendation || null
-        );
+        const result = recommendTargetPrescription({
+          allowedRepWindow: 2,
+          bodyWeight: templateBodyWeight,
+          exercise: recommendationExercise,
+          goalMode: getGoalMode(plan),
+          preferredRepWindow: 2,
+          previousE1RM: latestMaxE1RM,
+          progressionPercent: isDeload
+            ? -DELOAD_TARGET_REDUCTION_PERCENT
+            : MAIN_TARGET_PROGRESSION_PERCENT,
+          targetReps,
+          targetRir,
+          weightIncrement: (weight) =>
+            getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+        });
+
+        if (!isDeload) {
+          return result?.recommendation || null;
+        }
+
+        return [result?.recommendation, ...(result?.alternatives || [])].find(
+          (candidate) => candidate?.e1rm < latestMaxE1RM
+        ) || null;
       }
     }
 
