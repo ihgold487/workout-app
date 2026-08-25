@@ -1,5 +1,7 @@
 import { NotebookPen, Target, X } from "lucide-react";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import BenchmarkTrophy from "./BenchmarkTrophy";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 
 export function WorkoutExercisePreviewGroup({ children, group }) {
   return (
@@ -36,10 +38,20 @@ export function WorkoutExercisePreviewRow({
 }) {
   const isTemplateCompact = layout === "templateCompact";
   const equipmentLabel = exercise.equipment?.[0] || "";
+  const benchmark = isExerciseBenchmark(exerciseDetail || exercise);
   const hasMultiLinePrescription = String(prescriptionSummary || "").includes("\n");
   const exerciseTitle = (
     <>
-      <span style={{ fontWeight: "bold" }}>{exercise.name}</span>
+      <span
+        style={{
+          alignItems: "center",
+          display: "inline-flex",
+          gap: "5px",
+        }}
+      >
+        {benchmark ? <BenchmarkTrophy size={15} /> : null}
+        <span style={{ fontWeight: "bold" }}>{exercise.name}</span>
+      </span>
       {equipmentLabel ? (
         <span
           style={{

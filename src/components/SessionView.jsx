@@ -46,6 +46,7 @@ import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import BenchmarkTrophy from "./BenchmarkTrophy";
 import PlateLoadingCalculator, {
   getClosestLoadableWeight,
   getPlateCalculatorEquipmentId,
@@ -65,6 +66,7 @@ import {
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import {
   canUseNativeRestNotifications,
   cancelNativeRestTimerNotification,
@@ -5782,6 +5784,7 @@ export default function SessionView({
                     {group.exercises.map((exercise) => {
                       const exerciseDetail = getExerciseDetailRecord(exercise);
                       const isCurrent = currentExercise?.id === exercise.id;
+                      const isBenchmark = isExerciseBenchmark(exerciseDetail);
                       const isExerciseComplete =
                         exercise.sets.length > 0 &&
                         exercise.sets.every((set) => set.completed);
@@ -5840,6 +5843,26 @@ export default function SessionView({
                                 imageUrl={exerciseDetail.imageUrl}
                                 size={42}
                               />
+                              {isBenchmark ? (
+                                <span
+                                  title="Benchmark exercise"
+                                  style={{
+                                    alignItems: "center",
+                                    background: "var(--surface-raised)",
+                                    borderRadius: "999px",
+                                    boxShadow: "0 0 0 1px color-mix(in srgb, #ca8a04 35%, transparent)",
+                                    display: "inline-flex",
+                                    height: "18px",
+                                    justifyContent: "center",
+                                    left: "1px",
+                                    position: "absolute",
+                                    top: "1px",
+                                    width: "18px",
+                                  }}
+                                >
+                                  <BenchmarkTrophy size={12} />
+                                </span>
+                              ) : null}
                               {isExerciseComplete ? (
                                 <span
                                   aria-hidden="true"
@@ -5852,7 +5875,7 @@ export default function SessionView({
                                     fontWeight: 700,
                                     height: "16px",
                                     justifyContent: "center",
-                                    left: "2px",
+                                    right: "2px",
                                     lineHeight: 1,
                                     position: "absolute",
                                     top: "2px",

@@ -15,6 +15,7 @@ import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
 const muscleGroups = [
@@ -1731,9 +1732,15 @@ export default function ExerciseView({
                 >
                   <div
                     style={{
+                      alignItems: "center",
+                      display: "flex",
                       fontWeight: "bold",
+                      gap: "5px",
                     }}
                   >
+                    {isExerciseBenchmark(exercise) ? (
+                      <BenchmarkTrophy size={15} />
+                    ) : null}
                     {exercise.name}
                   </div>
                   <div

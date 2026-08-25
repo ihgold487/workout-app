@@ -1,6 +1,8 @@
 import { Plus, Search, X } from "lucide-react";
 import { useState } from "react";
+import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import { isExerciseActive } from "../utils/exerciseStatus";
+import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 
@@ -249,10 +251,16 @@ export default function ExercisePickerSheet({
                   >
                     <span
                       style={{
+                        alignItems: "center",
+                        display: "flex",
                         fontWeight: "bold",
+                        gap: "5px",
                         lineHeight: 1.15,
                       }}
                     >
+                      {isExerciseBenchmark(exercise) ? (
+                        <BenchmarkTrophy size={15} />
+                      ) : null}
                       {exercise.name}
                     </span>
                     {(equipment || primaryMuscle) && (

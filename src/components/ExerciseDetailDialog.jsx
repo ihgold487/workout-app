@@ -23,6 +23,7 @@ import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import MuscleMap from "./MuscleMap";
 import WeightPickerModal from "./WeightPickerModal";
+import BenchmarkTrophy from "./BenchmarkTrophy";
 
 const RANGE_OPTIONS = [
   { label: "1 week", value: 7 },
@@ -2624,11 +2625,15 @@ export default function ExerciseDetailDialog({
           <div style={{ minWidth: 0 }}>
             <h2
               style={{
+                alignItems: "center",
+                display: "flex",
                 fontSize: "19px",
+                gap: "7px",
                 lineHeight: 1.15,
                 margin: 0,
               }}
             >
+              {benchmark ? <BenchmarkTrophy size={19} /> : null}
               {exercise.name}
             </h2>
             <div
