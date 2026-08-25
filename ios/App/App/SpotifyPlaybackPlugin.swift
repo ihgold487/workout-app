@@ -35,6 +35,8 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
     private var isPaused: Bool?
     private var trackName: String?
     private var artistName: String?
+    private var playlistContextURI: String?
+    private var playlistImageDataURL: String?
     private var canSkipNext = false
     private var canSkipPrevious = false
     private var lastError: String?
@@ -181,6 +183,8 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         isPaused = nil
         trackName = nil
         artistName = nil
+        playlistContextURI = nil
+        playlistImageDataURL = nil
         lastError = error?.localizedDescription ?? "Unable to connect to Spotify."
         emitState()
     }
@@ -189,6 +193,8 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         isPaused = nil
         trackName = nil
         artistName = nil
+        playlistContextURI = nil
+        playlistImageDataURL = nil
         if let error {
             lastError = error.localizedDescription
         }
@@ -202,6 +208,7 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         canSkipNext = playerState.playbackRestrictions.canSkipNext
         canSkipPrevious = playerState.playbackRestrictions.canSkipPrevious
         lastError = nil
+        updatePlaylistArtwork(for: playerState.contextURI.absoluteString)
         emitState()
     }
 
@@ -216,8 +223,49 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         if let isPaused { payload["isPaused"] = isPaused }
         if let trackName { payload["trackName"] = trackName }
         if let artistName { payload["artistName"] = artistName }
+        if let playlistImageDataURL { payload["playlistImageDataURL"] = playlistImageDataURL }
         if let lastError { payload["error"] = lastError }
         return payload
+    }
+
+    private func updatePlaylistArtwork(for contextURI: String) {
+        guard contextURI.hasPrefix("spotify:playlist:") else {
+            playlistContextURI = nil
+            playlistImageDataURL = nil
+            return
+        }
+
+        guard contextURI != playlistContextURI || playlistImageDataURL == nil else {
+            return
+        }
+
+        playlistContextURI = contextURI
+        playlistImageDataURL = nil
+
+        appRemote.contentAPI?.fetchContentItem(forURI: contextURI) { [weak self] result, error in
+            guard let self,
+                  error == nil,
+                  self.playlistContextURI == contextURI,
+                  let contentItem = result as? SPTAppRemoteContentItem else {
+                return
+            }
+
+            self.appRemote.imageAPI?.fetchImage(
+                forItem: contentItem,
+                with: CGSize(width: 96, height: 96)
+            ) { [weak self] result, error in
+                guard let self,
+                      error == nil,
+                      self.playlistContextURI == contextURI,
+                      let image = result as? UIImage,
+                      let imageData = image.pngData() else {
+                    return
+                }
+
+                self.playlistImageDataURL = "data:image/png;base64,\(imageData.base64EncodedString())"
+                self.emitState()
+            }
+        }
     }
 
     private func emitState() {

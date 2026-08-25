@@ -314,6 +314,24 @@ function SpotifyIcon({ size = 28 }) {
   );
 }
 
+function SpotifyArtwork({ imageDataURL, size = 32 }) {
+  if (!imageDataURL) return <SpotifyIcon size={size} />;
+
+  return (
+    <img
+      alt="Spotify playlist cover"
+      src={imageDataURL}
+      style={{
+        borderRadius: "4px",
+        display: "block",
+        height: `${size}px`,
+        objectFit: "contain",
+        width: `${size}px`,
+      }}
+    />
+  );
+}
+
 export default function SessionView({
   session,
   sessions,
@@ -5532,7 +5550,13 @@ export default function SessionView({
               }}
               type="button"
             >
-              <SpotifyIcon />
+              <SpotifyArtwork
+                imageDataURL={
+                  spotifyState.connected && spotifyState.isPaused === false
+                    ? spotifyState.playlistImageDataURL
+                    : null
+                }
+              />
             </button>
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <div
