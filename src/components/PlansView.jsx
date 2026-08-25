@@ -1531,6 +1531,12 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
     firstSet.targetReps,
     fallbackReps
   );
+  const minimumReps = firstPresentValue(
+    firstSet.prescribedMinimumReps,
+    firstSet.minimumReps,
+    firstSet.minimum_reps,
+    firstSet.targetMinimumReps
+  );
   const restSeconds =
     normalizeRestSeconds(
       firstPresentValue(
@@ -1543,6 +1549,7 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
     ) || getDefaultRestSecondsForReps(reps);
 
   return {
+    minimumReps,
     reps,
     restSeconds: String(restSeconds),
     rir: firstPresentValue(firstSet.prescribedRir, firstSet.rir, firstSet.targetRir, fallbackRir),
@@ -1607,6 +1614,9 @@ function getDefaultWeeklyPrescriptions({
     const weekNumber = index + 1;
 
     return {
+      ...(base.minimumReps === ""
+        ? {}
+        : { minimumReps: String(base.minimumReps) }),
       reps: String(base.reps),
       restSeconds: String(base.restSeconds),
       rir: getRirForPlanWeek({
@@ -1629,6 +1639,9 @@ function getDefaultWeeklyPrescriptions({
     {
       isDeload: true,
       label: "D",
+      ...(trainingWeeks[0]?.minimumReps == null
+        ? {}
+        : { minimumReps: String(trainingWeeks[0].minimumReps) }),
       reps: String(trainingWeeks[0]?.reps || base.reps),
       restSeconds: String(trainingWeeks[0]?.restSeconds || base.restSeconds),
       rir: "5",
@@ -1679,11 +1692,22 @@ function normalizeWeeklyPrescriptions({
     return normalWeeks;
   }
 
+  const savedDeloadWeek =
+    savedByWeek.get(deloadWeek.weekNumber) ||
+    [...savedByWeek.values()].find((week) => week.isDeload);
+  const overriddenDeloadWeek =
+    overrideByWeek.get(deloadWeek.weekNumber) ||
+    [...overrideByWeek.values()].find((week) => week.isDeload);
+
   return [
     ...normalWeeks,
     {
       ...deloadWeek,
-      reps: String(normalWeeks[0]?.reps || deloadWeek.reps),
+      ...(savedDeloadWeek || {}),
+      ...(overriddenDeloadWeek || {}),
+      isDeload: true,
+      label: "D",
+      weekNumber: deloadWeek.weekNumber,
     },
   ];
 }
@@ -1867,28 +1891,32 @@ function WeeklyPrescriptionSheet({
               }}
             >
               <strong>{week.isDeload ? "D" : `W${week.weekNumber}`}</strong>
-              {["sets", "reps", "rir", "restSeconds"].map((field) => (
-                <button
-                  key={field}
-                  disabled={week.isDeload}
-                  onClick={() => {
-                    if (!week.isDeload) {
-                      onEditValue(week.weekNumber, field);
-                    }
-                  }}
-                  style={{
-                    opacity: week.isDeload ? 0.72 : 1,
-                    minHeight: "38px",
-                    padding: "6px 8px",
-                    textAlign: "center",
-                  }}
-                >
-                  {field === "reps" &&
-                  (week.minimumReps ?? week.minimum_reps) != null
-                    ? `${week.minimumReps ?? week.minimum_reps}–${week.reps}`
-                    : formatWeeklyPrescriptionValue(field, week[field])}
-                </button>
-              ))}
+              {["sets", "reps", "rir", "restSeconds"].map((field) => {
+                const canEdit = !week.isDeload || field === "restSeconds";
+
+                return (
+                  <button
+                    key={field}
+                    disabled={!canEdit}
+                    onClick={() => {
+                      if (canEdit) {
+                        onEditValue(week.weekNumber, field, week.isDeload);
+                      }
+                    }}
+                    style={{
+                      opacity: canEdit ? 1 : 0.72,
+                      minHeight: "38px",
+                      padding: "6px 8px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {field === "reps" &&
+                    (week.minimumReps ?? week.minimum_reps) != null
+                      ? `${week.minimumReps ?? week.minimum_reps}–${week.reps}`
+                      : formatWeeklyPrescriptionValue(field, week[field])}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -1940,6 +1968,7 @@ function ScopeSwitch({ checked, label, onChange }) {
 
 function WeeklyPrescriptionValuePicker({
   field,
+  isDeload,
   onClose,
   onSelect,
   scope,
@@ -2095,7 +2124,7 @@ function WeeklyPrescriptionValuePicker({
           }}
         >
           <strong>
-            Week {weekNumber} {title}
+            {isDeload ? "Deload" : `Week ${weekNumber}`} {title}
           </strong>
           <button
             aria-label="Close value picker"
@@ -2134,13 +2163,15 @@ function WeeklyPrescriptionValuePicker({
               setScope((current) => ({ ...current, allDays: checked }))
             }
           />
-          <ScopeSwitch
-            checked={scope.allWeeks}
-            label="All weeks"
-            onChange={(checked) =>
-              setScope((current) => ({ ...current, allWeeks: checked }))
-            }
-          />
+          {!isDeload && (
+            <ScopeSwitch
+              checked={scope.allWeeks}
+              label="All weeks"
+              onChange={(checked) =>
+                setScope((current) => ({ ...current, allWeeks: checked }))
+              }
+            />
+          )}
         </div>
 
         <div
@@ -3179,8 +3210,12 @@ export default function PlansView({
         (next, exercise) => ({
           ...next,
           [exercise.previewSlotKey]: getWeeksForExercise(exercise, next).map((week) =>
-            !week.isDeload &&
-            (scope.allWeeks || Number(week.weekNumber) === Number(weekNumber))
+            ((!week.isDeload &&
+              (scope.allWeeks ||
+                Number(week.weekNumber) === Number(weekNumber))) ||
+              (week.isDeload &&
+                field === "restSeconds" &&
+                Number(week.weekNumber) === Number(weekNumber)))
               ? {
                   ...week,
                   [field]: String(value),
@@ -5140,13 +5175,14 @@ export default function PlansView({
             setWeeklyPrescriptionTarget(null);
             setWeeklyPrescriptionPicker(null);
           }}
-          onEditValue={(weekNumber, field) => {
+          onEditValue={(weekNumber, field, isDeload) => {
             const week = weeklyPrescriptionExercise.weeklyPrescriptions?.find(
               (item) => Number(item.weekNumber) === Number(weekNumber)
             );
 
             setWeeklyPrescriptionPicker({
               field,
+              isDeload,
               previewSlotKey: weeklyPrescriptionExercise.previewSlotKey,
               value: week?.[field] || "",
               weekNumber,
@@ -5163,6 +5199,7 @@ export default function PlansView({
       <WeeklyPrescriptionValuePicker
         key={`${weeklyPrescriptionPicker?.field || "closed"}-${weeklyPrescriptionPicker?.weekNumber || "none"}-${weeklyPrescriptionPicker?.value || ""}`}
         field={weeklyPrescriptionPicker?.field}
+        isDeload={weeklyPrescriptionPicker?.isDeload}
         onClose={() => setWeeklyPrescriptionPicker(null)}
         scope={weeklyPrescriptionScope}
         setScope={setWeeklyPrescriptionScope}

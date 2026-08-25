@@ -3,7 +3,7 @@ import {
   deleteNutritionEntry,
   downloadNutritionEntryChanges,
   readPendingNutritionDeletes,
-  upsertNutritionEntry,
+  uploadNutritionEntries,
 } from "../sync/nutritionCloudSync";
 import {
   deleteBodyWeightEntry,
@@ -12,6 +12,7 @@ import {
 import { upsertNutritionTarget } from "../sync/nutritionTargetCloudSync";
 
 const SNAPSHOT_PREFIX = "nutrition:";
+export const NUTRITION_OUTBOX_QUEUED_EVENT = "workout:nutrition-outbox-queued";
 const syncPromises = new Map();
 const reconcilePromises = new Map();
 
@@ -25,6 +26,12 @@ function snapshotId(userId) {
 
 function outboxId(userId, entryId) {
   return `${normalizeUserId(userId)}:entry:${String(entryId)}`;
+}
+
+function notifyNutritionOutboxQueued() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(NUTRITION_OUTBOX_QUEUED_EVENT));
+  }
 }
 
 export async function loadNutritionSnapshot(userId) {
@@ -118,6 +125,7 @@ export async function queueNutritionUpserts(userId, entries, snapshotEntries) {
       );
     }
   );
+  notifyNutritionOutboxQueued();
 }
 
 export async function queueNutritionDelete(
@@ -149,6 +157,7 @@ export async function queueNutritionDelete(
       });
     }
   );
+  notifyNutritionOutboxQueued();
 }
 
 export async function queueBodyWeightUpsert(userId, entry) {
@@ -161,6 +170,7 @@ export async function queueBodyWeightUpsert(userId, entry) {
     updatedAt: new Date().toISOString(),
     userId,
   });
+  notifyNutritionOutboxQueued();
 }
 
 export async function queueBodyWeightDelete(userId, entryDate) {
@@ -173,6 +183,7 @@ export async function queueBodyWeightDelete(userId, entryDate) {
     updatedAt: new Date().toISOString(),
     userId,
   });
+  notifyNutritionOutboxQueued();
 }
 
 export async function queueNutritionTargetUpsert(userId, target) {
@@ -185,6 +196,7 @@ export async function queueNutritionTargetUpsert(userId, target) {
     updatedAt: new Date().toISOString(),
     userId,
   });
+  notifyNutritionOutboxQueued();
 }
 
 export async function getNutritionOutbox(userId) {
@@ -199,8 +211,17 @@ export async function getNutritionOutboxCount(userId) {
   return db.nutritionOutbox.where("userId").equals(userId).count();
 }
 
-export async function acknowledgeNutritionOutboxItem(id) {
-  await db.nutritionOutbox.delete(id);
+export async function acknowledgeNutritionOutboxItem(id, expectedUpdatedAt = null) {
+  await db.transaction("rw", db.nutritionOutbox, async () => {
+    const currentItem = await db.nutritionOutbox.get(id);
+
+    if (
+      currentItem &&
+      (expectedUpdatedAt == null || currentItem.updatedAt === expectedUpdatedAt)
+    ) {
+      await db.nutritionOutbox.delete(id);
+    }
+  });
 }
 
 export async function flushNutritionOutbox(userId, session) {
@@ -220,8 +241,38 @@ async function flushNutritionOutboxUnlocked(userId, session) {
   const failed = [];
   const remoteDeletedIds = [];
   const queuedItems = await getNutritionOutbox(userId);
+  const nutritionUpserts = queuedItems.filter(
+    (item) => item.operation === "upsert"
+  );
 
-  for (const item of queuedItems) {
+  if (nutritionUpserts.length > 0) {
+    try {
+      const result = await uploadNutritionEntries(
+        nutritionUpserts.map((item) => item.entry),
+        session
+      );
+
+      if (result.uploaded !== nutritionUpserts.length) {
+        throw new Error("Supabase did not confirm every nutrition entry upload.");
+      }
+
+      await Promise.all(
+        nutritionUpserts.map((item) =>
+          acknowledgeNutritionOutboxItem(item.id, item.updatedAt)
+        )
+      );
+    } catch (error) {
+      nutritionUpserts.forEach((item) => {
+        failed.push({
+          error: error.message,
+          id: item.entry?.id,
+          operation: item.operation,
+        });
+      });
+    }
+  }
+
+  for (const item of queuedItems.filter((item) => item.operation !== "upsert")) {
     try {
       let result = null;
 
@@ -238,19 +289,13 @@ async function flushNutritionOutboxUnlocked(userId, session) {
           item.entry,
           item.updatedAt
         );
-      } else {
-        result = await upsertNutritionEntry(item.entry, session);
-
-        if (result.remoteDeleted) {
-          remoteDeletedIds.push(String(item.entry.id));
-        }
       }
 
       if (result?.applied !== true) {
         throw new Error("Supabase did not confirm that the change was applied.");
       }
 
-      await acknowledgeNutritionOutboxItem(item.id);
+      await acknowledgeNutritionOutboxItem(item.id, item.updatedAt);
     } catch (error) {
       failed.push({
         error: error.message,

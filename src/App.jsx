@@ -85,6 +85,7 @@ import {
   getNutritionPersistenceStatus,
   initializeNutritionPersistence,
   loadNutritionSnapshot,
+  NUTRITION_OUTBOX_QUEUED_EVENT,
   persistNutritionEntries,
   reconcileNutritionEntries,
 } from "./storage/nutritionStorage";
@@ -664,6 +665,8 @@ function formatHistoryTimestamp(workout) {
 }
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
+const NUTRITION_SYNC_DEBOUNCE_MS = 90 * 1000;
+const NUTRITION_SYNC_MAX_WAIT_MS = 5 * 60 * 1000;
 const PENDING_SYNC_MAX_AGE_MS = 60 * 60 * 1000;
 const PENDING_SYNC_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
@@ -1360,6 +1363,169 @@ function buildPlanExportOptions(plans = []) {
       totalWeeks: getPlanExportTotalWeeks(plan),
       workoutsPerWeek: plan.workouts?.length || plan.daysPerWeek || 0,
     }));
+}
+
+function normalizeSupportedPlanJsonNumber(value) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : value;
+}
+
+function buildSupportedPlanJson({ plan, templates = [] }) {
+  const workouts = [...(plan?.workouts || [])]
+    .sort(
+      (left, right) =>
+        (Number(left.dayNumber) || Number(left.position) || 0) -
+        (Number(right.dayNumber) || Number(right.position) || 0)
+    )
+    .map((planWorkout, workoutIndex) => {
+      const template = getPlanExportWorkoutTemplate(
+        plan,
+        planWorkout,
+        templates
+      );
+      const exercises = template?.exercises || planWorkout.exercises || [];
+      const workoutName =
+        template?.name || planWorkout.name || `Workout ${workoutIndex + 1}`;
+      const workoutType = getPlanExportWorkoutType({
+        plan,
+        planWorkout,
+        template,
+        workoutIndex,
+        workoutName,
+      }).workoutType;
+
+      return {
+        dayNumber: Number(planWorkout.dayNumber) || workoutIndex + 1,
+        name: workoutName,
+        ...(workoutType ? { workoutType } : {}),
+        exercises: exercises.map((exercise, exerciseIndex) => {
+          const weeklyPrescriptions =
+            exercise.weeklyPrescriptions ||
+            planWorkout.weeklyPrescriptionsByPosition?.[exerciseIndex + 1] ||
+            [];
+          const exerciseRestSeconds = normalizeRestSeconds(
+            firstExportValue(
+              exercise.restSeconds,
+              exercise.rest_seconds,
+              exercise.sets?.[0]?.prescribedRestSeconds,
+              exercise.sets?.[0]?.restSeconds,
+              exercise.sets?.[0]?.rest_seconds
+            )
+          );
+
+          return {
+            name: exercise.name || "Exercise",
+            equipment: exercise.equipment || "",
+            ...(exercise.planMuscle
+              ? { planMuscle: exercise.planMuscle }
+              : {}),
+            ...(exercise.supersetGroup
+              ? { supersetGroup: exercise.supersetGroup }
+              : {}),
+            ...(exerciseRestSeconds ? { restSeconds: exerciseRestSeconds } : {}),
+            sets: (exercise.sets || []).map((set) => {
+              const reps = firstExportValue(
+                set.prescribedReps,
+                set.reps,
+                set.targetReps,
+                plan?.config?.reps
+              );
+              const minimumReps = getPlanSetMinimumReps(set, null);
+              const rir = firstExportValue(
+                set.prescribedRir,
+                set.rir,
+                set.targetRir,
+                plan?.config?.rir
+              );
+              const restSeconds = getPlanSetRestSeconds(set, null, exercise);
+
+              return {
+                reps: normalizeSupportedPlanJsonNumber(reps),
+                ...(minimumReps === ""
+                  ? {}
+                  : {
+                      minimumReps:
+                        normalizeSupportedPlanJsonNumber(minimumReps),
+                    }),
+                rir: normalizeSupportedPlanJsonNumber(rir),
+                ...(restSeconds ? { restSeconds } : {}),
+              };
+            }),
+            ...(weeklyPrescriptions.length > 0
+              ? {
+                  weeklyPrescriptions: weeklyPrescriptions.map((week) => {
+                    const storedMinimumReps = getPlanSetMinimumReps(null, week);
+                    const minimumReps =
+                      storedMinimumReps !== "" || !week.isDeload
+                        ? storedMinimumReps
+                        : getPlanSetMinimumReps(
+                            null,
+                            weeklyPrescriptions.find(
+                              (candidate) => !candidate.isDeload
+                            )
+                          );
+                    const restSeconds = normalizeRestSeconds(
+                      firstExportValue(
+                        week.restSeconds,
+                        week.rest_seconds,
+                        exerciseRestSeconds
+                      )
+                    );
+
+                    return {
+                      weekNumber: Number(week.weekNumber),
+                      sets: Number(week.sets),
+                      reps: normalizeSupportedPlanJsonNumber(week.reps),
+                      ...(minimumReps === ""
+                        ? {}
+                        : {
+                            minimumReps:
+                              normalizeSupportedPlanJsonNumber(minimumReps),
+                          }),
+                      rir: normalizeSupportedPlanJsonNumber(week.rir),
+                      ...(restSeconds ? { restSeconds } : {}),
+                      ...(week.isDeload ? { isDeload: true } : {}),
+                    };
+                  }),
+                }
+              : {}),
+          };
+        }),
+      };
+    });
+  const configuredDeloadWeeks = Number(plan?.config?.deloadWeeks);
+  const deloadWeeks = Number.isFinite(configuredDeloadWeeks)
+    ? Math.max(0, configuredDeloadWeeks)
+    : plan?.config?.deload
+      ? 1
+      : 0;
+
+  return {
+    schema: "workout-app.ai-plan-draft.v1",
+    ...(plan?.aiAnalysis ? { analysis: plan.aiAnalysis } : {}),
+    plan: {
+      name: plan?.name || "Training Plan",
+      goal: plan?.goal || plan?.config?.goal || "progress",
+      planType: plan?.planType || plan?.config?.planType || "ai",
+      trainingWeeks: getPlanExportTrainingWeeks(plan),
+      deloadWeeks,
+      daysPerWeek: Number(plan?.daysPerWeek) || workouts.length,
+      ...(plan?.config?.reps !== undefined
+        ? { reps: normalizeSupportedPlanJsonNumber(plan.config.reps) }
+        : {}),
+      ...(plan?.config?.rir !== undefined
+        ? { rir: normalizeSupportedPlanJsonNumber(plan.config.rir) }
+        : {}),
+      ...(plan?.config?.sets !== undefined
+        ? { sets: normalizeSupportedPlanJsonNumber(plan.config.sets) }
+        : {}),
+      ...(plan?.config?.rirPeriodization
+        ? { rirPeriodization: plan.config.rirPeriodization }
+        : {}),
+    },
+    workouts,
+  };
 }
 
 function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [] }) {
@@ -2479,7 +2645,7 @@ function buildAiPlanDraftInstructions() {
           restSeconds:
             "optional number; default prescribed rest after sets for this exercise, in seconds",
           weeklyPrescriptions:
-            "optional [{ weekNumber, sets, reps, minimumReps, rir, restSeconds, isDeload }]",
+            "optional [{ weekNumber, sets, reps, minimumReps, rir, restSeconds, isDeload }]; deload entries may prescribe restSeconds independently from training weeks",
         },
       ],
           name: "string",
@@ -3013,7 +3179,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. You may prescribe restSeconds at the exercise or set level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use a distinct restSeconds value for a deload week, and the app will preserve it. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3079,7 +3245,7 @@ function getAiPlanPrompt(context) {
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
     'The app requires a numeric upper-bound rep target in `reps`. When the intended range extends more than two reps below that target, also include numeric `minimumReps`. For example, encode 10–15 as `"reps": 15, "minimumReps": 10`. Apply this consistently to exercise sets and weekly prescriptions. When `minimumReps` is omitted, the app uses its default acceptable-repetition tolerance.',
-    "You may prescribe restSeconds at the exercise or set level. If omitted, the app will use its current rep-based rest defaults.",
+    "You may prescribe restSeconds at the exercise, set, or weekly-prescription level, including a distinct restSeconds for a deload week. If omitted, the app will use its current rep-based rest defaults.",
     "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
     "In the finalized JSON, put observations, rationale, and watch items inside the optional analysis object so the entire final response remains importable.",
     "Use plan.trainingWeeks for normal training weeks and plan.deloadWeeks for deload weeks. Do not use plan.durationWeeks unless you are maintaining backward compatibility with an older draft.",
@@ -3269,6 +3435,7 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
           muscles: libraryExercise?.muscles || exerciseDraft.muscles || [],
           name: libraryExercise?.name || exerciseDraft.name || "Exercise",
           planMuscle: exerciseDraft.planMuscle || libraryExercise?.muscles?.[0] || "",
+          ...(exerciseRestSeconds ? { restSeconds: exerciseRestSeconds } : {}),
           sets: setDrafts.map((setDraft, setIndex) => {
             const reps = setDraft?.reps ?? exerciseDraft.reps ?? "";
             const minimumReps = getAiDraftMinimumReps(
@@ -4858,6 +5025,125 @@ export default function App() {
     };
   }, [appAccessAllowed, approvalFromCache, authSession]);
 
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+
+    if (!userId || !appAccessAllowed || approvalFromCache) return undefined;
+
+    let cancelled = false;
+    let debounceTimeoutId = null;
+    let maximumWaitTimeoutId = null;
+
+    function clearScheduledFlushes() {
+      window.clearTimeout(debounceTimeoutId);
+      window.clearTimeout(maximumWaitTimeoutId);
+      debounceTimeoutId = null;
+      maximumWaitTimeoutId = null;
+    }
+
+    async function flushScheduledNutritionChanges(reason) {
+      clearScheduledFlushes();
+
+      const status = await getNutritionPersistenceStatus(userId);
+
+      if (!cancelled) {
+        setNutritionSettingsPending(status.pending);
+      }
+
+      if (status.pending === 0) return;
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (!cancelled) {
+          setNutritionSettingsStatus(
+            `${status.pending} nutrition change${
+              status.pending === 1 ? " is" : "s are"
+            } safely queued offline.`
+          );
+        }
+        return;
+      }
+
+      const session = authSessionRef.current;
+
+      if (!session?.user?.id || session.user.id !== userId) return;
+
+      const result = await flushNutritionOutbox(userId, session);
+
+      if (cancelled) return;
+
+      setNutritionSettingsPending(result.remaining.length);
+      setNutritionSettingsStatus(
+        result.failed.length > 0
+          ? `${result.failed.length} nutrition change${
+              result.failed.length === 1 ? "" : "s"
+            } failed to sync and remain safely queued.`
+          : `Nutrition auto sync complete after ${reason}.`
+      );
+    }
+
+    function runScheduledFlush(reason) {
+      flushScheduledNutritionChanges(reason).catch((error) => {
+        console.error("Scheduled nutrition sync failed:", error);
+        if (!cancelled) {
+          setNutritionSettingsStatus(
+            `Nutrition auto sync failed: ${error.message}. Changes remain queued.`
+          );
+        }
+      });
+    }
+
+    function scheduleNutritionFlush() {
+      getNutritionPersistenceStatus(userId)
+        .then((status) => {
+          if (!cancelled) setNutritionSettingsPending(status.pending);
+        })
+        .catch((error) =>
+          console.error("Failed to refresh nutrition queue status:", error)
+        );
+
+      window.clearTimeout(debounceTimeoutId);
+      debounceTimeoutId = window.setTimeout(
+        () => runScheduledFlush("90 seconds without changes"),
+        NUTRITION_SYNC_DEBOUNCE_MS
+      );
+
+      if (maximumWaitTimeoutId == null) {
+        maximumWaitTimeoutId = window.setTimeout(
+          () => runScheduledFlush("the five-minute maximum wait"),
+          NUTRITION_SYNC_MAX_WAIT_MS
+        );
+      }
+    }
+
+    function handleVisibilityChange() {
+      runScheduledFlush(
+        document.visibilityState === "hidden" ? "app backgrounding" : "app resume"
+      );
+    }
+
+    function handleOnline() {
+      runScheduledFlush("network reconnect");
+    }
+
+    window.addEventListener(
+      NUTRITION_OUTBOX_QUEUED_EVENT,
+      scheduleNutritionFlush
+    );
+    window.addEventListener("online", handleOnline);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      clearScheduledFlushes();
+      window.removeEventListener(
+        NUTRITION_OUTBOX_QUEUED_EVENT,
+        scheduleNutritionFlush
+      );
+      window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [appAccessAllowed, approvalFromCache, authSession?.user?.id]);
+
   async function runSettingsNutritionSync({ pull = false } = {}) {
     const userId = authSession?.user?.id;
 
@@ -5185,7 +5471,21 @@ export default function App() {
       weeklyPrescriptions.find((week) => !week.isDeload) ||
       {};
     const nextTrainingWeek = {
+      ...((sourceWeek.minimumReps ?? sourceWeek.minimum_reps) == null
+        ? {}
+        : {
+            minimumReps: sourceWeek.minimumReps ?? sourceWeek.minimum_reps,
+          }),
       reps: sourceWeek.reps || "",
+      ...(normalizeRestSeconds(
+        sourceWeek.restSeconds ?? sourceWeek.rest_seconds
+      )
+        ? {
+            restSeconds: normalizeRestSeconds(
+              sourceWeek.restSeconds ?? sourceWeek.rest_seconds
+            ),
+          }
+        : {}),
       rir: sourceWeek.rir || "",
       sets: sourceWeek.sets || "",
       weekNumber: nextDurationWeeks,
@@ -6516,6 +6816,49 @@ export default function App() {
     return `plans-${scope}-${date}.csv`;
   }
 
+  function getSelectedPlanForSupportedJson() {
+    const selectedPlans =
+      planExportMode === "active"
+        ? plans.filter((plan) => plan.status === "active")
+        : plans.filter((plan) =>
+            selectedPlanExportIds.includes(String(plan.id))
+          );
+
+    if (selectedPlans.length !== 1) {
+      setPlanExportStatus(
+        selectedPlans.length === 0
+          ? planExportMode === "active"
+            ? "No active plan is available to export."
+            : "Select one plan to export as supported JSON."
+          : "Supported JSON contains one plan. Select exactly one plan."
+      );
+      return null;
+    }
+
+    return selectedPlans[0];
+  }
+
+  function getSupportedPlanJsonExport() {
+    const plan = getSelectedPlanForSupportedJson();
+
+    if (!plan) return null;
+
+    return {
+      json: JSON.stringify(buildSupportedPlanJson({ plan, templates }), null, 2),
+      plan,
+    };
+  }
+
+  function getSupportedPlanJsonFilename(plan) {
+    const date = new Date().toISOString().slice(0, 10);
+    const planSlug = String(plan?.name || "plan")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "plan";
+
+    return `workout-plan-${planSlug}-${date}.json`;
+  }
+
   function togglePlanExportSelection(planId) {
     setSelectedPlanExportIds((currentIds) =>
       currentIds.includes(String(planId))
@@ -6558,6 +6901,73 @@ export default function App() {
     } catch (error) {
       console.error("Plan export copy failed:", error);
       setPlanExportStatus("Copy failed. Download the CSV instead.");
+    }
+  }
+
+  async function downloadSupportedPlanJson() {
+    const planExport = getSupportedPlanJsonExport();
+
+    if (!planExport) return;
+
+    const fileName = getSupportedPlanJsonFilename(planExport.plan);
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Filesystem.writeFile({
+          data: planExport.json,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+          path: fileName,
+        });
+        const { uri } = await Filesystem.getUri({
+          directory: Directory.Cache,
+          path: fileName,
+        });
+
+        await Share.share({
+          files: [uri],
+          title: `Export ${planExport.plan.name || "workout plan"}`,
+        });
+        setPlanExportStatus(
+          `“${planExport.plan.name || "Plan"}” JSON shared. Choose Save to Files to keep it on this iPhone.`
+        );
+      } catch (error) {
+        console.error("Supported plan JSON share failed:", error);
+        setPlanExportStatus(
+          "JSON export did not complete. Try Download JSON again and choose Save to Files."
+        );
+      }
+      return;
+    }
+
+    const blob = new Blob([planExport.json], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setPlanExportStatus(
+      `“${planExport.plan.name || "Plan"}” JSON downloaded.`
+    );
+  }
+
+  async function copySupportedPlanJson() {
+    const planExport = getSupportedPlanJsonExport();
+
+    if (!planExport) return;
+
+    try {
+      await navigator.clipboard.writeText(planExport.json);
+      setPlanExportStatus("Supported plan JSON copied.");
+    } catch (error) {
+      console.error("Supported plan JSON copy failed:", error);
+      setPlanExportStatus("Copy failed. Download the JSON instead.");
     }
   }
 
@@ -11148,6 +11558,16 @@ export default function App() {
                 </div>
                 <div
                   style={{
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    marginTop: "4px",
+                  }}
+                >
+                  Supported JSON exports one plan at a time and can be loaded
+                  through AI Plan Draft.
+                </div>
+                <div
+                  style={{
                     display: "flex",
                     flexWrap: "wrap",
                     gap: "8px",
@@ -11161,6 +11581,14 @@ export default function App() {
                   <button onClick={copyPlanExport} type="button">
                     <Copy size={14} />
                     Copy CSV
+                  </button>
+                  <button onClick={downloadSupportedPlanJson} type="button">
+                    <Download size={14} />
+                    Download JSON
+                  </button>
+                  <button onClick={copySupportedPlanJson} type="button">
+                    <Copy size={14} />
+                    Copy JSON
                   </button>
                 </div>
                 {planExportStatus && (
