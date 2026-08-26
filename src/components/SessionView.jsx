@@ -310,7 +310,7 @@ function SpotifyIcon({ size = 28 }) {
     >
       <path
         d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0Zm5.505 17.302a.747.747 0 0 1-1.028.249c-2.817-1.722-6.365-2.111-10.541-1.157a.748.748 0 1 1-.333-1.458c4.57-1.045 8.492-.595 11.653 1.337a.747.747 0 0 1 .249 1.029Zm1.469-3.268a.936.936 0 0 1-1.287.308c-3.225-1.982-8.137-2.557-11.953-1.399a.936.936 0 1 1-.543-1.79c4.363-1.324 9.776-.682 13.475 1.591.44.271.578.848.308 1.29Zm.126-3.404C15.233 8.333 8.85 8.121 5.159 9.242a1.123 1.123 0 1 1-.652-2.149c4.239-1.287 11.289-1.038 15.738 1.602a1.123 1.123 0 0 1-1.145 1.935Z"
-        fill="#1DB954"
+        fill="currentColor"
       />
     </svg>
   );
@@ -2452,6 +2452,7 @@ export default function SessionView({
     connected: false,
   });
   const [spotifyBusy, setSpotifyBusy] = useState(false);
+  const [expandedSessionUtility, setExpandedSessionUtility] = useState(null);
 
   const [restComplete, setRestComplete] = useState(false);
   const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
@@ -2665,6 +2666,7 @@ export default function SessionView({
         setTimerPaused(false);
         setTimerRunning(false);
         setTimerStartedAt(null);
+        setExpandedSessionUtility((current) => current || "timer");
         void endNativeRestTimerLiveActivity();
 
         if (nativeRestCompletionHandledRef.current !== completionKey) {
@@ -2680,6 +2682,7 @@ export default function SessionView({
       setTimerFinished(false);
       setTimerPaused(Boolean(nativeState.paused));
       setTimerRunning(!nativeState.paused && seconds > 0);
+      setExpandedSessionUtility((current) => current || "timer");
 
       if (nativeState.paused) {
         setTimerStartedAt(null);
@@ -3398,6 +3401,7 @@ export default function SessionView({
       workoutName: session.templateName,
       startedAtMs: startedAt,
     });
+    setExpandedSessionUtility("timer");
     setTimerRunning(true);
   }
 
@@ -5360,22 +5364,143 @@ export default function SessionView({
           </div>
         )}
         <div
+          aria-label="Workout utilities"
+          style={{
+            background: "color-mix(in srgb, var(--surface-raised) 88%, transparent)",
+            border: "1px solid var(--border)",
+            borderRadius: "12px",
+            marginBottom: "12px",
+            marginTop: "10px",
+            padding: "6px",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "6px",
+              justifyContent: "center",
+            }}
+          >
+            <button
+              aria-expanded={expandedSessionUtility === "timer"}
+              aria-label={
+                expandedSessionUtility === "timer"
+                  ? "Collapse rest timer"
+                  : "Show rest timer"
+              }
+              onClick={() =>
+                setExpandedSessionUtility((current) =>
+                  current === "timer" ? null : "timer"
+                )
+              }
+              style={{
+                alignItems: "center",
+                background: timerFinished
+                  ? "var(--danger-bg)"
+                  : timerRunning || timerPaused
+                  ? "var(--warning-bg, rgba(255, 193, 7, .18))"
+                  : expandedSessionUtility === "timer"
+                  ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                  : "var(--surface-raised)",
+                border: timerFinished
+                  ? "1px solid #c66"
+                  : timerRunning || timerPaused
+                  ? "1px solid #d6a100"
+                  : "1px solid var(--border)",
+                borderRadius: "999px",
+                color: "var(--text)",
+                display: "inline-flex",
+                fontSize: "13px",
+                fontWeight: 700,
+                gap: "6px",
+                minHeight: "36px",
+                padding: "6px 10px",
+              }}
+              type="button"
+            >
+              <Timer size={21} />
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {timerFinished ? "+" : ""}
+                {String(
+                  Math.floor(
+                    (timerRunning || timerPaused || timerFinished
+                      ? restSeconds
+                      : restMinutes * 60 + restRemainder) / 60
+                  )
+                ).padStart(2, "0")}
+                :
+                {String(
+                  (timerRunning || timerPaused || timerFinished
+                    ? restSeconds
+                    : restMinutes * 60 + restRemainder) % 60
+                ).padStart(2, "0")}
+              </span>
+            </button>
+
+            {canUseNativeSpotifyPlayback() && (
+              <button
+                aria-expanded={expandedSessionUtility === "spotify"}
+                aria-label={
+                  expandedSessionUtility === "spotify"
+                    ? "Collapse Spotify controls"
+                    : "Show Spotify controls"
+                }
+                onClick={() =>
+                  setExpandedSessionUtility((current) =>
+                    current === "spotify" ? null : "spotify"
+                  )
+                }
+                style={{
+                  alignItems: "center",
+                  background:
+                    expandedSessionUtility === "spotify"
+                      ? "color-mix(in srgb, #1db954 12%, var(--surface-raised))"
+                      : "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "999px",
+                  color: "var(--text)",
+                  display: "inline-flex",
+                  gap: "7px",
+                  maxWidth: "min(52vw, 220px)",
+                  minHeight: "36px",
+                  padding: "5px 10px 5px 7px",
+                }}
+                type="button"
+              >
+                <SpotifyIcon size={21} />
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {spotifyState.trackName || "Spotify"}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {expandedSessionUtility === "timer" && (
+        <div
           style={{
             background: timerFinished
               ? "var(--danger-bg)"
-              : timerRunning
+              : timerRunning || timerPaused
               ? "var(--warning-bg, rgba(255, 193, 7, .18))"
               : "var(--surface-raised)",
 
             border: timerFinished
               ? "2px solid #c66"
-              : timerRunning
+              : timerRunning || timerPaused
               ? "2px solid #d6a100"
               : "1px solid var(--border)",
 
             padding: "6px",
-            marginTop: "10px",
-            marginBottom: "12px",
+            marginTop: "6px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -5385,92 +5510,121 @@ export default function SessionView({
         >
           <Timer size={28} />
 
-          <select
+          <div
             style={{
-              fontSize: "16px",
-              padding: "4px",
-            }}
-            value={restMinutes}
-            onChange={(e) => setRestMinutes(Number(e.target.value))}
-          >
-            {[0, 1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-
-          <select
-            style={{
-              fontSize: "16px",
-              padding: "4px",
-            }}
-            value={restRemainder}
-            onChange={(e) => setRestRemainder(Number(e.target.value))}
-          >
-            {[0, 5, 15, 30, 45].map((n) => (
-              <option key={n} value={n}>
-                {String(n).padStart(2, "0")}
-              </option>
-            ))}
-          </select>
-
-          <strong
-            style={{
-              fontSize: "20px",
-              minWidth: "55px",
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "center",
+              minWidth: "112px",
             }}
           >
-            {String(Math.floor(restSeconds / 60)).padStart(2, "0")}:
-            {String(restSeconds % 60).padStart(2, "0")}
-          </strong>
+            {timerRunning || timerPaused || timerFinished ? (
+              <strong
+                aria-live={timerFinished ? "polite" : "off"}
+                style={{
+                  fontSize: "20px",
+                  fontVariantNumeric: "tabular-nums",
+                  textAlign: "center",
+                }}
+              >
+                {timerFinished ? "+" : ""}
+                {String(Math.floor(restSeconds / 60)).padStart(2, "0")}:
+                {String(restSeconds % 60).padStart(2, "0")}
+              </strong>
+            ) : (
+              <>
+                <select
+                  aria-label="Rest timer minutes"
+                  style={{
+                    fontSize: "16px",
+                    padding: "4px",
+                  }}
+                  value={restMinutes}
+                  onChange={(e) => setRestMinutes(Number(e.target.value))}
+                >
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <span aria-hidden="true" style={{ padding: "0 2px" }}>
+                  :
+                </span>
+                <select
+                  aria-label="Rest timer seconds"
+                  style={{
+                    fontSize: "16px",
+                    padding: "4px",
+                  }}
+                  value={restRemainder}
+                  onChange={(e) => setRestRemainder(Number(e.target.value))}
+                >
+                  {[0, 5, 15, 30, 45].map((n) => (
+                    <option key={n} value={n}>
+                      {String(n).padStart(2, "0")}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
 
           <button
+            aria-hidden={timerFinished ? "true" : undefined}
+            aria-label={
+              timerFinished
+                ? "Rest timer finished"
+                : timerRunning
+                ? "Pause rest timer"
+                : timerPaused
+                ? "Resume rest timer"
+                : "Start rest timer"
+            }
+            disabled={
+              timerFinished ||
+              (!timerPaused && restMinutes * 60 + restRemainder <= 0)
+            }
             style={{
-              padding: "8px 6px",
-              fontSize: "20px",
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
               lineHeight: "1",
+              minHeight: "38px",
+              minWidth: "38px",
+              padding: "8px 6px",
+              visibility: timerFinished ? "hidden" : "visible",
             }}
+            tabIndex={timerFinished ? -1 : undefined}
             onClick={() => {
-              if (timerFinished) {
-                setTimerPaused(false);
-                setTimerRunning(false);
-                setTimerStartedAt(null);
-                setTimerExpiredAt(null);
-                setTimerFinished(false);
-                restNotificationSentKeyRef.current = null;
-                void cancelNativeRestTimerNotification();
-                void endNativeRestTimerLiveActivity();
-                setRestSeconds(restMinutes * 60 + restRemainder);
-              } else if (timerRunning) {
+              if (timerRunning) {
                 setTimerPaused(true);
 
                 setTimerRunning(false);
                 void cancelNativeRestTimerNotification();
                 void pauseNativeRestTimerLiveActivity(restSeconds);
               } else {
+                setExpandedSessionUtility("timer");
                 setTimerPaused(false);
                 setTimerExpiredAt(null);
                 restNotificationSentKeyRef.current = null;
                 void requestRestNotificationPermission();
 
-                if (restSeconds <= 0) {
-                  setRestSeconds(restMinutes * 60 + restRemainder);
-                }
+                const configuredSeconds = restMinutes * 60 + restRemainder;
+                const liveActivitySeconds = timerPaused
+                  ? restSeconds
+                  : configuredSeconds;
+
+                setRestSeconds(liveActivitySeconds);
 
                 setTimerStartedAt(
-                  Date.now() -
-                    (restMinutes * 60 + restRemainder - restSeconds) * 1000
+                  timerPaused
+                    ? Date.now() - (configuredSeconds - restSeconds) * 1000
+                    : Date.now()
                 );
 
                 setTimerFinished(false);
-                void scheduleNativeRestTimerNotification(
-                  restSeconds > 0 ? restSeconds : restMinutes * 60 + restRemainder
-                );
-                const liveActivitySeconds =
-                  restSeconds > 0
-                    ? restSeconds
-                    : restMinutes * 60 + restRemainder;
+                void scheduleNativeRestTimerNotification(liveActivitySeconds);
 
                 if (timerPaused) {
                   void resumeNativeRestTimerLiveActivity(liveActivitySeconds);
@@ -5499,33 +5653,32 @@ export default function SessionView({
               }
             }}
           >
-            {timerRunning || timerFinished ? "■" : "▶"}
+            {timerRunning ? <Pause size={20} /> : <Play size={20} />}
           </button>
 
           <button
+            aria-label="Reset rest timer"
+            disabled={!timerRunning && !timerPaused && !timerFinished}
             style={{
-              fontSize: "18px",
+              alignItems: "center",
+              display: "inline-flex",
+              justifyContent: "center",
+              minHeight: "38px",
+              minWidth: "38px",
               padding: "8px 6px",
             }}
             onClick={() => {
-              setTimerPaused(false);
-
-              setTimerRunning(false);
-              setTimerStartedAt(null);
-              setTimerExpiredAt(null);
-              setTimerFinished(false);
-              restNotificationSentKeyRef.current = null;
-              void cancelNativeRestTimerNotification();
-              void endNativeRestTimerLiveActivity();
-
-              setRestSeconds(restMinutes * 60 + restRemainder);
+              resetRestTimer();
+              setExpandedSessionUtility("timer");
             }}
           >
-            ↺
+            <RefreshCw size={19} />
           </button>
         </div>
+        )}
 
-        {canUseNativeSpotifyPlayback() && (
+        {canUseNativeSpotifyPlayback() &&
+          expandedSessionUtility === "spotify" && (
           <div
             style={{
               alignItems: "center",
@@ -5534,7 +5687,7 @@ export default function SessionView({
               borderRadius: "10px",
               display: "flex",
               gap: "10px",
-              marginBottom: "12px",
+              marginTop: "6px",
               padding: "8px 10px",
             }}
           >
@@ -5654,6 +5807,7 @@ export default function SessionView({
             </div>
           </div>
         )}
+        </div>
 
         <div
           style={{
@@ -5666,7 +5820,7 @@ export default function SessionView({
               alignItems: "center",
               display: "grid",
               gap: "6px",
-              gridTemplateColumns: "1fr minmax(0, auto) 32px 1fr",
+              gridTemplateColumns: "1fr minmax(0, auto) 38px 1fr",
               justifyItems: "center",
             }}
           >
@@ -5727,13 +5881,13 @@ export default function SessionView({
                 borderRadius: "999px",
                 color: "var(--text)",
                 display: "inline-flex",
-                height: "32px",
+                height: "38px",
                 justifyContent: "center",
                 padding: 0,
-                width: "32px",
+                width: "38px",
               }}
             >
-              <SlidersHorizontal size={17} />
+              <SlidersHorizontal size={21} />
             </button>
             <span />
           </div>
