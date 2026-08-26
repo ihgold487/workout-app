@@ -42,6 +42,7 @@ import {
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
+import { buildPrimaryMuscleSections } from "../utils/primaryMuscleGroups";
 import {
   createPlanExercise,
   generatePlanWorkouts,
@@ -544,9 +545,8 @@ function getWorkoutSummary(workouts) {
     0
   );
   return {
-    muscleSets: Object.entries(muscleSets).sort((a, b) =>
-      a[0].localeCompare(b[0])
-    ),
+    muscleSections: buildPrimaryMuscleSections(muscleSets),
+    muscleSets: Object.entries(muscleSets),
     totalSets,
   };
 }
@@ -694,20 +694,43 @@ function WorkoutSummarySheet({
             scaleIntensity
             showLegend={false}
           />
-          {summary.muscleSets.map(([muscle, sets]) => (
-            <div
-              key={muscle}
-              style={{
-                alignItems: "center",
-                borderBottom: "1px solid var(--border)",
-                display: "grid",
-                gap: "8px",
-                gridTemplateColumns: "minmax(0, 1fr) auto",
-                padding: "8px 0",
-              }}
-            >
-              <strong>{muscle}</strong>
-              <span>{sets} sets</span>
+          {summary.muscleSections.map((section) => (
+            <div key={section.key} style={{ display: "grid" }}>
+              {section.showSubtotal && (
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "var(--surface-muted)",
+                    borderRadius: "8px",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    marginTop: "4px",
+                    padding: "8px 10px",
+                  }}
+                >
+                  <strong>{section.label}</strong>
+                  <strong>{section.total} sets</strong>
+                </div>
+              )}
+              {section.items.map(({ muscle, sets }) => (
+                <div
+                  key={muscle}
+                  style={{
+                    alignItems: "center",
+                    borderBottom: "1px solid var(--border)",
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    padding: section.showSubtotal ? "7px 10px 7px 22px" : "8px 0",
+                  }}
+                >
+                  <span style={{ fontWeight: section.showSubtotal ? 500 : 700 }}>
+                    {muscle}
+                  </span>
+                  <span>{sets} sets</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>

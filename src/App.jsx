@@ -32,6 +32,10 @@ import {
 } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
 import { getRirForPlanWeek } from "./utils/rirPeriodization";
+import {
+  buildPrimaryMuscleSections,
+  getPrimaryMuscleSectionTotal,
+} from "./utils/primaryMuscleGroups";
 import TemplateView from "./components/TemplateView";
 import SessionView from "./components/SessionView";
 import ExerciseView from "./components/ExerciseView";
@@ -6096,7 +6100,10 @@ export default function App() {
       }
 
       const shouldDownload =
-        nativePullOnly || shouldHydrateFirst || (reason === "manual" && !shouldUpload);
+        nativePullOnly ||
+        shouldHydrateFirst ||
+        reason === "startup" ||
+        reason === "manual";
 
       if (!shouldDownload) {
         if (
@@ -6110,14 +6117,14 @@ export default function App() {
           return;
         }
 
-        markNormalizedSyncClean();
+        if (shouldUpload) {
+          markNormalizedSyncClean();
+        }
         automaticSyncHydratedUserRef.current = session.user.id;
         setSyncStatus(
-          `${shouldUpload ? "Uploaded" : "Checked"} cloud sync state. ${
-            shouldUpload ? `Pushed: ${uploadDomains.join(", ")}. ` : ""
-          }Full cloud pull skipped to reduce Supabase egress. Last ${
-            reason === "manual" ? "manual" : "auto"
-          } sync: ${new Date().toLocaleTimeString()}.`
+          shouldUpload
+            ? `Uploaded checkpoint: ${uploadDomains.join(", ")}. Cloud download deferred until startup, Sync Now, or Pull Latest. Last upload: ${new Date().toLocaleTimeString()}.`
+            : `Cloud state checked at ${new Date().toLocaleTimeString()}. No upload or download was needed.`
         );
         return;
       }
@@ -7633,7 +7640,30 @@ export default function App() {
       ...new Set(
         planSummaries.flatMap((summary) => Object.keys(summary.muscleSets))
       ),
-    ].sort((a, b) => a.localeCompare(b));
+    ];
+    const muscleSections = buildPrimaryMuscleSections(
+      Object.fromEntries(muscles.map((muscle) => [muscle, 0]))
+    );
+    const comparisonRows = muscleSections.flatMap((section) => [
+      ...(section.showSubtotal
+        ? [
+            {
+              isSubtotal: true,
+              key: `section:${section.key}`,
+              label: section.label,
+              section,
+            },
+          ]
+        : []),
+      ...section.items.map((item) => ({
+        isGroupedChild: section.showSubtotal,
+        isSubtotal: false,
+        key: `muscle:${item.muscle}`,
+        label: item.muscle,
+        muscle: item.muscle,
+        section,
+      })),
+    ]);
     const selectedCount = selectedPlans.length;
 
     function togglePlanSelection(planId) {
@@ -7875,22 +7905,39 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {muscles.map((muscle) => {
-                    const values = planSummaries.map(
-                      (summary) => summary.muscleSets[muscle] || 0
+                  {comparisonRows.map((row) => {
+                    const values = planSummaries.map((summary) =>
+                      row.isSubtotal
+                        ? getPrimaryMuscleSectionTotal(
+                            row.section,
+                            summary.muscleSets
+                          )
+                        : summary.muscleSets[row.muscle] || 0
                     );
 
                     return (
-                      <tr key={muscle}>
+                      <tr
+                        key={row.key}
+                        style={{
+                          background: row.isSubtotal
+                            ? "var(--surface-muted)"
+                            : undefined,
+                        }}
+                      >
                         <th
                           style={{
                             borderBottom: "1px solid var(--border)",
-                            fontWeight: "bold",
+                            fontWeight: row.isSubtotal
+                              ? 800
+                              : row.isGroupedChild
+                                ? 500
+                                : 700,
                             padding: "8px",
+                            paddingLeft: row.isGroupedChild ? "18px" : "8px",
                             textAlign: "left",
                           }}
                         >
-                          {muscle}
+                          {row.label}
                         </th>
                         {planSummaries.map((summary, index) => {
                           const value = values[index];

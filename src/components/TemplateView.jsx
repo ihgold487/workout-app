@@ -790,9 +790,9 @@ export default function TemplateView({
     );
     const setLabel = setCount === 1 ? "set" : "sets";
 
-    return `${setCount} ${setLabel} | ${reps || "—"} reps | ${
+    return `${setCount}\u00a0${setLabel} | ${reps || "—"}\u00a0reps | ${
       rir || "—"
-    } RIR\n${rest || "—"} rest`;
+    }\u00a0RIR\n${rest || "—"}\u00a0rest`;
   }
 
   function getExerciseWithCurrentInstancePrescription(exercise) {

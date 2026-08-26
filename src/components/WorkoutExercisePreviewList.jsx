@@ -111,7 +111,7 @@ export function WorkoutExercisePreviewRow({
         minHeight: isTemplateCompact ? "28px" : compact ? "30px" : "34px",
         minWidth: 0,
         overflow: isTemplateCompact && !hasMultiLinePrescription ? "hidden" : undefined,
-        padding: compact ? "4px 7px" : "6px 8px",
+        padding: compact ? "4px 6px" : "6px 8px",
         textAlign: "left",
         textOverflow: isTemplateCompact && !hasMultiLinePrescription ? "ellipsis" : undefined,
         whiteSpace:
@@ -245,7 +245,7 @@ export function WorkoutExercisePreviewRow({
             style={{
               display: "grid",
               flex: "0 1 auto",
-              maxWidth: "min(42vw, 180px)",
+              maxWidth: "min(46vw, 196px)",
               minWidth: 0,
             }}
           >
