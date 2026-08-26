@@ -3311,7 +3311,12 @@ function CalorieHistorySheet({
   );
 }
 
-function NutritionDateCalendar({ entries, onSelectDate, selectedDate }) {
+function NutritionDateCalendar({
+  bodyWeightEntries = [],
+  entries = [],
+  onSelectDate,
+  selectedDate,
+}) {
   const selectedDateObject = parseLocalDateKey(selectedDate);
   const today = new Date();
   const [expanded, setExpanded] = useState(false);
@@ -3328,6 +3333,11 @@ function NutritionDateCalendar({ entries, onSelectDate, selectedDate }) {
   const entryDates = useMemo(
     () => new Set(entries.map((entry) => entry.date).filter(Boolean)),
     [entries]
+  );
+  const bodyWeightDates = useMemo(
+    () =>
+      new Set(bodyWeightEntries.map((entry) => entry.date).filter(Boolean)),
+    [bodyWeightEntries]
   );
   const weekStart = startOfMondayWeek(today);
   const weekDays = Array.from({ length: 7 }, (_, index) => {
@@ -3475,12 +3485,24 @@ function NutritionDateCalendar({ entries, onSelectDate, selectedDate }) {
                     marginTop: "2px",
                   }}
                 >
+                  {bodyWeightDates.has(dateKey) && (
+                    <span
+                      style={{
+                        background: "#ef6c00",
+                        borderRadius: "999px",
+                        height: "8px",
+                        marginRight: entryDates.has(dateKey) ? "-1px" : 0,
+                        width: "8px",
+                      }}
+                    />
+                  )}
                   {entryDates.has(dateKey) && (
                     <span
                       style={{
                         background: "#fbc02d",
                         borderRadius: "999px",
                         height: "8px",
+                        marginLeft: bodyWeightDates.has(dateKey) ? "-1px" : 0,
                         width: "8px",
                       }}
                     />
@@ -3622,17 +3644,28 @@ function NutritionDateCalendar({ entries, onSelectDate, selectedDate }) {
                       justifyContent: "center",
                     }}
                   >
-                    {date && entryDates.has(dateKey) ? (
+                    {date && bodyWeightDates.has(dateKey) && (
+                      <span
+                        style={{
+                          background: "#ef6c00",
+                          borderRadius: "999px",
+                          height: "8px",
+                          marginRight: entryDates.has(dateKey) ? "-1px" : 0,
+                          width: "8px",
+                        }}
+                      />
+                    )}
+                    {date && entryDates.has(dateKey) && (
                       <span
                         style={{
                           background: "#fbc02d",
                           borderRadius: "999px",
-                          display: "inline-block",
                           height: "8px",
+                          marginLeft: bodyWeightDates.has(dateKey) ? "-1px" : 0,
                           width: "8px",
                         }}
                       />
-                    ) : null}
+                    )}
                   </span>
                 </button>
               );
@@ -6704,20 +6737,7 @@ export default function NutritionView({ session = null }) {
           marginBottom: "16px",
         }}
       >
-        <div
-          style={{
-            alignItems: "center",
-            background: "var(--accent-bg)",
-            borderRadius: "999px",
-            color: "#1769aa",
-            display: "inline-flex",
-            height: "42px",
-            justifyContent: "center",
-            width: "42px",
-          }}
-        >
-          <Utensils size={22} />
-        </div>
+        <Utensils size={26} />
         <div>
           <h1
             style={{
@@ -7236,6 +7256,7 @@ export default function NutritionView({ session = null }) {
             }}
           >
             <NutritionDateCalendar
+              bodyWeightEntries={bodyWeightEntries}
               entries={entries}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}

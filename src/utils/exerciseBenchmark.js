@@ -38,7 +38,7 @@ function getInferredBenchmarkFamilyForExercise(exercise) {
 
   if (
     (equipment.includes("barbell") || equipment.includes("trap bar")) &&
-    /(^| )deadlifts?$|sumo deadlifts?|deficit deadlifts?/.test(name)
+    /^(deadlifts?|sumo deadlifts?|deficit deadlifts?)$/.test(name)
   ) {
     return "Lower/posterior-chain deadlift";
   }

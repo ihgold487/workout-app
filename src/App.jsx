@@ -2666,84 +2666,58 @@ function buildAiPlanDraftInstructions() {
   };
 }
 
-function buildTrainingProfileContext() {
-  return {
-    benchmarkFamilies: [
-      {
-        allowedVariants: [
-          {
-            equipment: ["Barbell"],
-            names: ["Bench Press"],
-          },
-          {
-            equipment: ["Barbell"],
-            names: ["Incline Bench Press"],
-          },
-        ],
-        disallowedForBenchmarkCredit:
-          "Dumbbell bench and dumbbell incline bench can be useful accessories, but they do not satisfy the chest benchmark requirement.",
-        muscleGroup: "Chest",
-        role: "benchmark family",
-      },
-      {
-        allowedVariants: [
-          {
-            equipment: ["Barbell"],
-            names: ["Deadlift", "Deadlifts"],
-          },
-          {
-            equipment: ["Trap Bar"],
-            names: ["Deadlift", "Deadlifts"],
-          },
-          {
-            equipment: ["Trap Bar"],
-            names: ["Deficit Deadlift", "Deficit Deadlifts"],
-          },
-          {
-            equipment: ["Barbell"],
-            names: ["Sumo Deadlift", "Sumo Deadlifts"],
-          },
-        ],
-        guidance:
-          "Treat conventional, trap-bar, deficit trap-bar, and sumo deadlift variants as acceptable lower/posterior-chain benchmark options.",
-        muscleGroup: "Lower body / posterior chain",
-        role: "benchmark family",
-      },
-      {
-        allowedVariants: [
-          {
-            equipment: ["Bodyweight"],
-            names: ["Pull-Up", "Pull-Ups", "Chin-Up", "Chin-Ups"],
-          },
-        ],
-        guidance:
-          "Grip and handle variations are acceptable benchmark options when they are pull-up or chin-up patterns.",
-        muscleGroup: "Back",
-        role: "benchmark family",
-      },
-    ],
-    goals: {
-      primary: "Strength gain and hypertrophy",
-      strengthMetric: "estimated 1 rep maximum (e1RM)",
-      hypertrophyMetric: "subjective visual progress for now",
+function buildTrainingProfileContext(exerciseLibrary = []) {
+  const benchmarkFamilyDefinitions = [
+    {
+      benchmarkFamily: "Chest barbell press",
+      muscleGroup: "Chest",
     },
-    currentPriorities: [
-      {
-        benchmarkPreference: {
-          equipment: ["Barbell"],
-          name: "Bench Press",
-        },
-        muscleGroup: "Chest",
-        priority: "emphasized",
-        rationale:
-          "Chest development is a current hypertrophy priority, and barbell bench performance is a particularly useful strength signal within that priority.",
-      },
-    ],
+    {
+      benchmarkFamily: "Lower/posterior-chain deadlift",
+      muscleGroup: "Lower body / posterior chain",
+    },
+    {
+      benchmarkFamily: "Back pull-up/chin-up",
+      muscleGroup: "Back",
+    },
+  ];
+  const benchmarkFamilies = benchmarkFamilyDefinitions
+    .map((family) => ({
+      ...family,
+      configuredExercises: exerciseLibrary
+        .filter(
+          (exercise) =>
+            exercise.active !== "inactive" &&
+            isExerciseBenchmark(exercise) &&
+            getBenchmarkFamilyForExercise(exercise) === family.benchmarkFamily
+        )
+        .map((exercise) => ({
+          equipment: exercise.equipment || [],
+          id: exercise.id,
+          name: exercise.name,
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+      role: "benchmark family",
+    }))
+    .filter((family) => family.configuredExercises.length > 0);
+
+  return {
+    benchmarkFamilies,
+    measurementModel: {
+      benchmarkFamilies:
+        "Broad areas used for planning and coverage; they allow compatible benchmark selection without treating different exercises as one interchangeable measurement series.",
+      benchmarkExercises:
+        "Stable measurement instruments used to evaluate strength progression through exercise-specific e1RM trends. Benchmark designation does not automatically make an exercise a current programming priority.",
+      hypertrophyAssessment:
+        "Use programmed direct-set volume, adherence, performance, recovery evidence, and the user's observations; e1RM is not a complete hypertrophy measurement.",
+      priorities:
+        "Use athleteProfile.longTermGoals and planningRequest, especially benchmarkFamilyGuidance and currentPriorities, to determine adaptation emphasis for the next block.",
+    },
     hardRules: {
       benchmarkCoverage:
-        "Each plan must include at least one exercise from every benchmark family.",
+        "Each plan must include at least one configured exercise from every benchmark family listed in trainingProfile.benchmarkFamilies unless the user agrees to an exception during plan discussion.",
       benchmarkChoice:
-        "Choose one or more allowed variants from each benchmark family based on history, fatigue, equipment, and plan intent; do not force every listed variant into the same week.",
+        "Choose from each family's configuredExercises. Follow planningRequest.benchmarkFamilyGuidance when it fixes a benchmark; otherwise choose based on history, fatigue, equipment, and plan intent. Do not force every configured exercise into the same week.",
       benchmarkPlacement:
         "When a benchmark exercise is included, place it before other direct exercises for that benchmark's primary muscle group in that workout so its e1RM signal is meaningful. It does not have to be the first exercise in the workout when the plan intentionally prioritizes another muscle or movement first.",
       benchmarkIsolation:
@@ -3183,7 +3157,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use a distinct restSeconds value for a deload week, and the app will preserve it. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use a distinct restSeconds value for a deload week, and the app will preserve it. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3216,7 +3190,7 @@ function buildAiPlanContext({
     performanceDropOffSummaries,
     prescriptionAdherenceSummaries,
     blockOutcomeSummaries,
-    trainingProfile: buildTrainingProfileContext(),
+    trainingProfile: buildTrainingProfileContext(exerciseLibrary),
     activeExercises,
     previousPlanAIContext,
     previousPlanAIContextStatus: {
@@ -3240,6 +3214,7 @@ function getAiPlanPrompt(context) {
     "First discuss the proposed plan with me in normal conversational form and revise it based on our discussion.",
     "Do not create the final importable JSON until I explicitly tell you to finalize the plan.",
     "Preserve athleteProfile.longTermGoals across blocks. Use planningRequest and current evidence to choose the emphasis for only the next block; do not create a speculative multi-block roadmap.",
+    "Use planningRequest.benchmarkFamilyGuidance to distinguish adaptation emphasis from measurement. A benchmark exercise provides an exercise-specific longitudinal strength signal; its benchmark status alone does not make it a current priority. Respect fixed benchmark preferences, and when a family says AI decides, choose among configured family benchmarks based on history and plan intent. Do not treat e1RM values from different exercises in one family as directly interchangeable.",
     "Follow planningGuidancePrecedence when fields conflict. Treat explicit user constraints as requirements and AI-decides fields as permission to use your judgment.",
     "Use the exercise names/equipment in activeExercises when possible.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
@@ -8582,42 +8557,6 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {plan.aiAnalysis && (
-                <div
-                  style={{
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    alignItems: "center",
-                    color: "var(--text-muted)",
-                    display: "flex",
-                    gap: "8px",
-                    justifyContent: "space-between",
-                    padding: "8px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    AI notes available
-                  </div>
-                  <button
-                    onClick={() => setAiPlanNotesTarget(plan)}
-                    style={{
-                      minHeight: "30px",
-                      padding: "3px 9px",
-                      whiteSpace: "nowrap",
-                    }}
-                    type="button"
-                  >
-                    <Brain size={14} />
-                    View
-                  </button>
-                </div>
-              )}
               {(plan.workouts || []).map((planWorkout) => {
                 const template = templates.find(
                   (item) => String(item.id) === String(planWorkout.templateId)
@@ -12190,7 +12129,7 @@ export default function App() {
           alignItems: "center",
           display: "grid",
           gap: "10px",
-          gridTemplateColumns: "34px minmax(0, 1fr) 34px",
+          gridTemplateColumns: "44px minmax(0, 1fr) 44px",
           marginBottom: "16px",
         }}
       >
@@ -12198,9 +12137,9 @@ export default function App() {
           alt=""
           src={HOME_WORKOUT_ICON}
           style={{
-            borderRadius: "8px",
-            height: "34px",
-            width: "34px",
+            borderRadius: "10px",
+            height: "44px",
+            width: "44px",
           }}
         />
         <h1

@@ -4526,6 +4526,7 @@ export default function PlansView({
               review the draft. No plan days are generated until a draft is loaded.
             </div>
             <AiPlanningGuidancePanel
+              exerciseLibrary={exerciseLibrary}
               guidance={aiPlanningGuidance}
               onChange={(nextGuidance) => {
                 setAiPlanningGuidance(nextGuidance);
@@ -4537,7 +4538,9 @@ export default function PlansView({
             >
               <button
                 onClick={() =>
-                  onShareAiPlanContext(buildAiPlanningContext(aiPlanningGuidance))
+                  onShareAiPlanContext(
+                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  )
                 }
                 style={{ minHeight: "44px", width: "100%" }}
                 type="button"
@@ -4556,7 +4559,7 @@ export default function PlansView({
               <button
                 onClick={() =>
                   onDownloadAiPlanContext(
-                    buildAiPlanningContext(aiPlanningGuidance)
+                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                   )
                 }
                 type="button"
@@ -4565,7 +4568,9 @@ export default function PlansView({
               </button>
               <button
                 onClick={() =>
-                  onCopyAiPlanPrompt(buildAiPlanningContext(aiPlanningGuidance))
+                  onCopyAiPlanPrompt(
+                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  )
                 }
                 type="button"
               >

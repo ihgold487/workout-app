@@ -1,11 +1,51 @@
+import {
+  getBenchmarkFamilyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
+
 export const AI_PLANNING_GUIDANCE_STORAGE_KEY =
   "workout-app.ai-planning-guidance.v1";
+
+export const AI_BENCHMARK_FAMILIES = [
+  {
+    id: "chestBarbellPress",
+    label: "Chest press",
+    benchmarkFamily: "Chest barbell press",
+  },
+  {
+    id: "posteriorChainDeadlift",
+    label: "Posterior chain",
+    benchmarkFamily: "Lower/posterior-chain deadlift",
+  },
+  {
+    id: "verticalPull",
+    label: "Vertical pull",
+    benchmarkFamily: "Back pull-up/chin-up",
+  },
+];
+
+const DEFAULT_BENCHMARK_FAMILY_PRIORITIES = {
+  chestBarbellPress: {
+    emphasis: "strengthAndHypertrophy",
+    benchmarkSelection: "Bench Press",
+  },
+  posteriorChainDeadlift: {
+    emphasis: "aiDecides",
+    benchmarkSelection: "aiDecides",
+  },
+  verticalPull: {
+    emphasis: "aiDecides",
+    benchmarkSelection: "aiDecides",
+  },
+};
 
 export const DEFAULT_AI_PLANNING_GUIDANCE = {
   strengthPriority: "high",
   hypertrophyPriority: "high",
   muscleHypertrophyPriorities: "Chest",
   exerciseStrengthPriorities: "Bench Press",
+  benchmarkFamilyPriorities: DEFAULT_BENCHMARK_FAMILY_PRIORITIES,
+  additionalPriorities: "",
   blockEmphasis: "aiDecides",
   daysMode: "fixed",
   daysMin: "5",
@@ -74,9 +114,42 @@ export function readAiPlanningGuidance() {
       window.localStorage.getItem(AI_PLANNING_GUIDANCE_STORAGE_KEY) || "null"
     );
 
-    return stored && typeof stored === "object"
-      ? { ...DEFAULT_AI_PLANNING_GUIDANCE, ...stored }
-      : DEFAULT_AI_PLANNING_GUIDANCE;
+    if (!stored || typeof stored !== "object") {
+      return DEFAULT_AI_PLANNING_GUIDANCE;
+    }
+
+    const migratedAdditionalPriorities =
+      stored.additionalPriorities == null &&
+      (stored.muscleHypertrophyPriorities !== "Chest" ||
+        stored.exerciseStrengthPriorities !== "Bench Press")
+        ? [
+            stored.muscleHypertrophyPriorities
+              ? `Hypertrophy: ${stored.muscleHypertrophyPriorities}`
+              : null,
+            stored.exerciseStrengthPriorities
+              ? `Strength: ${stored.exerciseStrengthPriorities}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : stored.additionalPriorities || "";
+    const storedFamilies = stored.benchmarkFamilyPriorities || {};
+    const benchmarkFamilyPriorities = Object.fromEntries(
+      AI_BENCHMARK_FAMILIES.map((family) => [
+        family.id,
+        {
+          ...DEFAULT_BENCHMARK_FAMILY_PRIORITIES[family.id],
+          ...(storedFamilies[family.id] || {}),
+        },
+      ])
+    );
+
+    return {
+      ...DEFAULT_AI_PLANNING_GUIDANCE,
+      ...stored,
+      additionalPriorities: migratedAdditionalPriorities,
+      benchmarkFamilyPriorities,
+    };
   } catch {
     return DEFAULT_AI_PLANNING_GUIDANCE;
   }
@@ -97,25 +170,57 @@ export function writeAiPlanningGuidance(guidance) {
   }
 }
 
-export function buildAiPlanningContext(guidance) {
+export function buildAiPlanningContext(guidance, exerciseLibrary = []) {
   const longTermGoals = [
     { goal: "strength", priority: guidance.strengthPriority },
     { goal: "hypertrophy", priority: guidance.hypertrophyPriority },
   ].filter((item) => item.priority !== "notAGoal");
-  const currentPriorities = [
-    ...parseList(guidance.muscleHypertrophyPriorities).map((target) => ({
-      goal: "hypertrophy",
+  const benchmarkFamilyPriorities = AI_BENCHMARK_FAMILIES.map((family) => {
+    const selection = guidance.benchmarkFamilyPriorities?.[family.id] ||
+      DEFAULT_BENCHMARK_FAMILY_PRIORITIES[family.id];
+    const savedBenchmarkSelection = selection.benchmarkSelection;
+    const savedExerciseId = String(savedBenchmarkSelection || "").startsWith(
+      "exercise:"
+    )
+      ? String(savedBenchmarkSelection).slice("exercise:".length)
+      : null;
+    const selectedExercise = exerciseLibrary.find(
+      (exercise) =>
+        exercise.active !== "inactive" &&
+        isExerciseBenchmark(exercise) &&
+        getBenchmarkFamilyForExercise(exercise) === family.benchmarkFamily &&
+        (savedExerciseId
+          ? String(exercise.id) === savedExerciseId
+          : exercise.name === savedBenchmarkSelection)
+    );
+
+    return {
+      benchmarkFamily: family.benchmarkFamily,
+      emphasis: selection.emphasis || "aiDecides",
+      familyId: family.id,
+      label: family.label,
+      benchmarkPreference:
+        savedBenchmarkSelection && savedBenchmarkSelection !== "aiDecides"
+          ? {
+              mode: "fixed",
+              exercise: selectedExercise?.name || savedBenchmarkSelection,
+              ...(selectedExercise
+                ? {
+                    equipment: selectedExercise.equipment || [],
+                    exerciseId: selectedExercise.id,
+                  }
+                : { availability: "savedPreferenceNotFoundInExerciseLibrary" }),
+            }
+          : { mode: "aiDecides" },
+    };
+  });
+  const currentPriorities = parseList(guidance.additionalPriorities).map(
+    (target) => ({
       priority: "high",
-      scope: "muscle",
+      scope: "additional",
       target,
-    })),
-    ...parseList(guidance.exerciseStrengthPriorities).map((target) => ({
-      goal: "strength",
-      priority: "high",
-      scope: "exercise",
-      target,
-    })),
-  ];
+    })
+  );
   const workoutDuration = guidance.workoutDurationEnabled
     ? {
         enabled: true,
@@ -141,6 +246,11 @@ export function buildAiPlanningContext(guidance) {
     },
     planningRequest: {
       blockEmphasis: guidance.blockEmphasis,
+      benchmarkFamilyGuidance: {
+        families: benchmarkFamilyPriorities,
+        instruction:
+          "Benchmark families are broad areas for planning and longitudinal monitoring. Their selected emphasis guides adaptation for this block. Benchmark exercises are measurement instruments, not automatically the highest programming priorities. Preserve exercise-specific trend continuity when practical. AI-decides benchmark preferences permit choosing any configured benchmark in that family; fixed preferences should be retained unless the user agrees to a revision. Never compare e1RM values from different exercises as if they were the same measurement series.",
+      },
       currentPriorities,
       deload: { mode: guidance.deloadMode },
       exerciseGuidance: {
@@ -204,10 +314,20 @@ export function summarizeAiPlanningGuidance(guidance) {
     if (range.mode === "fixed") return `${range.value} ${unit}`;
     return `${range.min || "?"}–${range.max || "?"} ${unit}`;
   };
+  const emphasizedFamilies = AI_BENCHMARK_FAMILIES.map((family) => {
+    const emphasis = guidance.benchmarkFamilyPriorities?.[family.id]?.emphasis;
+
+    return emphasis && emphasis !== "aiDecides"
+      ? `${family.label}: ${emphasis === "strengthAndHypertrophy" ? "strength + hypertrophy" : emphasis}`
+      : null;
+  }).filter(Boolean);
 
   return [
     `Long-term: ${goals.join(" + ") || "none selected"}`,
     `Block: ${guidance.blockEmphasis === "aiDecides" ? "AI chooses emphasis" : guidance.blockEmphasis}`,
+    emphasizedFamilies.length
+      ? emphasizedFamilies.join(", ")
+      : "family emphasis: AI chooses",
     formatRange(days, "days/week"),
     formatRange(weeks, "weeks"),
     guidance.workoutDurationEnabled

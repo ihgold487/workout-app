@@ -1,5 +1,12 @@
 import { ChevronDown } from "lucide-react";
-import { summarizeAiPlanningGuidance } from "../plans/aiPlanningGuidance";
+import {
+  AI_BENCHMARK_FAMILIES,
+  summarizeAiPlanningGuidance,
+} from "../plans/aiPlanningGuidance";
+import {
+  getBenchmarkFamilyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
 
 const fieldStyle = {
   boxSizing: "border-box",
@@ -75,8 +82,20 @@ function NumberField({ label, max, min = 1, onChange, value }) {
   );
 }
 
-export default function AiPlanningGuidancePanel({ guidance, onChange }) {
+export default function AiPlanningGuidancePanel({
+  exerciseLibrary = [],
+  guidance,
+  onChange,
+}) {
   const update = (field, value) => onChange({ ...guidance, [field]: value });
+  const updateBenchmarkFamily = (familyId, field, value) =>
+    update("benchmarkFamilyPriorities", {
+      ...guidance.benchmarkFamilyPriorities,
+      [familyId]: {
+        ...guidance.benchmarkFamilyPriorities?.[familyId],
+        [field]: value,
+      },
+    });
   const priorityOptions = (
     <>
       <option value="high">High</option>
@@ -150,26 +169,122 @@ export default function AiPlanningGuidancePanel({ guidance, onChange }) {
             </select>
           </label>
         </TwoColumnFields>
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            lineHeight: 1.45,
+            textAlign: "left",
+          }}
+        >
+          Set the adaptation emphasis for each tracked benchmark family, then
+          let the AI choose its benchmark or retain a specific exercise.
+        </div>
+        {AI_BENCHMARK_FAMILIES.map((family) => {
+          const familyGuidance =
+            guidance.benchmarkFamilyPriorities?.[family.id] || {};
+          const benchmarkExercises = exerciseLibrary
+            .filter(
+              (exercise) =>
+                exercise.active !== "inactive" &&
+                isExerciseBenchmark(exercise) &&
+                getBenchmarkFamilyForExercise(exercise) ===
+                  family.benchmarkFamily
+            )
+            .sort((left, right) => left.name.localeCompare(right.name));
+          const selectedBenchmark =
+            familyGuidance.benchmarkSelection || "aiDecides";
+          const selectedExercise = benchmarkExercises.find(
+            (exercise) =>
+              `exercise:${exercise.id}` === selectedBenchmark ||
+              exercise.name === selectedBenchmark
+          );
+          const selectedBenchmarkValue = selectedExercise
+            ? `exercise:${selectedExercise.id}`
+            : selectedBenchmark;
+
+          return (
+            <div
+              key={family.id}
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                display: "grid",
+                gap: "8px",
+                padding: "9px",
+              }}
+            >
+              <strong style={{ textAlign: "left" }}>{family.label}</strong>
+              <TwoColumnFields>
+                <label style={labelStyle}>
+                  Emphasis
+                  <select
+                    onChange={(event) =>
+                      updateBenchmarkFamily(
+                        family.id,
+                        "emphasis",
+                        event.target.value
+                      )
+                    }
+                    style={fieldStyle}
+                    value={familyGuidance.emphasis || "aiDecides"}
+                  >
+                    <option value="aiDecides">AI decides</option>
+                    <option value="strengthAndHypertrophy">
+                      Strength + hypertrophy
+                    </option>
+                    <option value="strength">Strength</option>
+                    <option value="hypertrophy">Hypertrophy</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </label>
+                <label style={labelStyle}>
+                  Benchmark
+                  <select
+                    onChange={(event) =>
+                      updateBenchmarkFamily(
+                        family.id,
+                        "benchmarkSelection",
+                        event.target.value
+                      )
+                    }
+                    style={fieldStyle}
+                    value={selectedBenchmarkValue}
+                  >
+                    <option value="aiDecides">AI decides within family</option>
+                    {!selectedExercise &&
+                      selectedBenchmark !== "aiDecides" && (
+                        <option value={selectedBenchmark}>
+                          {selectedBenchmark} (saved)
+                        </option>
+                      )}
+                    {benchmarkExercises.map((exercise) => (
+                      <option
+                        key={exercise.id}
+                        value={`exercise:${exercise.id}`}
+                      >
+                        {exercise.name} —
+                        {Array.isArray(exercise.equipment)
+                          ? ` ${exercise.equipment.join(", ")}`
+                          : ` ${exercise.equipment || "No equipment listed"}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </TwoColumnFields>
+            </div>
+          );
+        })}
         <label style={labelStyle}>
-          Muscle hypertrophy priorities
+          Additional priorities
           <input
             onChange={(event) =>
-              update("muscleHypertrophyPriorities", event.target.value)
+              update("additionalPriorities", event.target.value)
             }
-            placeholder="Chest, Lats, Quads"
+            placeholder="Quad growth, shoulder development, arm strength"
             style={fieldStyle}
-            value={guidance.muscleHypertrophyPriorities}
-          />
-        </label>
-        <label style={labelStyle}>
-          Exercise strength priorities
-          <input
-            onChange={(event) =>
-              update("exerciseStrengthPriorities", event.target.value)
-            }
-            placeholder="Bench Press, Pull-Up"
-            style={fieldStyle}
-            value={guidance.exerciseStrengthPriorities}
+            value={guidance.additionalPriorities || ""}
           />
         </label>
         <label style={labelStyle}>
