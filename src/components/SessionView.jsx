@@ -857,29 +857,44 @@ export default function SessionView({
   }
 
   function getRankedProgressionCandidates({
+    balanceAroundE1RM = null,
     baselineE1RM,
     currentWeight,
     exercise,
+    excludedPrescription = null,
     fatigueCeilingE1RM = null,
+    minimumReps = null,
     progressionFloorE1RM = null,
     prescribedReps,
     targetRir,
   }) {
     const numericCurrentWeight = parseSessionNumber(currentWeight);
+    const numericBalanceE1RM = parseSessionNumber(balanceAroundE1RM);
+    const excludedWeight = parseSessionNumber(excludedPrescription?.weight);
+    const excludedReps = parseSessionNumber(excludedPrescription?.reps);
+    const excludedRir = parseSessionNumber(excludedPrescription?.rir);
+    const numericPrescribedReps = parseSessionNumber(prescribedReps);
+    const numericMinimumReps = parseSessionNumber(minimumReps);
     const numericRir = parseSessionNumber(targetRir) || 0;
 
     if (
       baselineE1RM == null ||
       !Number.isFinite(Number(baselineE1RM)) ||
-      prescribedReps == null
+      numericPrescribedReps == null
     ) {
       return [];
     }
 
-    const minReps = Math.max(1, prescribedReps - SAME_WEIGHT_TARGET_REP_WINDOW);
-    const maxCandidateReps = Math.max(
-      minReps,
-      prescribedReps + SAME_WEIGHT_TARGET_REP_WINDOW
+    const maxCandidateReps = Math.max(1, Math.round(numericPrescribedReps));
+    const minReps = Math.max(
+      1,
+      Math.min(
+        maxCandidateReps,
+        Math.round(
+          numericMinimumReps ??
+            maxCandidateReps - SAME_WEIGHT_TARGET_REP_WINDOW
+        )
+      )
     );
     const calculationExercise = getExerciseForCalculation(exercise);
     const candidates = [];
@@ -922,7 +937,7 @@ export default function SessionView({
         isSameWeight:
           numericCurrentWeight != null &&
           Math.abs(normalizedWeight - numericCurrentWeight) < 0.001,
-        repDeviation: Math.abs(reps - prescribedReps),
+        repDeviation: Math.abs(reps - maxCandidateReps),
         reps,
         rir: numericRir,
         respectsFatigueCeiling:
@@ -951,11 +966,52 @@ export default function SessionView({
       [roundedWeight - increment, roundedWeight, roundedWeight + increment]
         .filter((weight) => Number.isFinite(weight) && weight >= 0)
         .forEach((weight) => addCandidate(weight, reps));
+
+      if (numericBalanceE1RM != null) {
+        const displayedTargetRawWeight = estimateWeightForE1RM(
+          numericBalanceE1RM,
+          reps,
+          numericRir,
+          {
+            bodyWeight: sessionBodyWeight,
+            exercise: calculationExercise,
+          }
+        );
+        const displayedTargetIncrement = getExerciseWeightIncrement(
+          calculationExercise,
+          undefined,
+          displayedTargetRawWeight
+        );
+        const displayedTargetRoundedWeight = roundWeightToIncrement(
+          Math.max(0, displayedTargetRawWeight ?? 0),
+          displayedTargetIncrement
+        );
+
+        [
+          displayedTargetRoundedWeight - displayedTargetIncrement,
+          displayedTargetRoundedWeight,
+          displayedTargetRoundedWeight + displayedTargetIncrement,
+        ]
+          .filter((weight) => Number.isFinite(weight) && weight >= 0)
+          .forEach((weight) => addCandidate(weight, reps));
+      }
     }
 
-    const eligibleCandidates = candidates.length
-      ? candidates
-      : [];
+    const eligibleCandidates = candidates.filter((candidate) => {
+      if (
+        excludedWeight == null ||
+        excludedReps == null ||
+        excludedRir == null
+      ) {
+        return true;
+      }
+
+      return !(
+        Math.abs(candidate.weight - excludedWeight) < 0.001 &&
+        candidate.reps === excludedReps &&
+        Math.abs(candidate.rir - excludedRir) < 0.001
+      );
+    });
     const progressionCandidates =
       progressionFloorE1RM != null &&
       eligibleCandidates.some((candidate) => candidate.clearsProgressionFloor)
@@ -981,8 +1037,8 @@ export default function SessionView({
         ? candidatePool.filter((candidate) => candidate.respectsFatigueCeiling)
         : candidatePool;
 
-    return fatigueCandidatePool
-      .sort((a, b) => {
+    const sortCandidates = (candidateList) =>
+      [...candidateList].sort((a, b) => {
         const progressionComparison =
           Number(b.isProgressionCandidate) - Number(a.isProgressionCandidate);
         const candidateScore = (candidate) =>
@@ -997,8 +1053,109 @@ export default function SessionView({
           a.repDeviation - b.repDeviation ||
           b.reps - a.reps
         );
-      })
-      .slice(0, 8);
+      });
+    const primaryCandidate = sortCandidates(fatigueCandidatePool)[0] || null;
+    const broaderCandidatePool =
+      fatigueCeilingE1RM != null &&
+      eligibleCandidates.some((candidate) => candidate.respectsFatigueCeiling)
+        ? eligibleCandidates.filter(
+            (candidate) => candidate.respectsFatigueCeiling
+          )
+        : eligibleCandidates;
+    const broaderRankedCandidates = sortCandidates(broaderCandidatePool);
+    const selectedCandidates = [];
+
+    function selectCandidate(candidate) {
+      if (candidate && !selectedCandidates.includes(candidate)) {
+        selectedCandidates.push(candidate);
+      }
+    }
+
+    if (numericBalanceE1RM != null) {
+      const comparisonTolerance = Math.max(0.01, numericBalanceE1RM * 0.0001);
+      const byDistanceFromDisplayedTarget = (a, b) =>
+        Math.abs(a.e1rm - numericBalanceE1RM) -
+          Math.abs(b.e1rm - numericBalanceE1RM) ||
+        broaderRankedCandidates.indexOf(a) -
+          broaderRankedCandidates.indexOf(b);
+      const belowTarget = broaderRankedCandidates
+        .filter(
+          (candidate) =>
+            candidate.e1rm < numericBalanceE1RM - comparisonTolerance
+        )
+        .sort(byDistanceFromDisplayedTarget);
+      const nearTarget = broaderRankedCandidates
+        .filter(
+          (candidate) =>
+            Math.abs(candidate.e1rm - numericBalanceE1RM) <=
+            comparisonTolerance
+        )
+        .sort(byDistanceFromDisplayedTarget);
+      const aboveTarget = broaderRankedCandidates
+        .filter(
+          (candidate) =>
+            candidate.e1rm > numericBalanceE1RM + comparisonTolerance
+        )
+        .sort(byDistanceFromDisplayedTarget);
+
+      for (let index = 0; index < 4; index += 1) {
+        selectCandidate(belowTarget[index]);
+        selectCandidate(aboveTarget[index]);
+      }
+      nearTarget.forEach(selectCandidate);
+      [...broaderRankedCandidates]
+        .sort(byDistanceFromDisplayedTarget)
+        .forEach((candidate) => {
+          if (selectedCandidates.length < 8) {
+            selectCandidate(candidate);
+          }
+        });
+
+      return selectedCandidates.slice(0, 8);
+    }
+
+    // Keep the established best recommendation first, then deliberately reserve
+    // room for choices across the prescribed range and in both load directions.
+    selectCandidate(primaryCandidate);
+
+    const midpointReps = Math.round((minReps + maxCandidateReps) / 2);
+    [minReps, midpointReps, maxCandidateReps].forEach((reps) => {
+      selectCandidate(
+        broaderRankedCandidates.find(
+          (candidate) => candidate.reps === reps && candidate.isSameWeight
+        ) ||
+          broaderRankedCandidates.find((candidate) => candidate.reps === reps)
+      );
+    });
+
+    if (numericCurrentWeight != null) {
+      selectCandidate(
+        broaderRankedCandidates.find(
+          (candidate) => candidate.weight < numericCurrentWeight
+        )
+      );
+      selectCandidate(
+        broaderRankedCandidates.find((candidate) => candidate.isSameWeight)
+      );
+      selectCandidate(
+        broaderRankedCandidates.find(
+          (candidate) => candidate.weight > numericCurrentWeight
+        )
+      );
+    }
+
+    selectCandidate(
+      broaderRankedCandidates.find(
+        (candidate) => !candidate.clearsProgressionFloor
+      )
+    );
+    broaderRankedCandidates.forEach((candidate) => {
+      if (selectedCandidates.length < 8) {
+        selectCandidate(candidate);
+      }
+    });
+
+    return selectedCandidates.slice(0, 8);
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
@@ -1274,6 +1431,9 @@ export default function SessionView({
     const prescribedReps = parseSessionNumber(
       getSetPrescribedReps(set, getSetPrescribedReps(previousSet))
     );
+    const minimumReps = parseSessionNumber(
+      getSetMinimumReps(set, getSetMinimumReps(previousSet))
+    );
 
     if (prescribedReps == null) {
       return [];
@@ -1320,12 +1480,29 @@ export default function SessionView({
           ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
           : Math.max(progressTargetE1RM, fatigueTargetE1RM)
         : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
+    const displayedTarget = {
+      reps: getSetTargetReps(set),
+      rir: getSetTargetRir(set),
+      weight: set.targetWeight,
+    };
+    const displayedTargetE1RM = calculateSessionE1RM(
+      exercise,
+      "",
+      "",
+      "",
+      displayedTarget.weight,
+      displayedTarget.reps,
+      displayedTarget.rir
+    );
 
     return getRankedProgressionCandidates({
+      balanceAroundE1RM: displayedTargetE1RM,
       baselineE1RM,
       currentWeight: currentTargetWeight,
       exercise,
+      excludedPrescription: displayedTarget,
       fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+      minimumReps,
       progressionFloorE1RM: hasClearPriorFatigueDrop
         ? latestMatchingSetE1RM
         : null,
@@ -2112,6 +2289,20 @@ export default function SessionView({
       alternatives = rankedProgressionAlternatives;
     }
 
+    const targetOptions = [
+      ...alternatives
+        .filter(
+          (option) =>
+            !(
+              valuesMatch(option.weight, suggested.weight) &&
+              valuesMatch(option.reps, suggested.reps) &&
+              valuesMatch(option.rir, suggested.rir)
+            )
+        )
+        .map((option) => ({ ...option, isSuggested: false })),
+      { ...suggested, isSuggested: true },
+    ].sort((a, b) => (b.e1rm ?? -Infinity) - (a.e1rm ?? -Infinity));
+
     window.getSelection?.()?.removeAllRanges();
 
     setTargetAlternativesClosing(false);
@@ -2121,6 +2312,7 @@ export default function SessionView({
       exerciseId: exercise.id,
       setId: set.id,
       suggested,
+      targetOptions,
     });
   }
 
@@ -3549,6 +3741,7 @@ export default function SessionView({
         currentWeight: currentTargetWeight,
         exercise,
         fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+        minimumReps: explicitMinimumReps,
         progressionFloorE1RM: hasClearPriorFatigueDrop
           ? latestMatchingSetE1RM
           : null,
@@ -5439,18 +5632,7 @@ export default function SessionView({
             </button>
 
             {canUseNativeSpotifyPlayback() && (
-              <button
-                aria-expanded={expandedSessionUtility === "spotify"}
-                aria-label={
-                  expandedSessionUtility === "spotify"
-                    ? "Collapse Spotify controls"
-                    : "Show Spotify controls"
-                }
-                onClick={() =>
-                  setExpandedSessionUtility((current) =>
-                    current === "spotify" ? null : "spotify"
-                  )
-                }
+              <div
                 style={{
                   alignItems: "center",
                   background:
@@ -5461,26 +5643,153 @@ export default function SessionView({
                   borderRadius: "999px",
                   color: "var(--text)",
                   display: "inline-flex",
-                  gap: "7px",
-                  maxWidth: "min(52vw, 220px)",
+                  gap: "3px",
                   minHeight: "36px",
-                  padding: "5px 10px 5px 7px",
+                  padding: "4px 6px",
                 }}
-                type="button"
               >
-                <SpotifyIcon size={21} />
-                <span
+                <button
+                  aria-expanded={expandedSessionUtility === "spotify"}
+                  aria-label={
+                    expandedSessionUtility === "spotify"
+                      ? "Collapse Spotify controls"
+                      : "Show Spotify controls"
+                  }
+                  onClick={() =>
+                    setExpandedSessionUtility((current) =>
+                      current === "spotify" ? null : "spotify"
+                    )
+                  }
                   style={{
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    alignItems: "center",
+                    background: "transparent",
+                    border: 0,
+                    color: "inherit",
+                    display: "inline-flex",
+                    gap: "7px",
+                    minHeight: "26px",
+                    padding: "2px",
                   }}
+                  type="button"
                 >
-                  {spotifyState.trackName || "Spotify"}
-                </span>
-              </button>
+                  <SpotifyIcon size={21} />
+                  {expandedSessionUtility === "spotify" && (
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        maxWidth: "min(34vw, 150px)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {spotifyState.trackName || "Spotify"}
+                    </span>
+                  )}
+                </button>
+
+                {expandedSessionUtility !== "spotify" && (
+                  <div
+                    aria-label="Spotify playback controls"
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "1px",
+                    }}
+                  >
+                    <button
+                      aria-label="Previous Spotify track"
+                      disabled={
+                        spotifyBusy ||
+                        !spotifyState.connected ||
+                        !spotifyState.canSkipPrevious
+                      }
+                      onClick={() => void handleSpotifySkip("previous")}
+                      style={{
+                        alignItems: "center",
+                        background: "transparent",
+                        border: 0,
+                        color: "inherit",
+                        display: "inline-flex",
+                        height: "26px",
+                        justifyContent: "center",
+                        opacity:
+                          spotifyBusy ||
+                          !spotifyState.connected ||
+                          !spotifyState.canSkipPrevious
+                            ? 0.38
+                            : 1,
+                        padding: "4px",
+                        width: "26px",
+                      }}
+                      type="button"
+                    >
+                      <SkipBack size={15} />
+                    </button>
+                    <button
+                      aria-label={
+                        spotifyState.connected
+                          ? spotifyState.isPaused
+                            ? "Resume Spotify"
+                            : "Pause Spotify"
+                          : "Connect Spotify"
+                      }
+                      disabled={spotifyBusy}
+                      onClick={() => void handleSpotifyPlayback()}
+                      style={{
+                        alignItems: "center",
+                        background: "transparent",
+                        border: 0,
+                        color: "inherit",
+                        display: "inline-flex",
+                        height: "28px",
+                        justifyContent: "center",
+                        opacity: spotifyBusy ? 0.38 : 1,
+                        padding: "4px",
+                        width: "28px",
+                      }}
+                      type="button"
+                    >
+                      {spotifyState.connected &&
+                      spotifyState.isPaused === false ? (
+                        <Pause size={16} />
+                      ) : (
+                        <Play size={16} />
+                      )}
+                    </button>
+                    <button
+                      aria-label="Next Spotify track"
+                      disabled={
+                        spotifyBusy ||
+                        !spotifyState.connected ||
+                        !spotifyState.canSkipNext
+                      }
+                      onClick={() => void handleSpotifySkip("next")}
+                      style={{
+                        alignItems: "center",
+                        background: "transparent",
+                        border: 0,
+                        color: "inherit",
+                        display: "inline-flex",
+                        height: "26px",
+                        justifyContent: "center",
+                        opacity:
+                          spotifyBusy ||
+                          !spotifyState.connected ||
+                          !spotifyState.canSkipNext
+                            ? 0.38
+                            : 1,
+                        padding: "4px",
+                        width: "26px",
+                      }}
+                      type="button"
+                    >
+                      <SkipForward size={15} />
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -8279,7 +8588,7 @@ export default function SessionView({
                         marginTop: "3px",
                       }}
                     >
-                      Most recent values and ranked alternatives
+                      Alternatives ordered by estimated strength
                     </div>
                   </div>
 
@@ -8359,65 +8668,6 @@ export default function SessionView({
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      alignItems: "center",
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "10px",
-                      display: "grid",
-                      gap: "10px",
-                      gridTemplateColumns: "32px minmax(0, 1fr)",
-                      padding: "10px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        alignItems: "center",
-                        background: "var(--surface-raised)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "999px",
-                        color: "var(--accent)",
-                        display: "inline-flex",
-                        height: "32px",
-                        justifyContent: "center",
-                        width: "32px",
-                      }}
-                    >
-                      <Target size={17} />
-                    </span>
-                    <div>
-                      <div
-                        style={{
-                          color: "var(--text-muted)",
-                          fontSize: "12px",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Suggested target
-                      </div>
-                      <strong>
-                        {!isBlankValue(targetAlternativesData.suggested?.weight)
-                          ? formatPrescriptionLabel(
-                              targetAlternativesData.suggested
-                            )
-                          : "No suggested target"}
-                      </strong>
-                      {targetAlternativesData.suggested?.e1rm != null && (
-                        <span
-                          style={{
-                            color: "var(--text-muted)",
-                            marginLeft: "8px",
-                          }}
-                        >
-                          e1RM{" "}
-                          {formatSessionE1RMDisplay(
-                            targetAlternativesData.suggested.e1rm
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 <div
@@ -8426,7 +8676,7 @@ export default function SessionView({
                     gap: "8px",
                   }}
                 >
-                  {targetAlternativesData.alternatives.length === 0 ? (
+                  {targetAlternativesData.targetOptions.length === 0 ? (
                     <div
                       style={{
                         color: "var(--text-muted)",
@@ -8437,9 +8687,9 @@ export default function SessionView({
                       No alternatives are available for this target yet.
                     </div>
                   ) : (
-                    targetAlternativesData.alternatives.map((option, index) => (
+                    targetAlternativesData.targetOptions.map((option) => (
                       <button
-                        key={`${option.weight}-${option.reps}-${option.rir}`}
+                        key={`${option.isSuggested ? "suggested" : "alternative"}-${option.weight}-${option.reps}-${option.rir}`}
                         onClick={() => {
                           applyPrescriptionToActual(
                             targetAlternativesData.exerciseId,
@@ -8450,31 +8700,39 @@ export default function SessionView({
                         }}
                         style={{
                           alignItems: "center",
+                          background: option.isSuggested
+                            ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
+                            : undefined,
+                          borderColor: option.isSuggested
+                            ? "var(--accent)"
+                            : undefined,
                           display: "grid",
                           gap: "8px",
-                          gridTemplateColumns: "28px minmax(0, 1fr) auto",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
                           minHeight: "44px",
                           textAlign: "left",
                         }}
                       >
-                        <span
-                          style={{
-                            alignItems: "center",
-                            background: "var(--surface-muted)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "999px",
-                            color: "var(--text-muted)",
-                            display: "inline-flex",
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                            height: "26px",
-                            justifyContent: "center",
-                            width: "26px",
-                          }}
-                        >
-                          {index + 1}
+                        <span>
+                          {option.isSuggested && (
+                            <span
+                              style={{
+                                alignItems: "center",
+                                color: "var(--accent)",
+                                display: "inline-flex",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                gap: "4px",
+                                marginRight: "8px",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              <Target size={14} />
+                              Suggested
+                            </span>
+                          )}
+                          {formatPrescriptionLabel(option)}
                         </span>
-                        <span>{formatPrescriptionLabel(option)}</span>
                         <span
                           style={{
                             color: "var(--text-muted)",

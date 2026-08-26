@@ -33,8 +33,11 @@ import {
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import {
+  getNutritionOutbox,
   initializeNutritionPersistence,
   loadNutritionSnapshot,
+  mergeNutritionEntryCollections,
+  persistNutritionEntries,
   queueBodyWeightDelete,
   queueBodyWeightUpsert,
   queueNutritionDelete,
@@ -4412,12 +4415,30 @@ export default function NutritionView({ session = null }) {
       const savedEntries =
         (await loadNutritionSnapshot(signedInUserId)) ||
         (await initializeNutritionPersistence(signedInUserId, legacyEntries));
+      const pendingItems = signedInUserId
+        ? await getNutritionOutbox(signedInUserId)
+        : [];
+      const pendingDeleteIds = new Set(
+        pendingItems
+          .filter((item) => item.operation === "delete")
+          .map((item) => String(item.entryId))
+      );
+      const pendingUpserts = pendingItems
+        .filter((item) => item.operation === "upsert" && item.entry)
+        .map((item) => item.entry);
+      const mergedEntries = mergeNutritionEntryCollections(
+        savedEntries,
+        legacyEntries,
+        latestNutritionEntriesRef.current,
+        pendingUpserts
+      ).filter((entry) => !pendingDeleteIds.has(String(entry.id)));
 
       if (cancelled) return;
 
-      latestNutritionEntriesRef.current = savedEntries;
-      setEntries(savedEntries);
-      saveNutritionEntries(savedEntries, nutritionStorageKey);
+      latestNutritionEntriesRef.current = mergedEntries;
+      setEntries(mergedEntries);
+      saveNutritionEntries(mergedEntries, nutritionStorageKey);
+      await persistNutritionEntries(signedInUserId, mergedEntries);
     }
 
     hydrateNutrition().catch((error) => {

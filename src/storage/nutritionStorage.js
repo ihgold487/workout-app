@@ -15,6 +15,7 @@ const SNAPSHOT_PREFIX = "nutrition:";
 export const NUTRITION_OUTBOX_QUEUED_EVENT = "workout:nutrition-outbox-queued";
 const syncPromises = new Map();
 const reconcilePromises = new Map();
+const mutationPromises = new Map();
 
 function normalizeUserId(userId) {
   return userId || "local";
@@ -26,6 +27,23 @@ function snapshotId(userId) {
 
 function outboxId(userId, entryId) {
   return `${normalizeUserId(userId)}:entry:${String(entryId)}`;
+}
+
+function enqueueNutritionMutation(userId, operation) {
+  const key = normalizeUserId(userId);
+  const previous = mutationPromises.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(operation);
+
+  mutationPromises.set(key, next);
+  return next.finally(() => {
+    if (mutationPromises.get(key) === next) {
+      mutationPromises.delete(key);
+    }
+  });
+}
+
+async function waitForNutritionMutations(userId) {
+  await mutationPromises.get(normalizeUserId(userId));
 }
 
 function notifyNutritionOutboxQueued() {
@@ -83,7 +101,7 @@ export async function initializeNutritionPersistence(userId, legacyEntries) {
   );
 }
 
-export async function persistNutritionEntries(userId, entries) {
+async function persistNutritionEntriesUnlocked(userId, entries) {
   const id = snapshotId(userId);
   const existing = await db.nutritionSnapshots.get(id);
 
@@ -94,6 +112,12 @@ export async function persistNutritionEntries(userId, entries) {
     updatedAt: new Date().toISOString(),
     userId: normalizeUserId(userId),
   });
+}
+
+export async function persistNutritionEntries(userId, entries) {
+  return enqueueNutritionMutation(userId, () =>
+    persistNutritionEntriesUnlocked(userId, entries)
+  );
 }
 
 export async function queueNutritionUpserts(userId, entries, snapshotEntries) {
@@ -108,22 +132,24 @@ export async function queueNutritionUpserts(userId, entries, snapshotEntries) {
 
   const now = new Date().toISOString();
 
-  await db.transaction(
-    "rw",
-    db.nutritionSnapshots,
-    db.nutritionOutbox,
-    async () => {
-      await persistNutritionEntries(userId, snapshotEntries);
-      await db.nutritionOutbox.bulkPut(
-        validEntries.map((entry) => ({
-          entry,
-          id: outboxId(userId, entry.id),
-          operation: "upsert",
-          updatedAt: now,
-          userId,
-        }))
-      );
-    }
+  await enqueueNutritionMutation(userId, () =>
+    db.transaction(
+      "rw",
+      db.nutritionSnapshots,
+      db.nutritionOutbox,
+      async () => {
+        await persistNutritionEntriesUnlocked(userId, snapshotEntries);
+        await db.nutritionOutbox.bulkPut(
+          validEntries.map((entry) => ({
+            entry,
+            id: outboxId(userId, entry.id),
+            operation: "upsert",
+            updatedAt: now,
+            userId,
+          }))
+        );
+      }
+    )
   );
   notifyNutritionOutboxQueued();
 }
@@ -141,21 +167,23 @@ export async function queueNutritionDelete(
 
   const now = new Date().toISOString();
 
-  await db.transaction(
-    "rw",
-    db.nutritionSnapshots,
-    db.nutritionOutbox,
-    async () => {
-      await persistNutritionEntries(userId, snapshotEntries);
-      await db.nutritionOutbox.put({
-        entry: deletedEntry,
-        entryId,
-        id: outboxId(userId, entryId),
-        operation: "delete",
-        updatedAt: now,
-        userId,
-      });
-    }
+  await enqueueNutritionMutation(userId, () =>
+    db.transaction(
+      "rw",
+      db.nutritionSnapshots,
+      db.nutritionOutbox,
+      async () => {
+        await persistNutritionEntriesUnlocked(userId, snapshotEntries);
+        await db.nutritionOutbox.put({
+          entry: deletedEntry,
+          entryId,
+          id: outboxId(userId, entryId),
+          operation: "delete",
+          updatedAt: now,
+          userId,
+        });
+      }
+    )
   );
   notifyNutritionOutboxQueued();
 }
@@ -238,6 +266,8 @@ export async function flushNutritionOutbox(userId, session) {
 }
 
 async function flushNutritionOutboxUnlocked(userId, session) {
+  await waitForNutritionMutations(userId);
+
   const failed = [];
   const remoteDeletedIds = [];
   const queuedItems = await getNutritionOutbox(userId);
@@ -316,6 +346,29 @@ function entryTimestamp(entry) {
   return Date.parse(entry?.updatedAt || entry?.createdAt || "") || 0;
 }
 
+export function mergeNutritionEntryCollections(...collections) {
+  const entriesById = new Map();
+
+  collections.forEach((entries) => {
+    (entries || []).forEach((entry) => {
+      if (entry?.id === undefined || entry?.id === null) return;
+
+      const id = String(entry.id);
+      const existing = entriesById.get(id);
+
+      if (!existing || entryTimestamp(entry) >= entryTimestamp(existing)) {
+        entriesById.set(id, entry);
+      }
+    });
+  });
+
+  return [...entriesById.values()].sort(
+    (a, b) =>
+      String(a.date || "").localeCompare(String(b.date || "")) ||
+      String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
+  );
+}
+
 export async function reconcileNutritionEntries(userId, session, options = {}) {
   const existingPromise = reconcilePromises.get(userId);
 
@@ -334,6 +387,8 @@ export async function reconcileNutritionEntries(userId, session, options = {}) {
 }
 
 async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) {
+  await waitForNutritionMutations(userId);
+
   const snapshot = await db.nutritionSnapshots.get(snapshotId(userId));
   const localEntries = Array.isArray(options.entries)
     ? options.entries
@@ -401,21 +456,53 @@ async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) 
     }
   }
 
-  entries = entries
-    .filter((entry) => !pendingDeleteIds.has(String(entry.id)))
-    .sort((a, b) =>
-      String(a.date || "").localeCompare(String(b.date || "")) ||
-      String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
+  entries = await enqueueNutritionMutation(userId, async () => {
+    const latestSnapshot = await db.nutritionSnapshots.get(snapshotId(userId));
+    const latestOutbox = await getNutritionOutbox(userId);
+    const latestPendingDeletes = new Set(
+      latestOutbox
+        .filter((item) => item.operation === "delete")
+        .map((item) => String(item.entryId))
     );
+    const latestPendingUpserts = latestOutbox
+      .filter((item) => item.operation === "upsert" && item.entry)
+      .map((item) => item.entry);
+    const downloadedDeleteIds = new Set(
+      changes
+        .filter((change) => change.deletedAt)
+        .map((change) => String(change.entry.id))
+    );
+    const latestPendingUpsertIds = new Set(
+      latestPendingUpserts.map((entry) => String(entry.id))
+    );
+    const latestLocalEntries = Array.isArray(latestSnapshot?.entries)
+      ? latestSnapshot.entries
+      : localEntries;
+    const downloadedEntries = changes
+      .filter((change) => !change.deletedAt)
+      .map((change) => change.entry);
+    const mergedEntries = mergeNutritionEntryCollections(
+      latestLocalEntries,
+      downloadedEntries,
+      latestPendingUpserts
+    ).filter((entry) => {
+      const id = String(entry.id);
 
-  await db.nutritionSnapshots.put({
-    ...(snapshot || {}),
-    entries,
-    id: snapshotId(userId),
-    lastPulledAt: pullStartedAt,
-    lastReconciledAt: pullStartedAt,
-    updatedAt: new Date().toISOString(),
-    userId,
+      if (latestPendingDeletes.has(id)) return false;
+      return !downloadedDeleteIds.has(id) || latestPendingUpsertIds.has(id);
+    });
+
+    await db.nutritionSnapshots.put({
+      ...(latestSnapshot || snapshot || {}),
+      entries: mergedEntries,
+      id: snapshotId(userId),
+      lastPulledAt: pullStartedAt,
+      lastReconciledAt: pullStartedAt,
+      updatedAt: new Date().toISOString(),
+      userId,
+    });
+
+    return mergedEntries;
   });
 
   return {
