@@ -275,7 +275,11 @@ export function buildAiPlanningContext(guidance, exerciseLibrary = []) {
           max: parsePositiveInteger(guidance.setsMax),
         },
       },
-      supersets: { mode: guidance.supersetMode },
+      supersets: {
+        mode: guidance.supersetMode,
+        instruction:
+          "Interpret mode as follows: avoid means do not prescribe supersets; allowed means supersets are permitted when they clearly support the other goals and constraints but are not required; aiDecides means explicitly decide whether supersets improve workout duration and programming quality. Superset groups may contain only exercises from the same workout.",
+      },
       trainingBlock: {
         trainingWeeks: buildRange(
           guidance.weeksMode,

@@ -86,6 +86,15 @@ import {
   setNativeWorkoutAutoLockEnabled,
 } from "../native/workoutIdleTimer";
 import {
+  cancelWorkoutPauseNotification,
+  formatWorkoutPauseDuration,
+  scheduleWorkoutPauseNotification,
+} from "../native/workoutPauseNotifications";
+import {
+  cancelWorkoutInactivityNotification,
+  scheduleWorkoutInactivityNotification,
+} from "../native/workoutInactivityNotifications";
+import {
   triggerNativeSetCompletionHaptic,
   triggerNativeWarningHaptic,
   triggerNativeWorkoutCompletionHaptic,
@@ -110,7 +119,12 @@ const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
 const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
+const WORKOUT_PAUSE_REMINDER_SECONDS = 300;
+const WORKOUT_INACTIVITY_REMINDER_SECONDS = 360;
 const REST_NOTIFICATION_ICON = `${import.meta.env.BASE_URL || "/"}icon-192.png`;
+const NATIVE_APP_ICON = `${
+  import.meta.env.BASE_URL || "/"
+}workout-icon-native.png`;
 const HISTORY_DEFAULT_SOURCE_FIELDS = [
   "historyDefaultSourceKey",
   "historyDefaultActualWeight",
@@ -2689,6 +2703,12 @@ export default function SessionView({
   const [expandedSessionUtility, setExpandedSessionUtility] = useState(null);
 
   const [restComplete, setRestComplete] = useState(false);
+  const [pauseReminderOpen, setPauseReminderOpen] = useState(false);
+  const [pauseWarningFlash, setPauseWarningFlash] = useState(false);
+  const pauseReminderHandledKeyRef = useRef(null);
+  const [inactivityReminderOpen, setInactivityReminderOpen] = useState(false);
+  const [inactivityWarningFlash, setInactivityWarningFlash] = useState(false);
+  const inactivityReminderHandledKeyRef = useRef(null);
   useEffect(() => {
     restSecondsRef.current = restSeconds;
   }, [restSeconds]);
@@ -2850,6 +2870,9 @@ export default function SessionView({
         return {
           ...s,
           workoutTimerPaused: false,
+          workoutTimerPausedAtIso: null,
+          workoutPauseReminderStartedAtIso: null,
+          workoutInactivityReminderStartedAtIso: nowIso,
           workoutTimerResumedAtIso: nowIso,
         };
       }
@@ -2862,10 +2885,135 @@ export default function SessionView({
         ...s,
         workoutTimerBaseSeconds: durationSeconds,
         workoutTimerPaused: true,
+        workoutTimerPausedAtIso: nowIso,
+        workoutPauseReminderStartedAtIso: nowIso,
         workoutTimerResumedAtIso: null,
       };
     });
   }
+
+  useEffect(() => {
+    if (!session.workoutTimerPaused) {
+      pauseReminderHandledKeyRef.current = null;
+      setPauseReminderOpen(false);
+      setPauseWarningFlash(false);
+      void cancelWorkoutPauseNotification();
+      return undefined;
+    }
+
+    const reminderStartedAtIso =
+      session.workoutPauseReminderStartedAtIso ||
+      session.workoutTimerPausedAtIso;
+    const reminderStartedAtMs = reminderStartedAtIso
+      ? new Date(reminderStartedAtIso).getTime()
+      : NaN;
+
+    if (!Number.isFinite(reminderStartedAtMs)) {
+      return undefined;
+    }
+
+    const reminderKey = `${session.id}:${reminderStartedAtIso}`;
+    const elapsedSeconds = Math.max(
+      0,
+      (Date.now() - reminderStartedAtMs) / 1000
+    );
+    const remainingSeconds = Math.max(
+      0,
+      WORKOUT_PAUSE_REMINDER_SECONDS - elapsedSeconds
+    );
+
+    if (remainingSeconds > 0) {
+      void scheduleWorkoutPauseNotification(
+        remainingSeconds,
+        WORKOUT_PAUSE_REMINDER_SECONDS
+      );
+    }
+
+    const showReminder = () => {
+      if (pauseReminderHandledKeyRef.current === reminderKey) {
+        return;
+      }
+
+      pauseReminderHandledKeyRef.current = reminderKey;
+      setPauseWarningFlash(true);
+      setPauseReminderOpen(true);
+      void triggerNativeWarningHaptic();
+      window.setTimeout(() => setPauseWarningFlash(false), 1200);
+    };
+
+    const timeoutId = window.setTimeout(showReminder, remainingSeconds * 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      void cancelWorkoutPauseNotification();
+    };
+  }, [
+    session.id,
+    session.workoutPauseReminderStartedAtIso,
+    session.workoutTimerPaused,
+    session.workoutTimerPausedAtIso,
+  ]);
+
+  useEffect(() => {
+    if (session.workoutTimerPaused) {
+      inactivityReminderHandledKeyRef.current = null;
+      setInactivityReminderOpen(false);
+      setInactivityWarningFlash(false);
+      void cancelWorkoutInactivityNotification();
+      return undefined;
+    }
+
+    const reminderStartedAtIso =
+      session.workoutInactivityReminderStartedAtIso ||
+      session.workoutStartedAtIso ||
+      session.startedAtIso;
+    const reminderStartedAtMs = reminderStartedAtIso
+      ? new Date(reminderStartedAtIso).getTime()
+      : NaN;
+
+    if (!Number.isFinite(reminderStartedAtMs)) {
+      return undefined;
+    }
+
+    const reminderKey = `${session.id}:${reminderStartedAtIso}`;
+    const elapsedSeconds = Math.max(
+      0,
+      (Date.now() - reminderStartedAtMs) / 1000
+    );
+    const remainingSeconds = Math.max(
+      0,
+      WORKOUT_INACTIVITY_REMINDER_SECONDS - elapsedSeconds
+    );
+
+    if (remainingSeconds > 0) {
+      void scheduleWorkoutInactivityNotification(remainingSeconds);
+    }
+
+    const showReminder = () => {
+      if (inactivityReminderHandledKeyRef.current === reminderKey) {
+        return;
+      }
+
+      inactivityReminderHandledKeyRef.current = reminderKey;
+      setInactivityWarningFlash(true);
+      setInactivityReminderOpen(true);
+      void triggerNativeWarningHaptic();
+      window.setTimeout(() => setInactivityWarningFlash(false), 1200);
+    };
+
+    const timeoutId = window.setTimeout(showReminder, remainingSeconds * 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      void cancelWorkoutInactivityNotification();
+    };
+  }, [
+    session.id,
+    session.startedAtIso,
+    session.workoutInactivityReminderStartedAtIso,
+    session.workoutStartedAtIso,
+    session.workoutTimerPaused,
+  ]);
 
   useEffect(
     () => () => {
@@ -4038,9 +4186,13 @@ export default function SessionView({
     const supersetOrdersOverride = undo
       ? null
       : getSupersetOrderOverrideForSet(exerciseId, setId);
+    const inactivityResetAtIso = new Date(completedAt || Date.now()).toISOString();
 
     updateSession((s) => ({
       ...s,
+      ...(!undo
+        ? { workoutInactivityReminderStartedAtIso: inactivityResetAtIso }
+        : {}),
       exercises: s.exercises.map((ex) =>
         ex.id === exerciseId
           ? {
@@ -4084,6 +4236,10 @@ export default function SessionView({
       return;
     }
 
+    inactivityReminderHandledKeyRef.current = null;
+    setInactivityReminderOpen(false);
+    setInactivityWarningFlash(false);
+    void cancelWorkoutInactivityNotification();
     setLastCompletedExerciseId(exerciseId);
     void triggerNativeSetCompletionHaptic();
 
@@ -6738,6 +6894,282 @@ export default function SessionView({
             }}
           >
             REST COMPLETE
+          </div>
+        )}
+
+        {(pauseWarningFlash || inactivityWarningFlash) && (
+          <div
+            aria-hidden="true"
+            style={{
+              background: "rgba(245, 158, 11, .64)",
+              inset: 0,
+              pointerEvents: "none",
+              position: "fixed",
+              zIndex: 20000,
+            }}
+          />
+        )}
+
+        {pauseReminderOpen && session.workoutTimerPaused && (
+          <div
+            aria-label="Workout pause reminder"
+            aria-modal="true"
+            role="alertdialog"
+            style={{
+              alignItems: "center",
+              background: "rgba(0, 0, 0, .48)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: "20px",
+              position: "fixed",
+              zIndex: 20001,
+            }}
+          >
+            <div
+              style={{
+                background: "var(--surface-raised)",
+                border: "2px solid #d6a100",
+                borderRadius: "18px",
+                boxShadow: "0 18px 50px rgba(0, 0, 0, .3)",
+                display: "grid",
+                gap: "16px",
+                maxWidth: "360px",
+                padding: "22px",
+                textAlign: "center",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "center",
+                  position: "relative",
+                }}
+              >
+                <img
+                  alt="Workout app"
+                  src={NATIVE_APP_ICON}
+                  style={{
+                    borderRadius: "14px",
+                    height: "64px",
+                    width: "64px",
+                  }}
+                />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    alignItems: "center",
+                    background: "#f59e0b",
+                    border: "3px solid var(--surface-raised)",
+                    borderRadius: "999px",
+                    bottom: "-6px",
+                    color: "#111",
+                    display: "inline-flex",
+                    height: "28px",
+                    justifyContent: "center",
+                    marginLeft: "42px",
+                    position: "absolute",
+                    width: "28px",
+                  }}
+                >
+                  <AlertTriangle size={16} />
+                </span>
+              </div>
+
+              <div>
+                <h2 style={{ fontSize: "21px", margin: "0 0 8px" }}>
+                  Workout paused for{" "}
+                  {formatWorkoutPauseDuration(WORKOUT_PAUSE_REMINDER_SECONDS)}
+                </h2>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "15px",
+                    lineHeight: 1.4,
+                    margin: 0,
+                  }}
+                >
+                  Are you still working out?
+                </p>
+              </div>
+
+              <div style={{ display: "grid", gap: "8px" }}>
+                <button
+                  autoFocus
+                  onClick={() => {
+                    setPauseReminderOpen(false);
+                    toggleWorkoutTimerPaused();
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    fontSize: "15px",
+                    fontWeight: 800,
+                    gap: "8px",
+                    justifyContent: "center",
+                    minHeight: "46px",
+                  }}
+                  type="button"
+                >
+                  <Play size={17} />
+                  Resume Workout
+                </button>
+                <button
+                  onClick={() => {
+                    const nextReminderStartedAtIso = new Date().toISOString();
+                    pauseReminderHandledKeyRef.current = null;
+                    setPauseReminderOpen(false);
+                    updateSession((currentSession) => ({
+                      ...currentSession,
+                      workoutPauseReminderStartedAtIso:
+                        nextReminderStartedAtIso,
+                    }));
+                  }}
+                  style={{ minHeight: "42px" }}
+                  type="button"
+                >
+                  Keep Paused
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {inactivityReminderOpen && !session.workoutTimerPaused && (
+          <div
+            aria-label="Workout inactivity reminder"
+            aria-modal="true"
+            role="alertdialog"
+            style={{
+              alignItems: "center",
+              background: "rgba(0, 0, 0, .48)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: "20px",
+              position: "fixed",
+              zIndex: 20001,
+            }}
+          >
+            <div
+              style={{
+                background: "var(--surface-raised)",
+                border: "2px solid #d6a100",
+                borderRadius: "18px",
+                boxShadow: "0 18px 50px rgba(0, 0, 0, .3)",
+                display: "grid",
+                gap: "16px",
+                maxWidth: "360px",
+                padding: "22px",
+                textAlign: "center",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "center",
+                  position: "relative",
+                }}
+              >
+                <img
+                  alt="Workout app"
+                  src={NATIVE_APP_ICON}
+                  style={{
+                    borderRadius: "14px",
+                    height: "64px",
+                    width: "64px",
+                  }}
+                />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    alignItems: "center",
+                    background: "#f59e0b",
+                    border: "3px solid var(--surface-raised)",
+                    borderRadius: "999px",
+                    bottom: "-6px",
+                    color: "#111",
+                    display: "inline-flex",
+                    height: "28px",
+                    justifyContent: "center",
+                    marginLeft: "42px",
+                    position: "absolute",
+                    width: "28px",
+                  }}
+                >
+                  <AlertTriangle size={16} />
+                </span>
+              </div>
+
+              <div>
+                <h2 style={{ fontSize: "21px", margin: "0 0 8px" }}>
+                  No sets completed in{" "}
+                  {formatWorkoutPauseDuration(
+                    WORKOUT_INACTIVITY_REMINDER_SECONDS
+                  )}
+                </h2>
+                <p
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "15px",
+                    lineHeight: 1.4,
+                    margin: 0,
+                  }}
+                >
+                  Are you still working out?
+                </p>
+              </div>
+
+              <div style={{ display: "grid", gap: "8px" }}>
+                <button
+                  autoFocus
+                  onClick={() => {
+                    const nextReminderStartedAtIso = new Date().toISOString();
+                    inactivityReminderHandledKeyRef.current = null;
+                    setInactivityReminderOpen(false);
+                    updateSession((currentSession) => ({
+                      ...currentSession,
+                      workoutInactivityReminderStartedAtIso:
+                        nextReminderStartedAtIso,
+                    }));
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    fontSize: "15px",
+                    fontWeight: 800,
+                    gap: "8px",
+                    justifyContent: "center",
+                    minHeight: "46px",
+                  }}
+                  type="button"
+                >
+                  <Dumbbell size={17} />
+                  Keep Working Out
+                </button>
+                <button
+                  onClick={() => {
+                    setInactivityReminderOpen(false);
+                    toggleWorkoutTimerPaused();
+                  }}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "7px",
+                    justifyContent: "center",
+                    minHeight: "42px",
+                  }}
+                  type="button"
+                >
+                  <Pause size={16} />
+                  Pause Workout
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
