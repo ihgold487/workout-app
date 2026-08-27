@@ -25,6 +25,7 @@ import {
   Hash,
   History,
   Link2,
+  Minus,
   NotebookPen,
   Pause,
   Play,
@@ -2663,6 +2664,11 @@ export default function SessionView({
   const [restRemainder, setRestRemainder] = useState(30);
 
   const [restSeconds, setRestSeconds] = useState(90);
+  const restSecondsRef = useRef(90);
+  const localRestTimerAdjustmentUntilRef = useRef(0);
+  const [restTimerRunDuration, setRestTimerRunDuration] = useState(90);
+  const [restTimerProgressTotal, setRestTimerProgressTotal] = useState(90);
+  const restTimerProgressTotalRef = useRef(90);
 
   const [timerRunning, setTimerRunning] = useState(false);
 
@@ -2683,6 +2689,13 @@ export default function SessionView({
   const [expandedSessionUtility, setExpandedSessionUtility] = useState(null);
 
   const [restComplete, setRestComplete] = useState(false);
+  useEffect(() => {
+    restSecondsRef.current = restSeconds;
+  }, [restSeconds]);
+
+  useEffect(() => {
+    restTimerProgressTotalRef.current = restTimerProgressTotal;
+  }, [restTimerProgressTotal]);
   const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
   const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
 
@@ -2882,7 +2895,16 @@ export default function SessionView({
         return;
       }
 
+      if (Date.now() < localRestTimerAdjustmentUntilRef.current) {
+        return;
+      }
+
       const seconds = Math.max(0, Number(nativeState.seconds) || 0);
+
+      if (seconds > restTimerProgressTotalRef.current) {
+        restTimerProgressTotalRef.current = seconds;
+        setRestTimerProgressTotal(seconds);
+      }
 
       if (!nativeState.paused && seconds <= 0) {
         const endsAtMs = Number(nativeState.endsAtMs) || Date.now();
@@ -2894,7 +2916,6 @@ export default function SessionView({
         setTimerPaused(false);
         setTimerRunning(false);
         setTimerStartedAt(null);
-        setExpandedSessionUtility((current) => current || "timer");
         void endNativeRestTimerLiveActivity();
 
         if (nativeRestCompletionHandledRef.current !== completionKey) {
@@ -2906,21 +2927,17 @@ export default function SessionView({
       }
 
       setRestSeconds(seconds);
+      setRestTimerRunDuration(seconds);
       setTimerExpiredAt(null);
       setTimerFinished(false);
       setTimerPaused(Boolean(nativeState.paused));
       setTimerRunning(!nativeState.paused && seconds > 0);
-      setExpandedSessionUtility((current) => current || "timer");
-
       if (nativeState.paused) {
         setTimerStartedAt(null);
         return;
       }
 
-      const totalSeconds = restMinutes * 60 + restRemainder;
-      setTimerStartedAt(
-        Date.now() - Math.max(0, totalSeconds - seconds) * 1000
-      );
+      setTimerStartedAt(Date.now());
     }
 
     void reconcileNativeRestTimer();
@@ -2942,15 +2959,13 @@ export default function SessionView({
     const id = setInterval(() => {
       const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000);
 
-      const total = restMinutes * 60 + restRemainder;
-
-      const remaining = Math.max(total - elapsed, 0);
+      const remaining = Math.max(restTimerRunDuration - elapsed, 0);
 
       setRestSeconds(remaining);
     }, 1000);
 
     return () => clearInterval(id);
-  }, [timerRunning, timerStartedAt, restMinutes, restRemainder]);
+  }, [timerRunning, timerStartedAt, restTimerRunDuration]);
 
   useEffect(() => {
     if (!timerFinished || !timerExpiredAt) return;
@@ -2965,14 +2980,19 @@ export default function SessionView({
   useEffect(() => {
     if (!timerRunning && !timerPaused && !timerFinished) {
       setTimeout(() => {
-        setRestSeconds(restMinutes * 60 + restRemainder);
+        const configuredSeconds = restMinutes * 60 + restRemainder;
+        restSecondsRef.current = configuredSeconds;
+        setRestSeconds(configuredSeconds);
+        setRestTimerRunDuration(configuredSeconds);
+        restTimerProgressTotalRef.current = configuredSeconds;
+        setRestTimerProgressTotal(configuredSeconds);
       }, 0);
     }
   }, [restMinutes, restRemainder, timerRunning, timerPaused, timerFinished]);
 
   useEffect(() => {
     if (restSeconds === 0 && timerRunning) {
-      const notificationKey = `${timerStartedAt || ""}:${restMinutes}:${restRemainder}`;
+      const notificationKey = `${timerStartedAt || ""}:${restTimerRunDuration}`;
 
       if (!canUseNativeRestNotifications()) {
         navigator.vibrate?.([200, 100, 200]);
@@ -3011,7 +3031,7 @@ export default function SessionView({
         setTimerPaused(false);
       }, 0);
     }
-  }, [restSeconds, timerRunning, timerStartedAt, restMinutes, restRemainder]);
+  }, [restSeconds, timerRunning, timerStartedAt, restTimerRunDuration]);
 
   useEffect(() => {
     if (!activeSet?.setId) {
@@ -3621,6 +3641,10 @@ export default function SessionView({
 
     setRestMinutes(Math.floor(duration / 60));
     setRestRemainder(duration % 60);
+    setRestTimerRunDuration(duration);
+    restTimerProgressTotalRef.current = duration;
+    setRestTimerProgressTotal(duration);
+    restSecondsRef.current = duration;
     setRestSeconds(duration);
     setTimerExpiredAt(null);
     setTimerFinished(false);
@@ -3637,11 +3661,11 @@ export default function SessionView({
       workoutName: session.templateName,
       startedAtMs: startedAt,
     });
-    setExpandedSessionUtility("timer");
     setTimerRunning(true);
   }
 
   function resetRestTimer() {
+    const resetSeconds = restMinutes * 60 + restRemainder;
     setTimerPaused(false);
     setTimerRunning(false);
     setTimerStartedAt(null);
@@ -3651,7 +3675,160 @@ export default function SessionView({
     nativeRestCompletionHandledRef.current = null;
     void cancelNativeRestTimerNotification();
     void endNativeRestTimerLiveActivity();
-    setRestSeconds(restMinutes * 60 + restRemainder);
+    setRestTimerRunDuration(resetSeconds);
+    restTimerProgressTotalRef.current = resetSeconds;
+    setRestTimerProgressTotal(resetSeconds);
+    restSecondsRef.current = resetSeconds;
+    setRestSeconds(resetSeconds);
+  }
+
+  function getActiveRestTimerContext() {
+    const exercise = session.exercises.find(
+      (candidate) => candidate.id === activeSet?.exerciseId
+    );
+    const setIndex = exercise?.sets?.findIndex(
+      (set) => set.id === activeSet?.setId
+    );
+
+    return {
+      exerciseName: exercise?.name,
+      setNumber: setIndex != null && setIndex >= 0 ? setIndex + 1 : undefined,
+      totalSets: exercise?.sets?.length,
+      workoutName: session.templateName,
+    };
+  }
+
+  function setConfiguredRestDuration(seconds) {
+    const normalizedSeconds = Math.max(0, Math.min(10 * 60, seconds));
+    setRestMinutes(Math.floor(normalizedSeconds / 60));
+    setRestRemainder(normalizedSeconds % 60);
+    return normalizedSeconds;
+  }
+
+  function toggleRestTimer() {
+    if (timerFinished) {
+      return;
+    }
+
+    if (timerRunning) {
+      setTimerPaused(true);
+      setTimerRunning(false);
+      void cancelNativeRestTimerNotification();
+      void pauseNativeRestTimerLiveActivity(restSeconds);
+      return;
+    }
+
+    const configuredSeconds = restMinutes * 60 + restRemainder;
+    const liveActivitySeconds = timerPaused ? restSeconds : configuredSeconds;
+
+    if (liveActivitySeconds <= 0) {
+      return;
+    }
+
+    setTimerPaused(false);
+    setTimerExpiredAt(null);
+    restNotificationSentKeyRef.current = null;
+    void requestRestNotificationPermission();
+    setRestSeconds(liveActivitySeconds);
+    setRestTimerRunDuration(liveActivitySeconds);
+    if (!timerPaused) {
+      restTimerProgressTotalRef.current = liveActivitySeconds;
+      setRestTimerProgressTotal(liveActivitySeconds);
+    }
+    setTimerStartedAt(Date.now());
+    setTimerFinished(false);
+    void scheduleNativeRestTimerNotification(liveActivitySeconds);
+
+    if (timerPaused) {
+      void resumeNativeRestTimerLiveActivity(liveActivitySeconds);
+    } else {
+      void startNativeRestTimerLiveActivity(
+        liveActivitySeconds,
+        getActiveRestTimerContext()
+      );
+    }
+
+    setTimerRunning(true);
+  }
+
+  function adjustRestTimer(deltaSeconds) {
+    localRestTimerAdjustmentUntilRef.current = Date.now() + 1500;
+
+    if (timerFinished) {
+      const signedRemaining = -restSecondsRef.current + deltaSeconds;
+
+      if (signedRemaining > 0) {
+        const adjustedSeconds = Math.max(0, Math.min(10 * 60, signedRemaining));
+        restSecondsRef.current = adjustedSeconds;
+        setRestSeconds(adjustedSeconds);
+        setRestTimerRunDuration(adjustedSeconds);
+        restTimerProgressTotalRef.current = adjustedSeconds;
+        setRestTimerProgressTotal(adjustedSeconds);
+        setTimerExpiredAt(null);
+        setTimerFinished(false);
+        setTimerPaused(false);
+        setTimerStartedAt(Date.now());
+        restNotificationSentKeyRef.current = null;
+        void scheduleNativeRestTimerNotification(adjustedSeconds);
+        void startNativeRestTimerLiveActivity(
+          adjustedSeconds,
+          getActiveRestTimerContext()
+        );
+        setTimerRunning(true);
+      } else {
+        const overdueSeconds = Math.abs(signedRemaining);
+        restSecondsRef.current = overdueSeconds;
+        setRestSeconds(overdueSeconds);
+        setTimerExpiredAt(Date.now() - overdueSeconds * 1000);
+      }
+      return;
+    }
+
+    if (timerRunning || timerPaused) {
+      const adjustedSeconds = Math.max(
+        0,
+        Math.min(10 * 60, restSecondsRef.current + deltaSeconds)
+      );
+      restSecondsRef.current = adjustedSeconds;
+      setRestSeconds(adjustedSeconds);
+      setRestTimerRunDuration(adjustedSeconds);
+      const adjustedProgressTotal = Math.max(
+        adjustedSeconds,
+        restTimerProgressTotalRef.current + deltaSeconds
+      );
+      restTimerProgressTotalRef.current = adjustedProgressTotal;
+      setRestTimerProgressTotal(adjustedProgressTotal);
+
+      if (adjustedSeconds <= 0) {
+        setTimerRunning(false);
+        setTimerPaused(false);
+        setTimerStartedAt(null);
+        setTimerExpiredAt(Date.now());
+        setTimerFinished(true);
+        void cancelNativeRestTimerNotification();
+        void endNativeRestTimerLiveActivity();
+        return;
+      }
+
+      if (timerPaused) {
+        setTimerStartedAt(null);
+        void pauseNativeRestTimerLiveActivity(adjustedSeconds);
+      } else {
+        setTimerStartedAt(Date.now());
+        void scheduleNativeRestTimerNotification(adjustedSeconds);
+        void resumeNativeRestTimerLiveActivity(adjustedSeconds);
+      }
+      return;
+    }
+
+    const adjustedSeconds = setConfiguredRestDuration(
+      restSecondsRef.current + deltaSeconds
+    );
+    setRestTimerRunDuration(adjustedSeconds);
+    restTimerProgressTotalRef.current = adjustedSeconds;
+    setRestTimerProgressTotal(adjustedSeconds);
+    restSecondsRef.current = adjustedSeconds;
+    setRestSeconds(adjustedSeconds);
   }
 
   function getNextSetTargetsAfterCompletion(exercise, currentSet, nextSet) {
@@ -5631,18 +5808,7 @@ export default function SessionView({
               justifyContent: "center",
             }}
           >
-            <button
-              aria-expanded={expandedSessionUtility === "timer"}
-              aria-label={
-                expandedSessionUtility === "timer"
-                  ? "Collapse rest timer"
-                  : "Show rest timer"
-              }
-              onClick={() =>
-                setExpandedSessionUtility((current) =>
-                  current === "timer" ? null : "timer"
-                )
-              }
+            <div
               style={{
                 alignItems: "center",
                 background: timerFinished
@@ -5662,30 +5828,141 @@ export default function SessionView({
                 display: "inline-flex",
                 fontSize: "13px",
                 fontWeight: 700,
-                gap: "6px",
+                gap: "3px",
                 minHeight: "36px",
-                padding: "6px 10px",
+                padding: "4px 6px",
               }}
-              type="button"
             >
-              <Timer size={21} />
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {timerFinished ? "+" : ""}
-                {String(
-                  Math.floor(
-                    (timerRunning || timerPaused || timerFinished
-                      ? restSeconds
-                      : restMinutes * 60 + restRemainder) / 60
+              <button
+                aria-expanded={expandedSessionUtility === "timer"}
+                aria-label={
+                  expandedSessionUtility === "timer"
+                    ? "Collapse rest timer"
+                    : "Show rest timer"
+                }
+                onClick={() =>
+                  setExpandedSessionUtility((current) =>
+                    current === "timer" ? null : "timer"
                   )
-                ).padStart(2, "0")}
-                :
-                {String(
-                  (timerRunning || timerPaused || timerFinished
-                    ? restSeconds
-                    : restMinutes * 60 + restRemainder) % 60
-                ).padStart(2, "0")}
-              </span>
-            </button>
+                }
+                style={{
+                  alignItems: "center",
+                  background: "transparent",
+                  border: 0,
+                  color: "inherit",
+                  display: "inline-flex",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  gap: "6px",
+                  minHeight: "26px",
+                  padding: "2px 4px",
+                }}
+                type="button"
+              >
+                <Timer size={21} />
+                {expandedSessionUtility === "timer" ? (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      background: "color-mix(in srgb, currentColor 20%, transparent)",
+                      borderRadius: "999px",
+                      display: "block",
+                      height: "5px",
+                      overflow: "hidden",
+                      width: "56px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        background: timerFinished ? "#c66" : "currentColor",
+                        borderRadius: "inherit",
+                        display: "block",
+                        height: "100%",
+                        transition: timerPaused ? "none" : "width 1s linear",
+                        width: `${
+                          timerFinished
+                            ? 0
+                            : Math.max(
+                                0,
+                                Math.min(
+                                  100,
+                                  ((timerRunning || timerPaused
+                                    ? restSeconds
+                                    : restMinutes * 60 + restRemainder) /
+                                    Math.max(1, restTimerProgressTotal)) *
+                                    100
+                                )
+                              )
+                        }%`,
+                      }}
+                    />
+                  </span>
+                ) : (
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {timerFinished ? "+" : ""}
+                    {String(Math.floor(
+                      (timerRunning || timerPaused || timerFinished
+                        ? restSeconds
+                        : restMinutes * 60 + restRemainder) / 60
+                    )).padStart(2, "0")}:
+                    {String(
+                      (timerRunning || timerPaused || timerFinished
+                        ? restSeconds
+                        : restMinutes * 60 + restRemainder) % 60
+                    ).padStart(2, "0")}
+                  </span>
+                )}
+              </button>
+
+              {expandedSessionUtility !== "timer" && (
+                <>
+                  {!timerFinished && (
+                    <button
+                      aria-label={timerRunning ? "Pause rest timer" : "Start rest timer"}
+                      disabled={
+                        !timerRunning &&
+                        !timerPaused &&
+                        restMinutes * 60 + restRemainder <= 0
+                      }
+                      onClick={toggleRestTimer}
+                      style={{
+                        alignItems: "center",
+                        background: "transparent",
+                        border: 0,
+                        color: "inherit",
+                        display: "inline-flex",
+                        height: "28px",
+                        justifyContent: "center",
+                        padding: "4px",
+                        width: "28px",
+                      }}
+                      type="button"
+                    >
+                      {timerRunning ? <Pause size={16} /> : <Play size={16} />}
+                    </button>
+                  )}
+                  <button
+                    aria-label="Reset rest timer"
+                    disabled={!timerRunning && !timerPaused && !timerFinished}
+                    onClick={resetRestTimer}
+                    style={{
+                      alignItems: "center",
+                      background: "transparent",
+                      border: 0,
+                      color: "inherit",
+                      display: "inline-flex",
+                      height: "28px",
+                      justifyContent: "center",
+                      padding: "4px",
+                      width: "28px",
+                    }}
+                    type="button"
+                  >
+                    <RefreshCw size={15} />
+                  </button>
+                </>
+              )}
+            </div>
 
             {canUseNativeSpotifyPlayback() && (
               <div
@@ -5875,12 +6152,30 @@ export default function SessionView({
         >
           <Timer size={28} />
 
+          <button
+            aria-label="Subtract 15 seconds from rest timer"
+            onClick={() => adjustRestTimer(-15)}
+            style={{
+              alignItems: "center",
+              borderRadius: "999px",
+              display: "inline-flex",
+              height: "34px",
+              justifyContent: "center",
+              minWidth: "34px",
+              padding: "6px",
+            }}
+            type="button"
+          >
+            <Minus size={18} />
+          </button>
+
           <div
             style={{
               alignItems: "center",
               display: "flex",
               justifyContent: "center",
-              minWidth: "112px",
+              minWidth:
+                timerRunning || timerPaused || timerFinished ? "72px" : "112px",
             }}
           >
             {timerRunning || timerPaused || timerFinished ? (
@@ -5907,7 +6202,7 @@ export default function SessionView({
                   value={restMinutes}
                   onChange={(e) => setRestMinutes(Number(e.target.value))}
                 >
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -5925,15 +6220,36 @@ export default function SessionView({
                   value={restRemainder}
                   onChange={(e) => setRestRemainder(Number(e.target.value))}
                 >
-                  {[0, 5, 15, 30, 45].map((n) => (
+                  {Array.from(
+                    new Set([0, 5, 15, 30, 45, restRemainder])
+                  )
+                    .sort((left, right) => left - right)
+                    .map((n) => (
                     <option key={n} value={n}>
                       {String(n).padStart(2, "0")}
                     </option>
-                  ))}
+                    ))}
                 </select>
               </>
             )}
           </div>
+
+          <button
+            aria-label="Add 15 seconds to rest timer"
+            onClick={() => adjustRestTimer(15)}
+            style={{
+              alignItems: "center",
+              borderRadius: "999px",
+              display: "inline-flex",
+              height: "34px",
+              justifyContent: "center",
+              minWidth: "34px",
+              padding: "6px",
+            }}
+            type="button"
+          >
+            <Plus size={18} />
+          </button>
 
           <button
             aria-hidden={timerFinished ? "true" : undefined}
@@ -5961,62 +6277,7 @@ export default function SessionView({
               visibility: timerFinished ? "hidden" : "visible",
             }}
             tabIndex={timerFinished ? -1 : undefined}
-            onClick={() => {
-              if (timerRunning) {
-                setTimerPaused(true);
-
-                setTimerRunning(false);
-                void cancelNativeRestTimerNotification();
-                void pauseNativeRestTimerLiveActivity(restSeconds);
-              } else {
-                setExpandedSessionUtility("timer");
-                setTimerPaused(false);
-                setTimerExpiredAt(null);
-                restNotificationSentKeyRef.current = null;
-                void requestRestNotificationPermission();
-
-                const configuredSeconds = restMinutes * 60 + restRemainder;
-                const liveActivitySeconds = timerPaused
-                  ? restSeconds
-                  : configuredSeconds;
-
-                setRestSeconds(liveActivitySeconds);
-
-                setTimerStartedAt(
-                  timerPaused
-                    ? Date.now() - (configuredSeconds - restSeconds) * 1000
-                    : Date.now()
-                );
-
-                setTimerFinished(false);
-                void scheduleNativeRestTimerNotification(liveActivitySeconds);
-
-                if (timerPaused) {
-                  void resumeNativeRestTimerLiveActivity(liveActivitySeconds);
-                } else {
-                  const activeTimerExercise = session.exercises.find(
-                    (exercise) => exercise.id === activeSet?.exerciseId
-                  );
-                  const activeTimerSetIndex = activeTimerExercise?.sets?.findIndex(
-                    (set) => set.id === activeSet?.setId
-                  );
-
-                  void startNativeRestTimerLiveActivity(
-                    liveActivitySeconds,
-                    {
-                      exerciseName: activeTimerExercise?.name,
-                      setNumber:
-                        activeTimerSetIndex != null && activeTimerSetIndex >= 0
-                          ? activeTimerSetIndex + 1
-                          : undefined,
-                      totalSets: activeTimerExercise?.sets?.length,
-                      workoutName: session.templateName,
-                    }
-                  );
-                }
-                setTimerRunning(true);
-              }
-            }}
+            onClick={toggleRestTimer}
           >
             {timerRunning ? <Pause size={20} /> : <Play size={20} />}
           </button>
