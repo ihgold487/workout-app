@@ -1576,5 +1576,26 @@ export const seedExercises = [
     imageUrl: "exercise-media/manual-2026-06-17-landmine-front-squat-landmine.webp",
     imageAlt: "Landmine Front Squat Landmine exercise demonstration",
     builtin: true,
+  },
+  {
+    id: 240,
+    name: "Chest Dips",
+    equipment: ["Bodyweight"],
+    muscles: ["Chest", "Triceps", "Front Delts", "Forearms"],
+    bodyweightLoadPercent: 100,
+    imageUrl: "exercise-media/manual-2026-08-27-chest-dips-bodyweight.webp",
+    imageAlt: "Chest Dips bodyweight exercise demonstration",
+    instructionSteps: [
+      "Take a firm grip on parallel bars and press to a stable locked-out position.",
+      "Incline your torso forward roughly 30 degrees to emphasize the chest.",
+      "Cross your ankles behind you and keep a slight bend in your knees.",
+      "Bend your elbows and lower under control, allowing them to travel slightly outward.",
+      "Descend only as far as you can while maintaining control and feeling a comfortable chest stretch.",
+      "Press through the bars to return to the top while keeping the forward torso angle.",
+      "Maintain the forward lean throughout each repetition instead of becoming upright.",
+    ],
+    instructionSource: "Lift Manual",
+    instructionSourceUrl: "https://liftmanual.com/chest-dip/",
+    builtin: true,
   }
 ];

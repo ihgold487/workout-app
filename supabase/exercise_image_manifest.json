@@ -1546,5 +1546,14 @@
     "lineNumber": 174,
     "name": "Landmine Front Squat",
     "sourceKey": "manual-2026-06-17:landmine-front-squat-landmine"
+  },
+  {
+    "equipment": "Bodyweight",
+    "imageAlt": "Chest Dips bodyweight exercise demonstration",
+    "imageFile": "chest-dip.webp",
+    "imageUrl": "exercise-media/manual-2026-08-27-chest-dips-bodyweight.webp",
+    "lineNumber": 175,
+    "name": "Chest Dips",
+    "sourceKey": "manual-2026-08-27:chest-dips-bodyweight"
   }
 ]
