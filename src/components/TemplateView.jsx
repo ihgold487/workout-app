@@ -23,6 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import ExerciseLibraryEditDialog from "./ExerciseLibraryEditDialog";
 import MuscleMap from "./MuscleMap";
 import {
   WorkoutExercisePreviewGroup,
@@ -241,6 +242,9 @@ export default function TemplateView({
   setTemplates,
   bodyWeightEntries = [],
   exerciseLibrary,
+  setExerciseLibrary,
+  session = null,
+  canEditBuiltInExercises = false,
   exerciseMetadata,
   setExerciseMetadata,
   history,
@@ -274,6 +278,7 @@ export default function TemplateView({
   const [editingTemplateName, setEditingTemplateName] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState(template.name);
   const [detailExercise, setDetailExercise] = useState(null);
+  const [libraryEditingExercise, setLibraryEditingExercise] = useState(null);
   const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
   const [confirmPreviousWeekIncomplete, setConfirmPreviousWeekIncomplete] =
     useState(false);
@@ -2247,6 +2252,37 @@ export default function TemplateView({
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
+          onEdit={
+            !detailExercise.builtin || canEditBuiltInExercises
+              ? (exercise) => {
+                  const exerciseKey = getExerciseKey(exercise);
+                  const libraryExercise = exerciseLibrary.find(
+                    (item) =>
+                      String(item.id) === String(exercise.id) ||
+                      String(item.exerciseId || "") === String(exercise.id) ||
+                      getExerciseKey(item) === exerciseKey
+                  );
+
+                  if (libraryExercise) {
+                    setLibraryEditingExercise(libraryExercise);
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+      {libraryEditingExercise && (
+        <ExerciseLibraryEditDialog
+          canEditBuiltIn={canEditBuiltInExercises}
+          exercise={libraryEditingExercise}
+          exerciseLibrary={exerciseLibrary}
+          onCancel={() => setLibraryEditingExercise(null)}
+          onSaved={(savedExercise) => {
+            setDetailExercise(savedExercise);
+            setLibraryEditingExercise(null);
+          }}
+          session={session}
+          setExerciseLibrary={setExerciseLibrary}
         />
       )}
       {showTemplateMuscleMap && (

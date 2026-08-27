@@ -2379,6 +2379,7 @@ export default function ExerciseDetailDialog({
   exerciseLibrary = [],
   history = [],
   onClose,
+  onEdit,
   onSelect,
   onUpdateHistoryWorkoutSet,
   zIndex = 1400,
@@ -2654,6 +2655,23 @@ export default function ExerciseDetailDialog({
               gap: "8px",
             }}
           >
+            {onEdit && (
+              <button
+                aria-label={`Edit ${exercise.name}`}
+                onClick={() => onEdit(exercise)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "36px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                <Pencil size={16} />
+                Edit
+              </button>
+            )}
             {onSelect && (
               <button
                 onClick={() => onSelect(exercise)}

@@ -557,16 +557,22 @@ export default function ExerciseView({
           session,
           editingExercise
         );
+        const savedExercise = {
+          ...updatedExercise,
+          exerciseId: updatedExerciseId || updatedExercise.exerciseId,
+        };
 
         setExerciseLibrary(
           exerciseLibrary.map((exercise) =>
             exercise.id === editingExercise.id
-              ? {
-                  ...updatedExercise,
-                  exerciseId: updatedExerciseId || updatedExercise.exerciseId,
-                }
+              ? savedExercise
               : exercise
           )
+        );
+        setDetailExercise((currentExercise) =>
+          currentExercise?.id === editingExercise.id
+            ? savedExercise
+            : currentExercise
         );
         setEditingExercise(null);
         setEditingDraft(emptyDraft);
@@ -583,6 +589,11 @@ export default function ExerciseView({
       exerciseLibrary.map((exercise) =>
         exercise.id === editingExercise.id ? updatedExercise : exercise
       )
+    );
+    setDetailExercise((currentExercise) =>
+      currentExercise?.id === editingExercise.id
+        ? updatedExercise
+        : currentExercise
     );
     setEditingExercise(null);
     setEditingDraft(emptyDraft);
@@ -1975,6 +1986,12 @@ export default function ExerciseView({
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setDetailExercise(null)}
+          onEdit={
+            isTrainerTargetSelf &&
+            (!detailExercise.builtin || trainerCanAddBuiltIns)
+              ? startEdit
+              : undefined
+          }
           onUpdateHistoryWorkoutSet={onUpdateHistoryWorkoutSet}
         />
       )}
@@ -2313,7 +2330,7 @@ export default function ExerciseView({
             justifyContent: "center",
             padding: "16px",
             position: "fixed",
-            zIndex: 1000,
+            zIndex: 1500,
           }}
         >
           <div

@@ -12117,6 +12117,8 @@ export default function App() {
   if (selectedSession) {
     return (
       <SessionView
+        authSession={authSession}
+        canEditBuiltInExercises={isIraSettingsUser}
         session={selectedSession}
         sessions={sessions}
         setSessions={setSessions}
@@ -12127,7 +12129,10 @@ export default function App() {
         templates={templates}
         setTemplates={setTemplates}
         exerciseLibrary={exerciseLibrary}
-        setExerciseLibrary={setExerciseLibrary}
+        setExerciseLibrary={(nextExerciseLibrary) => {
+          setExerciseLibrary(nextExerciseLibrary);
+          requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
+        }}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         setSelectedSessionId={setSelectedSessionId}
@@ -12149,6 +12154,7 @@ export default function App() {
     return renderAppShell(
       <TemplateView
         bodyWeightEntries={localBodyWeightEntries}
+        canEditBuiltInExercises={isIraSettingsUser}
         template={selectedTemplate}
         templates={templates}
         setTemplates={(nextTemplates) => {
@@ -12159,7 +12165,11 @@ export default function App() {
         setSelectedSessionId={setSelectedSessionId}
         sessions={sessions}
         setSessions={setSessions}
-        setExerciseLibrary={setExerciseLibrary}
+        setExerciseLibrary={(nextExerciseLibrary) => {
+          setExerciseLibrary(nextExerciseLibrary);
+          requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
+        }}
+        session={authSession}
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         history={history}

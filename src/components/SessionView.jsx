@@ -45,6 +45,7 @@ import WeightPickerModal from "./WeightPickerModal";
 import ExerciseSetupDialog from "./ExerciseSetupDialog";
 import ExercisePickerSheet from "./ExercisePickerSheet";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
+import ExerciseLibraryEditDialog from "./ExerciseLibraryEditDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import PlateLoadingCalculator, {
@@ -335,6 +336,8 @@ function SpotifyArtwork({ imageDataURL, size = 32 }) {
 }
 
 export default function SessionView({
+  authSession = null,
+  canEditBuiltInExercises = false,
   session,
   sessions,
   setSessions,
@@ -402,6 +405,7 @@ export default function SessionView({
   const wakeLockRef = useRef(null);
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [detailExercise, setDetailExercise] = useState(null);
+  const [libraryEditingExercise, setLibraryEditingExercise] = useState(null);
   const [warmupExerciseId, setWarmupExerciseId] = useState(null);
   const exerciseStripRef = useRef(null);
   const exerciseThumbnailRefs = useRef({});
@@ -2024,6 +2028,10 @@ export default function SessionView({
   function handleExerciseThumbnailDragEnd({ active, over }) {
     window.getSelection?.()?.removeAllRanges();
 
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     if (!over || idsMatch(active.id, over.id)) {
       return;
     }
@@ -2104,6 +2112,10 @@ export default function SessionView({
 
   const updateActual = useCallback(
     (exerciseId, setId, field, value) => {
+      if (session.workoutTimerPaused) {
+        return;
+      }
+
       appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
 
       updateSession((s) => ({
@@ -2127,10 +2139,14 @@ export default function SessionView({
         ),
       }));
     },
-    [session.id, updateSession]
+    [session.id, session.workoutTimerPaused, updateSession]
   );
 
   function applyTargetToActual(exerciseId, setId) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
 
@@ -2146,6 +2162,10 @@ export default function SessionView({
   }
 
   function applyPrescriptionToActual(exerciseId, setId, prescription) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
 
     updateSession((s) => ({
@@ -2201,6 +2221,10 @@ export default function SessionView({
   }
 
   function updateExercisePrescription(exerciseId, field, value) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const nextValue = formatSetupDefault(value);
     const prescriptionField = field === "prescribedRir" ? "rir" : "reps";
     const targetField = field === "prescribedRir" ? "targetRir" : "targetReps";
@@ -2265,6 +2289,10 @@ export default function SessionView({
   }
 
   function openTargetAlternatives(exercise, set, setIndex) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
     const current = getLatestActualForSet(exercise, setIndex);
     const suggested = {
@@ -2327,7 +2355,7 @@ export default function SessionView({
   }
 
   function openPlateLoadingCalculator(exercise, set) {
-    if (!exercise || !set) {
+    if (session.workoutTimerPaused || !exercise || !set) {
       return;
     }
 
@@ -2388,6 +2416,10 @@ export default function SessionView({
   }
 
   function applyManualLoadingToCurrentSet(weight) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const exerciseId = plateCalculatorData?.exerciseId;
     const setId = plateCalculatorData?.setId;
 
@@ -2523,6 +2555,10 @@ export default function SessionView({
   const [showSupersetEditor, setShowSupersetEditor] = useState(false);
 
   function openExerciseNoteEditor(exercise) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const noteKey = String(exercise.id);
     const metadata = exerciseMetadata?.[exercise.exerciseId] || {};
 
@@ -3097,6 +3133,10 @@ export default function SessionView({
   }, [keepScreenAwake]);
 
   function deleteSet(exerciseId, setId) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
     const currentIndex = exercise.sets.findIndex((s) => s.id === setId);
@@ -3152,6 +3192,10 @@ export default function SessionView({
   }
 
   function addSet(exerciseId, lastSet) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const prescribedReps = getSetPrescribedReps(lastSet);
     const minimumReps = getSetMinimumReps(lastSet);
     const prescribedRir = getSetPrescribedRir(lastSet);
@@ -3794,6 +3838,10 @@ export default function SessionView({
   }
 
   function markSetComplete(exerciseId, setId, completedAt = null) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
 
     const currentSet = exercise.sets.find((s) => s.id === setId);
@@ -3953,6 +4001,10 @@ export default function SessionView({
   }
 
   function editExerciseSupersetGroup(exercise) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     const group = prompt(
       "Superset group (A, B, etc). Leave empty to clear.",
       exercise.supersetGroup || ""
@@ -5066,6 +5118,10 @@ export default function SessionView({
   }
 
   function completeWorkout({ workoutUpdateSelections: selections = {} } = {}) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
     resetRestTimer();
     void triggerNativeWorkoutCompletionHaptic();
 
@@ -6359,6 +6415,7 @@ export default function SessionView({
             </DndContext>
             <button
               aria-label={showAddExercise ? "Cancel adding exercise" : "Add exercise"}
+              disabled={session.workoutTimerPaused}
               onClick={() => {
                 setShowAddExercise((isOpen) => !isOpen);
                 setReplacingExerciseId(null);
@@ -6551,6 +6608,7 @@ export default function SessionView({
                     >
                       <div>
                         <IconButton
+                          disabled={session.workoutTimerPaused}
                           label="Exercise notes"
                           size={34}
                           onClick={() => openExerciseNoteEditor(exercise)}
@@ -6649,6 +6707,7 @@ export default function SessionView({
                         }}
                       >
                         <textarea
+                          disabled={session.workoutTimerPaused}
                           placeholder="Notes"
                           style={{
                             background: "var(--surface)",
@@ -6667,19 +6726,23 @@ export default function SessionView({
                           value={
                             exerciseMetadata?.[exercise.exerciseId]?.note || ""
                           }
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            if (session.workoutTimerPaused) {
+                              return;
+                            }
+
                             setExerciseMetadata((metadata) => ({
                               ...(metadata || {}),
                               [exercise.exerciseId]: {
                                 ...(metadata?.[exercise.exerciseId] || {}),
-
                                 note: e.target.value,
                               },
-                            }))
-                          }
+                            }));
+                          }}
                         />
 
                         <button
+                          disabled={session.workoutTimerPaused}
                           type="button"
                           onClick={() => acceptExerciseNoteEdit(exercise)}
                           style={{
@@ -6711,6 +6774,7 @@ export default function SessionView({
                       </div>
                     ) : exerciseNoteText ? (
                       <button
+                        disabled={session.workoutTimerPaused}
                         type="button"
                         onClick={() => openExerciseNoteEditor(exercise)}
                         style={{
@@ -6814,6 +6878,7 @@ export default function SessionView({
 
                           <button
                             aria-label="Open plate loading calculator"
+                            disabled={session.workoutTimerPaused}
                             onClick={() => {
                               const targetSet =
                                 exercise.sets.find(
@@ -6847,6 +6912,7 @@ export default function SessionView({
 
                           <button
                             aria-label="Edit prescribed reps"
+                            disabled={session.workoutTimerPaused}
                             onClick={() => {
                               const targetSet =
                                 exercise.sets.find((set) => !set.completed) ||
@@ -6881,6 +6947,7 @@ export default function SessionView({
 
                           <button
                             aria-label="Edit prescribed RIR"
+                            disabled={session.workoutTimerPaused}
                             onClick={() => {
                               const targetSet =
                                 exercise.sets.find((set) => !set.completed) ||
@@ -7016,7 +7083,7 @@ export default function SessionView({
                                 }
                               }}
                               onClick={() => {
-                                if (canActivate) {
+                                if (!session.workoutTimerPaused && canActivate) {
                                   lockSupersetOrderForSet(exercise.id, set.id);
                                   setActiveWorkoutFocus({
                                     exerciseId: exercise.id,
@@ -7048,6 +7115,7 @@ export default function SessionView({
                               }}
                             >
                               <button
+                                disabled={session.workoutTimerPaused}
                                 type="button"
                                 onClick={(event) => {
                                   event.preventDefault();
@@ -7179,6 +7247,7 @@ export default function SessionView({
                                 }}
                               >
                                 <button
+                                  disabled={session.workoutTimerPaused}
                                   type="button"
                                   onClick={() => {
                                     const calculationExercise =
@@ -7222,6 +7291,7 @@ export default function SessionView({
                                 </span>
 
                                 <button
+                                  disabled={session.workoutTimerPaused}
                                   type="button"
                                   onClick={() => {
                                     setRepsPickerData({
@@ -7260,6 +7330,7 @@ export default function SessionView({
                                 </span>
 
                                 <button
+                                  disabled={session.workoutTimerPaused}
                                   type="button"
                                   onClick={() => {
                                     setRirPickerData({
@@ -7314,7 +7385,8 @@ export default function SessionView({
                                 }}
                                 tone={set.completed ? "success" : "neutral"}
                                 disabled={
-                                  set.completed ? !canUncomplete : !canActivate
+                                  session.workoutTimerPaused ||
+                                  (set.completed ? !canUncomplete : !canActivate)
                                 }
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -7334,6 +7406,7 @@ export default function SessionView({
                               </IconButton>
 
                               <IconButton
+                                disabled={session.workoutTimerPaused}
                                 label="Delete set"
                                 size={30}
                                 tone="danger"
@@ -7365,6 +7438,7 @@ export default function SessionView({
                       }}
                     >
                       <button
+                        disabled={session.workoutTimerPaused}
                         style={{
                           alignItems: "center",
                           boxSizing: "border-box",
@@ -7388,6 +7462,7 @@ export default function SessionView({
                       </button>
 
                       <IconButton
+                        disabled={session.workoutTimerPaused}
                         label={
                           exercise.supersetGroup
                             ? `Edit superset ${exercise.supersetGroup}`
@@ -8230,6 +8305,7 @@ export default function SessionView({
                 </button>
 
                 <button
+                  disabled={session.workoutTimerPaused}
                   onClick={() => {
                     setSessionActionsOpen(false);
                     setShowSupersetEditor(true);
@@ -8255,6 +8331,7 @@ export default function SessionView({
                 </button>
 
                 <button
+                  disabled={session.workoutTimerPaused}
                   ref={completeWorkoutButtonRef}
                   onClick={() => {
                     if (!allSetsCompleted) {
@@ -9082,6 +9159,37 @@ export default function SessionView({
               exerciseLibrary={exerciseLibrary}
               history={history}
               onClose={() => setDetailExercise(null)}
+              onEdit={
+                !detailExercise.builtin || canEditBuiltInExercises
+                  ? (exercise) => {
+                      const exerciseKey = getExerciseKey(exercise);
+                      const libraryExercise = exerciseLibrary.find(
+                        (item) =>
+                          String(item.id) === String(exercise.id) ||
+                          String(item.exerciseId || "") === String(exercise.id) ||
+                          getExerciseKey(item) === exerciseKey
+                      );
+
+                      if (libraryExercise) {
+                        setLibraryEditingExercise(libraryExercise);
+                      }
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {libraryEditingExercise && (
+            <ExerciseLibraryEditDialog
+              canEditBuiltIn={canEditBuiltInExercises}
+              exercise={libraryEditingExercise}
+              exerciseLibrary={exerciseLibrary}
+              onCancel={() => setLibraryEditingExercise(null)}
+              onSaved={(savedExercise) => {
+                setDetailExercise(savedExercise);
+                setLibraryEditingExercise(null);
+              }}
+              session={authSession}
+              setExerciseLibrary={setExerciseLibrary}
             />
           )}
         </>
