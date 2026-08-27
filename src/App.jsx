@@ -65,7 +65,11 @@ import {
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
-import { getBenchmarkFamilyForExercise, isExerciseBenchmark } from "./utils/exerciseBenchmark";
+import {
+  BENCHMARK_FAMILY_OPTIONS,
+  getBenchmarkFamilyForExercise,
+  isExerciseBenchmark,
+} from "./utils/exerciseBenchmark";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import {
   downloadExerciseLibraryWithPreferences,
@@ -2667,20 +2671,16 @@ function buildAiPlanDraftInstructions() {
 }
 
 function buildTrainingProfileContext(exerciseLibrary = []) {
-  const benchmarkFamilyDefinitions = [
-    {
-      benchmarkFamily: "Chest barbell press",
-      muscleGroup: "Chest",
-    },
-    {
-      benchmarkFamily: "Lower/posterior-chain deadlift",
-      muscleGroup: "Lower body / posterior chain",
-    },
-    {
-      benchmarkFamily: "Back pull-up/chin-up",
-      muscleGroup: "Back",
-    },
-  ];
+  const benchmarkFamilyDefinitions = BENCHMARK_FAMILY_OPTIONS.map((family) => ({
+    benchmarkFamily: family.contextLabel,
+    familyKey: family.key,
+    muscleGroup:
+      family.key === "chest_barbell_press"
+        ? "Chest"
+        : family.key === "posterior_chain_deadlift"
+          ? "Lower body / posterior chain"
+          : "Back",
+  }));
   const benchmarkFamilies = benchmarkFamilyDefinitions
     .map((family) => ({
       ...family,
@@ -6523,23 +6523,91 @@ export default function App() {
     }
   }
 
-  function downloadAiPlanContext(aiPlanningContext) {
+  async function copyAiPlanContext(aiPlanningContext) {
     const context = getAiPlanContext(aiPlanningContext);
-    const blob = new Blob([JSON.stringify(context, null, 2)], {
-      type: "application/json;charset=utf-8",
-    });
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(context, null, 2));
+      setAiPlanStatus("Complete AI context JSON copied.");
+    } catch (error) {
+      console.error("AI plan context copy failed:", error);
+      setAiPlanStatus("Context copy failed. Use Download Context instead.");
+    }
+  }
+
+  async function downloadAiTextFile({ contents, fileName, mimeType, title }) {
+    if (Capacitor.isNativePlatform()) {
+      await Filesystem.writeFile({
+        data: contents,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+        path: fileName,
+      });
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Cache,
+        path: fileName,
+      });
+
+      await Share.share({ files: [uri], title });
+      return "shared";
+    }
+
+    const blob = new Blob([contents], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `workout-ai-context-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setAiPlanStatus(
-      "AI context downloaded. Attach it to your existing ChatGPT discussion."
-    );
+    return "downloaded";
+  }
+
+  async function downloadAiPlanContext(aiPlanningContext) {
+    const context = getAiPlanContext(aiPlanningContext);
+    const fileName = `workout-ai-context-${new Date().toISOString().slice(0, 10)}.json`;
+
+    try {
+      const result = await downloadAiTextFile({
+        contents: JSON.stringify(context, null, 2),
+        fileName,
+        mimeType: "application/json;charset=utf-8",
+        title: "Save AI workout-plan context",
+      });
+      setAiPlanStatus(
+        result === "shared"
+          ? "AI context ready. Choose Save to Files to keep it on this device."
+          : "AI context downloaded. Attach it to your ChatGPT discussion."
+      );
+    } catch (error) {
+      console.error("AI plan context download failed:", error);
+      setAiPlanStatus("Context download did not complete. Try Copy Context instead.");
+    }
+  }
+
+  async function downloadAiPlanPrompt(aiPlanningContext) {
+    const context = getAiPlanContext(aiPlanningContext);
+    const prompt = getAiPlanPrompt(context);
+    const fileName = `workout-ai-prompt-${new Date().toISOString().slice(0, 10)}.txt`;
+
+    try {
+      const result = await downloadAiTextFile({
+        contents: prompt,
+        fileName,
+        mimeType: "text/plain;charset=utf-8",
+        title: "Save AI workout-plan prompt",
+      });
+      setAiPlanStatus(
+        result === "shared"
+          ? "AI prompt ready. Choose Save to Files to keep it on this device."
+          : "AI prompt downloaded."
+      );
+    } catch (error) {
+      console.error("AI plan prompt download failed:", error);
+      setAiPlanStatus("Prompt download did not complete. Try Copy Prompt instead.");
+    }
   }
 
   async function shareAiPlanContext(aiPlanningContext) {
@@ -6593,7 +6661,7 @@ export default function App() {
         return;
       }
 
-      downloadAiPlanContext(aiPlanningContext);
+      await downloadAiPlanContext(aiPlanningContext);
       setAiPlanStatus(
         `Native sharing is unavailable here. The context was downloaded${
           promptCopied ? " and the prompt was copied" : ""
@@ -6604,7 +6672,7 @@ export default function App() {
       setAiPlanStatus(
         `Sharing did not complete.${
           promptCopied ? " The prompt is copied;" : ""
-        } use Context and Open ChatGPT instead.`
+        } use Download Context and Open ChatGPT instead.`
       );
     }
   }
@@ -11841,7 +11909,9 @@ export default function App() {
           goHome();
         }}
         onCopyAiPlanPrompt={copyAiPlanPrompt}
+        onCopyAiPlanContext={copyAiPlanContext}
         onDownloadAiPlanContext={downloadAiPlanContext}
+        onDownloadAiPlanPrompt={downloadAiPlanPrompt}
         onOpenChatGptForAiPlan={openChatGptForAiPlan}
         onShareAiPlanContext={shareAiPlanContext}
         onSave={(result) => {

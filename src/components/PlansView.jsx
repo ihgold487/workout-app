@@ -6,12 +6,16 @@ import {
   ChevronRight,
   ClipboardList,
   Copy,
+  ExternalLink,
+  FileJson,
+  FileText,
   GripVertical,
   Link2,
   Plus,
   RefreshCw,
   Replace,
   Save,
+  Share2,
   Trash2,
   X,
 } from "lucide-react";
@@ -64,6 +68,124 @@ import {
   getDefaultRirPeriodizationMode,
   getRirForPlanWeek,
 } from "../utils/rirPeriodization";
+
+function ExplainedActionButton({
+  children,
+  description,
+  onClick,
+  style,
+  wrapperStyle,
+  ...buttonProps
+}) {
+  const [showExplanation, setShowExplanation] = useState(false);
+  const longPressTimerRef = useRef(null);
+  const explanationTimerRef = useRef(null);
+  const longPressedRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(longPressTimerRef.current);
+      window.clearTimeout(explanationTimerRef.current);
+    },
+    []
+  );
+
+  const cancelPendingLongPress = () => {
+    window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        position: "relative",
+        ...wrapperStyle,
+      }}
+    >
+      <button
+        {...buttonProps}
+        onClick={(event) => {
+          if (longPressedRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            longPressedRef.current = false;
+            return;
+          }
+
+          onClick?.(event);
+        }}
+        onContextMenu={(event) => event.preventDefault()}
+        onPointerCancel={cancelPendingLongPress}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "touch" && event.pointerType !== "pen") {
+            return;
+          }
+
+          cancelPendingLongPress();
+          longPressedRef.current = false;
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressedRef.current = true;
+            setShowExplanation(true);
+            window.clearTimeout(explanationTimerRef.current);
+            explanationTimerRef.current = window.setTimeout(
+              () => setShowExplanation(false),
+              1800
+            );
+          }, 550);
+        }}
+        onPointerLeave={cancelPendingLongPress}
+        onPointerUp={() => {
+          cancelPendingLongPress();
+          if (longPressedRef.current) {
+            window.setTimeout(() => {
+              longPressedRef.current = false;
+            }, 500);
+          }
+        }}
+        style={{
+          alignItems: "center",
+          display: "inline-flex",
+          gap: "6px",
+          justifyContent: "center",
+          minHeight: "44px",
+          padding: "7px 11px",
+          userSelect: "none",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          ...style,
+        }}
+        title={description}
+        type="button"
+      >
+        {children}
+      </button>
+      {showExplanation && (
+        <span
+          role="tooltip"
+          style={{
+            background: "var(--text-h)",
+            borderRadius: "6px",
+            bottom: "calc(100% + 7px)",
+            color: "var(--surface)",
+            fontSize: "12px",
+            left: "50%",
+            lineHeight: 1.35,
+            maxWidth: "220px",
+            padding: "7px 9px",
+            position: "absolute",
+            textAlign: "center",
+            transform: "translateX(-50%)",
+            width: "max-content",
+            zIndex: 20,
+          }}
+        >
+          {description}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function formatList(value) {
   if (Array.isArray(value)) {
@@ -2549,8 +2671,10 @@ export default function PlansView({
   history,
   onBuildAiPlanDraft,
   onCancel,
+  onCopyAiPlanContext,
   onCopyAiPlanPrompt,
   onDownloadAiPlanContext,
+  onDownloadAiPlanPrompt,
   onOpenChatGptForAiPlan,
   onShareAiPlanContext,
   onShowAiPlanNotes,
@@ -4533,53 +4657,89 @@ export default function PlansView({
                 setAiPlanStatus("");
               }}
             />
-            <div
-              style={{ display: "grid", gap: "8px" }}
-            >
-              <button
+            <div style={{ display: "grid", gap: "8px" }}>
+              <ExplainedActionButton
+                description="Share the complete context file and copy the prompt for use in ChatGPT."
                 onClick={() =>
                   onShareAiPlanContext(
                     buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                   )
                 }
                 style={{ minHeight: "44px", width: "100%" }}
-                type="button"
+                wrapperStyle={{ width: "100%" }}
               >
+                <Share2 size={16} />
                 Send to ChatGPT
-              </button>
+              </ExplainedActionButton>
             </div>
             <div
               style={{
-                display: "flex",
-                flexWrap: "wrap",
+                display: "grid",
                 gap: "8px",
-                justifyContent: "center",
+                gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
               }}
             >
-              <button
+              <ExplainedActionButton
+                description="Copy the complete AI context JSON to the clipboard."
+                onClick={() =>
+                  onCopyAiPlanContext(
+                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  )
+                }
+                style={{ width: "100%" }}
+                wrapperStyle={{ width: "100%" }}
+              >
+                <Copy size={16} />
+                Copy Context
+              </ExplainedActionButton>
+              <ExplainedActionButton
+                description="Download the complete AI context as a JSON file."
                 onClick={() =>
                   onDownloadAiPlanContext(
                     buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                   )
                 }
-                type="button"
+                style={{ width: "100%" }}
+                wrapperStyle={{ width: "100%" }}
               >
-                Context
-              </button>
-              <button
+                <FileJson size={16} />
+                Download Context
+              </ExplainedActionButton>
+              <ExplainedActionButton
+                description="Copy the ChatGPT instructions to the clipboard."
                 onClick={() =>
                   onCopyAiPlanPrompt(
                     buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                   )
                 }
-                type="button"
+                style={{ width: "100%" }}
+                wrapperStyle={{ width: "100%" }}
               >
-                <Copy size={14} />
-                Prompt
-              </button>
-              <button onClick={onOpenChatGptForAiPlan} type="button">
+                <Copy size={16} />
+                Copy Prompt
+              </ExplainedActionButton>
+              <ExplainedActionButton
+                description="Download the ChatGPT instructions as a text file."
+                onClick={() =>
+                  onDownloadAiPlanPrompt(
+                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  )
+                }
+                style={{ width: "100%" }}
+                wrapperStyle={{ width: "100%" }}
+              >
+                <FileText size={16} />
+                Download Prompt
+              </ExplainedActionButton>
+              <ExplainedActionButton
+                description="Open ChatGPT so you can attach the context and use the prompt."
+                onClick={onOpenChatGptForAiPlan}
+                style={{ width: "100%" }}
+                wrapperStyle={{ width: "100%" }}
+              >
+                <ExternalLink size={16} />
                 Open ChatGPT
-              </button>
+              </ExplainedActionButton>
             </div>
             <textarea
               aria-label="AI plan draft JSON"

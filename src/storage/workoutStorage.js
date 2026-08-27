@@ -1,5 +1,8 @@
 import { db } from "../db";
-import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
+import {
+  getBenchmarkFamilyKeyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
 import { withDefaultExerciseStatus } from "../utils/exerciseStatus";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
@@ -67,6 +70,10 @@ function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
     benchmark: Object.prototype.hasOwnProperty.call(savedExercise, "benchmark")
       ? Boolean(savedExercise.benchmark)
       : isExerciseBenchmark(seedExercise),
+    benchmarkFamilyKey:
+      savedExercise.benchmarkFamilyKey ??
+      savedExercise.benchmark_family_key ??
+      getBenchmarkFamilyKeyForExercise(seedExercise),
   };
 
   if (
@@ -98,6 +105,7 @@ function withDefaultExerciseBenchmark(exercise) {
   return {
     ...exercise,
     benchmark: isExerciseBenchmark(exercise),
+    benchmarkFamilyKey: getBenchmarkFamilyKeyForExercise(exercise),
   };
 }
 

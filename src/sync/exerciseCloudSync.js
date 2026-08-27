@@ -1,7 +1,10 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { skipBlockedRemoteWrite } from "./remoteWritePolicy";
 import { EXERCISE_STATUS, withDefaultExerciseStatus } from "../utils/exerciseStatus";
-import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
+import {
+  getBenchmarkFamilyKeyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
 
 const EXERCISES_TABLE = "exercises";
 const EXERCISE_PREFERENCES_TABLE = "user_exercise_preferences";
@@ -39,6 +42,7 @@ function cloudExerciseFromLocal(exercise, userId) {
   const muscles = Array.isArray(exercise.muscles) ? exercise.muscles : [];
 
   return {
+    benchmark_family_key: getBenchmarkFamilyKeyForExercise(exercise) || null,
     bodyweight_load_percent: parseOptionalNumber(exercise.bodyweightLoadPercent),
     deleted_at: null,
     description: exercise.description || exercise.note || null,
@@ -75,6 +79,7 @@ function cloudBuiltinExerciseFromLocal(exercise, userId) {
   ].join(":");
 
   return {
+    benchmark_family_key: getBenchmarkFamilyKeyForExercise(exercise) || null,
     bodyweight_load_percent: parseOptionalNumber(exercise.bodyweightLoadPercent),
     description: exercise.description || exercise.note || null,
     equipment: firstArrayValue(exercise.equipment),
@@ -392,6 +397,7 @@ function mergePreferenceMetadata(
 
 function cloudExerciseToLocal(exercise) {
   return withDefaultExerciseStatus({
+    benchmarkFamilyKey: exercise.benchmark_family_key || "",
     bodyweightLoadPercent: exercise.bodyweight_load_percent ?? null,
     builtin: !!exercise.is_builtin,
     benchmark:
@@ -430,6 +436,10 @@ function getPreferenceStatus(preference) {
 function applyCloudExerciseMetadata(localExercise, cloudExercise) {
   return withDefaultExerciseStatus({
     ...localExercise,
+    benchmarkFamilyKey:
+      cloudExercise.benchmark_family_key ||
+      localExercise.benchmarkFamilyKey ||
+      getBenchmarkFamilyKeyForExercise(localExercise),
     benchmark:
       cloudExercise.is_benchmark == null
         ? isExerciseBenchmark(localExercise)
@@ -541,7 +551,7 @@ export async function downloadExerciseLibraryWithPreferences(
   const { data: cloudExercises, error: exerciseError } = await supabase
     .from(EXERCISES_TABLE)
     .select(
-      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_benchmark,is_builtin,source,source_key"
+      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_benchmark,benchmark_family_key,is_builtin,source,source_key"
     )
     .or(`user_id.eq.${userId},user_id.is.null`)
     .is("deleted_at", null);

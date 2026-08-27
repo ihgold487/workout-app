@@ -402,6 +402,7 @@ create table if not exists public.exercises (
   secondary_muscles text[] not null default '{}',
   bodyweight_load_percent numeric,
   is_benchmark boolean not null default false,
+  benchmark_family_key text,
   is_builtin boolean not null default false,
   source text not null default 'user',
   source_key text,
@@ -443,6 +444,9 @@ add column if not exists bodyweight_load_percent numeric;
 alter table public.exercises
 add column if not exists is_benchmark boolean not null default false;
 
+alter table public.exercises
+add column if not exists benchmark_family_key text;
+
 update public.exercises
 set is_benchmark = true
 where is_benchmark = false
@@ -456,9 +460,37 @@ where is_benchmark = false
         lower(coalesce(equipment, '')) like '%barbell%'
         or lower(coalesce(equipment, '')) like '%trap bar%'
       )
-      and lower(name) ~ '(^| )deadlifts?$|sumo deadlifts?|deficit deadlifts?'
+      and lower(trim(name)) ~ '^(deadlifts?|sumo deadlifts?|deficit deadlifts?)$'
     )
     or lower(name) ~ 'pull[- ]?ups?|chin[- ]?ups?'
+  );
+
+update public.exercises
+set benchmark_family_key = case
+  when lower(coalesce(equipment, '')) like '%barbell%'
+    and lower(trim(name)) in ('bench press', 'incline bench press')
+    then 'chest_barbell_press'
+  when (
+    lower(coalesce(equipment, '')) like '%barbell%'
+    or lower(coalesce(equipment, '')) like '%trap bar%'
+  ) and lower(trim(name)) ~ '^(deadlifts?|sumo deadlifts?|deficit deadlifts?)$'
+    then 'posterior_chain_deadlift'
+  when lower(trim(name)) ~ 'pull[- ]?ups?|chin[- ]?ups?'
+    then 'vertical_pull'
+  else benchmark_family_key
+end
+where is_benchmark = true
+  and benchmark_family_key is null;
+
+-- Correct records classified by the former broad "ends in deadlifts" rule.
+update public.exercises
+set is_benchmark = false
+where benchmark_family_key is null
+  and is_benchmark = true
+  and lower(trim(name)) in ('romanian deadlift', 'romanian deadlifts')
+  and (
+    lower(coalesce(equipment, '')) like '%barbell%'
+    or lower(coalesce(equipment, '')) like '%trap bar%'
   );
 
 drop trigger if exists exercises_set_updated_at on public.exercises;
@@ -747,6 +779,7 @@ begin
     secondary_muscles,
     bodyweight_load_percent,
     is_benchmark,
+    benchmark_family_key,
     is_builtin,
     source,
     source_key,
@@ -777,6 +810,7 @@ begin
     ),
     nullif(exercise_payload->>'bodyweight_load_percent', '')::numeric,
     coalesce((exercise_payload->>'is_benchmark')::boolean, false),
+    nullif(exercise_payload->>'benchmark_family_key', ''),
     true,
     coalesce(nullif(exercise_payload->>'source', ''), 'trainer_promoted'),
     coalesce(
@@ -801,6 +835,7 @@ begin
     secondary_muscles = excluded.secondary_muscles,
     bodyweight_load_percent = excluded.bodyweight_load_percent,
     is_benchmark = excluded.is_benchmark,
+    benchmark_family_key = excluded.benchmark_family_key,
     is_builtin = true,
     deleted_at = null
   returning id into promoted_exercise_id;
@@ -877,6 +912,10 @@ begin
     is_benchmark = case
       when exercise_payload ? 'is_benchmark' then coalesce((exercise_payload->>'is_benchmark')::boolean, false)
       else is_benchmark
+    end,
+    benchmark_family_key = case
+      when exercise_payload ? 'benchmark_family_key' then nullif(exercise_payload->>'benchmark_family_key', '')
+      else benchmark_family_key
     end,
     is_builtin = true,
     user_id = null,

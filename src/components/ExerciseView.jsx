@@ -13,7 +13,11 @@ import {
 } from "../sync/exerciseCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
-import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
+import {
+  BENCHMARK_FAMILY_OPTIONS,
+  getBenchmarkFamilyKeyForExercise,
+  isExerciseBenchmark,
+} from "../utils/exerciseBenchmark";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseThumbnail from "./ExerciseThumbnail";
@@ -40,6 +44,7 @@ const muscleGroups = [
 
 const emptyDraft = {
   benchmark: "no",
+  benchmarkFamilyKey: "",
   bodyweightLoadPercent: "",
   description: "",
   equipment: "",
@@ -100,6 +105,7 @@ function getExerciseDraft(exercise = {}) {
 
   return {
     benchmark: isExerciseBenchmark(exercise) ? "yes" : "no",
+    benchmarkFamilyKey: getBenchmarkFamilyKeyForExercise(exercise),
     bodyweightLoadPercent:
       bodyweightLoadPercent == null || bodyweightLoadPercent === ""
         ? ""
@@ -124,6 +130,8 @@ function exerciseFromDraft(draft, existing = {}) {
   return {
     ...existing,
     benchmark: draft.benchmark === "yes",
+    benchmarkFamilyKey:
+      draft.benchmark === "yes" ? draft.benchmarkFamilyKey || "" : "",
     bodyweightLoadPercent:
       draft.bodyweightLoadPercent === ""
         ? null
@@ -495,6 +503,9 @@ export default function ExerciseView({
       !draft.name.trim() ? "exercise name" : null,
       !draft.equipment ? "equipment" : null,
       !draft.primaryMuscle ? "primary muscle" : null,
+      draft.benchmark === "yes" && !draft.benchmarkFamilyKey
+        ? "benchmark family"
+        : null,
     ].filter(Boolean);
 
     if (missingFields.length > 0) {
@@ -522,6 +533,11 @@ export default function ExerciseView({
   async function saveEdit() {
     if (!editingDraft.name.trim()) {
       alert("Exercise name required");
+      return;
+    }
+
+    if (editingDraft.benchmark === "yes" && !editingDraft.benchmarkFamilyKey) {
+      alert("Benchmark family required");
       return;
     }
 
@@ -1290,6 +1306,10 @@ export default function ExerciseView({
             setFormDraft({
               ...formDraft,
               benchmark: event.target.value,
+              benchmarkFamilyKey:
+                event.target.value === "yes"
+                  ? formDraft.benchmarkFamilyKey
+                  : "",
             })
           }
           value={formDraft.benchmark || "no"}
@@ -1299,6 +1319,46 @@ export default function ExerciseView({
         </select>
       </label>
     );
+    const benchmarkFamilySelect = formDraft.benchmark === "yes" ? (
+      <label
+        style={{
+          display: "grid",
+          gap: "4px",
+          gridColumn: isImageLayout || compact ? "auto" : "1 / -1",
+          maxWidth: isImageLayout ? "240px" : undefined,
+        }}
+      >
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "12px",
+            fontWeight: "bold",
+          }}
+        >
+          Benchmark Family
+        </span>
+        <select
+          onChange={(event) =>
+            setFormDraft({
+              ...formDraft,
+              benchmarkFamilyKey: event.target.value,
+            })
+          }
+          style={{
+            boxSizing: "border-box",
+            width: "100%",
+          }}
+          value={formDraft.benchmarkFamilyKey || ""}
+        >
+          <option value="">Select family</option>
+          {BENCHMARK_FAMILY_OPTIONS.map((family) => (
+            <option key={family.key} value={family.key}>
+              {family.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
 
     return (
       <div
@@ -1357,12 +1417,22 @@ export default function ExerciseView({
             >
               {benchmarkSelect}
             </div>
+            {benchmarkFamilySelect && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                }}
+              >
+                {benchmarkFamilySelect}
+              </div>
+            )}
           </>
         ) : (
           <>
             {nameInput}
             {equipmentSelect}
             {benchmarkSelect}
+            {benchmarkFamilySelect}
             {bodyweightSelect}
             <div
               style={{

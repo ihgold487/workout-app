@@ -1,4 +1,5 @@
 import {
+  BENCHMARK_FAMILY_OPTIONS,
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
@@ -6,23 +7,17 @@ import {
 export const AI_PLANNING_GUIDANCE_STORAGE_KEY =
   "workout-app.ai-planning-guidance.v1";
 
-export const AI_BENCHMARK_FAMILIES = [
-  {
-    id: "chestBarbellPress",
-    label: "Chest press",
-    benchmarkFamily: "Chest barbell press",
-  },
-  {
-    id: "posteriorChainDeadlift",
-    label: "Posterior chain",
-    benchmarkFamily: "Lower/posterior-chain deadlift",
-  },
-  {
-    id: "verticalPull",
-    label: "Vertical pull",
-    benchmarkFamily: "Back pull-up/chin-up",
-  },
-];
+export const AI_BENCHMARK_FAMILIES = BENCHMARK_FAMILY_OPTIONS.map((family) => ({
+  benchmarkFamily: family.contextLabel,
+  id:
+    family.key === "chest_barbell_press"
+      ? "chestBarbellPress"
+      : family.key === "posterior_chain_deadlift"
+        ? "posteriorChainDeadlift"
+        : "verticalPull",
+  key: family.key,
+  label: family.label,
+}));
 
 const DEFAULT_BENCHMARK_FAMILY_PRIORITIES = {
   chestBarbellPress: {
