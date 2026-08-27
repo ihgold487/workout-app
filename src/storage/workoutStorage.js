@@ -59,6 +59,18 @@ function getExerciseSeedKey(exercise) {
   return `${exercise?.id ?? ""}::${exercise?.name || ""}::${equipment}`;
 }
 
+function getBuiltInExerciseIdentityKey(exercise) {
+  const equipment = Array.isArray(exercise?.equipment)
+    ? exercise.equipment.filter(Boolean).join("|")
+    : exercise?.equipment || "";
+
+  return `${String(exercise?.name || "").trim().toLowerCase()}::${String(
+    equipment
+  )
+    .trim()
+    .toLowerCase()}`;
+}
+
 function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
   if (!savedExercise) {
     return seedExercise;
@@ -112,17 +124,26 @@ function withDefaultExerciseBenchmark(exercise) {
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const savedExercises = arrayOrEmpty(exerciseLibrary);
   const seedKeys = new Set(seedExercises.map(getExerciseSeedKey));
+  const seedIdentityKeys = new Set(
+    seedExercises.map(getBuiltInExerciseIdentityKey)
+  );
   const savedBuiltInBySeedKey = new Map(
     savedExercises
       .filter((exercise) => exercise.builtin)
       .map((exercise) => [getExerciseSeedKey(exercise), exercise])
+  );
+  const savedBuiltInByIdentityKey = new Map(
+    savedExercises
+      .filter((exercise) => exercise.builtin)
+      .map((exercise) => [getBuiltInExerciseIdentityKey(exercise), exercise])
   );
   const seededExercises = seedExercises.map((exercise) =>
     withDefaultExerciseBenchmark(
       withDefaultExerciseStatus(
         mergeSavedBuiltinExercise(
           exercise,
-          savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise))
+          savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise)) ||
+            savedBuiltInByIdentityKey.get(getBuiltInExerciseIdentityKey(exercise))
         )
       )
     )
@@ -131,7 +152,10 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
     (exercise) => !exercise.builtin
   );
   const promotedBuiltInExercises = savedExercises.filter(
-    (exercise) => exercise.builtin && !seedKeys.has(getExerciseSeedKey(exercise))
+    (exercise) =>
+      exercise.builtin &&
+      !seedKeys.has(getExerciseSeedKey(exercise)) &&
+      !seedIdentityKeys.has(getBuiltInExerciseIdentityKey(exercise))
   );
 
   return [

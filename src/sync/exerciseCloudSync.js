@@ -491,7 +491,7 @@ export async function uploadExercisePreferences(
   await uploadCustomExercises(exerciseLibrary, session);
 
   const targets = await loadCloudExercisePreferenceTargets(userId);
-  const records = [];
+  const recordsByExerciseId = new Map();
   const unmatched = [];
 
   for (const exercise of exerciseLibrary) {
@@ -509,7 +509,8 @@ export async function uploadExercisePreferences(
       continue;
     }
 
-    records.push(
+    recordsByExerciseId.set(
+      exerciseId,
       localExercisePreferenceToCloud(
         exercise,
         userId,
@@ -518,6 +519,8 @@ export async function uploadExercisePreferences(
       )
     );
   }
+
+  const records = [...recordsByExerciseId.values()];
 
   if (records.length > 0) {
     const { error } = await supabase
