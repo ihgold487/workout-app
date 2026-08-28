@@ -2150,25 +2150,90 @@ export default function SessionView({
       updateSession((s) => ({
         ...s,
 
-        exercises: s.exercises.map((ex) =>
-          ex.id === exerciseId
-            ? {
-                ...ex,
+        exercises: s.exercises.map((ex) => {
+          if (ex.id !== exerciseId) {
+            return ex;
+          }
 
-                sets: ex.sets.map((set) =>
-                  set.id === setId
-                    ? stripHistoryDefaultMetadata({
-                        ...set,
-                        [field]: value,
-                      })
-                    : set
-                ),
-              }
-            : ex
-        ),
+          const editedSetIndex = ex.sets.findIndex((set) => set.id === setId);
+          let nextSets = ex.sets.map((set) =>
+            set.id === setId
+              ? stripHistoryDefaultMetadata({
+                  ...set,
+                  [field]: value,
+                  ...(field === "actualWeight" && set.isDropSet
+                    ? { dropWeightManuallyEdited: true }
+                    : {}),
+                })
+              : set
+          );
+
+          if (field === "actualWeight") {
+            const finalWorkingSetIndex = nextSets.findLastIndex(
+              (set) => !set.isDropSet
+            );
+
+            if (editedSetIndex >= finalWorkingSetIndex) {
+              const libraryExercise =
+                exerciseLibrary.find(
+                  (item) => String(item.id) === String(ex.exerciseId)
+                ) || ex;
+              const calculationExercise = { ...libraryExercise, ...ex };
+              let sourceWeight = parseSessionNumber(
+                nextSets[finalWorkingSetIndex]?.actualWeight ||
+                  nextSets[finalWorkingSetIndex]?.targetWeight
+              );
+
+              nextSets = nextSets.map((set, index) => {
+                if (!set.isDropSet || index <= finalWorkingSetIndex) {
+                  return set;
+                }
+
+                const hasPersistedManualOverride =
+                  !isBlankValue(set.actualWeight) &&
+                  !isBlankValue(set.targetWeight) &&
+                  !valuesMatch(set.actualWeight, set.targetWeight);
+
+                if (
+                  set.dropWeightManuallyEdited ||
+                  hasPersistedManualOverride
+                ) {
+                  sourceWeight = parseSessionNumber(
+                    set.actualWeight || set.targetWeight
+                  );
+                  return set;
+                }
+
+                if (sourceWeight == null) {
+                  return set;
+                }
+
+                const nextWeight = String(
+                  roundWeightToIncrement(
+                    sourceWeight * 0.8,
+                    getExerciseWeightIncrement(
+                      calculationExercise,
+                      undefined,
+                      sourceWeight
+                    )
+                  )
+                );
+                sourceWeight = parseSessionNumber(nextWeight);
+
+                return {
+                  ...set,
+                  actualWeight: nextWeight,
+                  targetWeight: nextWeight,
+                };
+              });
+            }
+          }
+
+          return { ...ex, sets: nextSets };
+        }),
       }));
     },
-    [session.id, session.workoutTimerPaused, updateSession]
+    [exerciseLibrary, session.id, session.workoutTimerPaused, updateSession]
   );
 
   function applyTargetToActual(exerciseId, setId) {
@@ -2184,8 +2249,8 @@ export default function SessionView({
     }
 
     applyPrescriptionToActual(exerciseId, setId, {
-      reps: getSetTargetReps(set),
-      rir: getSetTargetRir(set),
+      reps: set.isDropSet ? "" : getSetTargetReps(set),
+      rir: set.isDropSet ? "" : getSetTargetRir(set),
       weight: set.targetWeight,
     });
   }
@@ -3428,9 +3493,70 @@ export default function SessionView({
           ? {
               ...ex,
 
-              sets: [...ex.sets, newSet],
+              sets: [
+                ...ex.sets.filter((set) => !set.isDropSet),
+                newSet,
+                ...ex.sets.filter((set) => set.isDropSet),
+              ],
             }
           : ex
+      ),
+    }));
+  }
+
+  function addDropSet(exercise) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
+    const dropSetCount = exercise.sets.filter((set) => set.isDropSet).length;
+
+    if (dropSetCount >= 3) {
+      return;
+    }
+
+    const precedingSet = exercise.sets.at(-1);
+    const sourceWeight = parseSessionNumber(
+      precedingSet?.actualWeight || precedingSet?.targetWeight
+    );
+    const calculationExercise = getExerciseForCalculation(exercise);
+    const targetWeight =
+      sourceWeight == null
+        ? ""
+        : String(
+            roundWeightToIncrement(
+              sourceWeight * 0.8,
+              getExerciseWeightIncrement(
+                calculationExercise,
+                undefined,
+                sourceWeight
+              )
+            )
+          );
+    const newSet = {
+      id: Date.now(),
+      isDropSet: true,
+      targetWeight,
+      targetReps: "AMRAP",
+      targetRir: "0",
+      prescribedReps: "AMRAP",
+      prescribedRir: "0",
+      reps: "AMRAP",
+      rir: "0",
+      actualWeight: targetWeight,
+      actualReps: "",
+      actualRir: "",
+      dropWeightManuallyEdited: false,
+      completed: false,
+    };
+
+    updateSession((s) => ({
+      ...s,
+      templateChanged: true,
+      exercises: s.exercises.map((item) =>
+        item.id === exercise.id
+          ? { ...item, sets: [...item.sets, newSet] }
+          : item
       ),
     }));
   }
@@ -3456,15 +3582,23 @@ export default function SessionView({
 
       return aOrder - bOrder;
     });
+    const workingSetsByExercise = new Map(
+      orderedExercises.map((exercise) => [
+        exercise.id,
+        exercise.sets.filter((set) => !set.isDropSet),
+      ])
+    );
     const maxSetCount = Math.max(
       0,
-      ...orderedExercises.map((exercise) => exercise.sets.length)
+      ...orderedExercises.map(
+        (exercise) => workingSetsByExercise.get(exercise.id).length
+      )
     );
     const sequence = [];
 
     for (let setIndex = 0; setIndex < maxSetCount; setIndex += 1) {
       for (const exercise of orderedExercises) {
-        const set = exercise.sets[setIndex];
+        const set = workingSetsByExercise.get(exercise.id)[setIndex];
 
         if (set) {
           sequence.push({
@@ -3476,6 +3610,20 @@ export default function SessionView({
           });
         }
       }
+    }
+
+    for (const exercise of orderedExercises) {
+      exercise.sets.forEach((set, setIndex) => {
+        if (set.isDropSet) {
+          sequence.push({
+            exercise,
+            exerciseId: exercise.id,
+            set,
+            setId: set.id,
+            setIndex,
+          });
+        }
+      });
     }
 
     return sequence;
@@ -3792,6 +3940,12 @@ export default function SessionView({
       return;
     }
 
+    const nextSet = nextExercise?.sets[nextSetIndex];
+
+    if (nextSet?.isDropSet) {
+      return;
+    }
+
     const prescribedRestSeconds = getNextSetTimerRestSeconds(nextActiveSet);
     const reps = getNextSetTimerReps(nextActiveSet, completedSetContext);
 
@@ -3994,6 +4148,46 @@ export default function SessionView({
   }
 
   function getNextSetTargetsAfterCompletion(exercise, currentSet, nextSet) {
+    if (nextSet.isDropSet) {
+      const hasPersistedManualOverride =
+        !isBlankValue(nextSet.actualWeight) &&
+        !isBlankValue(nextSet.targetWeight) &&
+        !valuesMatch(nextSet.actualWeight, nextSet.targetWeight);
+
+      if (
+        nextSet.dropWeightManuallyEdited ||
+        hasPersistedManualOverride
+      ) {
+        return {};
+      }
+
+      const sourceWeight = parseSessionNumber(
+        currentSet.actualWeight || currentSet.targetWeight
+      );
+      const calculationExercise = getExerciseForCalculation(exercise);
+
+      const targetWeight =
+        sourceWeight == null
+          ? nextSet.targetWeight
+          : String(
+              roundWeightToIncrement(
+                sourceWeight * 0.8,
+                getExerciseWeightIncrement(
+                  calculationExercise,
+                  undefined,
+                  sourceWeight
+                )
+              )
+            );
+
+      return {
+        actualWeight: targetWeight,
+        targetReps: "AMRAP",
+        targetRir: "0",
+        targetWeight,
+      };
+    }
+
     const calculationExercise = getExerciseForCalculation(exercise);
     const actualReps = parseSessionNumber(currentSet.actualReps);
     const prescribedReps = parseSessionNumber(
@@ -4188,6 +4382,15 @@ export default function SessionView({
     const currentIndex = exercise.sets.findIndex((s) => s.id === setId);
 
     const undo = currentSet.completed;
+
+    if (
+      !undo &&
+      currentSet.isDropSet &&
+      (!Number.isInteger(parseSessionNumber(currentSet.actualReps)) ||
+        parseSessionNumber(currentSet.actualReps) <= 0)
+    ) {
+      return;
+    }
 
     if (undo && !canUncompleteSet(exerciseId, setId)) {
       return;
@@ -5521,7 +5724,9 @@ export default function SessionView({
     completedWorkout.exercises.forEach((exercise) => {
       let bestE1RM = null;
 
-      exercise.sets.filter((set) => set.completed).forEach((set) => {
+      exercise.sets
+        .filter((set) => set.completed && !set.isDropSet)
+        .forEach((set) => {
         const e1rm = calculateSessionE1RM(
           exercise,
           set.actualWeight,
@@ -7747,11 +7952,18 @@ export default function SessionView({
                             activeSet?.setId === set.id;
 
                           const isCompleted = !!set.completed;
+                          const dropSetActualReps = parseSessionNumber(
+                            set.actualReps
+                          );
+                          const hasValidDropSetActualReps =
+                            !set.isDropSet ||
+                            (Number.isInteger(dropSetActualReps) &&
+                              dropSetActualReps > 0);
                           const targetMatchStatus = isActive
                             ? getActualTargetMatchStatus(exercise, set, setIndex)
                             : "match";
                           const showTargetStatus =
-                            targetMatchStatus !== "match";
+                            !set.isDropSet && targetMatchStatus !== "match";
                           const targetStatusStyle =
                             targetMatchStatus === "suggested"
                               ? {
@@ -7792,12 +8004,21 @@ export default function SessionView({
                             ? lbsToKg(set.actualWeight)
                             : set.actualWeight;
                           const actualRepsDisplay = isBlankValue(set.actualReps)
-                            ? "—"
-                            : set.actualReps;
+                            ? set.isDropSet
+                              ? "A"
+                              : "—"
+                            : set.actualReps === "AMRAP"
+                              ? "A"
+                              : set.actualReps;
                           const actualRirDisplay = isBlankValue(set.actualRir)
                             ? "—"
                             : set.actualRir;
-                          const actualE1RM = isBlankValue(set.actualReps)
+                          const dropSetIndex = set.isDropSet
+                            ? exercise.sets
+                                .slice(0, setIndex + 1)
+                                .filter((item) => item.isDropSet).length
+                            : null;
+                          const actualE1RM = set.isDropSet || isBlankValue(set.actualReps)
                             ? null
                             : calculateSessionE1RM(
                                 exercise,
@@ -7841,7 +8062,9 @@ export default function SessionView({
 
                                 background: isActive
                                   ? "color-mix(in srgb, var(--accent) 10%, var(--surface))"
-                                  : "transparent",
+                                  : set.isDropSet
+                                    ? "color-mix(in srgb, var(--accent) 5%, var(--surface))"
+                                    : "transparent",
 
                                 fontWeight: isActive ? "bold" : "normal",
                               }}
@@ -7861,34 +8084,45 @@ export default function SessionView({
 
                                   if (event.key === " ") {
                                     event.preventDefault();
-                                    openTargetAlternatives(
-                                      exercise,
-                                      set,
-                                      setIndex
-                                    );
-                                  }
-                                }}
-                                onPointerCancel={() => {
-                                  cancelTargetPressTimer();
-                                }}
-                                onPointerDown={(event) => {
-                                  event.stopPropagation();
-                                  targetLongPressRef.current = false;
-                                  cancelTargetPressTimer();
-                                  targetPressTimerRef.current = setTimeout(
-                                    () => {
-                                      targetLongPressRef.current = true;
+                                    if (set.isDropSet) {
+                                      applyTargetToActual(exercise.id, set.id);
+                                    } else {
                                       openTargetAlternatives(
                                         exercise,
                                         set,
                                         setIndex
                                       );
-                                    },
-                                    520
-                                  );
+                                    }
+                                  }
+                                }}
+                                onPointerCancel={() => {
+                                  if (!set.isDropSet) {
+                                    cancelTargetPressTimer();
+                                  }
+                                }}
+                                onPointerDown={(event) => {
+                                  event.stopPropagation();
+                                  targetLongPressRef.current = false;
+                                  cancelTargetPressTimer();
+
+                                  if (!set.isDropSet) {
+                                    targetPressTimerRef.current = setTimeout(
+                                      () => {
+                                        targetLongPressRef.current = true;
+                                        openTargetAlternatives(
+                                          exercise,
+                                          set,
+                                          setIndex
+                                        );
+                                      },
+                                      520
+                                    );
+                                  }
                                 }}
                                 onPointerLeave={() => {
-                                  cancelTargetPressTimer();
+                                  if (!set.isDropSet) {
+                                    cancelTargetPressTimer();
+                                  }
                                 }}
                                 onPointerUp={(event) => {
                                   event.stopPropagation();
@@ -7923,9 +8157,25 @@ export default function SessionView({
                                     textAlign: "left",
                                   }}
                                 >
+                                  {set.isDropSet && (
+                                    <span
+                                      style={{
+                                        color: "var(--accent)",
+                                        fontWeight: 800,
+                                        marginRight: "3px",
+                                      }}
+                                      title={`Drop set ${dropSetIndex}`}
+                                    >
+                                      D{dropSetIndex}
+                                    </span>
+                                  )}
                                   {displayWeight(set.targetWeight)}×
-                                  {getSetTargetReps(set)}
-                                  {getSetTargetRir(set) ? `@${getSetTargetRir(set)}` : ""}
+                                  {set.isDropSet
+                                    ? "AMRAP"
+                                    : getSetTargetReps(set)}
+                                  {!set.isDropSet && getSetTargetRir(set)
+                                    ? `@${getSetTargetRir(set)}`
+                                    : ""}
                                 </div>
 
                                 <div
@@ -7939,21 +8189,23 @@ export default function SessionView({
                                     textAlign: "left",
                                   }}
                                 >
-                                  <span>
-                                    (
-                                    {formatSessionE1RMDisplay(
-                                      calculateSessionE1RM(
-                                        exercise,
-                                        "",
-                                        "",
-                                        "",
-                                        set.targetWeight,
-                                        getSetTargetReps(set),
-                                        getSetTargetRir(set)
+                                  {!set.isDropSet && (
+                                    <span>
+                                      (
+                                      {formatSessionE1RMDisplay(
+                                        calculateSessionE1RM(
+                                          exercise,
+                                          "",
+                                          "",
+                                          "",
+                                          set.targetWeight,
+                                          getSetTargetReps(set),
+                                          getSetTargetRir(set)
+                                        )
+                                      )}
                                       )
-                                    )}
-                                    )
-                                  </span>
+                                    </span>
+                                  )}
                                   {showTargetStatus && (
                                     <span
                                       aria-label={targetStatusStyle.label}
@@ -8096,10 +8348,12 @@ export default function SessionView({
                                     width: "42px",
                                     textAlign: "center",
                                     fontSize: "13px",
-                                    color: "var(--text-muted)",
-                                  }}
+                                  color: "var(--text-muted)",
+                                }}
                                 >
-                                  {formatSessionE1RMDisplay(actualE1RM)}
+                                  {set.isDropSet
+                                    ? ""
+                                    : formatSessionE1RMDisplay(actualE1RM)}
                                 </span>
                               </span>
 
@@ -8107,6 +8361,8 @@ export default function SessionView({
                                 label={
                                   set.completed
                                     ? "Set completed"
+                                    : !hasValidDropSetActualReps
+                                      ? "Enter actual reps before completing drop set"
                                     : "Complete set"
                                 }
                                 size={30}
@@ -8118,6 +8374,8 @@ export default function SessionView({
                                 tone={set.completed ? "success" : "neutral"}
                                 disabled={
                                   session.workoutTimerPaused ||
+                                  (!set.completed &&
+                                    !hasValidDropSetActualReps) ||
                                   (set.completed ? !canUncomplete : !canActivate)
                                 }
                                 onClick={(e) => {
@@ -8191,6 +8449,24 @@ export default function SessionView({
                         }
                       >
                         <Plus size={15} /> Add Set
+                      </button>
+
+                      <button
+                        disabled={
+                          session.workoutTimerPaused ||
+                          exercise.sets.filter((set) => set.isDropSet).length >= 3
+                        }
+                        onClick={() => addDropSet(exercise)}
+                        style={{
+                          alignItems: "center",
+                          boxSizing: "border-box",
+                          display: "inline-flex",
+                          gap: "5px",
+                          minHeight: exercise.supersetGroup ? "40px" : "34px",
+                        }}
+                        type="button"
+                      >
+                        <Plus size={15} /> Add Drop Set
                       </button>
 
                       <IconButton

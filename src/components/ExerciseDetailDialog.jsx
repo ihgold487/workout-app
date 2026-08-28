@@ -336,13 +336,17 @@ function buildExerciseHistory(exercise, history, bodyWeightEntries = []) {
         const weight = getSetValue(set, "actualWeight");
         const reps = getSetValue(set, "actualReps");
         const rir = getSetValue(set, "actualRir");
-        const e1rm = calculateE1RM(weight, reps, rir, null, null, null, {
-          bodyWeight,
-          exercise,
-        });
+        const isDropSet = Boolean(set.isDropSet || set.is_drop_set);
+        const e1rm = isDropSet
+          ? null
+          : calculateE1RM(weight, reps, rir, null, null, null, {
+              bodyWeight,
+              exercise,
+            });
 
         return {
           e1rm,
+          isDropSet,
           prescribedReps:
             set.prescribedReps ?? set.targetReps ?? set.reps ?? null,
           reps,
@@ -3187,7 +3191,9 @@ export default function ExerciseDetailDialog({
                           const displayWeight = draftSet?.actualWeight ?? set.weight;
                           const displayReps = draftSet?.actualReps ?? set.reps;
                           const displayRir = draftSet?.actualRir ?? set.rir;
-                          const displayE1RM = isEditingEntry
+                          const displayE1RM = set.isDropSet
+                            ? null
+                            : isEditingEntry
                             ? calculateE1RM(
                                 displayWeight,
                                 displayReps,

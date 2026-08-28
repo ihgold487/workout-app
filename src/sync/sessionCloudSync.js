@@ -183,10 +183,10 @@ function buildLocalExerciseLookup(exerciseLibrary) {
 }
 
 function cloudSetToLocal(set) {
-  const prescribedReps = formatCloudValue(
-    null,
-    set.target_reps_max ?? set.target_reps_min
-  );
+  const prescribedReps =
+    set.target_reps_label === "AMRAP"
+      ? "AMRAP"
+      : formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
   const minimumReps = set.target_reps_min;
 
   return {
@@ -199,6 +199,10 @@ function cloudSetToLocal(set) {
     completed: Boolean(set.completed_at),
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
+    targetWeight: formatCloudValue(
+      set.target_weight_label,
+      set.target_weight_value
+    ),
     ...(minimumReps != null && Number(minimumReps) !== Number(prescribedReps)
       ? {
           minimumReps: String(minimumReps),
@@ -312,11 +316,10 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     set.targetMinimumReps ||
     prescribedReps;
   const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
-  const e1RM = calculateE1RM(
-    set.actualWeight,
-    set.actualReps,
-    actualRir
-  );
+  const isDropSet = Boolean(set.isDropSet || set.is_drop_set);
+  const e1RM = isDropSet
+    ? null
+    : calculateE1RM(set.actualWeight, set.actualReps, actualRir);
 
   return {
     actual_reps: parseInteger(set.actualReps),
@@ -327,7 +330,7 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     completed_at: set.completed ? new Date().toISOString() : null,
     deleted_at: null,
     estimated_1rm: e1RM,
-    is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
+    is_drop_set: isDropSet,
     session_exercise_id: sessionExerciseId,
     set_number: setNumber,
     target_reps_label: prescribedReps
@@ -339,8 +342,8 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     target_reps_min: parseInteger(minimumReps),
     target_rir_label: prescribedRir !== "" ? String(prescribedRir) : null,
     target_rir_value: parseRir(prescribedRir),
-    target_weight_label: null,
-    target_weight_value: null,
+    target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
+    target_weight_value: parseNumber(set.targetWeight),
     updated_at: new Date().toISOString(),
     user_id: userId,
   };

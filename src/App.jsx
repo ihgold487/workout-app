@@ -843,6 +843,10 @@ function findExerciseForHistoryExercise(historyExercise, exerciseLibrary = []) {
 }
 
 function getHistorySetE1RM(set, exercise, bodyWeight) {
+  if (set.isDropSet || set.is_drop_set) {
+    return null;
+  }
+
   const e1rm = calculateE1RM(
     parseHistoryMetricValue(set.actualWeight ?? set.actual_weight),
     parseHistoryMetricValue(set.actualReps ?? set.actual_reps),
@@ -1014,6 +1018,7 @@ function buildExerciseHistoryExportRows({
             equipment: getExerciseEquipmentLabel(exercise),
             set_number: set.setNumber || set.set_number || setIndex + 1,
             set_id: set.id || set.source_key || "",
+            is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
             weight: formatExportNumber(weight, 1),
             weight_unit: "lb",
             reps: formatExportNumber(reps, 0),

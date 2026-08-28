@@ -194,8 +194,8 @@ function localSetToCloud(set, userId, workoutExerciseId, setNumber) {
     target_reps_min: parseInteger(minimumReps),
     target_rir_label: prescribedRir ? String(prescribedRir) : null,
     target_rir_value: parseRir(prescribedRir),
-    target_weight_label: null,
-    target_weight_value: null,
+    target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
+    target_weight_value: parseNumber(set.targetWeight),
     updated_at: new Date().toISOString(),
     user_id: userId,
     workout_exercise_id: workoutExerciseId,
@@ -272,13 +272,20 @@ function buildLocalExerciseLookup(exerciseLibrary) {
 }
 
 function cloudSetToLocal(set) {
-  const reps = formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
+  const reps =
+    set.target_reps_label === "AMRAP"
+      ? "AMRAP"
+      : formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
   const minimumReps = set.target_reps_min;
   const rir = formatCloudValue(set.target_rir_label, set.target_rir_value);
 
   return {
     id: parseLocalSourceKey(set.id),
     isDropSet: Boolean(set.is_drop_set),
+    targetWeight: formatCloudValue(
+      set.target_weight_label,
+      set.target_weight_value
+    ),
     ...(minimumReps != null && Number(minimumReps) !== Number(reps)
       ? { minimumReps: String(minimumReps) }
       : {}),
