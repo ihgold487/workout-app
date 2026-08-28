@@ -41,11 +41,13 @@ import ExercisePickerSheet from "./ExercisePickerSheet";
 import AiPlanningGuidancePanel from "./AiPlanningGuidancePanel";
 import MuscleMap from "./MuscleMap";
 import WeightPickerModal from "./WeightPickerModal";
+import RestDurationInput from "./RestDurationInput";
 import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
+import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
 import { buildPrimaryMuscleSections } from "../utils/primaryMuscleGroups";
 import {
   createPlanExercise,
@@ -929,7 +931,6 @@ function buildTrainerWorkoutPayload(workout) {
 const WEEKLY_RIR_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
-const WEEKLY_REST_SECOND_VALUES = [45, 60, 75, 90, 120, 150, 180, 210, 240, 300];
 const AI_PLAN_DRAFT_STORAGE_KEY = "workoutAppLastAiPlanDraftJson";
 
 const PLAN_TYPE_DEFAULTS = {
@@ -2132,7 +2133,7 @@ function WeeklyPrescriptionValuePicker({
       : field === "reps" || field === "minimumReps"
         ? WEEKLY_REP_VALUES
         : field === "restSeconds"
-          ? WEEKLY_REST_SECOND_VALUES
+          ? REST_DURATION_PICKER_VALUES
           : WEEKLY_RIR_VALUES;
   const title =
     field === "sets"
@@ -2392,18 +2393,25 @@ function WeeklyPrescriptionValuePicker({
             ❌
           </button>
 
-          <input
-            inputMode={field === "restSeconds" ? "numeric" : "decimal"}
-            min="0"
-            value={manualValue}
-            onChange={(event) => setManualValue(event.target.value)}
-            style={{
-              fontSize: "22px",
-              fontWeight: "bold",
-              textAlign: "center",
-              width: "90px",
-            }}
-          />
+          {field === "restSeconds" ? (
+            <RestDurationInput
+              value={manualValue}
+              onChange={(value) => setManualValue(String(value))}
+            />
+          ) : (
+            <input
+              inputMode="decimal"
+              min="0"
+              value={manualValue}
+              onChange={(event) => setManualValue(event.target.value)}
+              style={{
+                fontSize: "22px",
+                fontWeight: "bold",
+                textAlign: "center",
+                width: "90px",
+              }}
+            />
+          )}
 
           <button
             aria-label="Apply value change"

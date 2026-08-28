@@ -39,6 +39,7 @@ import {
 } from "../utils/targetRecommendation";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
 import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
 
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
@@ -2222,6 +2223,7 @@ export default function TemplateView({
 	                    ? formatRestDuration
 	                    : undefined
 	                }
+	                restDurationInput={editingPrescriptionField === "restSeconds"}
 	                title={`Select ${
 	                  editingPrescriptionField === "sets"
 	                    ? "Sets"
@@ -2240,7 +2242,7 @@ export default function TemplateView({
 	                        editingPrescriptionField === "minimumReps"
 	                      ? Array.from({ length: 30 }, (_, index) => index + 1)
 	                      : editingPrescriptionField === "restSeconds"
-	                        ? [45, 60, 75, 90, 120, 150, 180, 210, 240, 300]
+	                        ? REST_DURATION_PICKER_VALUES
 	                        : Array.from({ length: 13 }, (_, index) => index * 0.5)
 	                }
                 onSelect={(value) => {

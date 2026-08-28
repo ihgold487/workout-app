@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { triggerNativePickerSelectionHaptic } from "../native/pickerHaptics";
+import RestDurationInput from "./RestDurationInput";
 
 function WeightPickerModalContent({
   current,
@@ -8,6 +9,7 @@ function WeightPickerModalContent({
   onSelect,
   optionLabel,
   options,
+  restDurationInput = false,
   title,
   zIndex = 1000,
 }) {
@@ -165,19 +167,26 @@ function WeightPickerModalContent({
             ❌
           </button>
 
-          <input
-            inputMode="decimal"
-            min="0"
-            value={manualValue}
-            onChange={(e) => setManualValue(e.target.value)}
-            style={{
-              width: "90px",
-              textAlign: "center",
-              fontSize: "22px",
-              fontWeight: "bold",
-              lineHeight: 1.2,
-            }}
-          />
+          {restDurationInput ? (
+            <RestDurationInput
+              value={manualValue}
+              onChange={(value) => setManualValue(String(value))}
+            />
+          ) : (
+            <input
+              inputMode="decimal"
+              min="0"
+              value={manualValue}
+              onChange={(e) => setManualValue(e.target.value)}
+              style={{
+                width: "90px",
+                textAlign: "center",
+                fontSize: "22px",
+                fontWeight: "bold",
+                lineHeight: 1.2,
+              }}
+            />
+          )}
 
           <button
             onClick={() => {
@@ -261,6 +270,7 @@ export default function WeightPickerModal({
   weightUnit,
   increment,
   range,
+  restDurationInput = false,
   title,
   values,
   zIndex,
@@ -295,6 +305,7 @@ export default function WeightPickerModal({
       onSelect={onSelect}
       optionLabel={optionLabel}
       options={options}
+      restDurationInput={restDurationInput}
       title={title}
       zIndex={zIndex}
     />
