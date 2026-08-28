@@ -33,3 +33,13 @@ db.version(3).stores({
   sessions: "++id,date",
   templates: "++id,name",
 });
+
+db.version(4).stores({
+  appData: "&id,updatedAt",
+  exerciseLibrary: "++id,name,muscleGroup",
+  nutritionBackups: "&id,userId,createdAt",
+  nutritionOutbox: "&id,userId,operation,updatedAt",
+  nutritionSnapshots: "&id,userId,updatedAt",
+  sessions: "++id,date",
+  templates: "++id,name",
+});

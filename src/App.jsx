@@ -95,6 +95,7 @@ import {
   loadNutritionSnapshot,
   NUTRITION_OUTBOX_QUEUED_EVENT,
   persistNutritionEntries,
+  recoverNutritionEntries,
   reconcileNutritionEntries,
 } from "./storage/nutritionStorage";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
@@ -5198,6 +5199,55 @@ export default function App() {
     } catch (error) {
       console.error("Settings nutrition sync failed:", error);
       setNutritionSettingsStatus(`Nutrition sync failed: ${error.message}`);
+    } finally {
+      setNutritionSettingsSyncing(false);
+    }
+  }
+
+  async function recoverNutritionHistory() {
+    const userId = authSession?.user?.id;
+
+    if (!userId || !isSupabaseConfigured || !appAccessAllowed) {
+      setNutritionSettingsStatus("Sign in and connect before recovering nutrition.");
+      return;
+    }
+
+    setNutritionSettingsSyncing(true);
+    setNutritionSettingsStatus("Checking every available nutrition copy...");
+
+    try {
+      const scopedEntries = readLocalArray(getNutritionLogStorageKey(userId));
+      const legacyEntries = readLocalArray(NUTRITION_LOG_KEY);
+      const pullResult = await reconcileNutritionEntries(userId, authSession, {
+        entries: [...calendarNutritionEntries, ...scopedEntries, ...legacyEntries],
+        full: true,
+      });
+      const result = await recoverNutritionEntries(
+        userId,
+        [
+          ...pullResult.entries,
+          ...calendarNutritionEntries,
+          ...scopedEntries,
+          ...legacyEntries,
+        ],
+        pullResult.deletedIds
+      );
+
+      setCalendarNutritionEntries(result.entries);
+      saveLocalArray(getNutritionLogStorageKey(userId), result.entries);
+      setNutritionSettingsPending(
+        (await getNutritionPersistenceStatus(userId)).pending
+      );
+      setNutritionSettingsStatus(
+        result.invalid > 0
+          ? `Recovery preserved ${result.invalid} row${result.invalid === 1 ? "" : "s"} with invalid identity, date, or nutrient values for manual review; none were uploaded.`
+          : result.added > 0
+          ? `Recovered ${result.added} missing food-log row${result.added === 1 ? "" : "s"}. Recovered rows are queued for cloud sync.`
+          : `Recovery check complete. No additional rows were found across cloud, local caches, and ${result.backupCount} protected backup${result.backupCount === 1 ? "" : "s"}.`
+      );
+    } catch (error) {
+      console.error("Nutrition recovery failed:", error);
+      setNutritionSettingsStatus(`Nutrition recovery failed: ${error.message}`);
     } finally {
       setNutritionSettingsSyncing(false);
     }
@@ -10637,6 +10687,19 @@ export default function App() {
               type="button"
             >
               Pull Nutrition Data
+            </button>
+            <button
+              disabled={
+                nutritionSettingsSyncing ||
+                !authSession ||
+                !appAccessAllowed ||
+                approvalFromCache
+              }
+              onClick={recoverNutritionHistory}
+              style={{ marginLeft: "8px" }}
+              type="button"
+            >
+              Recover Nutrition History
             </button>
             <div
               role="status"

@@ -12,6 +12,7 @@ import {
 import { upsertNutritionTarget } from "../sync/nutritionTargetCloudSync";
 
 const SNAPSHOT_PREFIX = "nutrition:";
+const MAX_NUTRITION_BACKUPS = 20;
 export const NUTRITION_OUTBOX_QUEUED_EVENT = "workout:nutrition-outbox-queued";
 const syncPromises = new Map();
 const reconcilePromises = new Map();
@@ -27,6 +28,81 @@ function snapshotId(userId) {
 
 function outboxId(userId, entryId) {
   return `${normalizeUserId(userId)}:entry:${String(entryId)}`;
+}
+
+function normalizeNutritionEntry(entry) {
+  if (
+    !entry ||
+    entry.id === undefined ||
+    entry.id === null ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date || "")) ||
+    !String(entry.name || "").trim()
+  ) {
+    return null;
+  }
+
+  const nutrients = ["calories", "carbs", "fat", "protein"];
+  const normalized = { ...entry, name: String(entry.name).trim() };
+
+  for (const nutrient of nutrients) {
+    const value = Number(entry[nutrient] ?? 0);
+
+    if (!Number.isFinite(value) || value < 0) return null;
+    normalized[nutrient] = value;
+  }
+
+  return normalized;
+}
+
+export function inspectNutritionEntries(entries) {
+  const valid = [];
+  const invalid = [];
+  const duplicateIds = [];
+  const seenIds = new Set();
+
+  (entries || []).forEach((entry) => {
+    const normalized = normalizeNutritionEntry(entry);
+
+    if (!normalized) {
+      invalid.push(entry);
+      return;
+    }
+
+    const id = String(normalized.id);
+    if (seenIds.has(id)) duplicateIds.push(id);
+    seenIds.add(id);
+    valid.push(normalized);
+  });
+
+  return { duplicateIds, invalid, valid };
+}
+
+async function backupNutritionEntriesUnlocked(userId, entries, reason) {
+  if (!Array.isArray(entries) || entries.length === 0) return;
+
+  const normalizedUserId = normalizeUserId(userId);
+  const createdAt = new Date().toISOString();
+
+  await db.nutritionBackups.put({
+    createdAt,
+    entries,
+    id: `${snapshotId(userId)}:${createdAt}:${Math.random().toString(36).slice(2)}`,
+    reason,
+    userId: normalizedUserId,
+  });
+
+  const backups = await db.nutritionBackups
+    .where("userId")
+    .equals(normalizedUserId)
+    .sortBy("createdAt");
+  const excess = backups.slice(
+    0,
+    Math.max(0, backups.length - MAX_NUTRITION_BACKUPS)
+  );
+
+  if (excess.length > 0) {
+    await db.nutritionBackups.bulkDelete(excess.map((backup) => backup.id));
+  }
 }
 
 function enqueueNutritionMutation(userId, operation) {
@@ -105,6 +181,17 @@ async function persistNutritionEntriesUnlocked(userId, entries) {
   const id = snapshotId(userId);
   const existing = await db.nutritionSnapshots.get(id);
 
+  if (
+    Array.isArray(existing?.entries) &&
+    JSON.stringify(existing.entries) !== JSON.stringify(entries)
+  ) {
+    await backupNutritionEntriesUnlocked(
+      userId,
+      existing.entries,
+      "before-snapshot-write"
+    );
+  }
+
   await db.nutritionSnapshots.put({
     ...(existing || {}),
     entries: Array.isArray(entries) ? entries : [],
@@ -121,9 +208,16 @@ export async function persistNutritionEntries(userId, entries) {
 }
 
 export async function queueNutritionUpserts(userId, entries, snapshotEntries) {
-  const validEntries = (entries || []).filter(
-    (entry) => entry?.id !== undefined && entry?.date && entry?.name
-  );
+  const integrity = inspectNutritionEntries(entries || []);
+  const validEntries = integrity.valid;
+
+  if (integrity.invalid.length > 0) {
+    throw new Error(
+      `${integrity.invalid.length} nutrition entr${
+        integrity.invalid.length === 1 ? "y has" : "ies have"
+      } invalid identity, date, or nutrient values.`
+    );
+  }
 
   if (!userId || validEntries.length === 0) {
     await persistNutritionEntries(userId, snapshotEntries);
@@ -137,6 +231,7 @@ export async function queueNutritionUpserts(userId, entries, snapshotEntries) {
       "rw",
       db.nutritionSnapshots,
       db.nutritionOutbox,
+      db.nutritionBackups,
       async () => {
         await persistNutritionEntriesUnlocked(userId, snapshotEntries);
         await db.nutritionOutbox.bulkPut(
@@ -172,6 +267,7 @@ export async function queueNutritionDelete(
       "rw",
       db.nutritionSnapshots,
       db.nutritionOutbox,
+      db.nutritionBackups,
       async () => {
         await persistNutritionEntriesUnlocked(userId, snapshotEntries);
         await db.nutritionOutbox.put({
@@ -369,6 +465,56 @@ export function mergeNutritionEntryCollections(...collections) {
   );
 }
 
+export async function recoverNutritionEntries(
+  userId,
+  candidateEntries = [],
+  excludedEntryIds = []
+) {
+  await waitForNutritionMutations(userId);
+
+  const result = await enqueueNutritionMutation(userId, async () => {
+    const snapshot = await db.nutritionSnapshots.get(snapshotId(userId));
+    const backups = await db.nutritionBackups
+      .where("userId")
+      .equals(normalizeUserId(userId))
+      .toArray();
+    const currentEntries = Array.isArray(snapshot?.entries)
+      ? snapshot.entries
+      : [];
+    const excludedIds = new Set(excludedEntryIds.map(String));
+    const recovered = mergeNutritionEntryCollections(
+      ...backups.map((backup) => backup.entries),
+      candidateEntries,
+      currentEntries
+    ).filter((entry) => !excludedIds.has(String(entry.id)));
+    const integrity = inspectNutritionEntries(recovered);
+    const currentIds = new Set(currentEntries.map((entry) => String(entry.id)));
+    const added = integrity.valid.filter(
+      (entry) => !currentIds.has(String(entry.id))
+    );
+    const nextEntries = mergeNutritionEntryCollections(currentEntries, added);
+
+    if (added.length > 0) {
+      await backupNutritionEntriesUnlocked(userId, currentEntries, "before-recovery");
+      await persistNutritionEntriesUnlocked(userId, nextEntries);
+    }
+
+    return {
+      added: added.length,
+      addedEntries: added,
+      backupCount: backups.length,
+      entries: nextEntries,
+      invalid: integrity.invalid.length,
+    };
+  });
+
+  if (userId && result.addedEntries.length > 0) {
+    await queueNutritionUpserts(userId, result.addedEntries, result.entries);
+  }
+
+  return result;
+}
+
 export async function reconcileNutritionEntries(userId, session, options = {}) {
   const existingPromise = reconcilePromises.get(userId);
 
@@ -492,6 +638,17 @@ async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) 
       return !downloadedDeleteIds.has(id) || latestPendingUpsertIds.has(id);
     });
 
+    if (
+      Array.isArray(latestSnapshot?.entries) &&
+      JSON.stringify(latestSnapshot.entries) !== JSON.stringify(mergedEntries)
+    ) {
+      await backupNutritionEntriesUnlocked(
+        userId,
+        latestSnapshot.entries,
+        "before-cloud-reconcile"
+      );
+    }
+
     await db.nutritionSnapshots.put({
       ...(latestSnapshot || snapshot || {}),
       entries: mergedEntries,
@@ -507,6 +664,9 @@ async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) 
 
   return {
     changes: changes.length,
+    deletedIds: changes
+      .filter((change) => change.deletedAt)
+      .map((change) => String(change.entry.id)),
     entries,
     failed: flushResult.failed,
     full: !since,
@@ -517,8 +677,14 @@ async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) 
 
 export async function getNutritionPersistenceStatus(userId) {
   const snapshot = await db.nutritionSnapshots.get(snapshotId(userId));
+  const integrity = inspectNutritionEntries(snapshot?.entries || []);
 
   return {
+    backups: await db.nutritionBackups
+      .where("userId")
+      .equals(normalizeUserId(userId))
+      .count(),
+    invalid: integrity.invalid.length,
     lastPulledAt: snapshot?.lastPulledAt || null,
     lastReconciledAt: snapshot?.lastReconciledAt || null,
     local: Array.isArray(snapshot?.entries) ? snapshot.entries.length : 0,
