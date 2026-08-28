@@ -9231,13 +9231,25 @@ export default function App() {
               gap: "8px",
             }}
           >
-            <button onClick={completePlanCompletionPrompt} type="button">
+            <button
+              onClick={completePlanCompletionPrompt}
+              style={{ minHeight: "48px" }}
+              type="button"
+            >
               Complete plan
             </button>
-            <button onClick={extendPromptPlanOneWeek} type="button">
+            <button
+              onClick={extendPromptPlanOneWeek}
+              style={{ minHeight: "48px" }}
+              type="button"
+            >
               Extend plan one week
             </button>
-            <button onClick={repeatPromptPlan} type="button">
+            <button
+              onClick={repeatPromptPlan}
+              style={{ minHeight: "48px" }}
+              type="button"
+            >
               Repeat plan
             </button>
           </div>
