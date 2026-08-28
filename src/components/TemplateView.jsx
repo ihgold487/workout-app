@@ -372,11 +372,14 @@ export default function TemplateView({
       keyMatches[0] ||
       idMatch ||
       null;
-    const muscles = Array.isArray(templateExercise.muscles)
-      ? templateExercise.muscles
-      : Array.isArray(libraryExercise?.muscles)
-        ? libraryExercise.muscles
-        : [templateExercise.planMuscle].filter(Boolean);
+    const libraryMuscles = Array.isArray(libraryExercise?.muscles)
+      ? libraryExercise.muscles.filter(Boolean)
+      : [];
+    const templateMuscles = Array.isArray(templateExercise.muscles)
+      ? templateExercise.muscles.filter(Boolean)
+      : [templateExercise.planMuscle].filter(Boolean);
+    const muscles =
+      libraryMuscles.length > 0 ? libraryMuscles : templateMuscles;
 
     return {
       ...(libraryExercise || {}),
@@ -389,6 +392,12 @@ export default function TemplateView({
       imageAlt: libraryExercise?.imageAlt || templateExercise.imageAlt || "",
       imageUrl: libraryExercise?.imageUrl || templateExercise.imageUrl || "",
       muscles,
+      primaryMuscles: muscles.length > 0 ? [muscles[0]] : [],
+      primary_muscles: muscles.length > 0 ? [muscles[0]] : [],
+      primaryMuscle: muscles[0] || "",
+      primary_muscle: muscles[0] || "",
+      secondaryMuscles: muscles.slice(1),
+      secondary_muscles: muscles.slice(1),
     };
   }
 

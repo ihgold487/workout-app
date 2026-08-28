@@ -825,6 +825,7 @@ export default function BodyWeightSheet({
         range={50}
         title="Select body weight"
         value={latestWeight || ""}
+        zIndex={2350}
       />
       {rangeSheetOpen && (
         <SelectionSheet
