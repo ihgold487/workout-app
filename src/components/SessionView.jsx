@@ -382,6 +382,7 @@ export default function SessionView({
 
   const [newExerciseValues, setNewExerciseValues] = useState({
     weight: "",
+    minimumReps: "",
     reps: "",
     sets: "",
     rir: "",
@@ -389,6 +390,7 @@ export default function SessionView({
 
   const [replacementValues, setReplacementValues] = useState({
     weight: "",
+    minimumReps: "",
     reps: "",
     rir: "",
     sets: "",
@@ -683,6 +685,11 @@ export default function SessionView({
     const config = getLinkedPlan()?.config || {};
 
     return {
+      minimumReps:
+        (config.minimumReps ?? config.minimum_reps) == null ||
+        (config.minimumReps ?? config.minimum_reps) === ""
+          ? ""
+          : String(config.minimumReps ?? config.minimum_reps),
       reps:
         config.reps == null || config.reps === "" ? "" : String(config.reps),
       rir: config.rir == null || config.rir === "" ? "" : String(config.rir),
@@ -1883,6 +1890,7 @@ export default function SessionView({
     const rir = getSetPrescribedRir(firstSet);
 
     return {
+      minimumReps: formatSetupDefault(getSetMinimumReps(firstSet) || reps),
       reps: formatSetupDefault(reps),
       rir: formatSetupDefault(rir),
       sets: replacedExercise?.sets?.length
@@ -1900,12 +1908,18 @@ export default function SessionView({
       planTargets.reps,
       getSetPrescribedReps(previousFirstSet)
     );
+    const minimumReps = firstPresentValue(
+      planTargets.minimumReps,
+      getSetMinimumReps(previousFirstSet),
+      reps
+    );
     const rir = firstPresentValue(
       planTargets.rir,
       getSetPrescribedRir(previousFirstSet)
     );
 
     return {
+      minimumReps: formatSetupDefault(minimumReps),
       reps: formatSetupDefault(reps),
       rir: formatSetupDefault(rir),
       sets: "3",
@@ -4381,6 +4395,9 @@ export default function SessionView({
         const defaultReps = formatSetupDefault(
           getSetPrescribedReps(firstSet)
         );
+        const defaultMinimumReps = formatSetupDefault(
+          getSetMinimumReps(firstSet) || defaultReps
+        );
         const defaultRir = formatSetupDefault(
           getSetPrescribedRir(firstSet)
         );
@@ -4388,7 +4405,9 @@ export default function SessionView({
         const preservingExistingSetCount =
           requestedSetCount === existingSets.length;
         const shouldPreserveSetReps =
-          String(replacementValues.reps ?? "") === String(defaultReps ?? "");
+          String(replacementValues.reps ?? "") === String(defaultReps ?? "") &&
+          String(replacementValues.minimumReps || replacementValues.reps || "") ===
+            String(defaultMinimumReps ?? "");
         const shouldPreserveSetRir =
           String(replacementValues.rir ?? "") === String(defaultRir ?? "");
         const sourceSets = preservingExistingSetCount
@@ -4403,6 +4422,10 @@ export default function SessionView({
           shouldPreserveSetRir
             ? firstPresentValue(getSetPrescribedRir(set), replacementValues.rir)
             : replacementValues.rir;
+        const nextMinimumRepsForSet = (set, prescribedReps) =>
+          shouldPreserveSetReps
+            ? firstPresentValue(getSetMinimumReps(set), prescribedReps)
+            : firstPresentValue(replacementValues.minimumReps, prescribedReps);
 
         return {
           ...ex,
@@ -4423,6 +4446,7 @@ export default function SessionView({
 
           sets: sourceSets.map((set, i) => {
             const prescribedReps = nextRepsForSet(set);
+            const minimumReps = nextMinimumRepsForSet(set, prescribedReps);
             const prescribedRir = nextRirForSet(set);
 
             return {
@@ -4435,6 +4459,14 @@ export default function SessionView({
               targetRir: prescribedRir,
 
               prescribedReps,
+
+              ...(String(minimumReps) === String(prescribedReps)
+                ? {}
+                : {
+                    minimumReps,
+                    prescribedMinimumReps: minimumReps,
+                    targetMinimumReps: minimumReps,
+                  }),
 
               prescribedRir,
 
@@ -4604,13 +4636,20 @@ export default function SessionView({
     });
   }
 
-  function addExercise(exercise, weight, reps, numSets, rir) {
+  function addExercise(exercise, weight, minimumReps, reps, numSets, rir) {
     const sets = Array.from({ length: Number(numSets) }, () => ({
       id: Date.now() + Math.random(),
       targetWeight: weight,
       targetReps: reps,
       targetRir: rir,
       prescribedReps: reps,
+      ...(String(minimumReps) === String(reps)
+        ? {}
+        : {
+            minimumReps,
+            prescribedMinimumReps: minimumReps,
+            targetMinimumReps: minimumReps,
+          }),
       prescribedRir: rir,
       reps,
       rir,
@@ -8279,6 +8318,7 @@ export default function SessionView({
                   addExercise(
                     pendingExercise,
                     newExerciseValues.weight,
+                    newExerciseValues.minimumReps || newExerciseValues.reps,
                     newExerciseValues.reps,
                     newExerciseValues.sets,
                     newExerciseValues.rir

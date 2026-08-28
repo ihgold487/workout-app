@@ -21,10 +21,35 @@ export default function ExerciseSetupDialog({
   );
 
   function setValue(field, value) {
-    setValues({
-      ...values,
-      [field]: String(value),
-    });
+    const nextValue = String(value);
+
+    if (field === "minimumReps") {
+      const maximumReps = Number(values?.reps);
+      const minimumReps = Number(nextValue);
+      setValues({
+        ...values,
+        minimumReps: nextValue,
+        ...(Number.isFinite(maximumReps) && minimumReps > maximumReps
+          ? { reps: nextValue }
+          : {}),
+      });
+      return;
+    }
+
+    if (field === "reps") {
+      const minimumReps = Number(values?.minimumReps || values?.reps);
+      const maximumReps = Number(nextValue);
+      setValues({
+        ...values,
+        reps: nextValue,
+        ...(Number.isFinite(minimumReps) && maximumReps < minimumReps
+          ? { minimumReps: nextValue }
+          : {}),
+      });
+      return;
+    }
+
+    setValues({ ...values, [field]: nextValue });
   }
 
   function renderPickerButton({ field, icon, label, value }) {
@@ -142,9 +167,16 @@ export default function ExerciseSetupDialog({
       })}
 
       {renderPickerButton({
+        field: "minimumReps",
+        icon: "🔁",
+        label: "Minimum reps",
+        value: values?.minimumReps || values?.reps,
+      })}
+
+      {renderPickerButton({
         field: "reps",
         icon: "🔁",
-        label: "Reps",
+        label: "Maximum reps",
         value: values?.reps,
       })}
 
@@ -171,11 +203,21 @@ export default function ExerciseSetupDialog({
       />
 
       <WeightPickerModal
+        isOpen={activePicker === "minimumReps"}
+        onClose={() => setActivePicker(null)}
+        value={values?.minimumReps || values?.reps}
+        increment={1}
+        title="Select Minimum Reps"
+        values={Array.from({ length: 20 }, (_, index) => index + 1)}
+        onSelect={(value) => setValue("minimumReps", value)}
+      />
+
+      <WeightPickerModal
         isOpen={activePicker === "reps"}
         onClose={() => setActivePicker(null)}
         value={values?.reps}
         increment={1}
-        title="Select Reps"
+        title="Select Maximum Reps"
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => setValue("reps", value)}
       />

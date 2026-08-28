@@ -926,7 +926,7 @@ function buildTrainerWorkoutPayload(workout) {
   };
 }
 
-const WEEKLY_RIR_VALUES = [0, 1, 2, 3, 4, 5, 6];
+const WEEKLY_RIR_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
 const WEEKLY_REST_SECOND_VALUES = [45, 60, 75, 90, 120, 150, 180, 210, 240, 300];
@@ -2014,13 +2014,14 @@ function WeeklyPrescriptionSheet({
               fontSize: "12px",
               fontWeight: "bold",
               gap: "6px",
-              gridTemplateColumns: "48px 1fr 1fr 1fr 1.2fr",
+              gridTemplateColumns: "44px .8fr 1fr 1fr .8fr 1.2fr",
               textTransform: "uppercase",
             }}
           >
             <span>Week</span>
             <span>Sets</span>
-            <span>Reps</span>
+            <span>Min</span>
+            <span>Max</span>
             <span>RIR</span>
             <span>Rest</span>
           </div>
@@ -2032,11 +2033,11 @@ function WeeklyPrescriptionSheet({
                 alignItems: "center",
                 display: "grid",
                 gap: "6px",
-                gridTemplateColumns: "48px 1fr 1fr 1fr 1.2fr",
+                gridTemplateColumns: "44px .8fr 1fr 1fr .8fr 1.2fr",
               }}
             >
               <strong>{week.isDeload ? "D" : `W${week.weekNumber}`}</strong>
-              {["sets", "reps", "rir", "restSeconds"].map((field) => {
+              {["sets", "minimumReps", "reps", "rir", "restSeconds"].map((field) => {
                 const canEdit = !week.isDeload || field === "restSeconds";
 
                 return (
@@ -2055,9 +2056,8 @@ function WeeklyPrescriptionSheet({
                       textAlign: "center",
                     }}
                   >
-                    {field === "reps" &&
-                    (week.minimumReps ?? week.minimum_reps) != null
-                      ? `${week.minimumReps ?? week.minimum_reps}–${week.reps}`
+                    {field === "minimumReps"
+                      ? week.minimumReps ?? week.minimum_reps ?? week.reps
                       : formatWeeklyPrescriptionValue(field, week[field])}
                   </button>
                 );
@@ -2129,7 +2129,7 @@ function WeeklyPrescriptionValuePicker({
   const values =
     field === "sets"
       ? WEEKLY_SET_VALUES
-      : field === "reps"
+      : field === "reps" || field === "minimumReps"
         ? WEEKLY_REP_VALUES
         : field === "restSeconds"
           ? WEEKLY_REST_SECOND_VALUES
@@ -2137,8 +2137,10 @@ function WeeklyPrescriptionValuePicker({
   const title =
     field === "sets"
       ? "sets"
-      : field === "reps"
-        ? "reps"
+      : field === "minimumReps"
+        ? "minimum reps"
+        : field === "reps"
+          ? "maximum reps"
         : field === "restSeconds"
           ? "rest"
           : "RIR";
@@ -3320,6 +3322,36 @@ export default function PlansView({
   ) {
     enterPlanDraftEditMode();
     setWeeklyPrescriptionBySlot((current) => {
+      const applyValueToWeek = (week) => {
+        if (field !== "minimumReps" && field !== "reps") {
+          return { ...week, [field]: String(value) };
+        }
+
+        const selectedReps = Number(value);
+        const currentMaximum = Number(week.reps);
+        const currentMinimum = Number(
+          week.minimumReps ?? week.minimum_reps ?? week.reps
+        );
+        const maximumReps =
+          field === "reps" ? selectedReps : Math.max(currentMaximum, selectedReps);
+        const minimumReps =
+          field === "minimumReps"
+            ? selectedReps
+            : Math.min(currentMinimum, selectedReps);
+        const nextWeek = {
+          ...week,
+          reps: String(maximumReps),
+        };
+
+        delete nextWeek.minimumReps;
+        delete nextWeek.minimum_reps;
+
+        if (minimumReps !== maximumReps) {
+          nextWeek.minimumReps = String(minimumReps);
+        }
+
+        return nextWeek;
+      };
       const targetWorkout = orderedPreviewWorkouts.find((workout) =>
         workout.exercises.some(
           (exercise) => String(exercise.previewSlotKey) === String(slotKey)
@@ -3363,10 +3395,7 @@ export default function PlansView({
               (week.isDeload &&
                 field === "restSeconds" &&
                 Number(week.weekNumber) === Number(weekNumber)))
-              ? {
-                  ...week,
-                  [field]: String(value),
-                }
+              ? applyValueToWeek(week)
               : week
           ),
         }),
@@ -5372,7 +5401,10 @@ export default function PlansView({
               field,
               isDeload,
               previewSlotKey: weeklyPrescriptionExercise.previewSlotKey,
-              value: week?.[field] || "",
+              value:
+                field === "minimumReps"
+                  ? week?.minimumReps ?? week?.minimum_reps ?? week?.reps ?? ""
+                  : week?.[field] || "",
               weekNumber,
             });
             setWeeklyPrescriptionScope({

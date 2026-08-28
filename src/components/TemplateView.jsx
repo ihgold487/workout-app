@@ -267,6 +267,7 @@ export default function TemplateView({
 
   const [newExerciseValues, setNewExerciseValues] = useState({
     weight: "",
+    minimumReps: "",
     reps: "",
     sets: "",
     rir: "",
@@ -662,6 +663,7 @@ export default function TemplateView({
     setPendingExercise(null);
     setNewExerciseValues({
       weight: "",
+      minimumReps: "",
       reps: "",
       sets: "",
       rir: "",
@@ -831,7 +833,12 @@ export default function TemplateView({
     return {
       reps:
         getSetPrescriptionReps(originalFirstSet) !==
-        getSetPrescriptionReps(draftFirstSet),
+          getSetPrescriptionReps(draftFirstSet) ||
+        getSetMinimumReps(
+          originalFirstSet,
+          getSetPrescriptionReps(originalFirstSet)
+        ) !==
+          getSetMinimumReps(draftFirstSet, getSetPrescriptionReps(draftFirstSet)),
       rest:
         getEffectiveSetRestSeconds(originalFirstSet) !==
         getEffectiveSetRestSeconds(draftFirstSet),
@@ -862,6 +869,7 @@ export default function TemplateView({
     const firstSet = instanceExercise?.sets?.[0] || {};
     const editedSets = String(instanceExercise?.sets?.length || 1);
     const editedReps = getSetPrescriptionReps(firstSet);
+    const editedMinimumReps = getSetMinimumReps(firstSet, editedReps);
     const editedRestSeconds = getEffectiveSetRestSeconds(firstSet);
     const editedRir = getSetPrescriptionRir(firstSet);
     const nextWeeklyPrescriptions = baseExercise.weeklyPrescriptions.map((week) => {
@@ -875,9 +883,16 @@ export default function TemplateView({
         return week;
       }
 
-      return {
+      const nextWeek = {
         ...week,
-        ...(changes.reps ? { reps: editedReps } : {}),
+        ...(changes.reps
+          ? {
+              reps: editedReps,
+              ...(String(editedMinimumReps) === String(editedReps)
+                ? {}
+                : { minimumReps: editedMinimumReps }),
+            }
+          : {}),
         ...(changes.rest ? { restSeconds: String(editedRestSeconds) } : {}),
         ...(changes.sets ? { sets: editedSets } : {}),
         ...(weekNumber === Number(currentPlanWeek)
@@ -886,6 +901,13 @@ export default function TemplateView({
             }
           : {}),
       };
+
+      if (changes.reps && String(editedMinimumReps) === String(editedReps)) {
+        delete nextWeek.minimumReps;
+        delete nextWeek.minimum_reps;
+      }
+
+      return nextWeek;
     });
 
     return {
@@ -907,6 +929,7 @@ export default function TemplateView({
       .map((set) =>
         [
           getSetPrescriptionReps(set),
+          getSetMinimumReps(set, getSetPrescriptionReps(set)),
           getSetPrescriptionRir(set),
           getEffectiveSetRestSeconds(set),
         ].join(":")
@@ -1201,6 +1224,7 @@ export default function TemplateView({
     enterEditMode();
 
     const reps = newExerciseValues.reps;
+    const minimumReps = newExerciseValues.minimumReps || reps;
 
     const numSets = Number(newExerciseValues.sets);
 
@@ -1213,7 +1237,7 @@ export default function TemplateView({
 
       () => ({
         id: Date.now() + Math.random(),
-
+        ...(String(minimumReps) === String(reps) ? {} : { minimumReps }),
         reps,
 
         rir,
@@ -1255,6 +1279,7 @@ export default function TemplateView({
 
     setNewExerciseValues({
       weight: "",
+      minimumReps: "",
       reps: "",
       sets: "",
       rir: "",
@@ -1352,6 +1377,10 @@ export default function TemplateView({
       return getSetPrescriptionReps(firstSet);
     }
 
+    if (field === "minimumReps") {
+      return getSetMinimumReps(firstSet, getSetPrescriptionReps(firstSet));
+    }
+
     if (field === "rir") {
       return getSetPrescriptionRir(firstSet);
     }
@@ -1386,6 +1415,9 @@ export default function TemplateView({
           ? existingSet
           : {
               id: Date.now() + Math.random() + index,
+              ...(getSetMinimumReps(templateSet)
+                ? { minimumReps: getSetMinimumReps(templateSet) }
+                : {}),
               reps: getSetPrescriptionReps(templateSet),
               restSeconds: getEffectiveSetRestSeconds(templateSet),
               rir: getSetPrescriptionRir(templateSet),
@@ -1393,11 +1425,35 @@ export default function TemplateView({
       });
     }
 
-    if (field === "reps") {
-      updated.sets = (updated.sets || []).map((set) => ({
-        ...set,
-        reps: String(value),
-      }));
+    if (field === "reps" || field === "minimumReps") {
+      updated.sets = (updated.sets || []).map((set) => {
+        const currentMaximum = Number(getSetPrescriptionReps(set));
+        const currentMinimum = Number(
+          getSetMinimumReps(set, getSetPrescriptionReps(set))
+        );
+        const selectedValue = Number(value);
+        const maximumReps =
+          field === "reps" ? selectedValue : Math.max(currentMaximum, selectedValue);
+        const minimumReps =
+          field === "minimumReps" ? selectedValue : Math.min(currentMinimum, selectedValue);
+        const nextSet = {
+          ...set,
+          prescribedReps: String(maximumReps),
+          reps: String(maximumReps),
+          targetReps: String(maximumReps),
+        };
+
+        delete nextSet.minimumReps;
+        delete nextSet.minimum_reps;
+        delete nextSet.prescribedMinimumReps;
+        delete nextSet.targetMinimumReps;
+
+        if (minimumReps !== maximumReps) {
+          nextSet.minimumReps = String(minimumReps);
+        }
+
+        return nextSet;
+      });
     }
 
     if (field === "rir") {
@@ -1770,6 +1826,7 @@ export default function TemplateView({
 
                     setNewExerciseValues({
                       weight: "",
+                      minimumReps: "",
                       reps: "",
                       sets: "",
                       rir: "",
@@ -1787,6 +1844,7 @@ export default function TemplateView({
 
                     setNewExerciseValues({
                       weight: "",
+                      minimumReps: "",
                       reps: "",
                       sets: "",
                       rir: "",
@@ -2107,12 +2165,13 @@ export default function TemplateView({
 	                  fontSize: "12px",
 	                  fontWeight: "bold",
 	                  gap: "8px",
-	                  gridTemplateColumns: "1fr 1fr 1fr 1.2fr",
+	                  gridTemplateColumns: "0.8fr 1fr 1fr 0.8fr 1.2fr",
 	                  textTransform: "uppercase",
 	                }}
 	              >
 	                <span>Sets</span>
-	                <span>Reps</span>
+	                <span>Min</span>
+	                <span>Max</span>
 	                <span>RIR</span>
 	                <span>Rest</span>
 	              </div>
@@ -2121,11 +2180,12 @@ export default function TemplateView({
 	                style={{
 	                  display: "grid",
 	                  gap: "8px",
-	                  gridTemplateColumns: "1fr 1fr 1fr 1.2fr",
+	                  gridTemplateColumns: "0.8fr 1fr 1fr 0.8fr 1.2fr",
 	                }}
 	              >
 	                {[
 	                  ["sets", editingExerciseDraft?.sets?.length || 1],
+	                  ["minimumReps", getPrescriptionPickerValue("minimumReps") || "—"],
 	                  ["reps", getPrescriptionPickerValue("reps") || "—"],
 	                  ["rir", getPrescriptionPickerValue("rir") || "—"],
 	                  [
@@ -2165,8 +2225,10 @@ export default function TemplateView({
 	                title={`Select ${
 	                  editingPrescriptionField === "sets"
 	                    ? "Sets"
-	                    : editingPrescriptionField === "reps"
-	                      ? "Reps"
+	                    : editingPrescriptionField === "minimumReps"
+	                      ? "Minimum Reps"
+	                      : editingPrescriptionField === "reps"
+	                        ? "Maximum Reps"
 	                      : editingPrescriptionField === "restSeconds"
 	                        ? "Rest"
 	                        : "RIR"
@@ -2174,7 +2236,8 @@ export default function TemplateView({
 	                values={
 	                  editingPrescriptionField === "sets"
 	                    ? Array.from({ length: 10 }, (_, index) => index + 1)
-	                    : editingPrescriptionField === "reps"
+	                    : editingPrescriptionField === "reps" ||
+	                        editingPrescriptionField === "minimumReps"
 	                      ? Array.from({ length: 30 }, (_, index) => index + 1)
 	                      : editingPrescriptionField === "restSeconds"
 	                        ? [45, 60, 75, 90, 120, 150, 180, 210, 240, 300]
