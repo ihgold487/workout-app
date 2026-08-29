@@ -6,19 +6,30 @@ public class PickerHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "PickerHapticsPlugin"
     public let jsName = "PickerHaptics"
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "actionTriggered", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "selectionChanged", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setCompleted", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "workoutCompleted", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "warning", returnType: CAPPluginReturnPromise)
     ]
+    private let actionImpactFeedbackGenerator = UIImpactFeedbackGenerator(style: .heavy)
     private let pickerImpactFeedbackGenerator = UIImpactFeedbackGenerator(style: .rigid)
     private let setCompletionFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     private let notificationFeedbackGenerator = UINotificationFeedbackGenerator()
 
     override public func load() {
+        actionImpactFeedbackGenerator.prepare()
         pickerImpactFeedbackGenerator.prepare()
         setCompletionFeedbackGenerator.prepare()
         notificationFeedbackGenerator.prepare()
+    }
+
+    @objc func actionTriggered(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.actionImpactFeedbackGenerator.impactOccurred(intensity: 1.0)
+            self.actionImpactFeedbackGenerator.prepare()
+            call.resolve()
+        }
     }
 
     @objc func setCompleted(_ call: CAPPluginCall) {

@@ -61,6 +61,7 @@ import {
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
+  triggerNativeActionHaptic,
   triggerNativePickerSelectionHaptic,
   triggerNativeWarningHaptic,
 } from "../native/pickerHaptics";
@@ -2720,6 +2721,11 @@ export default function PlansView({
   setTemplates,
   templates,
 }) {
+  const runAiPlanActionWithHaptic = (action) => {
+    void triggerNativeActionHaptic();
+    return action();
+  };
+
   const initialPlanType = editingPlan?.planType || "ai";
   const initialPlanDefaults = getPlanTypeDefaults(initialPlanType);
   const editingPlanConfig = editingPlan?.config || {};
@@ -4732,8 +4738,10 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Share the complete context file and copy the prompt for use in ChatGPT."
                 onClick={() =>
-                  onShareAiPlanContext(
-                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  runAiPlanActionWithHaptic(() =>
+                    onShareAiPlanContext(
+                      buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                    )
                   )
                 }
                 style={{ minHeight: "44px", width: "100%" }}
@@ -4753,8 +4761,10 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Copy the complete AI context JSON to the clipboard."
                 onClick={() =>
-                  onCopyAiPlanContext(
-                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  runAiPlanActionWithHaptic(() =>
+                    onCopyAiPlanContext(
+                      buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                    )
                   )
                 }
                 style={{ width: "100%" }}
@@ -4766,8 +4776,10 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Download the complete AI context as a JSON file."
                 onClick={() =>
-                  onDownloadAiPlanContext(
-                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  runAiPlanActionWithHaptic(() =>
+                    onDownloadAiPlanContext(
+                      buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                    )
                   )
                 }
                 style={{ width: "100%" }}
@@ -4779,8 +4791,10 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Copy the ChatGPT instructions to the clipboard."
                 onClick={() =>
-                  onCopyAiPlanPrompt(
-                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  runAiPlanActionWithHaptic(() =>
+                    onCopyAiPlanPrompt(
+                      buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                    )
                   )
                 }
                 style={{ width: "100%" }}
@@ -4792,8 +4806,10 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Download the ChatGPT instructions as a text file."
                 onClick={() =>
-                  onDownloadAiPlanPrompt(
-                    buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                  runAiPlanActionWithHaptic(() =>
+                    onDownloadAiPlanPrompt(
+                      buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
+                    )
                   )
                 }
                 style={{ width: "100%" }}
@@ -4804,7 +4820,9 @@ export default function PlansView({
               </ExplainedActionButton>
               <ExplainedActionButton
                 description="Open ChatGPT so you can attach the context and use the prompt."
-                onClick={onOpenChatGptForAiPlan}
+                onClick={() =>
+                  runAiPlanActionWithHaptic(onOpenChatGptForAiPlan)
+                }
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >

@@ -58,6 +58,7 @@ export const DEFAULT_AI_PLANNING_GUIDANCE = {
   restMode: "aiDecides",
   restMaximumSeconds: "",
   supersetMode: "aiDecides",
+  dropSetMode: "aiDecides",
   requiredExercises: "",
   preferredExercises: "",
   avoidedExercises: "",
@@ -142,6 +143,10 @@ export function readAiPlanningGuidance() {
     return {
       ...DEFAULT_AI_PLANNING_GUIDANCE,
       ...stored,
+      supersetMode:
+        stored.supersetMode === "allowed"
+          ? "preferred"
+          : stored.supersetMode || DEFAULT_AI_PLANNING_GUIDANCE.supersetMode,
       additionalPriorities: migratedAdditionalPriorities,
       benchmarkFamilyPriorities,
     };
@@ -256,7 +261,7 @@ export function buildAiPlanningContext(guidance, exerciseLibrary = []) {
       mixedPurposePlanAllowed: true,
       programmingAuthority: {
         instruction:
-          "Use the long-term goals, history, prior AI rationale, watchNext items, and current evidence to choose only the next block. The AI may choose a mixed strength/hypertrophy emphasis and should explain material decisions. Do not create a speculative multi-block roadmap.",
+          "Use explicit current priorities to determine which adaptations deserve emphasis, then use history, volume, adherence, fatigue, recovery, exercise exposure, body weight, and nutrition evidence to choose the appropriate dose and method for only the next block. A high priority is not an automatic instruction to increase volume, and an empty currentPriorities array does not erase long-term goals or available history. The AI may choose a mixed strength/hypertrophy emphasis and should explain material decisions. Do not create a speculative multi-block roadmap.",
       },
       rest: {
         mode: guidance.restMode,
@@ -278,7 +283,12 @@ export function buildAiPlanningContext(guidance, exerciseLibrary = []) {
       supersets: {
         mode: guidance.supersetMode,
         instruction:
-          "Interpret mode as follows: avoid means do not prescribe supersets; allowed means supersets are permitted when they clearly support the other goals and constraints but are not required; aiDecides means explicitly decide whether supersets improve workout duration and programming quality. Superset groups may contain only exercises from the same workout.",
+          "Interpret mode as follows: avoid means do not prescribe supersets; preferred means favor supersets when they support workout efficiency and programming quality, but they are not mandatory when exercise compatibility, performance, fatigue, or another constraint argues against them; aiDecides means explicitly decide whether supersets improve the plan. A group contains two or more exercises from the same workout, performed in listed order round by round. Unequal set counts are supported by skipping an exercise when it has no set in a later round. Rest applies after the full round, not between its exercises.",
+      },
+      dropSets: {
+        mode: guidance.dropSetMode,
+        instruction:
+          "Interpret mode as follows: avoid means prescribe zero drop sets; preferred means favor 1-3 drop sets after the final working set of suitable cable, machine, or isolation exercises when they support the goal, but they are not mandatory when fatigue, recovery, technique, or another constraint argues against them; aiDecides means explicitly decide whether and where drop sets improve the plan. Avoid drop sets on benchmarks, highly technical compounds, and movements where fatigue creates a meaningful safety concern unless specifically justified. An omitted weekly value inherits the exercise default, while 0 disables drop sets for that week. The count is the number of additional sequential load-reduction segments. Unless specifically justified, prescribe 0 during deload weeks. Each segment is AMRAP at RIR 0 with no rest, is not an e1RM set, and initially targets 80% of the preceding segment's actual weight rounded to a supported increment; the athlete may edit it.",
       },
       trainingBlock: {
         trainingWeeks: buildRange(

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { writeTextToClipboard } from "./native/clipboard";
 import {
   AlertTriangle,
   BarChart3,
@@ -994,12 +995,14 @@ function buildExerciseHistoryExportRows({
       (workout.exercises || []).forEach((historyExercise) => {
         const exercise = findExerciseForHistoryExercise(historyExercise, exerciseLibrary);
         const exerciseKey = getHistoryExerciseKey(exercise);
+        let dropSetIndex = 0;
 
         if (selectedKeySet && !selectedKeySet.has(exerciseKey)) {
           return;
         }
 
         (historyExercise.sets || []).forEach((set, setIndex) => {
+          const isDropSet = Boolean(set.isDropSet || set.is_drop_set);
           const weight = parseHistoryMetricValue(set.actualWeight ?? set.actual_weight);
           const reps = parseHistoryMetricValue(set.actualReps ?? set.actual_reps);
           const rir = parseHistoryMetricValue(set.actualRir ?? set.actual_rir);
@@ -1018,7 +1021,8 @@ function buildExerciseHistoryExportRows({
             equipment: getExerciseEquipmentLabel(exercise),
             set_number: set.setNumber || set.set_number || setIndex + 1,
             set_id: set.id || set.source_key || "",
-            is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
+            is_drop_set: isDropSet,
+            drop_set_index: isDropSet ? ++dropSetIndex : "",
             weight: formatExportNumber(weight, 1),
             weight_unit: "lb",
             reps: formatExportNumber(reps, 0),
@@ -1427,6 +1431,9 @@ function buildSupportedPlanJson({ plan, templates = [] }) {
               exercise.sets?.[0]?.rest_seconds
             )
           );
+          const exerciseDropSetCount = (exercise.sets || []).filter(
+            (set) => set.isDropSet || set.is_drop_set
+          ).length;
 
           return {
             name: exercise.name || "Exercise",
@@ -1438,7 +1445,12 @@ function buildSupportedPlanJson({ plan, templates = [] }) {
               ? { supersetGroup: exercise.supersetGroup }
               : {}),
             ...(exerciseRestSeconds ? { restSeconds: exerciseRestSeconds } : {}),
-            sets: (exercise.sets || []).map((set) => {
+            ...(exerciseDropSetCount > 0
+              ? { dropSets: exerciseDropSetCount }
+              : {}),
+            sets: (exercise.sets || [])
+              .filter((set) => !set.isDropSet && !set.is_drop_set)
+              .map((set) => {
               const reps = firstExportValue(
                 set.prescribedReps,
                 set.reps,
@@ -1454,18 +1466,18 @@ function buildSupportedPlanJson({ plan, templates = [] }) {
               );
               const restSeconds = getPlanSetRestSeconds(set, null, exercise);
 
-              return {
-                reps: normalizeSupportedPlanJsonNumber(reps),
-                ...(minimumReps === ""
-                  ? {}
-                  : {
-                      minimumReps:
-                        normalizeSupportedPlanJsonNumber(minimumReps),
-                    }),
-                rir: normalizeSupportedPlanJsonNumber(rir),
-                ...(restSeconds ? { restSeconds } : {}),
-              };
-            }),
+                return {
+                  reps: normalizeSupportedPlanJsonNumber(reps),
+                  ...(minimumReps === ""
+                    ? {}
+                    : {
+                        minimumReps:
+                          normalizeSupportedPlanJsonNumber(minimumReps),
+                      }),
+                  rir: normalizeSupportedPlanJsonNumber(rir),
+                  ...(restSeconds ? { restSeconds } : {}),
+                };
+              }),
             ...(weeklyPrescriptions.length > 0
               ? {
                   weeklyPrescriptions: weeklyPrescriptions.map((week) => {
@@ -1490,6 +1502,13 @@ function buildSupportedPlanJson({ plan, templates = [] }) {
                     return {
                       weekNumber: Number(week.weekNumber),
                       sets: Number(week.sets),
+                      ...((week.dropSets ?? week.drop_sets) == null
+                        ? {}
+                        : {
+                            dropSets: getAiDraftDropSetCount(
+                              week.dropSets ?? week.drop_sets
+                            ),
+                          }),
                       reps: normalizeSupportedPlanJsonNumber(week.reps),
                       ...(minimumReps === ""
                         ? {}
@@ -1606,8 +1625,10 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                 exercise_name: "",
                 exercise_id: "",
                 equipment: "",
+                superset_group: "",
                 set_number: "",
                 prescribed_sets: "",
+                prescribed_drop_sets: "",
                 prescribed_reps: "",
                 prescribed_minimum_reps: "",
                 prescribed_rir: "",
@@ -1628,6 +1649,16 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
               const prescribedSets = getPlanExportSetCount(
                 exercise,
                 weekPrescription
+              );
+              const weeklyDropSets =
+                weekPrescription?.dropSets ?? weekPrescription?.drop_sets;
+              const exerciseDropSets = exercise.dropSets ?? exercise.drop_sets;
+              const prescribedDropSets = getAiDraftDropSetCount(
+                weeklyDropSets ??
+                  exerciseDropSets ??
+                  (exercise.sets || []).filter(
+                    (set) => set.isDropSet || set.is_drop_set
+                  ).length
               );
               const exerciseWeekRole = getPlanExportWeekRole(
                 plan,
@@ -1662,8 +1693,10 @@ function buildPlanExportRows({ plans = [], selectedPlanIds = null, templates = [
                   exercise_name: exercise.name || "",
                   exercise_id: exercise.exerciseId || exercise.id || "",
                   equipment: getExerciseEquipmentLabel(exercise),
+                  superset_group: exercise.supersetGroup || "",
                   set_number: setIndex + 1,
                   prescribed_sets: prescribedSets,
+                  prescribed_drop_sets: prescribedDropSets,
                   prescribed_reps: getPlanSetReps(set, weekPrescription, plan),
                   prescribed_minimum_reps: getPlanSetMinimumReps(
                     set,
@@ -2623,7 +2656,11 @@ function buildAiPlanDraftInstructions() {
     repPrescriptionConvention:
       'The app requires a numeric upper-bound rep target in `reps`. When the intended range extends more than two reps below that target, also include numeric `minimumReps`. For example, encode 10–15 as `"reps": 15, "minimumReps": 10`. Apply this consistently to exercise sets and weekly prescriptions. When `minimumReps` is omitted, the app uses its default acceptable-repetition tolerance.',
     supersetConvention:
-      'Respect `planningRequest.supersets.mode`. For `avoid`, omit supersets. For `allowed`, supersets are permitted when useful but are not required. For `aiDecides`, explicitly decide whether they improve workout duration and programming quality. Encode a superset by assigning the same nonempty `supersetGroup` string, such as `"A"`, to at least two exercises in the same workout. Use concise group labels that are unique within that workout, never span a group across workouts, and omit `supersetGroup` from ungrouped exercises.',
+      'Respect `planningRequest.supersets.mode`. For `avoid`, omit supersets. For `preferred`, favor supersets when useful, while allowing exercise compatibility, performance, fatigue, and other constraints to override the preference. For `aiDecides`, explicitly decide whether they improve workout duration and programming quality. Encode a superset by assigning the same nonempty `supersetGroup` string, such as `"A"`, to two or more exercises in the same workout. Exercises sharing a group are performed in listed order, round by round. Unequal working-set counts are supported: an exercise without a set in a later round is skipped. There is no rest between exercises within the same round; the applicable rest timer starts after the final exercise performed in that round. Use concise group labels that are unique within that workout, never span a group across workouts, and omit `supersetGroup` from ungrouped exercises.',
+    dropSetConvention:
+      'Respect `planningRequest.dropSets.mode`. For `avoid`, prescribe zero drop sets. For `preferred`, favor drop sets on suitable cable, machine, or isolation exercises when they support the plan, while allowing fatigue, recovery, technique, and other constraints to override the preference. Avoid them on benchmarks, highly technical compounds, and movements where fatigue creates a meaningful safety concern unless specifically justified. For `aiDecides`, explicitly decide whether and where drop sets improve the plan. Encode the default count as exercise `dropSets` and week-specific counts as `weeklyPrescriptions[].dropSets`, using integers from 0 through 3. An omitted weekly `dropSets` inherits the exercise-level value; an explicit 0 disables drop sets for that week. The count is the number of additional sequential load-reduction segments after the final working set. Unless specifically justified, prescribe 0 during deload weeks rather than inheriting a nonzero default. Each segment prescribes AMRAP at RIR 0 with no rest before the next segment and does not produce an e1RM. The app initially targets 80% of the preceding segment\'s actual weight, rounded to the exercise\'s supported weight increment; the athlete may edit the target or actual weight.',
+    dropSetAnalysisConvention:
+      'Completed drop-set rows have `is_drop_set: true` and a one-based `drop_set_index`. Exclude them from benchmark e1RM trends and ordinary working-set performance-drop-off calculations. Treat working-set and drop-set volume separately, and do not assume one drop-set segment is equivalent to one conventional working set. `activePlanPrescriptionRows[].prescribed_drop_sets` supplies the prescribed count for adherence comparisons.',
     requiredShape: {
       analysis: {
         rationale:
@@ -2650,6 +2687,8 @@ function buildAiPlanDraftInstructions() {
               name: "string matching the exercise library when possible",
               supersetGroup:
                 "optional string; assign the same label to at least two exercises in this workout to link them as a superset; omit for ungrouped exercises",
+              dropSets:
+                "optional integer 0-3; default drop-set count after the final working set",
               sets: [
             {
               restSeconds:
@@ -2663,7 +2702,7 @@ function buildAiPlanDraftInstructions() {
           restSeconds:
             "optional number; default prescribed rest after sets for this exercise, in seconds",
           weeklyPrescriptions:
-            "optional [{ weekNumber, sets, reps, minimumReps, rir, restSeconds, isDeload }]; deload entries may prescribe restSeconds independently from training weeks",
+            "optional [{ weekNumber, sets, dropSets, reps, minimumReps, rir, restSeconds, isDeload }]; dropSets is an integer from 0 through 3; omission inherits exercise.dropSets, while 0 disables drop sets for that week; deload entries should normally use 0 unless specifically justified and may prescribe restSeconds independently",
         },
       ],
           name: "string",
@@ -3167,7 +3206,7 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use a distinct restSeconds value for a deload week, and the app will preserve it. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3224,6 +3263,7 @@ function getAiPlanPrompt(context) {
     "First discuss the proposed plan with me in normal conversational form and revise it based on our discussion.",
     "Do not create the final importable JSON until I explicitly tell you to finalize the plan.",
     "Preserve athleteProfile.longTermGoals across blocks. Use planningRequest and current evidence to choose the emphasis for only the next block; do not create a speculative multi-block roadmap.",
+    "Use explicit priorities to determine which adaptations deserve emphasis, then use historical performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to determine the appropriate training dose and method. Do not treat a high priority as an automatic instruction to increase volume, and do not treat an empty currentPriorities array as an instruction to ignore long-term goals or available history.",
     "Use planningRequest.benchmarkFamilyGuidance to distinguish adaptation emphasis from measurement. A benchmark exercise provides an exercise-specific longitudinal strength signal; its benchmark status alone does not make it a current priority. Respect fixed benchmark preferences, and when a family says AI decides, choose among configured family benchmarks based on history and plan intent. Do not treat e1RM values from different exercises in one family as directly interchangeable.",
     "Follow planningGuidancePrecedence when fields conflict. Treat explicit user constraints as requirements and AI-decides fields as permission to use your judgment.",
     "Use the exercise names/equipment in activeExercises when possible.",
@@ -3234,6 +3274,7 @@ function getAiPlanPrompt(context) {
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
     'The app requires a numeric upper-bound rep target in `reps`. When the intended range extends more than two reps below that target, also include numeric `minimumReps`. For example, encode 10–15 as `"reps": 15, "minimumReps": 10`. Apply this consistently to exercise sets and weekly prescriptions. When `minimumReps` is omitted, the app uses its default acceptable-repetition tolerance.',
+    "Follow draftInstructions.supersetConvention and draftInstructions.dropSetConvention exactly. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention.",
     "You may prescribe restSeconds at the exercise, set, or weekly-prescription level, including a distinct restSeconds for a deload week. If omitted, the app will use its current rep-based rest defaults.",
     "Treat current plan volume and structure as context, not a constraint. Use bodyWeightTrend and nutritionTrend when interpreting strength, recovery, and hypertrophy progress.",
     "In the finalized JSON, put observations, rationale, and watch items inside the optional analysis object so the entire final response remains importable.",
@@ -3348,6 +3389,14 @@ function getAiDraftMinimumReps(value, upperReps) {
     : minimumReps;
 }
 
+function getAiDraftDropSetCount(value) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    ? Math.max(0, Math.min(3, Math.round(parsed)))
+    : 0;
+}
+
 function findAiDraftExercise(exerciseDraft, exerciseLibrary = []) {
   const draftName = normalizeExportText(exerciseDraft?.name);
   const draftEquipment = normalizeExportText(
@@ -3425,34 +3474,70 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
           name: libraryExercise?.name || exerciseDraft.name || "Exercise",
           planMuscle: exerciseDraft.planMuscle || libraryExercise?.muscles?.[0] || "",
           ...(exerciseRestSeconds ? { restSeconds: exerciseRestSeconds } : {}),
-          sets: setDrafts.map((setDraft, setIndex) => {
-            const reps = setDraft?.reps ?? exerciseDraft.reps ?? "";
-            const minimumReps = getAiDraftMinimumReps(
-              setDraft?.minimumReps ??
-                setDraft?.minimum_reps ??
-                exerciseDraft.minimumReps ??
-                exerciseDraft.minimum_reps,
-              reps
-            );
+          sets: [
+            ...setDrafts.map((setDraft, setIndex) => {
+              const reps = setDraft?.reps ?? exerciseDraft.reps ?? "";
+              const minimumReps = getAiDraftMinimumReps(
+                setDraft?.minimumReps ??
+                  setDraft?.minimum_reps ??
+                  exerciseDraft.minimumReps ??
+                  exerciseDraft.minimum_reps,
+                reps
+              );
 
-            return {
-              id:
-                importedAt + workoutIndex * 1000 + exerciseIndex * 100 + setIndex,
-              ...(minimumReps == null ? {} : { minimumReps }),
-              reps: String(reps),
-              restSeconds:
-                getAiDraftRestSeconds(
-                  setDraft?.restSeconds,
-                  setDraft?.rest_seconds,
-                  exerciseRestSeconds
-                ) || undefined,
-              rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
-            };
-          }),
+              return {
+                id:
+                  importedAt +
+                  workoutIndex * 1000 +
+                  exerciseIndex * 100 +
+                  setIndex,
+                ...(minimumReps == null ? {} : { minimumReps }),
+                reps: String(reps),
+                restSeconds:
+                  getAiDraftRestSeconds(
+                    setDraft?.restSeconds,
+                    setDraft?.rest_seconds,
+                    exerciseRestSeconds
+                  ) || undefined,
+                rir: String(setDraft?.rir ?? exerciseDraft.rir ?? ""),
+              };
+            }),
+            ...Array.from(
+              {
+                length: getAiDraftDropSetCount(
+                  exerciseDraft.dropSets ?? exerciseDraft.drop_sets
+                ),
+              },
+              (_, dropSetIndex) => ({
+                id:
+                  importedAt +
+                  workoutIndex * 1000 +
+                  exerciseIndex * 100 +
+                  setDrafts.length +
+                  dropSetIndex,
+                isDropSet: true,
+                prescribedReps: "AMRAP",
+                prescribedRestSeconds: 0,
+                prescribedRir: "0",
+                reps: "AMRAP",
+                restSeconds: 0,
+                rir: "0",
+                targetReps: "AMRAP",
+                targetRir: "0",
+              })
+            ),
+          ],
           supersetGroup: exerciseDraft.supersetGroup || null,
           weeklyPrescriptions: Array.isArray(exerciseDraft.weeklyPrescriptions)
             ? exerciseDraft.weeklyPrescriptions.map((week) => ({
                 ...week,
+                ...((week?.dropSets ?? week?.drop_sets) == null
+                  ? {}
+                  : {
+                      dropSets: getAiDraftDropSetCount(
+                        week?.dropSets ?? week?.drop_sets
+                      ),
+                    }),
                 ...(getAiDraftMinimumReps(
                   week?.minimumReps ?? week?.minimum_reps,
                   week?.reps
@@ -6572,7 +6657,7 @@ export default function App() {
     const prompt = getAiPlanPrompt(context);
 
     try {
-      await navigator.clipboard.writeText(prompt);
+      await writeTextToClipboard(prompt);
       setAiPlanStatus(
         "AI plan prompt copied. Attach the context JSON in your existing ChatGPT discussion."
       );
@@ -6586,7 +6671,7 @@ export default function App() {
     const context = getAiPlanContext(aiPlanningContext);
 
     try {
-      await navigator.clipboard.writeText(JSON.stringify(context, null, 2));
+      await writeTextToClipboard(JSON.stringify(context, null, 2));
       setAiPlanStatus("Complete AI context JSON copied.");
     } catch (error) {
       console.error("AI plan context copy failed:", error);
@@ -6678,7 +6763,7 @@ export default function App() {
     let promptCopied = false;
 
     try {
-      await navigator.clipboard.writeText(prompt);
+      await writeTextToClipboard(prompt);
       promptCopied = true;
     } catch (error) {
       console.error("AI plan prompt copy before share failed:", error);
@@ -6784,6 +6869,8 @@ export default function App() {
         "equipment",
         "set_number",
         "set_id",
+        "is_drop_set",
+        "drop_set_index",
         "weight",
         "weight_unit",
         "reps",
@@ -6844,7 +6931,7 @@ export default function App() {
     }
 
     try {
-      await navigator.clipboard.writeText(csv);
+      await writeTextToClipboard(csv);
       setExerciseExportStatus("Exercise history CSV copied.");
     } catch (error) {
       console.error("Exercise history export copy failed:", error);
@@ -6905,9 +6992,12 @@ export default function App() {
         "exercise_name",
         "exercise_id",
         "equipment",
+        "superset_group",
         "set_number",
         "prescribed_sets",
+        "prescribed_drop_sets",
         "prescribed_reps",
+        "prescribed_minimum_reps",
         "prescribed_rir",
         "rest_seconds",
       ],
@@ -7005,7 +7095,7 @@ export default function App() {
     }
 
     try {
-      await navigator.clipboard.writeText(csv);
+      await writeTextToClipboard(csv);
       setPlanExportStatus("Plan CSV copied.");
     } catch (error) {
       console.error("Plan export copy failed:", error);
@@ -7072,7 +7162,7 @@ export default function App() {
     if (!planExport) return;
 
     try {
-      await navigator.clipboard.writeText(planExport.json);
+      await writeTextToClipboard(planExport.json);
       setPlanExportStatus("Supported plan JSON copied.");
     } catch (error) {
       console.error("Supported plan JSON copy failed:", error);

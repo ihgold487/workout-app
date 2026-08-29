@@ -461,7 +461,19 @@ export default function AiPlanningGuidancePanel({
             value={guidance.supersetMode}
           >
             <option value="aiDecides">AI decides</option>
-            <option value="allowed">Allowed</option>
+            <option value="preferred">Preferred</option>
+            <option value="avoid">Avoid</option>
+          </select>
+        </label>
+        <label style={labelStyle}>
+          Drop sets
+          <select
+            onChange={(event) => update("dropSetMode", event.target.value)}
+            style={fieldStyle}
+            value={guidance.dropSetMode}
+          >
+            <option value="aiDecides">AI decides</option>
+            <option value="preferred">Preferred</option>
             <option value="avoid">Avoid</option>
           </select>
         </label>

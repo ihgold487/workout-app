@@ -20,6 +20,20 @@ export async function triggerNativePickerSelectionHaptic() {
   }
 }
 
+export async function triggerNativeActionHaptic() {
+  if (!canUseNativePickerHaptics()) {
+    return false;
+  }
+
+  try {
+    await PickerHaptics.actionTriggered();
+    return true;
+  } catch (error) {
+    console.warn("Native action haptic failed:", error);
+    return false;
+  }
+}
+
 export async function triggerNativeWarningHaptic() {
   if (!canUseNativePickerHaptics()) {
     return false;

@@ -213,7 +213,7 @@ Potentially useful missing inputs include:
 - Exercises to require, prefer, avoid, or rotate
 - Priority and maintenance muscle groups
 - Desired frequency per muscle or benchmark
-- Superset permission
+- Superset and drop-set modes: AI decides, preferred, or avoid
 - Recovery constraints such as sleep, stress, other sports, or a physical job
 - Progression preference: fixed progression, double progression, RIR-based, or AI decides
 - Variety preference: retain familiar exercises or rotate more aggressively
@@ -289,7 +289,7 @@ The initial controls cover:
 - Optional estimated workout-duration limits
 - Working-set range per exercise
 - AI-selected rest intervals with an optional maximum, or app defaults
-- Superset permission
+- Superset and drop-set modes: AI decides, preferred, or avoid
 - Required, preferred, and avoided exercises
 - Freeform notes for injuries, recovery, equipment, schedule details, and other constraints
 
@@ -310,6 +310,14 @@ The first exported context revealed two derived-data ambiguities. Block outcomes
 Completed workout history previously removed prescribed rep and RIR targets, preventing adherence comparisons. New history preserves those two prescription fields. The adherence export now has an explicit `{ available, reason, rows }` shape so older history without comparable targets cannot be mistaken for zero or perfect adherence.
 
 The two-stage prompt now ends with “After I explicitly approve finalization, return only valid JSON...” to keep conversational planning distinct from final file generation. An empty `previousPlanAIContext` remains expected until an imported AI plan containing analysis has been activated and performed.
+
+### Drop-set and superset conventions
+
+Exercise-level `dropSets` is the default. An omitted weekly value inherits that default, while an explicit `0` disables drop sets for the week. The count means additional sequential load-reduction segments after the final working set. Each segment is AMRAP at RIR 0, has no rest before the next segment, and is excluded from e1RM. The initial target is 80% of the preceding segment's actual weight, rounded to the exercise's supported increment, and remains editable. Deload weeks should normally prescribe `0` explicitly unless drop sets have a specific rationale.
+
+Completed history exposes both `is_drop_set` and the one-based `drop_set_index`. Active-plan prescription rows expose `prescribed_drop_sets`, including weekly inheritance and explicit overrides. AI analysis should keep working-set and drop-set volume distinct, exclude drop sets from ordinary working-set performance-drop-off analysis, and avoid treating a drop segment as equivalent to a conventional working set.
+
+Superset groups contain two or more exercises from the same workout and execute in listed order, round by round. Unequal set counts are supported by skipping exercises that have no set in a later round. No rest timer starts between exercises in the same round; the applicable timer starts after the final exercise performed in that round.
 
 ### Benchmark-series intent
 
