@@ -48,6 +48,20 @@ export async function triggerNativeWarningHaptic() {
   }
 }
 
+export async function triggerNativeSuccessHaptic() {
+  if (!canUseNativePickerHaptics()) {
+    return false;
+  }
+
+  try {
+    await PickerHaptics.success();
+    return true;
+  } catch (error) {
+    console.warn("Native success haptic failed:", error);
+    return false;
+  }
+}
+
 export async function triggerNativeSetCompletionHaptic() {
   if (!canUseNativePickerHaptics()) {
     return false;

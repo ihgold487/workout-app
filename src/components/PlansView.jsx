@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   Brain,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -63,6 +65,7 @@ import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
   triggerNativeActionHaptic,
   triggerNativePickerSelectionHaptic,
+  triggerNativeSuccessHaptic,
   triggerNativeWarningHaptic,
 } from "../native/pickerHaptics";
 import {
@@ -2721,10 +2724,50 @@ export default function PlansView({
   setTemplates,
   templates,
 }) {
-  const runAiPlanActionWithHaptic = (action) => {
+  const [aiActionFeedback, setAiActionFeedback] = useState(null);
+  const aiActionFeedbackTimerRef = useRef(null);
+
+  const runAiPlanActionWithFeedback = async (actionKey, action) => {
     void triggerNativeActionHaptic();
-    return action();
+    window.clearTimeout(aiActionFeedbackTimerRef.current);
+
+    try {
+      const result = await action();
+      const succeeded = result?.ok !== false;
+      const message =
+        result?.message || (succeeded ? "Action completed" : "Action failed");
+
+      setAiActionFeedback({ actionKey, message, succeeded });
+      setAiPlanStatus(result?.detail || message);
+      void (succeeded
+        ? triggerNativeSuccessHaptic()
+        : triggerNativeWarningHaptic());
+      aiActionFeedbackTimerRef.current = window.setTimeout(
+        () => setAiActionFeedback(null),
+        1800
+      );
+      return result;
+    } catch (error) {
+      console.error("AI plan action failed:", error);
+      setAiActionFeedback({
+        actionKey,
+        message: "Action did not complete",
+        succeeded: false,
+      });
+      setAiPlanStatus("Action did not complete. Please try again.");
+      void triggerNativeWarningHaptic();
+      aiActionFeedbackTimerRef.current = window.setTimeout(
+        () => setAiActionFeedback(null),
+        2400
+      );
+      return null;
+    }
   };
+
+  useEffect(
+    () => () => window.clearTimeout(aiActionFeedbackTimerRef.current),
+    []
+  );
 
   const initialPlanType = editingPlan?.planType || "ai";
   const initialPlanDefaults = getPlanTypeDefaults(initialPlanType);
@@ -4738,7 +4781,7 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Share the complete context file and copy the prompt for use in ChatGPT."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(() =>
+                  runAiPlanActionWithFeedback("shareContext", () =>
                     onShareAiPlanContext(
                       buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                     )
@@ -4747,8 +4790,16 @@ export default function PlansView({
                 style={{ minHeight: "44px", width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <Share2 size={16} />
-                Send to ChatGPT
+                {aiActionFeedback?.actionKey === "shareContext" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <Share2 size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "shareContext" &&
+                aiActionFeedback.succeeded
+                  ? "Shared"
+                  : "Send to ChatGPT"}
               </ExplainedActionButton>
             </div>
             <div
@@ -4761,7 +4812,7 @@ export default function PlansView({
               <ExplainedActionButton
                 description="Copy the complete AI context JSON to the clipboard."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(() =>
+                  runAiPlanActionWithFeedback("copyContext", () =>
                     onCopyAiPlanContext(
                       buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                     )
@@ -4770,13 +4821,21 @@ export default function PlansView({
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <Copy size={16} />
-                Copy Context
+                {aiActionFeedback?.actionKey === "copyContext" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <Copy size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "copyContext" &&
+                aiActionFeedback.succeeded
+                  ? "Copied"
+                  : "Copy Context"}
               </ExplainedActionButton>
               <ExplainedActionButton
                 description="Download the complete AI context as a JSON file."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(() =>
+                  runAiPlanActionWithFeedback("downloadContext", () =>
                     onDownloadAiPlanContext(
                       buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                     )
@@ -4785,13 +4844,21 @@ export default function PlansView({
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <FileJson size={16} />
-                Download Context
+                {aiActionFeedback?.actionKey === "downloadContext" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <FileJson size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "downloadContext" &&
+                aiActionFeedback.succeeded
+                  ? "File Ready"
+                  : "Download Context"}
               </ExplainedActionButton>
               <ExplainedActionButton
                 description="Copy the ChatGPT instructions to the clipboard."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(() =>
+                  runAiPlanActionWithFeedback("copyPrompt", () =>
                     onCopyAiPlanPrompt(
                       buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                     )
@@ -4800,13 +4867,21 @@ export default function PlansView({
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <Copy size={16} />
-                Copy Prompt
+                {aiActionFeedback?.actionKey === "copyPrompt" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <Copy size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "copyPrompt" &&
+                aiActionFeedback.succeeded
+                  ? "Copied"
+                  : "Copy Prompt"}
               </ExplainedActionButton>
               <ExplainedActionButton
                 description="Download the ChatGPT instructions as a text file."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(() =>
+                  runAiPlanActionWithFeedback("downloadPrompt", () =>
                     onDownloadAiPlanPrompt(
                       buildAiPlanningContext(aiPlanningGuidance, exerciseLibrary)
                     )
@@ -4815,21 +4890,75 @@ export default function PlansView({
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <FileText size={16} />
-                Download Prompt
+                {aiActionFeedback?.actionKey === "downloadPrompt" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <FileText size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "downloadPrompt" &&
+                aiActionFeedback.succeeded
+                  ? "File Ready"
+                  : "Download Prompt"}
               </ExplainedActionButton>
               <ExplainedActionButton
                 description="Open ChatGPT so you can attach the context and use the prompt."
                 onClick={() =>
-                  runAiPlanActionWithHaptic(onOpenChatGptForAiPlan)
+                  runAiPlanActionWithFeedback(
+                    "openChatGpt",
+                    onOpenChatGptForAiPlan
+                  )
                 }
                 style={{ width: "100%" }}
                 wrapperStyle={{ width: "100%" }}
               >
-                <ExternalLink size={16} />
-                Open ChatGPT
+                {aiActionFeedback?.actionKey === "openChatGpt" &&
+                aiActionFeedback.succeeded ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <ExternalLink size={16} />
+                )}
+                {aiActionFeedback?.actionKey === "openChatGpt" &&
+                aiActionFeedback.succeeded
+                  ? "Opened"
+                  : "Open ChatGPT"}
               </ExplainedActionButton>
             </div>
+            {aiActionFeedback && (
+              <div
+                aria-live="polite"
+                role="status"
+                style={{
+                  alignItems: "center",
+                  background: aiActionFeedback.succeeded
+                    ? "rgba(28, 28, 30, 0.94)"
+                    : "rgba(120, 28, 28, 0.96)",
+                  border: "1px solid rgba(255, 255, 255, 0.16)",
+                  borderRadius: "14px",
+                  bottom: "calc(env(safe-area-inset-bottom, 0px) + 76px)",
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.28)",
+                  color: "#fff",
+                  display: "flex",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  gap: "8px",
+                  left: "50%",
+                  maxWidth: "calc(100vw - 32px)",
+                  padding: "11px 14px",
+                  position: "fixed",
+                  transform: "translateX(-50%)",
+                  width: "max-content",
+                  zIndex: 10000,
+                }}
+              >
+                {aiActionFeedback.succeeded ? (
+                  <CheckCircle2 aria-hidden="true" size={18} />
+                ) : (
+                  <AlertTriangle aria-hidden="true" size={18} />
+                )}
+                {aiActionFeedback.message}
+              </div>
+            )}
             <textarea
               aria-label="AI plan draft JSON"
               onChange={(event) => {

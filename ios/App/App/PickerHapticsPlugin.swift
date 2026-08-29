@@ -9,6 +9,7 @@ public class PickerHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "actionTriggered", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "selectionChanged", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setCompleted", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "success", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "workoutCompleted", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "warning", returnType: CAPPluginReturnPromise)
     ]
@@ -41,6 +42,14 @@ public class PickerHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func workoutCompleted(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.notificationFeedbackGenerator.notificationOccurred(.success)
+            self.notificationFeedbackGenerator.prepare()
+            call.resolve()
+        }
+    }
+
+    @objc func success(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             self.notificationFeedbackGenerator.notificationOccurred(.success)
             self.notificationFeedbackGenerator.prepare()

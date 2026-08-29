@@ -6658,12 +6658,16 @@ export default function App() {
 
     try {
       await writeTextToClipboard(prompt);
-      setAiPlanStatus(
-        "AI plan prompt copied. Attach the context JSON in your existing ChatGPT discussion."
-      );
+      const detail =
+        "AI plan prompt copied. Attach the context JSON in your existing ChatGPT discussion.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Prompt copied", ok: true };
     } catch (error) {
       console.error("AI plan prompt copy failed:", error);
-      setAiPlanStatus("Copy failed. Download the context and copy the visible prompt.");
+      const detail =
+        "Copy failed. Download the context and copy the visible prompt.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Prompt copy failed", ok: false };
     }
   }
 
@@ -6672,10 +6676,14 @@ export default function App() {
 
     try {
       await writeTextToClipboard(JSON.stringify(context, null, 2));
-      setAiPlanStatus("Complete AI context JSON copied.");
+      const detail = "Complete AI context JSON copied.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Context copied", ok: true };
     } catch (error) {
       console.error("AI plan context copy failed:", error);
-      setAiPlanStatus("Context copy failed. Use Download Context instead.");
+      const detail = "Context copy failed. Use Download Context instead.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Context copy failed", ok: false };
     }
   }
 
@@ -6720,14 +6728,22 @@ export default function App() {
         mimeType: "application/json;charset=utf-8",
         title: "Save AI workout-plan context",
       });
-      setAiPlanStatus(
+      const detail =
         result === "shared"
           ? "AI context ready. Choose Save to Files to keep it on this device."
-          : "AI context downloaded. Attach it to your ChatGPT discussion."
-      );
+          : "AI context downloaded. Attach it to your ChatGPT discussion.";
+      setAiPlanStatus(detail);
+      return {
+        detail,
+        message: result === "shared" ? "Context file ready" : "Context downloaded",
+        ok: true,
+      };
     } catch (error) {
       console.error("AI plan context download failed:", error);
-      setAiPlanStatus("Context download did not complete. Try Copy Context instead.");
+      const detail =
+        "Context download did not complete. Try Copy Context instead.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Context download failed", ok: false };
     }
   }
 
@@ -6743,14 +6759,21 @@ export default function App() {
         mimeType: "text/plain;charset=utf-8",
         title: "Save AI workout-plan prompt",
       });
-      setAiPlanStatus(
+      const detail =
         result === "shared"
           ? "AI prompt ready. Choose Save to Files to keep it on this device."
-          : "AI prompt downloaded."
-      );
+          : "AI prompt downloaded.";
+      setAiPlanStatus(detail);
+      return {
+        detail,
+        message: result === "shared" ? "Prompt file ready" : "Prompt downloaded",
+        ok: true,
+      };
     } catch (error) {
       console.error("AI plan prompt download failed:", error);
-      setAiPlanStatus("Prompt download did not complete. Try Copy Prompt instead.");
+      const detail = "Prompt download did not complete. Try Copy Prompt instead.";
+      setAiPlanStatus(detail);
+      return { detail, message: "Prompt download failed", ok: false };
     }
   }
 
@@ -6786,10 +6809,11 @@ export default function App() {
           files: [uri],
           title: "Create a workout plan in ChatGPT",
         });
-        setAiPlanStatus(
-          `Context shared.${promptCopied ? " The prompt was also copied." : ""} Continue in ChatGPT, then return with the finalized JSON file.`
-        );
-        return;
+        const detail = `Context shared.${
+          promptCopied ? " The prompt was also copied." : ""
+        } Continue in ChatGPT, then return with the finalized JSON file.`;
+        setAiPlanStatus(detail);
+        return { detail, message: "Context shared", ok: true };
       }
 
       const file = new File([json], fileName, { type: "application/json" });
@@ -6799,31 +6823,40 @@ export default function App() {
           files: [file],
           title: "Create a workout plan in ChatGPT",
         });
-        setAiPlanStatus(
-          `Context shared.${promptCopied ? " The prompt was also copied." : ""}`
-        );
-        return;
+        const detail = `Context shared.${
+          promptCopied ? " The prompt was also copied." : ""
+        }`;
+        setAiPlanStatus(detail);
+        return { detail, message: "Context shared", ok: true };
       }
 
-      await downloadAiPlanContext(aiPlanningContext);
-      setAiPlanStatus(
-        `Native sharing is unavailable here. The context was downloaded${
-          promptCopied ? " and the prompt was copied" : ""
-        }. Attach it in ChatGPT.`
-      );
+      const downloadResult = await downloadAiPlanContext(aiPlanningContext);
+
+      if (downloadResult?.ok === false) {
+        return downloadResult;
+      }
+
+      const detail = `Native sharing is unavailable here. The context was downloaded${
+        promptCopied ? " and the prompt was copied" : ""
+      }. Attach it in ChatGPT.`;
+      setAiPlanStatus(detail);
+      return { detail, message: "Context downloaded", ok: true };
     } catch (error) {
       console.error("AI plan context share failed:", error);
-      setAiPlanStatus(
-        `Sharing did not complete.${
-          promptCopied ? " The prompt is copied;" : ""
-        } use Download Context and Open ChatGPT instead.`
-      );
+      const detail = `Sharing did not complete.${
+        promptCopied ? " The prompt is copied;" : ""
+      } use Download Context and Open ChatGPT instead.`;
+      setAiPlanStatus(detail);
+      return { detail, message: "Sharing did not complete", ok: false };
     }
   }
 
   function openChatGptForAiPlan() {
     window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-    setAiPlanStatus("ChatGPT opened. Use Copy Prompt and attach the JSON context.");
+    const detail =
+      "ChatGPT opened. Use Copy Prompt and attach the JSON context.";
+    setAiPlanStatus(detail);
+    return { detail, message: "ChatGPT opened", ok: true };
   }
 
   function buildAiPlanDraftFromText(text) {
