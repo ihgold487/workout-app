@@ -16,6 +16,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Clock3,
   Coffee,
   Library,
   Plus,
@@ -46,6 +47,12 @@ import {
 } from "../storage/nutritionStorage";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
+import {
+  cancelNativeCreatineNotifications,
+  canUseNativeCreatineNotifications,
+  scheduleNativeCreatineNotifications,
+} from "../native/creatineReminderNotifications";
+import { triggerNativePickerSelectionHaptic } from "../native/pickerHaptics";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
@@ -66,7 +73,20 @@ const DAILY_CREATINE_REMINDER_KEY = "dailyCreatineReminder";
 const DAILY_CREATINE_REMINDER_TIME_KEY = "dailyCreatineReminderTime";
 const NUTRITION_ADD_MEAL_KEY = "nutritionAddMeal";
 const DEFAULT_DAILY_CREATINE_REMINDER_TIME = "16:00";
-const LONG_PRESS_DURATION_MS = 550;
+const CREATINE_REMINDER_HOUR_OPTIONS = Array.from(
+  { length: 24 },
+  (_, hour) => ({
+    label: `${hour % 12 || 12} ${hour >= 12 ? "PM" : "AM"}`,
+    value: hour,
+  })
+);
+const CREATINE_REMINDER_MINUTE_OPTIONS = Array.from(
+  { length: 60 },
+  (_, minute) => ({
+    label: String(minute).padStart(2, "0"),
+    value: minute,
+  })
+);
 const FDC_API_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 const FDC_API_KEY = import.meta.env.VITE_USDA_FDC_API_KEY || "";
 const SUPPLEMENTAL_FOOD_SOURCE = "supplemental_library";
@@ -581,6 +601,143 @@ function formatReminderTime(time) {
   const displayHours = hours % 12 || 12;
 
   return `${displayHours}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
+function CreatineTimePickerColumn({ label, onChange, options, value }) {
+  const scrollRef = useRef(null);
+  const scrollSelectionTimerRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
+  const hapticValueRef = useRef(value);
+
+  function getCenteredValue() {
+    const scroller = scrollRef.current;
+
+    if (!scroller) {
+      return null;
+    }
+
+    const centerY = scroller.getBoundingClientRect().top + scroller.clientHeight / 2;
+    let closestValue = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    scroller.querySelectorAll("[data-time-value]").forEach((option) => {
+      const bounds = option.getBoundingClientRect();
+      const distance = Math.abs(bounds.top + bounds.height / 2 - centerY);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestValue = Number(option.dataset.timeValue);
+      }
+    });
+
+    return closestValue;
+  }
+
+  function handlePickerScroll() {
+    if (!isUserScrollingRef.current) {
+      return;
+    }
+
+    const centeredValue = getCenteredValue();
+
+    if (centeredValue == null) {
+      return;
+    }
+
+    if (hapticValueRef.current !== centeredValue) {
+      hapticValueRef.current = centeredValue;
+      void triggerNativePickerSelectionHaptic();
+    }
+
+    window.clearTimeout(scrollSelectionTimerRef.current);
+    scrollSelectionTimerRef.current = window.setTimeout(() => {
+      isUserScrollingRef.current = false;
+      onChange(centeredValue);
+    }, 120);
+  }
+
+  useEffect(() => {
+    const selectedOption = scrollRef.current?.querySelector(
+      `[data-time-value="${value}"]`
+    );
+
+    selectedOption?.scrollIntoView({ block: "center" });
+    hapticValueRef.current = value;
+  }, [value]);
+
+  useEffect(
+    () => () => window.clearTimeout(scrollSelectionTimerRef.current),
+    []
+  );
+
+  return (
+    <label style={{ display: "grid", gap: "6px", minWidth: 0 }}>
+      <span
+        style={{
+          color: "var(--text-muted)",
+          fontSize: "12px",
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </span>
+      <div
+        onPointerDown={() => {
+          isUserScrollingRef.current = true;
+          hapticValueRef.current = value;
+        }}
+        onScroll={handlePickerScroll}
+        onWheel={() => {
+          isUserScrollingRef.current = true;
+          hapticValueRef.current = value;
+        }}
+        ref={scrollRef}
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          height: "174px",
+          overflowY: "auto",
+          padding: "58px 4px",
+          scrollSnapType: "y mandatory",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        {options.map((option) => {
+          const selected = option.value === value;
+
+          return (
+            <button
+              aria-pressed={selected}
+              data-time-value={option.value}
+              key={option.value}
+              onClick={() => {
+                isUserScrollingRef.current = false;
+                window.clearTimeout(scrollSelectionTimerRef.current);
+                onChange(option.value);
+                void triggerNativePickerSelectionHaptic();
+              }}
+              style={{
+                background: selected ? "#e6f4ea" : "transparent",
+                border: selected ? "1px solid #137333" : "1px solid transparent",
+                borderRadius: "6px",
+                color: selected ? "#137333" : "var(--text)",
+                display: "block",
+                fontSize: selected ? "20px" : "16px",
+                fontWeight: selected ? 700 : 400,
+                minHeight: "44px",
+                padding: "6px 8px",
+                scrollSnapAlign: "center",
+                width: "100%",
+              }}
+              type="button"
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </label>
+  );
 }
 
 function upsertDailyCalorieGoalHistory(history, date, goal) {
@@ -3996,6 +4153,7 @@ export default function NutritionView({ session = null }) {
   );
   const [creatineReminderTimePickerOpen, setCreatineReminderTimePickerOpen] =
     useState(false);
+  const [creatineReminderStatus, setCreatineReminderStatus] = useState("");
   const [preferredAddMeal, setPreferredAddMeal] = useState(() =>
     readNutritionAddMeal(nutritionAddMealStorageKey)
   );
@@ -4104,8 +4262,6 @@ export default function NutritionView({ session = null }) {
   const latestNutritionEntriesRef = useRef(entries);
   const latestDailyCalorieGoalRef = useRef(dailyCalorieGoal);
   const latestDailyCalorieGoalHistoryRef = useRef(dailyCalorieGoalHistory);
-  const creatineReminderLongPressTimerRef = useRef(null);
-  const suppressCreatineReminderClickRef = useRef(false);
   const entryDraftMealContextRef = useRef({
     dayEntryCount: 0,
     selectedDate,
@@ -4161,15 +4317,6 @@ export default function NutritionView({ session = null }) {
 
     return () => window.clearInterval(intervalId);
   }, []);
-
-  useEffect(
-    () => () => {
-      if (creatineReminderLongPressTimerRef.current) {
-        window.clearTimeout(creatineReminderLongPressTimerRef.current);
-      }
-    },
-    []
-  );
 
   const dayEntries = useMemo(
     () => entries.filter((entry) => entry.date === selectedDate),
@@ -4238,6 +4385,25 @@ export default function NutritionView({ session = null }) {
   const creatineAutoDetected = creatineFoodDetected || creatineRecipeDetected;
   const creatineManuallyChecked = Boolean(dailyCreatineLog[selectedDate]);
   const creatineTaken = creatineAutoDetected || creatineManuallyChecked;
+  const creatineReminderSkippedDates = useMemo(() => {
+    const dates = new Set(Object.keys(dailyCreatineLog));
+
+    entries.forEach((entry) => {
+      if (
+        entry.date &&
+        (includesCreatine(entry.name) ||
+          includesCreatine(entry.servingDescription))
+      ) {
+        dates.add(entry.date);
+      }
+    });
+
+    if (selectedDate && creatineAutoDetected) {
+      dates.add(selectedDate);
+    }
+
+    return [...dates];
+  }, [creatineAutoDetected, dailyCreatineLog, entries, selectedDate]);
   const creatineReminderDue =
     dailyCreatineReminderEnabled &&
     selectedDate === getTodayKey() &&
@@ -4246,6 +4412,63 @@ export default function NutritionView({ session = null }) {
   const creatineReminderTimeLabel = formatReminderTime(
     dailyCreatineReminderTime
   );
+  const [creatineReminderHours, creatineReminderMinutes] =
+    dailyCreatineReminderTime.split(":").map(Number);
+
+  useEffect(() => {
+    if (!canUseNativeCreatineNotifications()) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function reconcileReminder() {
+      const result = dailyCreatineReminderEnabled
+        ? await scheduleNativeCreatineNotifications({
+            skippedDates: creatineReminderSkippedDates,
+            time: dailyCreatineReminderTime,
+          })
+        : {
+            status: (await cancelNativeCreatineNotifications())
+              ? "off"
+              : "error",
+          };
+
+      if (cancelled) {
+        return;
+      }
+
+      if (result.status === "permission-required") {
+        setCreatineReminderStatus(
+          "Creatine reminders need notification permission in iPhone Settings."
+        );
+      } else if (result.status === "error") {
+        setCreatineReminderStatus(
+          "The creatine reminder could not be scheduled."
+        );
+      } else {
+        setCreatineReminderStatus("");
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void reconcileReminder();
+      }
+    }
+
+    void reconcileReminder();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [
+    creatineReminderSkippedDates,
+    dailyCreatineReminderEnabled,
+    dailyCreatineReminderTime,
+  ]);
   const latestBodyWeight = useMemo(
     () =>
       [...bodyWeightEntries].sort((a, b) => b.date.localeCompare(a.date))[0] ||
@@ -6590,8 +6813,27 @@ export default function NutritionView({ session = null }) {
     saveDailyCreatineLog(nextLog, dailyCreatineLogStorageKeyRef.current);
   }
 
-  function toggleDailyCreatineReminder() {
+  async function toggleDailyCreatineReminder() {
     const nextValue = !dailyCreatineReminderEnabled;
+
+    if (nextValue && canUseNativeCreatineNotifications()) {
+      const result = await scheduleNativeCreatineNotifications({
+        requestPermission: true,
+        skippedDates: creatineReminderSkippedDates,
+        time: dailyCreatineReminderTime,
+      });
+
+      if (result.status !== "scheduled") {
+        setCreatineReminderStatus(
+          result.status === "denied"
+            ? "Notifications are disabled. Enable them for this app in iPhone Settings."
+            : "The creatine reminder could not be scheduled."
+        );
+        return;
+      }
+    } else if (!nextValue) {
+      await cancelNativeCreatineNotifications();
+    }
 
     setDailyCreatineReminderEnabled(nextValue);
     saveDailyCreatineReminderEnabled(
@@ -6599,42 +6841,7 @@ export default function NutritionView({ session = null }) {
       dailyCreatineReminderStorageKeyRef.current
     );
     setCreatineReminderTick(Date.now());
-  }
-
-  function startCreatineReminderLongPress(event) {
-    event.preventDefault();
-    suppressCreatineReminderClickRef.current = false;
-
-    if (creatineReminderLongPressTimerRef.current) {
-      window.clearTimeout(creatineReminderLongPressTimerRef.current);
-    }
-
-    creatineReminderLongPressTimerRef.current = window.setTimeout(() => {
-      suppressCreatineReminderClickRef.current = true;
-      setCreatineReminderTimePickerOpen(true);
-      creatineReminderLongPressTimerRef.current = null;
-    }, LONG_PRESS_DURATION_MS);
-  }
-
-  function cancelCreatineReminderLongPress() {
-    if (!creatineReminderLongPressTimerRef.current) {
-      return;
-    }
-
-    window.clearTimeout(creatineReminderLongPressTimerRef.current);
-    creatineReminderLongPressTimerRef.current = null;
-  }
-
-  function finishCreatineReminderPress(event) {
-    event.preventDefault();
-
-    if (creatineReminderLongPressTimerRef.current) {
-      cancelCreatineReminderLongPress();
-      toggleDailyCreatineReminder();
-      return;
-    }
-
-    suppressCreatineReminderClickRef.current = false;
+    setCreatineReminderStatus("");
   }
 
   function updateDailyCreatineReminderTime(value) {
@@ -6646,6 +6853,18 @@ export default function NutritionView({ session = null }) {
       dailyCreatineReminderTimeStorageKeyRef.current
     );
     setCreatineReminderTick(Date.now());
+  }
+
+  function updateDailyCreatineReminderTimePart(part, value) {
+    const nextHours = part === "hours" ? value : creatineReminderHours;
+    const nextMinutes = part === "minutes" ? value : creatineReminderMinutes;
+
+    updateDailyCreatineReminderTime(
+      `${String(nextHours).padStart(2, "0")}:${String(nextMinutes).padStart(
+        2,
+        "0"
+      )}`
+    );
   }
 
   function updateDailyCalorieGoal(value) {
@@ -6896,7 +7115,7 @@ export default function NutritionView({ session = null }) {
           borderRadius: "8px",
           display: "grid",
           gap: "8px",
-          gridTemplateColumns: "auto minmax(0, 1fr) auto auto",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto auto auto",
           marginBottom: "14px",
           padding: "10px 12px",
           WebkitTouchCallout: "none",
@@ -6907,26 +7126,37 @@ export default function NutritionView({ session = null }) {
         <BicepsFlexed size={20} color="#6d4c41" />
         <strong>Creatine</strong>
         <button
+          aria-label={`Set creatine reminder time. Currently ${creatineReminderTimeLabel}.`}
+          onClick={() => setCreatineReminderTimePickerOpen(true)}
+          style={{
+            alignItems: "center",
+            background: "#f7fbf7",
+            border: "1px solid #b7d7bf",
+            borderRadius: "8px",
+            color: "#5f7f68",
+            display: "inline-flex",
+            gap: "5px",
+            height: "34px",
+            justifyContent: "center",
+            padding: "0 8px",
+            whiteSpace: "nowrap",
+          }}
+          title={`Set reminder time (currently ${creatineReminderTimeLabel})`}
+          type="button"
+        >
+          <Clock3 size={17} />
+          <span style={{ fontSize: "12px", fontWeight: 600 }}>
+            {creatineReminderTimeLabel}
+          </span>
+        </button>
+        <button
           aria-label={
             dailyCreatineReminderEnabled
               ? "Turn creatine reminder off"
               : "Turn creatine reminder on"
           }
           aria-pressed={dailyCreatineReminderEnabled}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setCreatineReminderTimePickerOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              toggleDailyCreatineReminder();
-            }
-          }}
-          onPointerCancel={cancelCreatineReminderLongPress}
-          onPointerDown={startCreatineReminderLongPress}
-          onPointerLeave={cancelCreatineReminderLongPress}
-          onPointerUp={finishCreatineReminderPress}
+          onClick={() => void toggleDailyCreatineReminder()}
           style={{
             alignItems: "center",
             background: dailyCreatineReminderEnabled ? "#e6f4ea" : "#f7fbf7",
@@ -6951,8 +7181,8 @@ export default function NutritionView({ session = null }) {
           }}
           title={
             dailyCreatineReminderEnabled
-              ? `Creatine reminder is on at ${creatineReminderTimeLabel}. Long press to change time.`
-              : `Creatine reminder is off. Long press to change ${creatineReminderTimeLabel} time.`
+              ? `Creatine reminder is on at ${creatineReminderTimeLabel}.`
+              : `Creatine reminder is off. Alert time is ${creatineReminderTimeLabel}.`
           }
           type="button"
         >
@@ -6986,6 +7216,20 @@ export default function NutritionView({ session = null }) {
           type="checkbox"
         />
       </section>
+
+      {creatineReminderStatus && (
+        <p
+          aria-live="polite"
+          style={{
+            color: "#8a1f11",
+            fontSize: "12px",
+            margin: "-8px 0 14px",
+          }}
+          role="status"
+        >
+          {creatineReminderStatus}
+        </p>
+      )}
 
       {creatineReminderTimePickerOpen && (
         <div
@@ -7030,46 +7274,30 @@ export default function NutritionView({ session = null }) {
             >
               Creatine Reminder
             </h3>
-            <label
+            <div
               style={{
                 display: "grid",
-                gap: "6px",
-                minWidth: 0,
+                gap: "10px",
+                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
               }}
             >
-              Time
-              <span
-                style={{
-                  boxSizing: "border-box",
-                  display: "block",
-                  maxWidth: "100%",
-                  minWidth: 0,
-                  overflow: "hidden",
-                  width: "100%",
-                }}
-              >
-                <input
-                  aria-label="Creatine reminder time"
-                  onChange={(event) =>
-                    updateDailyCreatineReminderTime(event.target.value)
-                  }
-                  style={{
-                    WebkitAppearance: "none",
-                    appearance: "none",
-                    boxSizing: "border-box",
-                    display: "block",
-                    font: "inherit",
-                    maxWidth: "100%",
-                    minHeight: "44px",
-                    minWidth: 0,
-                    padding: "7px 10px",
-                    width: "100%",
-                  }}
-                  type="time"
-                  value={dailyCreatineReminderTime}
-                />
-              </span>
-            </label>
+              <CreatineTimePickerColumn
+                label="Hour"
+                onChange={(value) =>
+                  updateDailyCreatineReminderTimePart("hours", value)
+                }
+                options={CREATINE_REMINDER_HOUR_OPTIONS}
+                value={creatineReminderHours}
+              />
+              <CreatineTimePickerColumn
+                label="Minute"
+                onChange={(value) =>
+                  updateDailyCreatineReminderTimePart("minutes", value)
+                }
+                options={CREATINE_REMINDER_MINUTE_OPTIONS}
+                value={creatineReminderMinutes}
+              />
+            </div>
             <button
               onClick={() => setCreatineReminderTimePickerOpen(false)}
               style={{
