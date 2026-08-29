@@ -4633,6 +4633,9 @@ export default function App() {
   const [indexedDbReady, setIndexedDbReady] = useState(false);
 
   const [authSession, setAuthSession] = useState(null);
+  const [authInitialized, setAuthInitialized] = useState(
+    !isSupabaseConfigured
+  );
   const [calendarNutritionEntries, setCalendarNutritionEntries] = useState(() =>
     readLocalArray(NUTRITION_LOG_KEY)
   );
@@ -4779,6 +4782,10 @@ export default function App() {
 
         if (!cancelled) {
           setAuthStatus(`Sync sign-in failed: ${error.message}`);
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthInitialized(true);
         }
       }
     }
@@ -11920,6 +11927,38 @@ export default function App() {
   }
 
   function renderAccessGate() {
+    if (!authInitialized) {
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            padding: "20px",
+          }}
+        >
+          <div
+            aria-live="polite"
+            role="status"
+            style={{
+              margin: "0 auto",
+              maxWidth: "460px",
+              textAlign: "center",
+            }}
+          >
+            <h2 style={{ margin: "0 0 8px" }}>Restoring your session…</h2>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                margin: 0,
+              }}
+            >
+              Checking your saved sign-in securely.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         style={{
