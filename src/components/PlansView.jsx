@@ -660,7 +660,9 @@ function getWorkoutSummary(workouts) {
   const muscleSets = exercises.reduce((summary, exercise) => {
     const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
 
-    summary[muscle] = (summary[muscle] || 0) + exercise.sets.length;
+    summary[muscle] =
+      (summary[muscle] || 0) +
+      (exercise.sets || []).filter((set) => !set.isDropSet).length;
 
     return summary;
   }, {});
@@ -930,6 +932,7 @@ function buildTrainerWorkoutPayload(workout) {
 
 const WEEKLY_RIR_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const WEEKLY_SET_VALUES = [1, 2, 3, 4, 5, 6];
+const WEEKLY_DROP_SET_VALUES = [0, 1, 2, 3];
 const WEEKLY_REP_VALUES = Array.from({ length: 15 }, (_, index) => index + 1);
 const AI_PLAN_DRAFT_STORAGE_KEY = "workoutAppLastAiPlanDraftJson";
 
@@ -1670,7 +1673,9 @@ function formatWeeklyPrescriptionValue(field, value) {
 }
 
 function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
-  const firstSet = exercise?.sets?.[0] || {};
+  const workingSets = (exercise?.sets || []).filter((set) => !set.isDropSet);
+  const dropSets = (exercise?.sets || []).filter((set) => set.isDropSet);
+  const firstSet = workingSets[0] || {};
   const reps = firstPresentValue(
     firstSet.prescribedReps,
     firstSet.reps,
@@ -1695,11 +1700,12 @@ function getBaseExercisePrescription(exercise, fallbackReps, fallbackRir) {
     ) || getDefaultRestSecondsForReps(reps);
 
   return {
+    dropSets: String(dropSets.length),
     minimumReps,
     reps,
     restSeconds: String(restSeconds),
     rir: firstPresentValue(firstSet.prescribedRir, firstSet.rir, firstSet.targetRir, fallbackRir),
-    sets: String(exercise?.sets?.length || 1),
+    sets: String(workingSets.length || 1),
   };
 }
 
@@ -1730,7 +1736,7 @@ function createReplacementPlanExercise({
     planMuscle: replacedExercise.planMuscle,
     reps: basePrescription.reps,
     rir: basePrescription.rir,
-    setCount: replacedExercise.sets?.length || Number(basePrescription.sets) || 1,
+    setCount: Number(basePrescription.sets) || 1,
     supersetGroup,
   });
 
@@ -1771,6 +1777,7 @@ function getDefaultWeeklyPrescriptions({
         mode: rirPeriodization,
         weekNumber,
       }),
+      dropSets: String(base.dropSets),
       sets: String(base.sets),
       weekNumber,
     };
@@ -1791,6 +1798,7 @@ function getDefaultWeeklyPrescriptions({
       reps: String(trainingWeeks[0]?.reps || base.reps),
       restSeconds: String(trainingWeeks[0]?.restSeconds || base.restSeconds),
       rir: "5",
+      dropSets: "0",
       sets: "2",
       weekNumber: weekCount + 1,
     },
@@ -1869,11 +1877,14 @@ function getPrescriptionSummary(weeklyPrescriptions) {
   );
   const rirRange = formatRange(primaryWeeks.map((week) => week.rir));
   const restRange = formatRestRange(primaryWeeks.map((week) => week.restSeconds));
+  const dropSetRange = formatRange(
+    primaryWeeks.map((week) => week.dropSets ?? week.drop_sets ?? 0)
+  );
   const setLabel = setRange === "1" ? "set" : "sets";
 
-  return `${setRange} ${setLabel} | ${repRange} reps | ${rirRange} RIR${
-    restRange ? `\n${restRange} rest` : ""
-  }`;
+  return `${setRange}\u00a0${setLabel} | ${dropSetRange}\u00a0drops | ${
+    repRange || "—"
+  }\u00a0reps\n${rirRange || "—"}\u00a0RIR | ${restRange || "—"}\u00a0rest`;
 }
 
 function WeeklyPrescriptionSheet({
@@ -2015,12 +2026,13 @@ function WeeklyPrescriptionSheet({
               fontSize: "12px",
               fontWeight: "bold",
               gap: "6px",
-              gridTemplateColumns: "44px .8fr 1fr 1fr .8fr 1.2fr",
+              gridTemplateColumns: "44px .8fr .9fr 1fr 1fr .8fr 1.2fr",
               textTransform: "uppercase",
             }}
           >
             <span>Week</span>
             <span>Sets</span>
+            <span>Drops</span>
             <span>Min</span>
             <span>Max</span>
             <span>RIR</span>
@@ -2034,12 +2046,22 @@ function WeeklyPrescriptionSheet({
                 alignItems: "center",
                 display: "grid",
                 gap: "6px",
-                gridTemplateColumns: "44px .8fr 1fr 1fr .8fr 1.2fr",
+                gridTemplateColumns: "44px .8fr .9fr 1fr 1fr .8fr 1.2fr",
               }}
             >
               <strong>{week.isDeload ? "D" : `W${week.weekNumber}`}</strong>
-              {["sets", "minimumReps", "reps", "rir", "restSeconds"].map((field) => {
-                const canEdit = !week.isDeload || field === "restSeconds";
+              {[
+                "sets",
+                "dropSets",
+                "minimumReps",
+                "reps",
+                "rir",
+                "restSeconds",
+              ].map((field) => {
+                const canEdit =
+                  !week.isDeload ||
+                  field === "dropSets" ||
+                  field === "restSeconds";
 
                 return (
                   <button
@@ -2130,6 +2152,8 @@ function WeeklyPrescriptionValuePicker({
   const values =
     field === "sets"
       ? WEEKLY_SET_VALUES
+      : field === "dropSets"
+        ? WEEKLY_DROP_SET_VALUES
       : field === "reps" || field === "minimumReps"
         ? WEEKLY_REP_VALUES
         : field === "restSeconds"
@@ -2138,6 +2162,8 @@ function WeeklyPrescriptionValuePicker({
   const title =
     field === "sets"
       ? "sets"
+      : field === "dropSets"
+        ? "drop sets"
       : field === "minimumReps"
         ? "minimum reps"
         : field === "reps"
@@ -3332,7 +3358,12 @@ export default function PlansView({
     setWeeklyPrescriptionBySlot((current) => {
       const applyValueToWeek = (week) => {
         if (field !== "minimumReps" && field !== "reps") {
-          return { ...week, [field]: String(value) };
+          const nextValue =
+            field === "dropSets"
+              ? Math.max(0, Math.min(3, Number(value) || 0))
+              : value;
+
+          return { ...week, [field]: String(nextValue) };
         }
 
         const selectedReps = Number(value);
@@ -3401,7 +3432,7 @@ export default function PlansView({
               (scope.allWeeks ||
                 Number(week.weekNumber) === Number(weekNumber))) ||
               (week.isDeload &&
-                field === "restSeconds" &&
+                (field === "dropSets" || field === "restSeconds") &&
                 Number(week.weekNumber) === Number(weekNumber)))
               ? applyValueToWeek(week)
               : week
@@ -3608,8 +3639,11 @@ export default function PlansView({
 
     const setCount =
       Number(sets) ||
-      targetWorkout.exercises?.[0]?.sets?.length ||
-      orderedPreviewWorkouts[0]?.exercises?.[0]?.sets?.length ||
+      targetWorkout.exercises?.[0]?.sets?.filter((set) => !set.isDropSet)
+        .length ||
+      orderedPreviewWorkouts[0]?.exercises?.[0]?.sets?.filter(
+        (set) => !set.isDropSet
+      ).length ||
       3;
     const nextExercise = createPlanExercise({
       exercise: selectedExercise,
@@ -5412,6 +5446,8 @@ export default function PlansView({
               value:
                 field === "minimumReps"
                   ? week?.minimumReps ?? week?.minimum_reps ?? week?.reps ?? ""
+                  : field === "dropSets"
+                    ? week?.dropSets ?? week?.drop_sets ?? 0
                   : week?.[field] || "",
               weekNumber,
             });

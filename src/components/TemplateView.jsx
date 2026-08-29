@@ -37,7 +37,10 @@ import {
   recommendSetTarget,
   recommendTargetPrescription,
 } from "../utils/targetRecommendation";
-import { getExerciseWeightIncrement } from "../utils/weightIncrement";
+import {
+  getExerciseWeightIncrement,
+  roundWeightToIncrement,
+} from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
 import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
@@ -118,7 +121,9 @@ function getTemplateWorkoutSummary(template) {
   const muscleSets = exercises.reduce((summary, exercise) => {
     const muscle = exercise.muscles?.[0] || exercise.planMuscle || "Unknown";
 
-    summary[muscle] = (summary[muscle] || 0) + exercise.sets.length;
+    summary[muscle] =
+      (summary[muscle] || 0) +
+      (exercise.sets || []).filter((set) => !set.isDropSet).length;
 
     return summary;
   }, {});
@@ -444,17 +449,84 @@ export default function TemplateView({
 
   function getExerciseSetsForPlanWeek(exercise, weekPrescription) {
     const sourceSets = exercise.sets || [];
+    const sourceWorkingSets = sourceSets.filter((set) => !set.isDropSet);
+    const sourceDropSets = sourceSets.filter((set) => set.isDropSet);
     const targetSetCount = Math.max(
       1,
-      Number(weekPrescription?.sets) || sourceSets.length || 1
+      Number(weekPrescription?.sets) || sourceWorkingSets.length || 1
     );
-
-    return Array.from({ length: targetSetCount }, (_, index) => {
-      const sourceSet = sourceSets[index] || sourceSets.at(-1) || {};
+    const targetDropSetCount = Math.max(
+      0,
+      Math.min(
+        3,
+        Number(
+          weekPrescription?.dropSets ??
+            weekPrescription?.drop_sets ??
+            sourceDropSets.length
+        ) || 0
+      )
+    );
+    const workingSets = Array.from({ length: targetSetCount }, (_, index) => {
+      const sourceSet =
+        sourceWorkingSets[index] || sourceWorkingSets.at(-1) || {};
 
       return {
         ...sourceSet,
-        id: sourceSets[index]?.id || Date.now() + Math.random() + index,
+        isDropSet: false,
+        id:
+          sourceWorkingSets[index]?.id || Date.now() + Math.random() + index,
+      };
+    });
+
+    const dropSets = Array.from({ length: targetDropSetCount }, (_, index) => {
+      const sourceSet = sourceDropSets[index] || {};
+
+      return {
+        ...sourceSet,
+        id:
+          sourceDropSets[index]?.id ||
+          Date.now() + Math.random() + targetSetCount + index,
+        isDropSet: true,
+        prescribedReps: "AMRAP",
+        prescribedRestSeconds: 0,
+        prescribedRir: "0",
+        reps: "AMRAP",
+        restSeconds: 0,
+        rir: "0",
+        targetReps: "AMRAP",
+        targetRir: "0",
+      };
+    });
+
+    return [...workingSets, ...dropSets];
+  }
+
+  function applyInitialDropSetWeights(sets, exercise) {
+    let sourceWeight = null;
+
+    return sets.map((set) => {
+      if (!set.isDropSet) {
+        const parsedWeight = Number.parseFloat(
+          String(set.actualWeight || set.targetWeight || "")
+        );
+        sourceWeight = Number.isFinite(parsedWeight) ? parsedWeight : null;
+        return set;
+      }
+
+      if (sourceWeight == null) {
+        return set;
+      }
+
+      const dropWeight = roundWeightToIncrement(
+        sourceWeight * 0.8,
+        getExerciseWeightIncrement(exercise, undefined, sourceWeight)
+      );
+      sourceWeight = dropWeight;
+
+      return {
+        ...set,
+        actualWeight: String(dropWeight),
+        targetWeight: String(dropWeight),
       };
     });
   }
@@ -501,6 +573,15 @@ export default function TemplateView({
   }
 
   function getPlannedSetPrescription({ plan, set, weekPrescription }) {
+    if (set?.isDropSet) {
+      return {
+        minimumReps: "",
+        reps: "AMRAP",
+        restSeconds: 0,
+        rir: "0",
+      };
+    }
+
     const restSeconds = getSetPrescriptionRestSeconds(
       {
         restSeconds: weekPrescription?.restSeconds ?? weekPrescription?.rest_seconds,
@@ -791,25 +872,29 @@ export default function TemplateView({
   }
 
   function getWorkoutPrescriptionSummary(exercise) {
-    const setCount = exercise?.sets?.length || 0;
+    const workingSets = (exercise?.sets || []).filter((set) => !set.isDropSet);
+    const dropSetCount = (exercise?.sets || []).filter(
+      (set) => set.isDropSet
+    ).length;
+    const setCount = workingSets.length;
     const reps = formatRange(
-      (exercise?.sets || []).flatMap((set) => {
+      workingSets.flatMap((set) => {
         const maximumReps = getSetPrescriptionReps(set);
 
         return [getSetMinimumReps(set, maximumReps), maximumReps];
       })
     );
     const rir = formatRange(
-      (exercise?.sets || []).map((set) => getSetPrescriptionRir(set))
+      workingSets.map((set) => getSetPrescriptionRir(set))
     );
     const rest = formatRestRange(
-      (exercise?.sets || []).map((set) => getEffectiveSetRestSeconds(set))
+      workingSets.map((set) => getEffectiveSetRestSeconds(set))
     );
     const setLabel = setCount === 1 ? "set" : "sets";
 
-    return `${setCount}\u00a0${setLabel} | ${reps || "—"}\u00a0reps | ${
-      rir || "—"
-    }\u00a0RIR\n${rest || "—"}\u00a0rest`;
+    return `${setCount}\u00a0${setLabel} | ${dropSetCount}\u00a0drops | ${
+      reps || "—"
+    }\u00a0reps\n${rir || "—"}\u00a0RIR | ${rest || "—"}\u00a0rest`;
   }
 
   function getExerciseWithCurrentInstancePrescription(exercise) {
@@ -856,8 +941,11 @@ export default function TemplateView({
         getSetPrescriptionRir(originalFirstSet) !==
         getSetPrescriptionRir(draftFirstSet),
       sets:
-        (originalExercise?.sets?.length || 0) !==
-        (draftExercise?.sets?.length || 0),
+        (originalExercise?.sets || []).filter((set) => !set.isDropSet).length !==
+        (draftExercise?.sets || []).filter((set) => !set.isDropSet).length,
+      dropSets:
+        (originalExercise?.sets || []).filter((set) => set.isDropSet).length !==
+        (draftExercise?.sets || []).filter((set) => set.isDropSet).length,
     };
   }
 
@@ -877,7 +965,12 @@ export default function TemplateView({
         instanceExercise
       );
     const firstSet = instanceExercise?.sets?.[0] || {};
-    const editedSets = String(instanceExercise?.sets?.length || 1);
+    const editedSets = String(
+      (instanceExercise?.sets || []).filter((set) => !set.isDropSet).length || 1
+    );
+    const editedDropSets = String(
+      (instanceExercise?.sets || []).filter((set) => set.isDropSet).length
+    );
     const editedReps = getSetPrescriptionReps(firstSet);
     const editedMinimumReps = getSetMinimumReps(firstSet, editedReps);
     const editedRestSeconds = getEffectiveSetRestSeconds(firstSet);
@@ -905,6 +998,7 @@ export default function TemplateView({
           : {}),
         ...(changes.rest ? { restSeconds: String(editedRestSeconds) } : {}),
         ...(changes.sets ? { sets: editedSets } : {}),
+        ...(changes.dropSets ? { dropSets: editedDropSets } : {}),
         ...(weekNumber === Number(currentPlanWeek)
           ? {
               ...(changes.rir ? { rir: editedRir } : {}),
@@ -942,6 +1036,7 @@ export default function TemplateView({
           getSetMinimumReps(set, getSetPrescriptionReps(set)),
           getSetPrescriptionRir(set),
           getEffectiveSetRestSeconds(set),
+          set.isDropSet ? "drop" : "working",
         ].join(":")
       )
       .join("|");
@@ -1166,61 +1261,66 @@ export default function TemplateView({
 
           note: libraryExercise?.note || "",
 
-          sets: getExerciseSetsForPlanWeek(
-            exercise,
-            getExerciseWeekPrescription(exercise, plan, currentPlanWeek)
-          ).map((set, setIndex) => {
-            const weekPrescription = getExerciseWeekPrescription(
+          sets: applyInitialDropSetWeights(
+            getExerciseSetsForPlanWeek(
               exercise,
-              plan,
-              currentPlanWeek
-            );
-            const plannedPrescription = getPlannedSetPrescription({
-              plan,
-              set,
-              weekPrescription,
-            });
-            const dynamicTarget = getDynamicTargetPrescription({
-              exercise,
-              libraryExercise,
-              plan,
-              setIndex,
-              targetReps: plannedPrescription.reps,
-              targetRir: plannedPrescription.rir,
-            });
+              getExerciseWeekPrescription(exercise, plan, currentPlanWeek)
+            ).map((set, setIndex) => {
+              const weekPrescription = getExerciseWeekPrescription(
+                exercise,
+                plan,
+                currentPlanWeek
+              );
+              const plannedPrescription = getPlannedSetPrescription({
+                plan,
+                set,
+                weekPrescription,
+              });
+              const dynamicTarget = getDynamicTargetPrescription({
+                exercise,
+                libraryExercise,
+                plan,
+                setIndex,
+                targetReps: plannedPrescription.reps,
+                targetRir: plannedPrescription.rir,
+              });
 
-            const targetSet = {
-              ...set,
-              ...(plannedPrescription.minimumReps
-                ? {
-                    minimumReps: plannedPrescription.minimumReps,
-                    prescribedMinimumReps: plannedPrescription.minimumReps,
-                    targetMinimumReps: plannedPrescription.minimumReps,
-                  }
-                : {}),
-              prescribedReps: plannedPrescription.reps,
-              prescribedRestSeconds: plannedPrescription.restSeconds || undefined,
-              prescribedRir: plannedPrescription.rir,
-              reps: plannedPrescription.reps,
-              restSeconds: plannedPrescription.restSeconds || set.restSeconds,
-              rir: plannedPrescription.rir,
-              targetWeight: formatTargetValue(dynamicTarget?.weight),
+              const targetSet = {
+                ...set,
+                ...(plannedPrescription.minimumReps
+                  ? {
+                      minimumReps: plannedPrescription.minimumReps,
+                      prescribedMinimumReps: plannedPrescription.minimumReps,
+                      targetMinimumReps: plannedPrescription.minimumReps,
+                    }
+                  : {}),
+                prescribedReps: plannedPrescription.reps,
+                prescribedRestSeconds:
+                  plannedPrescription.restSeconds || undefined,
+                prescribedRir: plannedPrescription.rir,
+                reps: plannedPrescription.reps,
+                restSeconds:
+                  plannedPrescription.restSeconds || set.restSeconds,
+                rir: plannedPrescription.rir,
+                targetWeight: formatTargetValue(dynamicTarget?.weight),
 
-              targetReps: plannedPrescription.reps,
+                targetReps: plannedPrescription.reps,
 
-              targetRir: plannedPrescription.rir,
-            };
-            const actualDefaults = getActualDefaultsForSet(
-              exercise,
-              setIndex,
-              targetSet
-            );
+                targetRir: plannedPrescription.rir,
+              };
+              const actualDefaults = getActualDefaultsForSet(
+                exercise,
+                setIndex,
+                targetSet
+              );
 
-            return {
-              ...targetSet,
-              ...actualDefaults,
-            };
-          }),
+              return {
+                ...targetSet,
+                ...actualDefaults,
+              };
+            }),
+            { ...(libraryExercise || {}), ...exercise }
+          ),
         };
       }),
     };
@@ -1378,7 +1478,16 @@ export default function TemplateView({
     }
 
     if (field === "sets") {
-      return String(editingExerciseDraft.sets?.length || 1);
+      return String(
+        (editingExerciseDraft.sets || []).filter((set) => !set.isDropSet)
+          .length || 1
+      );
+    }
+
+    if (field === "dropSets") {
+      return String(
+        (editingExerciseDraft.sets || []).filter((set) => set.isDropSet).length
+      );
     }
 
     const firstSet = editingExerciseDraft.sets?.[0] || {};
@@ -1411,14 +1520,15 @@ export default function TemplateView({
 
     if (field === "sets") {
       const nextSetCount = Math.max(1, Number(value) || 1);
-      const currentSets = updated.sets || [];
+      const currentSets = (updated.sets || []).filter((set) => !set.isDropSet);
+      const dropSets = (updated.sets || []).filter((set) => set.isDropSet);
       const templateSet = currentSets.at(-1) || {
         reps: "",
         restSeconds: "",
         rir: "",
       };
 
-      updated.sets = Array.from({ length: nextSetCount }, (_, index) => {
+      const workingSets = Array.from({ length: nextSetCount }, (_, index) => {
         const existingSet = currentSets[index];
 
         return existingSet
@@ -1433,10 +1543,39 @@ export default function TemplateView({
               rir: getSetPrescriptionRir(templateSet),
             };
       });
+      updated.sets = [...workingSets, ...dropSets];
+    }
+
+    if (field === "dropSets") {
+      const nextDropSetCount = Math.max(0, Math.min(3, Number(value) || 0));
+      const workingSets = (updated.sets || []).filter((set) => !set.isDropSet);
+      const currentDropSets = (updated.sets || []).filter(
+        (set) => set.isDropSet
+      );
+      const dropSets = Array.from({ length: nextDropSetCount }, (_, index) => ({
+        ...(currentDropSets[index] || {}),
+        id:
+          currentDropSets[index]?.id ||
+          Date.now() + Math.random() + workingSets.length + index,
+        isDropSet: true,
+        prescribedReps: "AMRAP",
+        prescribedRestSeconds: 0,
+        prescribedRir: "0",
+        reps: "AMRAP",
+        restSeconds: 0,
+        rir: "0",
+        targetReps: "AMRAP",
+        targetRir: "0",
+      }));
+
+      updated.sets = [...workingSets, ...dropSets];
     }
 
     if (field === "reps" || field === "minimumReps") {
       updated.sets = (updated.sets || []).map((set) => {
+        if (set.isDropSet) {
+          return set;
+        }
         const currentMaximum = Number(getSetPrescriptionReps(set));
         const currentMinimum = Number(
           getSetMinimumReps(set, getSetPrescriptionReps(set))
@@ -1469,15 +1608,19 @@ export default function TemplateView({
     if (field === "rir") {
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
-        rir: String(value),
+        ...(set.isDropSet ? {} : { rir: String(value) }),
       }));
     }
 
     if (field === "restSeconds") {
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
-        prescribedRestSeconds: Number(value),
-        restSeconds: Number(value),
+        ...(set.isDropSet
+          ? {}
+          : {
+              prescribedRestSeconds: Number(value),
+              restSeconds: Number(value),
+            }),
       }));
     }
 
@@ -2175,11 +2318,12 @@ export default function TemplateView({
 	                  fontSize: "12px",
 	                  fontWeight: "bold",
 	                  gap: "8px",
-	                  gridTemplateColumns: "0.8fr 1fr 1fr 0.8fr 1.2fr",
+	                  gridTemplateColumns: "0.8fr 0.9fr 1fr 1fr 0.8fr 1.2fr",
 	                  textTransform: "uppercase",
 	                }}
 	              >
 	                <span>Sets</span>
+	                <span>Drops</span>
 	                <span>Min</span>
 	                <span>Max</span>
 	                <span>RIR</span>
@@ -2190,11 +2334,12 @@ export default function TemplateView({
 	                style={{
 	                  display: "grid",
 	                  gap: "8px",
-	                  gridTemplateColumns: "0.8fr 1fr 1fr 0.8fr 1.2fr",
+	                  gridTemplateColumns: "0.8fr 0.9fr 1fr 1fr 0.8fr 1.2fr",
 	                }}
 	              >
 	                {[
-	                  ["sets", editingExerciseDraft?.sets?.length || 1],
+	                  ["sets", getPrescriptionPickerValue("sets")],
+	                  ["dropSets", getPrescriptionPickerValue("dropSets")],
 	                  ["minimumReps", getPrescriptionPickerValue("minimumReps") || "—"],
 	                  ["reps", getPrescriptionPickerValue("reps") || "—"],
 	                  ["rir", getPrescriptionPickerValue("rir") || "—"],
@@ -2236,6 +2381,8 @@ export default function TemplateView({
 	                title={`Select ${
 	                  editingPrescriptionField === "sets"
 	                    ? "Sets"
+	                    : editingPrescriptionField === "dropSets"
+	                      ? "Drop Sets"
 	                    : editingPrescriptionField === "minimumReps"
 	                      ? "Minimum Reps"
 	                      : editingPrescriptionField === "reps"
@@ -2247,6 +2394,8 @@ export default function TemplateView({
 	                values={
 	                  editingPrescriptionField === "sets"
 	                    ? Array.from({ length: 10 }, (_, index) => index + 1)
+	                    : editingPrescriptionField === "dropSets"
+	                      ? [0, 1, 2, 3]
 	                    : editingPrescriptionField === "reps" ||
 	                        editingPrescriptionField === "minimumReps"
 	                      ? Array.from({ length: 30 }, (_, index) => index + 1)

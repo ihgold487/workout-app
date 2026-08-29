@@ -115,7 +115,11 @@ export function WorkoutExercisePreviewRow({
         textAlign: "left",
         textOverflow: isTemplateCompact && !hasMultiLinePrescription ? "ellipsis" : undefined,
         whiteSpace:
-          isTemplateCompact && !hasMultiLinePrescription ? "nowrap" : "pre-line",
+          isTemplateCompact && !hasMultiLinePrescription
+            ? "nowrap"
+            : hasMultiLinePrescription
+              ? "pre"
+              : "pre-line",
       }}
     >
       {prescriptionSummary}
@@ -245,7 +249,7 @@ export function WorkoutExercisePreviewRow({
             style={{
               display: "grid",
               flex: "0 1 auto",
-              maxWidth: "min(46vw, 196px)",
+              maxWidth: "min(48vw, 202px)",
               minWidth: 0,
             }}
           >
