@@ -293,6 +293,8 @@ The initial controls cover:
 - Required, preferred, and avoided exercises
 - Freeform notes for injuries, recovery, equipment, schedule details, and other constraints
 
+The exported `activeExercises` list is the complete set of exercises available for AI prescription. Historical or previous-plan exercises that are absent from that list remain evidence only and must not be prescribed. Each active exercise identifies its primary muscle separately from its secondary muscles so the AI does not need to infer roles from array order.
+
 Defaults mirror the previously hard-coded direction: strength and hypertrophy are high priorities, chest hypertrophy and bench strength are emphasized, and the plan uses five days, five training weeks, a deload, and generally three to four sets per exercise. This allows comparison against prior output without silently changing the established baseline.
 
 ### Native ChatGPT handoff: Phase 1
