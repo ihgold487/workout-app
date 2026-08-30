@@ -472,6 +472,7 @@ export default function SessionView({
   const [targetAlternativesData, setTargetAlternativesData] = useState(null);
   const [targetAlternativesClosing, setTargetAlternativesClosing] =
     useState(false);
+  const [targetSuggestionPreview, setTargetSuggestionPreview] = useState(null);
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
   const appliedHistoryDefaultsRef = useRef(new Map());
@@ -2030,6 +2031,7 @@ export default function SessionView({
 
     setActiveSet(nextActiveSet || null);
     setActiveExerciseId(resolvedExerciseId);
+    setTargetSuggestionPreview(null);
     updateSession((s) => ({
       ...s,
       activeExerciseId: resolvedExerciseId,
@@ -2044,6 +2046,10 @@ export default function SessionView({
     const exercises = session.exercises.map((exercise) => {
       let exerciseChanged = false;
       const sets = exercise.sets.map((set, setIndex) => {
+        if (set.isDropSet) {
+          return set;
+        }
+
         const defaultKey = `${session.id}:${exercise.id}:${set.id}`;
         const defaults = getHistoryDefaultsForSet(exercise, setIndex);
 
@@ -2313,6 +2319,25 @@ export default function SessionView({
     });
   }
 
+  function applyDropSetTargetWeight(exerciseId, setId) {
+    if (session.workoutTimerPaused) {
+      return;
+    }
+
+    const exercise = session.exercises.find((ex) => ex.id === exerciseId);
+    const set = exercise?.sets.find((item) => item.id === setId);
+
+    if (!set?.isDropSet) {
+      return;
+    }
+
+    applyPrescriptionToActual(exerciseId, setId, {
+      reps: set.actualReps,
+      rir: set.actualRir,
+      weight: set.targetWeight,
+    });
+  }
+
   function applyPrescriptionToActual(exerciseId, setId, prescription) {
     if (session.workoutTimerPaused) {
       return;
@@ -2485,6 +2510,7 @@ export default function SessionView({
 
     window.getSelection?.()?.removeAllRanges();
 
+    setTargetSuggestionPreview(null);
     setTargetAlternativesClosing(false);
     setTargetAlternativesData({
       alternatives,
@@ -2649,6 +2675,10 @@ export default function SessionView({
     const currentSet = exercise?.sets[setIndex];
 
     if (!exercise || !currentSet || setIndex < 0) {
+      return;
+    }
+
+    if (currentSet.isDropSet) {
       return;
     }
 
@@ -5162,10 +5192,19 @@ export default function SessionView({
     }
 
     setActiveExerciseId(exercise.id);
+    setTargetSuggestionPreview(null);
     updateSession((currentSession) => ({
       ...currentSession,
       activeExerciseId: exercise.id,
     }));
+  }
+
+  function toggleTargetSuggestionPreview(exerciseId, setId) {
+    setTargetSuggestionPreview((current) =>
+      current?.exerciseId === exerciseId && current?.setId === setId
+        ? null
+        : { exerciseId, setId }
+    );
   }
 
   function returnToCurrentSet() {
@@ -8105,57 +8144,67 @@ export default function SessionView({
                             fontWeight: "bold",
                             color: "var(--text-muted)",
                             marginBottom: "6px",
-                            marginLeft: "0px",
+                            marginLeft: "8px",
+                            gap: "3px",
                           }}
                         >
                           <span
                             style={{
-                              width: "78px",
+                              width: "36px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
                               display: "inline-flex",
-                              gap: "3px",
+                              justifyContent: "center",
                             }}
+                            title="Target"
                           >
-                            <Target size={14} /> Target
+                            <Target aria-label="Target" size={15} />
                           </span>
 
-                          <button
-                            aria-label="Open plate loading calculator"
-                            disabled={session.workoutTimerPaused}
-                            onClick={() => {
-                              const targetSet =
-                                exercise.sets.find(
-                                  (set) => activeSet?.setId === set.id
-                                ) ||
-                                exercise.sets.find((set) => !set.completed) ||
-                                exercise.sets[0];
-
-                              openPlateLoadingCalculator(exercise, targetSet);
-                            }}
-                            title="Actual weight"
+                          <span
                             style={{
-                              background: "transparent",
-                              border: "none",
-                              color: "inherit",
-                              marginLeft: "4px",
-                              width: "50px",
-                              whiteSpace: "nowrap",
-                              fontSize: "14px",
-                              alignItems: "center",
-                              cursor: "pointer",
                               display: "inline-flex",
-                              font: "inherit",
-                              justifyContent: "center",
-                              padding: 0,
+                              alignItems: "center",
+                              flex: "0 0 auto",
                             }}
-                            type="button"
                           >
-                            <Weight size={15} aria-label="Actual weight" />
-                          </button>
+                            <button
+                              aria-label="Open plate loading calculator"
+                              disabled={session.workoutTimerPaused}
+                              onClick={() => {
+                                const targetSet =
+                                  exercise.sets.find(
+                                    (set) => activeSet?.setId === set.id
+                                  ) ||
+                                  exercise.sets.find((set) => !set.completed) ||
+                                  exercise.sets[0];
 
-                          <button
+                                openPlateLoadingCalculator(exercise, targetSet);
+                              }}
+                              title="Actual weight"
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "inherit",
+                                width: "56px",
+                                whiteSpace: "nowrap",
+                                fontSize: "14px",
+                                alignItems: "center",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                font: "inherit",
+                                justifyContent: "center",
+                                padding: 0,
+                              }}
+                              type="button"
+                            >
+                              <Weight size={15} aria-label="Actual weight" />
+                            </button>
+
+                            <span aria-hidden="true" style={{ width: "10px" }} />
+
+                            <button
                             aria-label="Edit prescribed reps"
                             disabled={session.workoutTimerPaused}
                             onClick={() => {
@@ -8175,7 +8224,7 @@ export default function SessionView({
                               background: "transparent",
                               border: "none",
                               color: "inherit",
-                              width: "46px",
+                              width: "38px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8188,9 +8237,11 @@ export default function SessionView({
                             type="button"
                           >
                             <Hash size={15} aria-label="Target reps" />
-                          </button>
+                            </button>
 
-                          <button
+                            <span aria-hidden="true" style={{ width: "10px" }} />
+
+                            <button
                             aria-label="Edit prescribed RIR"
                             disabled={session.workoutTimerPaused}
                             onClick={() => {
@@ -8210,7 +8261,7 @@ export default function SessionView({
                               background: "transparent",
                               border: "none",
                               color: "inherit",
-                              width: "36px",
+                              width: "38px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8223,27 +8274,29 @@ export default function SessionView({
                             type="button"
                           >
                             <BatteryMedium size={15} aria-label="Target RIR" />
-                          </button>
+                            </button>
 
-                          <span
-                            title="e1RM"
-                            style={{
-                              marginLeft: "2px",
-                              width: "42px",
+                            <span
+                              title="e1RM"
+                              style={{
+                                width: "36px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
                               display: "inline-flex",
                               justifyContent: "center",
                             }}
-                          >
-                            <Dumbbell size={15} aria-label="e1RM" />
+                            >
+                              <Dumbbell size={15} aria-label="e1RM" />
+                            </span>
                           </span>
 
                           <span
                             title="Completed"
                             style={{
                               marginLeft: "8px",
+                              width: "30px",
+                              justifyContent: "center",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8267,17 +8320,24 @@ export default function SessionView({
                             !set.isDropSet ||
                             (Number.isInteger(dropSetActualReps) &&
                               dropSetActualReps > 0);
-                          const targetMatchStatus = isActive
-                            ? getActualTargetMatchStatus(exercise, set, setIndex)
-                            : "match";
-                          const showTargetStatus =
-                            !set.isDropSet && targetMatchStatus !== "match";
+                          const targetMatchStatus = set.isDropSet
+                            ? isBlankValue(set.actualWeight)
+                              ? "match"
+                              : valuesMatch(set.actualWeight, set.targetWeight)
+                                ? "suggested"
+                                : "off-target"
+                            : getActualTargetMatchStatus(
+                                exercise,
+                                set,
+                                setIndex
+                              );
                           const targetStatusStyle =
                             targetMatchStatus === "suggested"
                               ? {
                                   iconColor: "#16a34a",
-                                  label:
-                                    "Actual values match the first suggested target",
+                                  label: set.isDropSet
+                                    ? "Actual weight matches the suggested drop set weight"
+                                    : "Actual values match the first suggested target",
                                 }
                               : targetMatchStatus === "alternative"
                               ? {
@@ -8285,10 +8345,20 @@ export default function SessionView({
                                   label:
                                     "Actual values match an alternate target",
                                 }
-                              : {
+                              : targetMatchStatus === "off-target"
+                              ? {
                                   iconColor: "#ef4444",
-                                  label:
-                                    "Actual values do not match target options",
+                                  label: set.isDropSet
+                                    ? "Actual weight differs from the suggested drop set weight"
+                                    : "Actual values do not match target options",
+                                }
+                              : {
+                                  iconColor: set.isDropSet
+                                    ? "var(--accent)"
+                                    : "var(--text-muted)",
+                                  label: set.isDropSet
+                                    ? "Apply suggested drop set weight"
+                                    : "View suggested target",
                                 };
                           const canActivate = canActivateSet(
                             exercise.id,
@@ -8334,6 +8404,27 @@ export default function SessionView({
                                 set.actualReps,
                                 set.actualRir
                               );
+                          const targetPreviewOpen = Boolean(
+                            !set.isDropSet &&
+                              targetSuggestionPreview?.exerciseId === exercise.id &&
+                              targetSuggestionPreview?.setId === set.id
+                          );
+                          const suggestedTarget = {
+                            e1rm: calculateSessionE1RM(
+                              exercise,
+                              "",
+                              "",
+                              "",
+                              set.targetWeight,
+                              getSetTargetReps(set),
+                              getSetTargetRir(set)
+                            ),
+                            reps: set.isDropSet
+                              ? "AMRAP"
+                              : getSetTargetReps(set),
+                            rir: set.isDropSet ? "" : getSetTargetRir(set),
+                            weight: set.targetWeight,
+                          };
 
                           return (
                             <div
@@ -8360,19 +8451,19 @@ export default function SessionView({
                               }}
                               style={{
                                 borderRadius: "8px",
-                                padding: isActive ? "6px 4px" : "3px 2px",
+                                padding: isActive ? "6px 4px" : "3px 4px",
                                 marginBottom: "3px",
                                 display: "flex",
                                 alignItems: "center",
-                                flexWrap: "nowrap",
+                                flexWrap: targetPreviewOpen ? "wrap" : "nowrap",
                                 width: "calc(100% + 12px)",
                                 marginRight: "-12px",
                                 boxSizing: "border-box",
                                 gap: "3px",
 
-                                borderLeft: isActive
-                                  ? "4px solid var(--accent)"
-                                  : "none",
+                                borderLeft: `4px solid ${
+                                  isActive ? "var(--accent)" : "transparent"
+                                }`,
 
                                 boxShadow: isActive
                                   ? "inset 0 0 0 2px color-mix(in srgb, var(--accent) 75%, transparent)"
@@ -8388,6 +8479,14 @@ export default function SessionView({
                               }}
                             >
                               <button
+                                aria-expanded={targetPreviewOpen}
+                                aria-label={
+                                  set.isDropSet
+                                    ? `${targetStatusStyle.label} for drop set ${dropSetIndex}`
+                                    : `${targetStatusStyle.label}. Show suggested target for set ${
+                                        setIndex + 1
+                                      }`
+                                }
                                 disabled={session.workoutTimerPaused}
                                 type="button"
                                 onClick={(event) => {
@@ -8397,14 +8496,22 @@ export default function SessionView({
                                 onKeyDown={(event) => {
                                   if (event.key === "Enter") {
                                     event.preventDefault();
-                                    applyTargetToActual(exercise.id, set.id);
+                                    if (set.isDropSet) {
+                                      applyDropSetTargetWeight(
+                                        exercise.id,
+                                        set.id
+                                      );
+                                    } else {
+                                      toggleTargetSuggestionPreview(
+                                        exercise.id,
+                                        set.id
+                                      );
+                                    }
                                   }
 
                                   if (event.key === " ") {
                                     event.preventDefault();
-                                    if (set.isDropSet) {
-                                      applyTargetToActual(exercise.id, set.id);
-                                    } else {
+                                    if (!set.isDropSet) {
                                       openTargetAlternatives(
                                         exercise,
                                         set,
@@ -8451,104 +8558,72 @@ export default function SessionView({
                                     return;
                                   }
 
-                                  applyTargetToActual(exercise.id, set.id);
+                                  if (set.isDropSet) {
+                                    applyDropSetTargetWeight(
+                                      exercise.id,
+                                      set.id
+                                    );
+                                    setTargetSuggestionPreview(null);
+                                  } else {
+                                    toggleTargetSuggestionPreview(
+                                      exercise.id,
+                                      set.id
+                                    );
+                                  }
                                 }}
-                                title="Use target values"
+                                title={
+                                  set.isDropSet
+                                    ? "Apply suggested drop set weight"
+                                    : "Show suggested target; hold for all target options"
+                                }
                                 style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "inherit",
+                                  alignItems: "center",
+                                  background: targetPreviewOpen
+                                    ? "color-mix(in srgb, var(--accent) 14%, var(--surface-raised))"
+                                    : "transparent",
+                                  border: targetPreviewOpen
+                                    ? "1px solid var(--accent-border)"
+                                    : "1px solid transparent",
+                                  borderRadius: "999px",
+                                  color: targetStatusStyle.iconColor,
                                   cursor: "pointer",
                                   boxSizing: "border-box",
-                                  flex: "1 1 80px",
+                                  display: "inline-flex",
+                                  flex: "0 0 36px",
                                   font: "inherit",
-                                  maxWidth: "80px",
-                                  minWidth: "60px",
-                                  overflow: "hidden",
+                                  height: "30px",
+                                  justifyContent: "center",
                                   padding: 0,
-                                  textAlign: "left",
-                                  lineHeight: "1.1",
+                                  position: "relative",
+                                  width: "36px",
                                   touchAction: "manipulation",
                                   userSelect: "none",
                                   WebkitUserSelect: "none",
                                 }}
                               >
-                                <ShrinkToFitText
-                                  maxFontSize={isActive ? 12 : 11}
-                                  minFontSize={9}
-                                  style={{
-                                    fontVariantNumeric: "tabular-nums",
-                                    letterSpacing: "-0.15px",
-                                    textAlign: "left",
-                                  }}
-                                >
-                                  {set.isDropSet && (
-                                    <span
-                                      style={{
-                                        color: "var(--accent)",
-                                        fontWeight: 800,
-                                        marginRight: "3px",
-                                      }}
-                                      title={`Drop set ${dropSetIndex}`}
-                                    >
-                                      D{dropSetIndex}
-                                    </span>
-                                  )}
-                                  {displayWeight(set.targetWeight)}×
-                                  {set.isDropSet
-                                    ? "AMRAP"
-                                    : getSetTargetReps(set)}
-                                  {!set.isDropSet && getSetTargetRir(set)
-                                    ? `@${getSetTargetRir(set)}`
-                                    : ""}
-                                </ShrinkToFitText>
-
-                                <div
-                                  style={{
-                                    alignItems: "center",
-                                    fontSize: "10px",
-                                    color: "var(--text-muted)",
-                                    display: "flex",
-                                    gap: "4px",
-                                    minHeight: "13px",
-                                    minWidth: 0,
-                                    overflow: "hidden",
-                                    textAlign: "left",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {!set.isDropSet && (
-                                    <span>
-                                      (
-                                      {formatSessionE1RMDisplay(
-                                        calculateSessionE1RM(
-                                          exercise,
-                                          "",
-                                          "",
-                                          "",
-                                          set.targetWeight,
-                                          getSetTargetReps(set),
-                                          getSetTargetRir(set)
-                                        )
-                                      )}
-                                      )
-                                    </span>
-                                  )}
-                                  {showTargetStatus && (
-                                    <span
-                                      aria-label={targetStatusStyle.label}
-                                      title={targetStatusStyle.label}
-                                      style={{
-                                        alignItems: "center",
-                                        color: targetStatusStyle.iconColor,
-                                        display: "inline-flex",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Target size={12} strokeWidth={3.2} />
-                                    </span>
-                                  )}
-                                </div>
+                                <Target size={18} strokeWidth={2.7} />
+                                {set.isDropSet && (
+                                  <span
+                                    aria-hidden="true"
+                                    style={{
+                                      alignItems: "center",
+                                      background: "var(--accent)",
+                                      borderRadius: "999px",
+                                      color: "white",
+                                      display: "inline-flex",
+                                      fontSize: "8px",
+                                      fontWeight: 800,
+                                      height: "14px",
+                                      justifyContent: "center",
+                                      position: "absolute",
+                                      right: "-2px",
+                                      top: "-3px",
+                                      width: "14px",
+                                    }}
+                                  >
+                                    D{dropSetIndex}
+                                  </span>
+                                )}
                               </button>
 
                               <span
@@ -8580,8 +8655,8 @@ export default function SessionView({
                                     setShowWeightPicker(true);
                                   }}
                                   style={{
-                                    width: "54px",
-                                    marginLeft: "4px",
+                                    width: "56px",
+                                    marginLeft: 0,
                                     fontSize: isActive ? "14px" : "12px",
                                     border: "1px solid var(--border)",
                                     background: "var(--surface-raised)",
@@ -8608,6 +8683,9 @@ export default function SessionView({
 
                                 <span
                                   style={{
+                                    display: "inline-block",
+                                    width: "10px",
+                                    textAlign: "center",
                                     fontSize: isActive ? "14px" : "12px",
                                   }}
                                 >
@@ -8629,7 +8707,7 @@ export default function SessionView({
                                     setShowRepsPicker(true);
                                   }}
                                   style={{
-                                    width: "34px",
+                                    width: "38px",
                                     marginLeft: "0px",
                                     fontSize: isActive ? "14px" : "12px",
                                     border: "1px solid var(--border)",
@@ -8653,8 +8731,9 @@ export default function SessionView({
 
                                 <span
                                   style={{
-                                    marginLeft: "1px",
-                                    marginRight: "1px",
+                                    display: "inline-block",
+                                    width: "10px",
+                                    textAlign: "center",
                                     fontSize: isActive ? "14px" : "12px",
                                   }}
                                 >
@@ -8676,7 +8755,7 @@ export default function SessionView({
                                     setShowRirPicker(true);
                                   }}
                                   style={{
-                                    width: "34px",
+                                    width: "38px",
                                     height: "28px",
                                     marginLeft: "0px",
                                     fontSize: isActive ? "14px" : "12px",
@@ -8701,7 +8780,7 @@ export default function SessionView({
                                 <span
                                   style={{
                                   display: "inline-block",
-                                  width: "38px",
+                                  width: "36px",
                                   textAlign: "center",
                                   fontSize: isActive ? "14px" : "13px",
                                   color: "var(--text-muted)",
@@ -8732,6 +8811,7 @@ export default function SessionView({
                                   background: set.completed
                                     ? "var(--success-bg)"
                                     : "var(--surface-raised)",
+                                  marginLeft: "8px",
                                 }}
                                 tone={set.completed ? "success" : "neutral"}
                                 disabled={
@@ -8761,6 +8841,7 @@ export default function SessionView({
                                 disabled={session.workoutTimerPaused}
                                 label="Delete set"
                                 size={30}
+                                style={{ marginLeft: "3px" }}
                                 tone="danger"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -8774,6 +8855,94 @@ export default function SessionView({
                               >
                                 <Trash2 size={15} />
                               </IconButton>
+
+                              {targetPreviewOpen && (
+                                <div
+                                  aria-label={`Suggested target for set ${
+                                    setIndex + 1
+                                  }`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  style={{
+                                    alignItems: "center",
+                                    background: "var(--surface-raised)",
+                                    border: "1px solid var(--accent-border)",
+                                    borderRadius: "7px",
+                                    boxSizing: "border-box",
+                                    display: "grid",
+                                    flex: "0 0 100%",
+                                    gap: "6px",
+                                    gridTemplateColumns: set.isDropSet
+                                      ? "minmax(0, 1fr) auto"
+                                      : "minmax(0, 1fr) auto auto",
+                                    marginTop: "4px",
+                                    minWidth: 0,
+                                    padding: "6px",
+                                    width: "100%",
+                                  }}
+                                >
+                                  <button
+                                    aria-label={`Use suggested target ${formatPrescriptionLabel(
+                                      suggestedTarget
+                                    )}`}
+                                    disabled={session.workoutTimerPaused}
+                                    onClick={() => {
+                                      applyTargetToActual(exercise.id, set.id);
+                                      setTargetSuggestionPreview(null);
+                                    }}
+                                    style={{
+                                      background:
+                                        "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))",
+                                      borderColor: "var(--accent)",
+                                      fontSize: "13px",
+                                      fontWeight: 800,
+                                      minHeight: "36px",
+                                      minWidth: 0,
+                                      overflow: "hidden",
+                                      padding: "5px 8px",
+                                      textAlign: "left",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                    type="button"
+                                  >
+                                    {formatPrescriptionLabel(suggestedTarget)}
+                                  </button>
+                                  {!set.isDropSet && (
+                                    <button
+                                      aria-label="Show all target options"
+                                      onClick={() =>
+                                        openTargetAlternatives(
+                                          exercise,
+                                          set,
+                                          setIndex
+                                        )
+                                      }
+                                      style={{
+                                        minHeight: "36px",
+                                        padding: "5px 8px",
+                                      }}
+                                      type="button"
+                                    >
+                                      More options
+                                    </button>
+                                  )}
+                                  <button
+                                    aria-label="Close suggested target"
+                                    onClick={() => setTargetSuggestionPreview(null)}
+                                    style={{
+                                      alignItems: "center",
+                                      display: "inline-flex",
+                                      height: "36px",
+                                      justifyContent: "center",
+                                      padding: 0,
+                                      width: "36px",
+                                    }}
+                                    type="button"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
