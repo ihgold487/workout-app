@@ -70,6 +70,7 @@ Initial session-header increment implemented and build-validated; longer real-wo
 - [x] Keep long workout and exercise names clear of adjacent controls, with truncation where needed.
 - [x] Increase the workout-controls touch target to 44×44px.
 - [x] Cancel the rest timer, native notification, and Live Activity when a workout is ended without saving.
+- [x] Add compact active-set emphasis and bounded numeric-cell overflow handling.
 - [ ] Continue real-world validation of the updated header, exercise preview behavior, timer cleanup, supersets, and workout completion.
 - [ ] Review remaining active-session tap targets and set-entry ergonomics.
 - [ ] Refine the expanded rest-timer experience and reduce competition among workout utilities.

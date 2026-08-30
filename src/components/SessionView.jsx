@@ -1,4 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import {
   DndContext,
   MouseSensor,
@@ -219,6 +225,57 @@ function IconButton({
     >
       {children}
     </button>
+  );
+}
+
+function ShrinkToFitText({ children, maxFontSize, minFontSize, style }) {
+  const textRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const element = textRef.current;
+
+    if (!element) {
+      return undefined;
+    }
+
+    function fitText() {
+      element.style.fontSize = `${maxFontSize}px`;
+
+      let fontSize = maxFontSize;
+      while (element.scrollWidth > element.clientWidth && fontSize > minFontSize) {
+        fontSize = Math.max(minFontSize, fontSize - 0.5);
+        element.style.fontSize = `${fontSize}px`;
+      }
+    }
+
+    fitText();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const resizeObserver = new ResizeObserver(fitText);
+    resizeObserver.observe(element);
+
+    return () => resizeObserver.disconnect();
+  }, [children, maxFontSize, minFontSize]);
+
+  return (
+    <span
+      ref={textRef}
+      style={{
+        display: "block",
+        maxWidth: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        width: "100%",
+        ...style,
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -8128,7 +8185,12 @@ export default function SessionView({
 
                           return (
                             <div
+                              aria-current={isActive ? "step" : undefined}
+                              aria-label={`Set ${setIndex + 1}${
+                                isActive ? ", current set" : ""
+                              }${isCompleted ? ", completed" : ""}`}
                               key={set.id}
+                              role="group"
                               ref={(el) => {
                                 if (el) {
                                   setRowRefs.current[set.id] = el;
@@ -8145,22 +8207,27 @@ export default function SessionView({
                                 }
                               }}
                               style={{
-                                padding: "8px 2px",
-                                marginBottom: "6px",
+                                borderRadius: "8px",
+                                padding: isActive ? "6px 4px" : "3px 2px",
+                                marginBottom: "3px",
                                 display: "flex",
                                 alignItems: "center",
                                 flexWrap: "nowrap",
                                 width: "calc(100% + 12px)",
                                 marginRight: "-12px",
                                 boxSizing: "border-box",
-                                gap: "4px",
+                                gap: "3px",
 
                                 borderLeft: isActive
                                   ? "4px solid var(--accent)"
                                   : "none",
 
+                                boxShadow: isActive
+                                  ? "inset 0 0 0 2px color-mix(in srgb, var(--accent) 75%, transparent)"
+                                  : "none",
+
                                 background: isActive
-                                  ? "color-mix(in srgb, var(--accent) 10%, var(--surface))"
+                                  ? "color-mix(in srgb, var(--accent) 22%, var(--surface))"
                                   : set.isDropSet
                                     ? "color-mix(in srgb, var(--accent) 5%, var(--surface))"
                                     : "transparent",
@@ -8240,19 +8307,26 @@ export default function SessionView({
                                   border: "none",
                                   color: "inherit",
                                   cursor: "pointer",
+                                  boxSizing: "border-box",
+                                  flex: "1 1 80px",
                                   font: "inherit",
+                                  maxWidth: "80px",
+                                  minWidth: "60px",
+                                  overflow: "hidden",
                                   padding: 0,
                                   textAlign: "left",
-                                  width: "80px",
                                   lineHeight: "1.1",
                                   touchAction: "manipulation",
                                   userSelect: "none",
                                   WebkitUserSelect: "none",
                                 }}
                               >
-                                <div
+                                <ShrinkToFitText
+                                  maxFontSize={isActive ? 12 : 11}
+                                  minFontSize={9}
                                   style={{
-                                    fontSize: "11px",
+                                    fontVariantNumeric: "tabular-nums",
+                                    letterSpacing: "-0.15px",
                                     textAlign: "left",
                                   }}
                                 >
@@ -8275,7 +8349,7 @@ export default function SessionView({
                                   {!set.isDropSet && getSetTargetRir(set)
                                     ? `@${getSetTargetRir(set)}`
                                     : ""}
-                                </div>
+                                </ShrinkToFitText>
 
                                 <div
                                   style={{
@@ -8285,7 +8359,10 @@ export default function SessionView({
                                     display: "flex",
                                     gap: "4px",
                                     minHeight: "13px",
+                                    minWidth: 0,
+                                    overflow: "hidden",
                                     textAlign: "left",
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {!set.isDropSet && (
@@ -8326,6 +8403,7 @@ export default function SessionView({
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
+                                  flex: "0 0 auto",
                                   whiteSpace: "nowrap",
                                 }}
                               >
@@ -8350,24 +8428,35 @@ export default function SessionView({
                                     setShowWeightPicker(true);
                                   }}
                                   style={{
-                                    width: "50px",
+                                    width: "54px",
                                     marginLeft: "4px",
-                                    fontSize: "12px",
+                                    fontSize: isActive ? "14px" : "12px",
                                     border: "1px solid var(--border)",
                                     background: "var(--surface-raised)",
-                                    height: "24px",
+                                    height: "28px",
                                     textAlign: "center",
                                     boxSizing: "border-box",
                                     color: valueColor,
                                     fontWeight: isActive ? "bold" : "normal",
+                                    overflow: "hidden",
+                                    padding: 0,
                                   }}
                                 >
-                                  {actualWeightDisplay}
+                                  <ShrinkToFitText
+                                    maxFontSize={isActive ? 14 : 12}
+                                    minFontSize={8}
+                                    style={{
+                                      fontVariantNumeric: "tabular-nums",
+                                      letterSpacing: "-0.2px",
+                                    }}
+                                  >
+                                    {actualWeightDisplay}
+                                  </ShrinkToFitText>
                                 </button>
 
                                 <span
                                   style={{
-                                    fontSize: "12px",
+                                    fontSize: isActive ? "14px" : "12px",
                                   }}
                                 >
                                   ×
@@ -8390,23 +8479,31 @@ export default function SessionView({
                                   style={{
                                     width: "34px",
                                     marginLeft: "0px",
-                                    fontSize: "12px",
+                                    fontSize: isActive ? "14px" : "12px",
                                     border: "1px solid var(--border)",
                                     background: "var(--surface-raised)",
-                                    height: "24px",
+                                    height: "28px",
                                     boxSizing: "border-box",
                                     color: valueColor,
                                     fontWeight: isActive ? "bold" : "normal",
+                                    overflow: "hidden",
+                                    padding: 0,
                                   }}
                                 >
-                                  {actualRepsDisplay}
+                                  <ShrinkToFitText
+                                    maxFontSize={isActive ? 14 : 12}
+                                    minFontSize={10}
+                                    style={{ fontVariantNumeric: "tabular-nums" }}
+                                  >
+                                    {actualRepsDisplay}
+                                  </ShrinkToFitText>
                                 </button>
 
                                 <span
                                   style={{
                                     marginLeft: "1px",
                                     marginRight: "1px",
-                                    fontSize: "12px",
+                                    fontSize: isActive ? "14px" : "12px",
                                   }}
                                 >
                                   @
@@ -8428,31 +8525,45 @@ export default function SessionView({
                                   }}
                                   style={{
                                     width: "34px",
-                                    height: "24px",
+                                    height: "28px",
                                     marginLeft: "0px",
-                                    fontSize: "12px",
+                                    fontSize: isActive ? "14px" : "12px",
                                     border: "1px solid var(--border)",
                                     background: "var(--surface-raised)",
                                     boxSizing: "border-box",
                                     color: valueColor,
                                     fontWeight: isActive ? "bold" : "normal",
+                                    overflow: "hidden",
+                                    padding: 0,
                                   }}
                                 >
-                                  {actualRirDisplay}
+                                  <ShrinkToFitText
+                                    maxFontSize={isActive ? 14 : 12}
+                                    minFontSize={10}
+                                    style={{ fontVariantNumeric: "tabular-nums" }}
+                                  >
+                                    {actualRirDisplay}
+                                  </ShrinkToFitText>
                                 </button>
 
                                 <span
                                   style={{
-                                    display: "inline-block",
-                                    width: "42px",
-                                    textAlign: "center",
-                                    fontSize: "13px",
+                                  display: "inline-block",
+                                  width: "38px",
+                                  textAlign: "center",
+                                  fontSize: isActive ? "14px" : "13px",
                                   color: "var(--text-muted)",
                                 }}
                                 >
-                                  {set.isDropSet
-                                    ? ""
-                                    : formatSessionE1RMDisplay(actualE1RM)}
+                                  <ShrinkToFitText
+                                    maxFontSize={isActive ? 14 : 13}
+                                    minFontSize={10}
+                                    style={{ fontVariantNumeric: "tabular-nums" }}
+                                  >
+                                    {set.isDropSet
+                                      ? ""
+                                      : formatSessionE1RMDisplay(actualE1RM)}
+                                  </ShrinkToFitText>
                                 </span>
                               </span>
 
