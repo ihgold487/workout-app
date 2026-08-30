@@ -486,11 +486,21 @@ export default function SessionView({
   const exerciseStripRef = useRef(null);
   const exerciseThumbnailRefs = useRef({});
   const addExerciseButtonRef = useRef(null);
+  const returnToCurrentSetScrollTimerRef = useRef(null);
   const previousExercisePanelIdRef = useRef(null);
   const [exercisePanelTransition, setExercisePanelTransition] = useState({
     direction: "next",
     sequence: 0,
   });
+
+  useEffect(
+    () => () => {
+      if (returnToCurrentSetScrollTimerRef.current) {
+        window.clearTimeout(returnToCurrentSetScrollTimerRef.current);
+      }
+    },
+    []
+  );
 
   function lbsToKg(lbs) {
     const num = parseFloat(lbs);
@@ -563,12 +573,12 @@ export default function SessionView({
     );
     const keyMatchWithImage = keyMatches.find((exercise) => exercise.imageUrl);
     const libraryExercise =
-      keyMatchWithImage || keyMatches[0] || idMatch || null;
+      idMatch || keyMatchWithImage || keyMatches[0] || null;
 
-    const muscles = Array.isArray(sessionExercise.muscles)
-      ? sessionExercise.muscles
-      : Array.isArray(libraryExercise?.muscles)
+    const muscles = Array.isArray(libraryExercise?.muscles)
       ? libraryExercise.muscles
+      : Array.isArray(sessionExercise.muscles)
+      ? sessionExercise.muscles
       : [
           sessionExercise.primaryMuscle || sessionExercise.planMuscle,
           ...(Array.isArray(sessionExercise.secondaryMuscles)
@@ -1650,8 +1660,14 @@ export default function SessionView({
     const targetSet =
       exercise?.sets?.find((set) => !set.completed) || exercise?.sets?.[0];
 
+    const prescribedRestSeconds = getSetPrescribedRestSeconds(targetSet);
+    const targetReps = parseTimerReps(getSetPrescribedReps(targetSet));
+
     return {
       reps: formatPrescriptionValue(getSetTargetRepDisplay(targetSet)),
+      restSeconds:
+        prescribedRestSeconds ||
+        (targetReps == null ? null : getRestDurationForReps(targetReps)),
       rir: formatPrescriptionValue(getSetPrescribedRir(targetSet)),
     };
   }
@@ -5094,7 +5110,7 @@ export default function SessionView({
     : [];
   const shouldAnimateExercisePanel = exercisePanelTransition.sequence > 0;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const currentExerciseId = currentExercise?.id || null;
     const previousExerciseId = previousExercisePanelIdRef.current;
 
@@ -5214,14 +5230,17 @@ export default function SessionView({
 
     setActiveWorkoutFocus(activeSet);
 
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        setRowRefs.current[activeWorkoutPosition.set.id]?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
+    if (returnToCurrentSetScrollTimerRef.current) {
+      window.clearTimeout(returnToCurrentSetScrollTimerRef.current);
+    }
+
+    returnToCurrentSetScrollTimerRef.current = window.setTimeout(() => {
+      returnToCurrentSetScrollTimerRef.current = null;
+      setRowRefs.current[activeWorkoutPosition.set.id]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
       });
-    });
+    }, 460);
   }
 
   function renderLatestSetHistory(exercise) {
@@ -5265,11 +5284,13 @@ export default function SessionView({
               style={{
                 alignItems: "center",
                 color: "var(--text-muted)",
-                display: "flex",
+                columnGap: "4px",
+                display: "grid",
                 fontSize: "14px",
                 fontWeight: "bold",
+                gridTemplateColumns: "78px 50px 46px 36px 42px",
                 lineHeight: 1,
-                marginLeft: "0px",
+                padding: "0 2px",
               }}
             >
               <span
@@ -5279,7 +5300,6 @@ export default function SessionView({
                   fontSize: "14px",
                   gap: "3px",
                   whiteSpace: "nowrap",
-                  width: "78px",
                 }}
               >
                 Set
@@ -5292,9 +5312,7 @@ export default function SessionView({
                   display: "inline-flex",
                   fontSize: "14px",
                   justifyContent: "center",
-                  marginLeft: "4px",
                   whiteSpace: "nowrap",
-                  width: "50px",
                 }}
               >
                 <Weight size={15} aria-label="Weight" />
@@ -5308,7 +5326,6 @@ export default function SessionView({
                   fontSize: "14px",
                   justifyContent: "center",
                   whiteSpace: "nowrap",
-                  width: "46px",
                 }}
               >
                 <Hash size={15} aria-label="Reps" />
@@ -5322,7 +5339,6 @@ export default function SessionView({
                   fontSize: "14px",
                   justifyContent: "center",
                   whiteSpace: "nowrap",
-                  width: "36px",
                 }}
               >
                 <BatteryMedium size={15} aria-label="RIR" />
@@ -5335,9 +5351,7 @@ export default function SessionView({
                   display: "inline-flex",
                   fontSize: "14px",
                   justifyContent: "center",
-                  marginLeft: "2px",
                   whiteSpace: "nowrap",
-                  width: "42px",
                 }}
               >
                 <Dumbbell size={15} aria-label="e1RM" />
@@ -5358,10 +5372,11 @@ export default function SessionView({
                   style={{
                     alignItems: "center",
                     color: "var(--text-muted)",
-                    display: "flex",
+                    columnGap: "4px",
+                    display: "grid",
                     flexWrap: "nowrap",
                     fontSize: "12px",
-                    gap: "4px",
+                    gridTemplateColumns: "78px 50px 46px 36px 42px",
                     lineHeight: 1,
                     padding: "0 2px",
                   }}
@@ -5369,16 +5384,13 @@ export default function SessionView({
                   <span
                     style={{
                       fontWeight: 700,
-                      width: "78px",
                     }}
                   >
                     {setIndex + 1}
                   </span>
                   <span
                     style={{
-                      marginLeft: "4px",
                       textAlign: "center",
-                      width: "50px",
                     }}
                   >
                     {displayHistoricalWeight(weight)}
@@ -5386,7 +5398,6 @@ export default function SessionView({
                   <span
                     style={{
                       textAlign: "center",
-                      width: "46px",
                     }}
                   >
                     {displayHistoricalValue(reps)}
@@ -5394,16 +5405,13 @@ export default function SessionView({
                   <span
                     style={{
                       textAlign: "center",
-                      width: "36px",
                     }}
                   >
                     {displayHistoricalValue(rir)}
                   </span>
                   <span
                     style={{
-                      marginLeft: "2px",
                       textAlign: "center",
-                      width: "42px",
                     }}
                   >
                     {formatSessionE1RMDisplay(e1rm)}
@@ -6031,7 +6039,7 @@ export default function SessionView({
           }
 
           .session-current-exercise-panel {
-            animation-duration: 1360ms;
+            animation-duration: 440ms;
             animation-fill-mode: both;
             animation-timing-function: cubic-bezier(.16, 1, .3, 1);
             will-change: opacity, transform;
@@ -6061,7 +6069,7 @@ export default function SessionView({
           @keyframes sessionExerciseSlideNext {
             from {
               opacity: 0.25;
-              transform: translateX(288px);
+              transform: translateX(64px);
             }
 
             to {
@@ -6073,7 +6081,7 @@ export default function SessionView({
           @keyframes sessionExerciseSlidePrevious {
             from {
               opacity: 0.25;
-              transform: translateX(-288px);
+              transform: translateX(-64px);
             }
 
             to {
@@ -8103,8 +8111,8 @@ export default function SessionView({
                         <Flame size={15} /> Warmup sets
                       </button>
                       <div
-                        aria-label="Prescribed reps and RIR"
-                        title="Prescribed reps and RIR"
+                        aria-label="Prescribed reps, RIR, and rest time"
+                        title="Prescribed reps, RIR, and rest time"
                         style={{
                           alignItems: "center",
                           border: "1px solid var(--border)",
@@ -8120,7 +8128,13 @@ export default function SessionView({
                         }}
                       >
                         {prescriptionDisplay.reps} reps ·{" "}
-                        {prescriptionDisplay.rir} RIR
+                        {prescriptionDisplay.rir} RIR ·{" "}
+                        {prescriptionDisplay.restSeconds == null
+                          ? "—"
+                          : formatWorkoutDuration(
+                              prescriptionDisplay.restSeconds
+                            )}{" "}
+                        rest
                       </div>
                     </div>
 
@@ -8595,6 +8609,7 @@ export default function SessionView({
                                   font: "inherit",
                                   height: "30px",
                                   justifyContent: "center",
+                                  opacity: isActive ? 1 : 0.52,
                                   padding: 0,
                                   position: "relative",
                                   width: "36px",
@@ -8897,17 +8912,39 @@ export default function SessionView({
                                       borderColor: "var(--accent)",
                                       fontSize: "13px",
                                       fontWeight: 800,
-                                      minHeight: "36px",
+                                      minHeight: "42px",
                                       minWidth: 0,
                                       overflow: "hidden",
                                       padding: "5px 8px",
                                       textAlign: "left",
                                       textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
                                     }}
                                     type="button"
                                   >
-                                    {formatPrescriptionLabel(suggestedTarget)}
+                                    <span
+                                      style={{
+                                        display: "block",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {formatPrescriptionLabel(suggestedTarget)}
+                                    </span>
+                                    <span
+                                      style={{
+                                        color: "var(--text-muted)",
+                                        display: "block",
+                                        fontSize: "11px",
+                                        fontWeight: 700,
+                                        marginTop: "2px",
+                                      }}
+                                    >
+                                      e1RM{" "}
+                                      {formatSessionE1RMDisplay(
+                                        suggestedTarget.e1rm
+                                      )}
+                                    </span>
                                   </button>
                                   {!set.isDropSet && (
                                     <button
@@ -10730,6 +10767,35 @@ export default function SessionView({
               exerciseLibrary={exerciseLibrary}
               onCancel={() => setLibraryEditingExercise(null)}
               onSaved={(savedExercise) => {
+                updateSession((currentSession) => ({
+                  ...currentSession,
+                  exercises: currentSession.exercises.map((exercise) => {
+                    const savedIds = [
+                      savedExercise.id,
+                      savedExercise.exerciseId,
+                    ]
+                      .filter((value) => value != null && value !== "")
+                      .map(String);
+                    const exerciseIds = [exercise.id, exercise.exerciseId]
+                      .filter((value) => value != null && value !== "")
+                      .map(String);
+                    const matchesExercise =
+                      savedIds.some((id) => exerciseIds.includes(id)) ||
+                      getExerciseKey(exercise) ===
+                        getExerciseKey(savedExercise);
+
+                    if (!matchesExercise) {
+                      return exercise;
+                    }
+
+                    return {
+                      ...exercise,
+                      muscles: savedExercise.muscles,
+                      primaryMuscle: savedExercise.muscles?.[0] || "",
+                      secondaryMuscles: savedExercise.muscles?.slice(1) || [],
+                    };
+                  }),
+                }));
                 setDetailExercise(savedExercise);
                 setLibraryEditingExercise(null);
               }}
