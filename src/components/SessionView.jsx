@@ -5899,6 +5899,36 @@ export default function SessionView({
     ? getWarmupRecommendations(warmupExercise)
     : null;
   const workoutUpdateOptions = getWorkoutUpdateOptions();
+  const displayedRestSeconds =
+    timerRunning || timerPaused || timerFinished
+      ? restSeconds
+      : restMinutes * 60 + restRemainder;
+  const restTimerStateLabel = timerFinished
+    ? "Rest complete"
+    : timerPaused
+      ? "Paused"
+      : timerRunning
+        ? "Resting"
+        : "Ready";
+  const restTimerTimeLabel = `${String(
+    Math.floor(displayedRestSeconds / 60)
+  ).padStart(2, "0")}:${String(displayedRestSeconds % 60).padStart(2, "0")}`;
+  const spotifyCompactLabel = spotifyBusy
+    ? "Spotify connecting"
+    : spotifyState.error
+      ? "Spotify needs attention"
+      : spotifyState.connected
+        ? spotifyState.isPaused
+          ? "Spotify paused"
+          : "Spotify playing"
+        : "Spotify disconnected";
+  const spotifyStatusColor = spotifyState.error
+    ? "#dc2626"
+    : spotifyBusy
+      ? "#d6a100"
+      : spotifyState.connected && spotifyState.isPaused === false
+        ? "#1db954"
+        : "var(--text-muted)";
 
   return (
     <div
@@ -6280,14 +6310,18 @@ export default function SessionView({
                 alignItems: "center",
                 background: timerFinished
                   ? "var(--danger-bg)"
-                  : timerRunning || timerPaused
+                  : timerPaused
+                  ? "color-mix(in srgb, var(--accent) 14%, var(--surface-raised))"
+                  : timerRunning
                   ? "var(--warning-bg, rgba(255, 193, 7, .18))"
                   : expandedSessionUtility === "timer"
                   ? "color-mix(in srgb, var(--accent) 12%, var(--surface-raised))"
                   : "var(--surface-raised)",
                 border: timerFinished
                   ? "1px solid #c66"
-                  : timerRunning || timerPaused
+                  : timerPaused
+                  ? "1px solid var(--accent)"
+                  : timerRunning
                   ? "1px solid #d6a100"
                   : "1px solid var(--border)",
                 borderRadius: "999px",
@@ -6303,9 +6337,13 @@ export default function SessionView({
               <button
                 aria-expanded={expandedSessionUtility === "timer"}
                 aria-label={
-                  expandedSessionUtility === "timer"
-                    ? "Collapse rest timer"
-                    : "Show rest timer"
+                  `${restTimerStateLabel}, ${
+                    timerFinished ? `over ${restTimerTimeLabel}` : restTimerTimeLabel
+                  }. ${
+                    expandedSessionUtility === "timer"
+                      ? "Collapse rest timer"
+                      : "Show rest timer"
+                  }`
                 }
                 onClick={() =>
                   setExpandedSessionUtility((current) =>
@@ -6327,58 +6365,65 @@ export default function SessionView({
                 type="button"
               >
                 <Timer size={21} />
-                {expandedSessionUtility === "timer" ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "grid",
+                    lineHeight: 1.05,
+                    minWidth: "62px",
+                    textAlign: "left",
+                  }}
+                >
                   <span
-                    aria-hidden="true"
                     style={{
-                      background: "color-mix(in srgb, currentColor 20%, transparent)",
-                      borderRadius: "999px",
-                      display: "block",
-                      height: "5px",
-                      overflow: "hidden",
-                      width: "56px",
+                      fontSize: "10px",
+                      fontWeight: 800,
+                      letterSpacing: ".02em",
+                      textTransform: "uppercase",
                     }}
                   >
+                    {restTimerStateLabel}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "13px",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {timerFinished ? `Over ${restTimerTimeLabel}` : restTimerTimeLabel}
+                  </span>
+                  {(timerRunning || timerPaused) && (
                     <span
                       style={{
-                        background: timerFinished ? "#c66" : "currentColor",
+                        background: "color-mix(in srgb, currentColor 20%, transparent)",
                         borderRadius: "inherit",
                         display: "block",
-                        height: "100%",
-                        transition: timerPaused ? "none" : "width 1s linear",
-                        width: `${
-                          timerFinished
-                            ? 0
-                            : Math.max(
-                                0,
-                                Math.min(
-                                  100,
-                                  ((timerRunning || timerPaused
-                                    ? restSeconds
-                                    : restMinutes * 60 + restRemainder) /
-                                    Math.max(1, restTimerProgressTotal)) *
-                                    100
-                                )
-                              )
-                        }%`,
+                        height: "3px",
+                        marginTop: "3px",
+                        overflow: "hidden",
+                        width: "100%",
                       }}
-                    />
-                  </span>
-                ) : (
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {timerFinished ? "+" : ""}
-                    {String(Math.floor(
-                      (timerRunning || timerPaused || timerFinished
-                        ? restSeconds
-                        : restMinutes * 60 + restRemainder) / 60
-                    )).padStart(2, "0")}:
-                    {String(
-                      (timerRunning || timerPaused || timerFinished
-                        ? restSeconds
-                        : restMinutes * 60 + restRemainder) % 60
-                    ).padStart(2, "0")}
-                  </span>
-                )}
+                    >
+                      <span
+                        style={{
+                          background: "currentColor",
+                          borderRadius: "inherit",
+                          display: "block",
+                          height: "100%",
+                          transition: timerPaused ? "none" : "width 1s linear",
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (restSeconds / Math.max(1, restTimerProgressTotal)) *
+                                100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </span>
+                  )}
+                </span>
               </button>
 
               {expandedSessionUtility !== "timer" && (
@@ -6443,18 +6488,17 @@ export default function SessionView({
                   borderRadius: "999px",
                   color: "var(--text)",
                   display: "inline-flex",
-                  gap: "3px",
-                  minHeight: "36px",
-                  padding: "4px 6px",
+                  minHeight: "38px",
+                  padding: "2px",
                 }}
               >
                 <button
                   aria-expanded={expandedSessionUtility === "spotify"}
-                  aria-label={
+                  aria-label={`${spotifyCompactLabel}. ${
                     expandedSessionUtility === "spotify"
                       ? "Collapse Spotify controls"
                       : "Show Spotify controls"
-                  }
+                  }`}
                   onClick={() =>
                     setExpandedSessionUtility((current) =>
                       current === "spotify" ? null : "spotify"
@@ -6466,10 +6510,13 @@ export default function SessionView({
                     border: 0,
                     color: "inherit",
                     display: "inline-flex",
-                    gap: "7px",
-                    minHeight: "26px",
-                    padding: "2px",
+                    height: "34px",
+                    justifyContent: "center",
+                    padding: "4px",
+                    position: "relative",
+                    width: expandedSessionUtility === "spotify" ? "auto" : "34px",
                   }}
+                  title={spotifyCompactLabel}
                   type="button"
                 >
                   <SpotifyIcon size={21} />
@@ -6487,8 +6534,20 @@ export default function SessionView({
                       {spotifyState.trackName || "Spotify"}
                     </span>
                   )}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      background: spotifyStatusColor,
+                      border: "2px solid var(--surface-raised)",
+                      borderRadius: "999px",
+                      bottom: "1px",
+                      height: "8px",
+                      position: "absolute",
+                      right: "1px",
+                      width: "8px",
+                    }}
+                  />
                 </button>
-
                 {expandedSessionUtility !== "spotify" && (
                   <div
                     aria-label="Spotify playback controls"
@@ -6598,13 +6657,17 @@ export default function SessionView({
           style={{
             background: timerFinished
               ? "var(--danger-bg)"
-              : timerRunning || timerPaused
+              : timerPaused
+              ? "color-mix(in srgb, var(--accent) 14%, var(--surface-raised))"
+              : timerRunning
               ? "var(--warning-bg, rgba(255, 193, 7, .18))"
               : "var(--surface-raised)",
 
             border: timerFinished
               ? "2px solid #c66"
-              : timerRunning || timerPaused
+              : timerPaused
+              ? "2px solid var(--accent)"
+              : timerRunning
               ? "2px solid #d6a100"
               : "1px solid var(--border)",
 
@@ -6640,11 +6703,24 @@ export default function SessionView({
             style={{
               alignItems: "center",
               display: "flex",
+              flexDirection: "column",
               justifyContent: "center",
               minWidth:
                 timerRunning || timerPaused || timerFinished ? "72px" : "112px",
             }}
           >
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: 800,
+                letterSpacing: ".02em",
+                lineHeight: 1,
+                marginBottom: "2px",
+                textTransform: "uppercase",
+              }}
+            >
+              {restTimerStateLabel}
+            </span>
             {timerRunning || timerPaused || timerFinished ? (
               <strong
                 aria-live={timerFinished ? "polite" : "off"}
@@ -6654,12 +6730,18 @@ export default function SessionView({
                   textAlign: "center",
                 }}
               >
-                {timerFinished ? "+" : ""}
-                {String(Math.floor(restSeconds / 60)).padStart(2, "0")}:
-                {String(restSeconds % 60).padStart(2, "0")}
+                {timerFinished ? "Over " : ""}
+                {restTimerTimeLabel}
               </strong>
             ) : (
-              <>
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                }}
+              >
                 <select
                   aria-label="Rest timer minutes"
                   style={{
@@ -6697,7 +6779,7 @@ export default function SessionView({
                     </option>
                     ))}
                 </select>
-              </>
+              </div>
             )}
           </div>
 
