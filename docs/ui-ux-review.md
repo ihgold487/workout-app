@@ -72,6 +72,7 @@ Initial session-header increment implemented and build-validated; longer real-wo
 - [x] Cancel the rest timer, native notification, and Live Activity when a workout is ended without saving.
 - [x] Add compact active-set emphasis and bounded numeric-cell overflow handling.
 - [x] Clarify rest-timer states and improve compact and expanded Spotify status presentation while preserving collapsed playback controls.
+- [x] Add a contextual return-to-current-set action while previewing another exercise.
 - [ ] Continue real-world validation of the updated header, exercise preview behavior, timer cleanup, supersets, and workout completion.
 - [ ] Review remaining active-session tap targets and set-entry ergonomics.
 - [ ] Refine the expanded rest-timer experience and reduce competition among workout utilities.

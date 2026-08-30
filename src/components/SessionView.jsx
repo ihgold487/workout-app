@@ -26,6 +26,7 @@ import {
   Check,
   CheckCircle2,
   Circle,
+  CornerUpLeft,
   Dumbbell,
   Flame,
   Hash,
@@ -5042,6 +5043,17 @@ export default function SessionView({
         (exercise) => exercise.id === currentExercise.id
       )
     : -1;
+  const activeWorkoutPosition = getSessionSet(session, activeSet);
+  const activeWorkoutSetIndex = activeWorkoutPosition
+    ? activeWorkoutPosition.exercise.sets.findIndex(
+        (set) => set.id === activeWorkoutPosition.set.id
+      )
+    : -1;
+  const isPreviewingExercise = Boolean(
+    currentExercise &&
+      activeWorkoutPosition &&
+      !idsMatch(currentExercise.id, activeWorkoutPosition.exercise.id)
+  );
   const visibleExerciseGroups = currentExercise
     ? [
         {
@@ -5154,6 +5166,23 @@ export default function SessionView({
       ...currentSession,
       activeExerciseId: exercise.id,
     }));
+  }
+
+  function returnToCurrentSet() {
+    if (!activeWorkoutPosition) {
+      return;
+    }
+
+    setActiveWorkoutFocus(activeSet);
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setRowRefs.current[activeWorkoutPosition.set.id]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    });
   }
 
   function renderLatestSetHistory(exercise) {
@@ -7335,6 +7364,47 @@ export default function SessionView({
               {showAddExercise ? <X size={30} /> : <Plus size={32} />}
             </button>
           </div>
+
+          {isPreviewingExercise && (
+            <button
+              aria-label={`Return to current set: ${
+                activeWorkoutPosition.exercise.name
+              }, set ${activeWorkoutSetIndex + 1}`}
+              onClick={returnToCurrentSet}
+              style={{
+                alignItems: "center",
+                background:
+                  "color-mix(in srgb, var(--accent) 10%, var(--surface-raised))",
+                border: "1px solid var(--accent-border)",
+                borderRadius: "8px",
+                color: "var(--text)",
+                display: "grid",
+                fontSize: "12px",
+                gap: "2px",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
+                minHeight: "36px",
+                padding: "5px 10px",
+                textAlign: "left",
+                width: "100%",
+              }}
+              type="button"
+            >
+              <CornerUpLeft aria-hidden="true" size={16} />
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <strong>Return to current set</strong>
+                {` · ${activeWorkoutPosition.exercise.name} · Set ${
+                  activeWorkoutSetIndex + 1
+                }`}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
