@@ -2565,7 +2565,7 @@ export default function ExerciseDetailDialog({
       <style>
         {`
           .exercise-detail-sheet {
-            animation: exerciseDetailSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            animation: exerciseDetailSheetSlideUp 320ms cubic-bezier(.16, 1, .3, 1) both;
             will-change: opacity, transform;
           }
 

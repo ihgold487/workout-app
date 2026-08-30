@@ -1924,7 +1924,7 @@ function WeeklyPrescriptionSheet({
       <style>
         {`
           .plan-weekly-prescription-sheet {
-            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            animation: planSheetSlideUp 320ms cubic-bezier(.16, 1, .3, 1) both;
             will-change: opacity, transform;
           }
 
@@ -2260,7 +2260,7 @@ function WeeklyPrescriptionValuePicker({
       <style>
         {`
           .plan-weekly-value-picker-sheet {
-            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            animation: planSheetSlideUp 320ms cubic-bezier(.16, 1, .3, 1) both;
             will-change: opacity, transform;
           }
 
@@ -2505,7 +2505,7 @@ function WorkoutTypePickerSheet({
       <style>
         {`
           .plan-workout-type-picker-sheet {
-            animation: planSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            animation: planSheetSlideUp 320ms cubic-bezier(.16, 1, .3, 1) both;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;

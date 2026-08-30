@@ -6048,7 +6048,7 @@ export default function SessionView({
           .session-workout-actions-sheet,
           .session-target-options-sheet,
           .session-plate-loading-sheet {
-            animation: sessionSheetSlideUp 750ms cubic-bezier(.16, 1, .3, 1) both;
+            animation: sessionSheetSlideUp 320ms cubic-bezier(.16, 1, .3, 1) both;
             will-change: opacity, transform;
           }
 
@@ -7282,8 +7282,8 @@ export default function SessionView({
                                   : "none",
                                 cursor: isDragging ? "grabbing" : "pointer",
                                 display: "inline-flex",
-                                flex: "0 0 52px",
-                                height: "52px",
+                                flex: "0 0 60px",
+                                height: "60px",
                                 justifyContent: "center",
                                 opacity: isDragging ? 0.72 : isCurrent ? 1 : 0.42,
                                 padding: "4px",
@@ -7291,7 +7291,7 @@ export default function SessionView({
                                 touchAction: "pan-x",
                                 userSelect: "none",
                                 WebkitTouchCallout: "none",
-                                width: "52px",
+                                width: "60px",
                               }}
                               title={exercise.name}
                               type="button"
@@ -7303,7 +7303,7 @@ export default function SessionView({
                                   `${exercise.name} demonstration`
                                 }
                                 imageUrl={exerciseDetail.imageUrl}
-                                size={42}
+                                size={50}
                               />
                               {isBenchmark ? (
                                 <span
@@ -7823,10 +7823,9 @@ export default function SessionView({
           </div>
         )}
 
-        <hr />
-
         <div
           style={{
+            marginTop: "8px",
             overflow: "hidden",
           }}
         >
@@ -8334,20 +8333,23 @@ export default function SessionView({
                           const targetStatusStyle =
                             targetMatchStatus === "suggested"
                               ? {
-                                  iconColor: "#16a34a",
+                                  iconColor:
+                                    "color-mix(in srgb, #16a34a 72%, var(--text-muted))",
                                   label: set.isDropSet
                                     ? "Actual weight matches the suggested drop set weight"
                                     : "Actual values match the first suggested target",
                                 }
                               : targetMatchStatus === "alternative"
                               ? {
-                                  iconColor: "#ca8a04",
+                                  iconColor:
+                                    "color-mix(in srgb, #ca8a04 72%, var(--text-muted))",
                                   label:
                                     "Actual values match an alternate target",
                                 }
                               : targetMatchStatus === "off-target"
                               ? {
-                                  iconColor: "#ef4444",
+                                  iconColor:
+                                    "color-mix(in srgb, #ef4444 72%, var(--text-muted))",
                                   label: set.isDropSet
                                     ? "Actual weight differs from the suggested drop set weight"
                                     : "Actual values do not match target options",
@@ -8601,7 +8603,7 @@ export default function SessionView({
                                   WebkitUserSelect: "none",
                                 }}
                               >
-                                <Target size={18} strokeWidth={2.7} />
+                                <Target size={18} strokeWidth={2.5} />
                                 {set.isDropSet && (
                                   <span
                                     aria-hidden="true"
@@ -9038,8 +9040,6 @@ export default function SessionView({
             ))}
           </div>
         </div>
-
-        <hr />
 
         {showAddExercise && (
           <ExercisePickerSheet
@@ -9622,9 +9622,12 @@ export default function SessionView({
             style={{
               alignItems: "flex-end",
               background: "rgba(0,0,0,.45)",
+              boxSizing: "border-box",
               display: "flex",
               inset: 0,
               justifyContent: "center",
+              paddingLeft: "env(safe-area-inset-left)",
+              paddingRight: "env(safe-area-inset-right)",
               position: "fixed",
               zIndex: 2200,
             }}
@@ -9650,6 +9653,8 @@ export default function SessionView({
                 display: "grid",
                 gap: "12px",
                 maxWidth: "520px",
+                minWidth: 0,
+                overflowX: "hidden",
                 padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
                 width: "100%",
               }}
