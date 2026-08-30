@@ -1042,6 +1042,228 @@ function buildExerciseHistoryExportRows({
   return rows;
 }
 
+function getCompletedWorkoutDurationSeconds(workout) {
+  const duration = Number(
+    workout?.durationSeconds ?? workout?.duration_seconds
+  );
+
+  return Number.isFinite(duration) && duration > 0
+    ? Math.round(duration)
+    : null;
+}
+
+function isCompletedWorkoutDeload(workout, plans = []) {
+  if (workout?.isDeload || workout?.is_deload) {
+    return true;
+  }
+
+  if (/\bdeload\b/i.test(getWorkoutName(workout))) {
+    return true;
+  }
+
+  const plan = plans.find(
+    (item) => String(item.id) === String(workout?.planId || workout?.plan_id)
+  );
+  const planWeek = Number(workout?.planWeek || workout?.plan_week);
+
+  return Boolean(
+    plan?.config?.deload &&
+      planWeek &&
+      planWeek === Number(plan.durationWeeks || 0) + 1
+  );
+}
+
+function getWorkoutDurationGroupKey(workout, isDeload) {
+  const planWorkoutId = workout?.planWorkoutId || workout?.plan_workout_id;
+
+  if (planWorkoutId) {
+    return `plan-workout:${planWorkoutId}:${isDeload ? "deload" : "training"}`;
+  }
+
+  const normalizedName = normalizeExportText(getWorkoutName(workout))
+    .replace(/\bweek\s+\d+\b/g, " ")
+    .replace(/\bdeload\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return `name:${normalizedName}:${isDeload ? "deload" : "training"}`;
+}
+
+function buildCompletedWorkoutRows({ history = [], plans = [], limit = 90 }) {
+  return [...history]
+    .map((workout) => {
+      const durationSeconds = getCompletedWorkoutDurationSeconds(workout);
+
+      if (!durationSeconds) {
+        return null;
+      }
+
+      const completedAt = getHistoryWorkoutIso(workout);
+      const completedExercises = (workout.exercises || [])
+        .map((exercise) => ({
+          exercise,
+          sets: (exercise.sets || []).filter(
+            (set) => set.completed !== false && set.completed !== "false"
+          ),
+        }))
+        .filter((entry) => entry.sets.length > 0);
+      const completedSets = completedExercises.flatMap((entry) => entry.sets);
+      const completedDropSets = completedSets.filter(
+        (set) => set.isDropSet || set.is_drop_set
+      );
+      const completedWorkingSets = completedSets.filter(
+        (set) => !set.isDropSet && !set.is_drop_set
+      );
+      const prescribedRestValues = completedSets
+        .map((set) =>
+          normalizeRestSeconds(
+            firstExportValue(
+              set.prescribedRestSeconds,
+              set.restSeconds,
+              set.rest_seconds
+            )
+          )
+        )
+        .filter(Boolean);
+      const prescribedRestSeconds = prescribedRestValues.length
+        ? prescribedRestValues.reduce((sum, value) => sum + value, 0)
+        : null;
+      const isDeload = isCompletedWorkoutDeload(workout, plans);
+
+      return {
+        completed_at: completedAt,
+        completed_date: completedAt ? completedAt.slice(0, 10) : "",
+        completed_drop_set_count: completedDropSets.length,
+        completed_set_count: completedSets.length,
+        completed_working_set_count: completedWorkingSets.length,
+        duration_minutes: roundAiMetric(durationSeconds / 60, 1),
+        duration_seconds: durationSeconds,
+        exercise_count: completedExercises.length,
+        group_key: getWorkoutDurationGroupKey(workout, isDeload),
+        is_deload: isDeload,
+        plan_id: workout.planId || workout.plan_id || "",
+        plan_week: Number(workout.planWeek || workout.plan_week) || null,
+        plan_workout_id:
+          workout.planWorkoutId || workout.plan_workout_id || "",
+        prescribed_rest_seconds_sum: prescribedRestSeconds,
+        workout_id: workout.id || workout.source_key || "",
+        workout_name: getWorkoutName(workout),
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        Date.parse(right.completed_at || 0) - Date.parse(left.completed_at || 0)
+    )
+    .slice(0, limit);
+}
+
+function getMedianMetric(rows, field) {
+  const values = rows
+    .map((row) => Number(row[field]))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  const middle = Math.floor(values.length / 2);
+
+  return values.length % 2
+    ? values[middle]
+    : (values[middle - 1] + values[middle]) / 2;
+}
+
+function summarizeWorkoutDurationRows(rows) {
+  if (!rows.length) {
+    return null;
+  }
+
+  const totalDuration = rows.reduce(
+    (sum, row) => sum + row.duration_minutes,
+    0
+  );
+
+  return {
+    averageMinutes: roundAiMetric(totalDuration / rows.length, 1),
+    latestDate: rows[0]?.completed_date || null,
+    maximumMinutes: Math.max(...rows.map((row) => row.duration_minutes)),
+    medianCompletedDropSets: roundAiMetric(
+      getMedianMetric(rows, "completed_drop_set_count"),
+      1
+    ),
+    medianCompletedWorkingSets: roundAiMetric(
+      getMedianMetric(rows, "completed_working_set_count"),
+      1
+    ),
+    medianExerciseCount: roundAiMetric(
+      getMedianMetric(rows, "exercise_count"),
+      1
+    ),
+    medianMinutes: roundAiMetric(getMedianMetric(rows, "duration_minutes"), 1),
+    minimumMinutes: Math.min(...rows.map((row) => row.duration_minutes)),
+    recentObservations: rows.slice(0, 8).map((row) => ({
+      completedDropSets: row.completed_drop_set_count,
+      completedWorkingSets: row.completed_working_set_count,
+      date: row.completed_date,
+      durationMinutes: row.duration_minutes,
+      exerciseCount: row.exercise_count,
+    })),
+    sampleCount: rows.length,
+  };
+}
+
+function buildWorkoutDurationSummary(completedWorkoutRows = []) {
+  if (!completedWorkoutRows.length) {
+    return {
+      available: false,
+      byWorkout: [],
+      note: "No completed workouts with persisted duration were available.",
+      overallRecent: null,
+    };
+  }
+
+  const groups = new Map();
+
+  completedWorkoutRows.forEach((row) => {
+    const current = groups.get(row.group_key) || [];
+
+    current.push(row);
+    groups.set(row.group_key, current);
+  });
+
+  const byWorkout = [...groups.entries()]
+    .map(([groupKey, rows]) => ({
+      ...summarizeWorkoutDurationRows(rows),
+      groupKey,
+      isDeload: rows[0].is_deload,
+      planWorkoutId: rows[0].plan_workout_id || null,
+      workoutName: rows[0].workout_name,
+    }))
+    .sort(
+      (left, right) =>
+        String(right.latestDate).localeCompare(String(left.latestDate)) ||
+        right.sampleCount - left.sampleCount
+    )
+    .slice(0, 30);
+
+  return {
+    available: true,
+    byWorkout,
+    deloadRecent: summarizeWorkoutDurationRows(
+      completedWorkoutRows.filter((row) => row.is_deload)
+    ),
+    note:
+      "Durations are active workout-timer time and exclude pauses. Group summaries use plan-workout identity when available, otherwise normalized workout name. Use medians and recent observations with exercise and completed-set counts; do not infer exact transition or actual-rest time.",
+    normalTrainingRecent: summarizeWorkoutDurationRows(
+      completedWorkoutRows.filter((row) => !row.is_deload)
+    ),
+    overallRecent: summarizeWorkoutDurationRows(completedWorkoutRows),
+    rawWorkoutLimit: 90,
+  };
+}
+
 function firstExportValue(...values) {
   const value = values.find((item) => item !== undefined && item !== null && item !== "");
 
@@ -2663,6 +2885,8 @@ function buildAiPlanDraftInstructions() {
       'Respect `planningRequest.dropSets.mode`. For `avoid`, prescribe zero drop sets. For `preferred`, favor drop sets on suitable cable, machine, or isolation exercises when they support the plan, while allowing fatigue, recovery, technique, and other constraints to override the preference. Avoid them on benchmarks, highly technical compounds, and movements where fatigue creates a meaningful safety concern unless specifically justified. For `aiDecides`, explicitly decide whether and where drop sets improve the plan. Encode the default count as exercise `dropSets` and week-specific counts as `weeklyPrescriptions[].dropSets`, using integers from 0 through 3. An omitted weekly `dropSets` inherits the exercise-level value; an explicit 0 disables drop sets for that week. The count is the number of additional sequential load-reduction segments after the final working set. Unless specifically justified, prescribe 0 during deload weeks rather than inheriting a nonzero default. Each segment prescribes AMRAP at RIR 0 with no rest before the next segment and does not produce an e1RM. The app initially targets 80% of the preceding segment\'s actual weight, rounded to the exercise\'s supported weight increment; the athlete may edit the target or actual weight.',
     dropSetAnalysisConvention:
       'Completed drop-set rows have `is_drop_set: true` and a one-based `drop_set_index`. Exclude them from benchmark e1RM trends and ordinary working-set performance-drop-off calculations. Treat working-set and drop-set volume separately, and do not assume one drop-set segment is equivalent to one conventional working set. `activePlanPrescriptionRows[].prescribed_drop_sets` supplies the prescribed count for adherence comparisons.',
+    workoutDurationAnalysisConvention:
+      '`completedWorkoutRows` contains recent workout-level actual durations and workload counts. `workoutDurationSummary` provides overall, normal-training, deload, and stable per-workout summaries. Prefer medians and recent observations over a single lifetime average, compare workouts with similar exercise and completed-set counts, and treat unusually long or short sessions as possible outliers. Durations are active workout-timer time excluding pauses; exact exercise-transition and actual-rest durations are not available. Use this evidence with `planningRequest.workoutDuration` constraints to estimate and control the duration of each proposed workout.',
     requiredShape: {
       analysis: {
         rationale:
@@ -3149,6 +3373,13 @@ function buildAiPlanContext({
     exerciseLibrary,
     history,
   });
+  const completedWorkoutRows = buildCompletedWorkoutRows({
+    history,
+    plans,
+  });
+  const workoutDurationSummary = buildWorkoutDurationSummary(
+    completedWorkoutRows
+  );
   const bodyWeightTrend = buildBodyWeightTrendContext(bodyWeightEntries, plans);
   const nutritionTrend = buildNutritionTrendContext({
     calorieGoal,
@@ -3209,12 +3440,13 @@ function buildAiPlanContext({
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as primary derived metrics before falling back to raw completedSetRows. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, blockOutcomeSummaries, and workoutDurationSummary as primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows. Analyze workout durations according to draftInstructions.workoutDurationAnalysisConvention, and use them with planningRequest.workoutDuration to estimate each proposed workout independently and keep it within the requested range. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
       benchmarkRepRangeTrendRows: benchmarkRepRangeTrends.length,
       blockOutcomeRows: blockOutcomeSummaries.length,
+      completedWorkoutRows: completedWorkoutRows.length,
       completedSetRows: historyRows.length,
       nutritionDays:
         nutritionTrend.available ? nutritionTrend.goalAdherence.daysWithEntries : 0,
@@ -3242,6 +3474,7 @@ function buildAiPlanContext({
     performanceDropOffSummaries,
     prescriptionAdherenceSummaries,
     blockOutcomeSummaries,
+    workoutDurationSummary,
     trainingProfile: buildTrainingProfileContext(exerciseLibrary),
     activeExercises,
     previousPlanAIContext,
@@ -3254,6 +3487,7 @@ function buildAiPlanContext({
     },
     recentPlanExposure,
     activePlanPrescriptionRows: planRows,
+    completedWorkoutRows,
     completedSetRows: historyRows,
   };
 }
@@ -3271,7 +3505,8 @@ function getAiPlanPrompt(context) {
     "Follow planningGuidancePrecedence when fields conflict. Treat explicit user constraints as requirements and AI-decides fields as permission to use your judgment.",
     "Prescribe exercises only from activeExercises, matching both name and equipment, as described in draftInstructions.exerciseSelectionConvention. Exercises found only in history or previous plans are evidence, not available exercise choices.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
-    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, and blockOutcomeSummaries as the primary derived metrics before falling back to raw completedSetRows.",
+    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, blockOutcomeSummaries, and workoutDurationSummary as the primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows.",
+    "Analyze actual durations according to draftInstructions.workoutDurationAnalysisConvention. When planningRequest.workoutDuration is present, estimate each proposed workout independently and adjust exercise count, working sets, rest intervals, supersets, and suitable drop sets to keep it within the requested range.",
     "Within benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current strength progress.",
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",

@@ -173,6 +173,8 @@ Workout duration is a valuable planning constraint. A target and hard maximum ma
 
 The model can estimate duration using exercises, sets, reps, and rest intervals, although warm-ups and exercise transitions make the result approximate. The prompt could require an estimated duration for each workout, but storing or displaying that estimate may require an import-schema addition.
 
+Completed workout duration is persisted as active workout-timer time, excluding pauses. The AI context exposes up to 90 recent workout-level observations in `completedWorkoutRows` and provides `workoutDurationSummary` with overall, normal-training, deload, and stable per-workout medians and averages. Each observation includes exercise, working-set, and drop-set counts so the model can compare proposed workouts with historically similar workloads rather than relying on one overall average. Exact exercise-transition and actual-rest durations are not currently persisted, so estimates remain empirical.
+
 ### Rest time
 
 Rest guidance fits the existing feature particularly well because the draft schema already supports exercise- and set-level `restSeconds`. Possible modes are:
