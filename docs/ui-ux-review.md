@@ -61,6 +61,20 @@ Current content combines branding, synchronization status, calendar, plans, work
 
 This deserves the highest design priority.
 
+#### Progress
+
+Initial session-header increment implemented and build-validated; longer real-world testing remains in progress.
+
+- [x] Show current exercise position and completed-set progress.
+- [x] Distinguish the previewed exercise from the active workout position.
+- [x] Keep long workout and exercise names clear of adjacent controls, with truncation where needed.
+- [x] Increase the workout-controls touch target to 44×44px.
+- [x] Cancel the rest timer, native notification, and Live Activity when a workout is ended without saving.
+- [ ] Continue real-world validation of the updated header, exercise preview behavior, timer cleanup, supersets, and workout completion.
+- [ ] Review remaining active-session tap targets and set-entry ergonomics.
+- [ ] Refine the expanded rest-timer experience and reduce competition among workout utilities.
+- [ ] Improve incomplete-set guidance before finishing a workout.
+
 - Make the active exercise and next incomplete set visually dominant.
 - Keep weight, reps, RIR, and completion controls within thumb reach.
 - Enlarge tap targets; several controls appear optimized around 34px, while approximately 44px is a safer mobile baseline.

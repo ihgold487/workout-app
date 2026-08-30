@@ -4780,6 +4780,13 @@ export default function SessionView({
     setSelectedTemplateId(null);
   }
 
+  function endWorkoutWithoutSaving() {
+    resetRestTimer();
+    setConfirmExitWorkout(false);
+    setSelectedSessionId(null);
+    setSelectedTemplateId(null);
+  }
+
   function applyPlanPrescriptionUpdates(exercise) {
     if (!session.planId || !Array.isArray(exercise.weeklyPrescriptions)) {
       return exercise;
@@ -4945,6 +4952,18 @@ export default function SessionView({
     session.exercises.every((exercise) =>
       exercise.sets.every((set) => set.completed)
     );
+  const totalWorkoutSets = session.exercises.reduce(
+    (total, exercise) => total + exercise.sets.length,
+    0
+  );
+  const completedWorkoutSets = session.exercises.reduce(
+    (total, exercise) =>
+      total + exercise.sets.filter((set) => set.completed).length,
+    0
+  );
+  const workoutProgressPercent = totalWorkoutSets
+    ? Math.round((completedWorkoutSets / totalWorkoutSets) * 100)
+    : 0;
 
   const currentExercise =
     session.exercises.find((exercise) => exercise.id === activeExerciseId) ||
@@ -5073,14 +5092,11 @@ export default function SessionView({
       return;
     }
 
-    if (canActivateSet(exercise.id, nextSet.id)) {
-      lockSupersetOrderForSet(exercise.id, nextSet.id);
-    }
-
-    setActiveWorkoutFocus({
-      exerciseId: exercise.id,
-      setId: nextSet.id,
-    });
+    setActiveExerciseId(exercise.id);
+    updateSession((currentSession) => ({
+      ...currentSession,
+      activeExerciseId: exercise.id,
+    }));
   }
 
   function renderLatestSetHistory(exercise) {
@@ -6025,13 +6041,7 @@ export default function SessionView({
                 <IconButton
                   label="End workout"
                   tone="danger"
-                  onClick={() => {
-                    setConfirmExitWorkout(false);
-
-                    setSelectedSessionId(null);
-
-                    setSelectedTemplateId(null);
-                  }}
+                  onClick={endWorkoutWithoutSaving}
                 >
                   <Check size={18} />
                 </IconButton>
@@ -6846,8 +6856,9 @@ export default function SessionView({
               alignItems: "center",
               display: "grid",
               gap: "6px",
-              gridTemplateColumns: "1fr minmax(0, auto) 38px 1fr",
+              gridTemplateColumns: "32px minmax(0, 1fr) 44px",
               justifyItems: "center",
+              marginInline: "-8px",
             }}
           >
             <span />
@@ -6872,24 +6883,31 @@ export default function SessionView({
                 gap: "6px",
                 justifyContent: "center",
                 lineHeight: 1.15,
+                maxWidth: "100%",
                 minWidth: 0,
                 overflow: "hidden",
-                padding: session.workoutTimerPaused ? "5px 10px" : 0,
+                padding: session.workoutTimerPaused ? "5px 10px" : "0 6px",
                 textAlign: "center",
                 textOverflow: "ellipsis",
                 transition:
                   "background 160ms ease, border-color 160ms ease, color 160ms ease",
                 whiteSpace: "nowrap",
+                width: "100%",
               }}
+              title={session.templateName}
             >
               {session.workoutTimerPaused && (
                 <Pause aria-hidden="true" size={16} />
               )}
               <span
                 style={{
+                  display: "block",
+                  maxWidth: "100%",
                   minWidth: 0,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  width: "100%",
                 }}
               >
                 {session.templateName}
@@ -6907,15 +6925,66 @@ export default function SessionView({
                 borderRadius: "999px",
                 color: "var(--text)",
                 display: "inline-flex",
-                height: "38px",
+                height: "44px",
                 justifyContent: "center",
                 padding: 0,
-                width: "38px",
+                width: "44px",
               }}
             >
               <SlidersHorizontal size={21} />
             </button>
-            <span />
+          </div>
+
+          <div
+            aria-label={`${completedWorkoutSets} of ${totalWorkoutSets} workout sets complete`}
+            style={{
+              display: "grid",
+              gap: "6px",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                color: "var(--text-muted)",
+                display: "flex",
+                fontSize: "12px",
+                fontWeight: 700,
+                justifyContent: "space-between",
+              }}
+            >
+              <span>
+                {currentExerciseIndex >= 0
+                  ? `Exercise ${currentExerciseIndex + 1} of ${session.exercises.length}`
+                  : `${session.exercises.length} exercises`}
+              </span>
+              <span>
+                {completedWorkoutSets} of {totalWorkoutSets} sets
+              </span>
+            </div>
+            <div
+              aria-valuemax={totalWorkoutSets}
+              aria-valuemin={0}
+              aria-valuenow={completedWorkoutSets}
+              role="progressbar"
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "999px",
+                height: "8px",
+                overflow: "hidden",
+              }}
+            >
+              <span
+                style={{
+                  background: allSetsCompleted ? "#16a34a" : "var(--accent)",
+                  borderRadius: "inherit",
+                  display: "block",
+                  height: "100%",
+                  transition: "width 220ms ease",
+                  width: `${workoutProgressPercent}%`,
+                }}
+              />
+            </div>
           </div>
 
           <div
@@ -6964,6 +7033,10 @@ export default function SessionView({
                     {group.exercises.map((exercise) => {
                       const exerciseDetail = getExerciseDetailRecord(exercise);
                       const isCurrent = currentExercise?.id === exercise.id;
+                      const isWorkoutCurrent = idsMatch(
+                        activeSet?.exerciseId,
+                        exercise.id
+                      );
                       const isBenchmark = isExerciseBenchmark(exerciseDetail);
                       const isExerciseComplete =
                         exercise.sets.length > 0 &&
@@ -6978,7 +7051,9 @@ export default function SessionView({
                             <button
                               {...attributes}
                               {...listeners}
-                              aria-label={`Show ${exercise.name}`}
+                              aria-label={`Show ${exercise.name}${
+                                isWorkoutCurrent ? ", current workout position" : ""
+                              }`}
                               onContextMenu={(event) => event.preventDefault()}
                               onClick={() => activateExerciseFromThumbnail(exercise)}
                               ref={(element) => {
@@ -7064,6 +7139,20 @@ export default function SessionView({
                                 >
                                   <Check size={11} strokeWidth={3} />
                                 </span>
+                              ) : null}
+                              {isWorkoutCurrent && !isCurrent ? (
+                                <span
+                                  aria-hidden="true"
+                                  style={{
+                                    background: "var(--accent)",
+                                    borderRadius: "999px",
+                                    bottom: "-5px",
+                                    height: "3px",
+                                    left: "8px",
+                                    position: "absolute",
+                                    right: "8px",
+                                  }}
+                                />
                               ) : null}
                             </button>
                           )}
@@ -7538,12 +7627,21 @@ export default function SessionView({
                   >
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
                         alignItems: "center",
+                        display: "grid",
+                        gap: "8px",
+                        gridTemplateColumns: "minmax(0, 1fr) auto",
                       }}
                     >
-                      <div>
+                      <div
+                        style={{
+                          alignItems: "center",
+                          display: "grid",
+                          gap: "6px",
+                          gridTemplateColumns: "34px minmax(0, 1fr)",
+                          minWidth: 0,
+                        }}
+                      >
                         <IconButton
                           disabled={session.workoutTimerPaused}
                           label="Exercise notes"
@@ -7551,8 +7649,8 @@ export default function SessionView({
                           onClick={() => openExerciseNoteEditor(exercise)}
                         >
                           <NotebookPen size={17} />
-                        </IconButton>{" "}
-                        <strong>
+                        </IconButton>
+                        <strong style={{ minWidth: 0 }}>
                           <button
                             type="button"
                             onClick={() =>
@@ -7565,16 +7663,17 @@ export default function SessionView({
                               border: 0,
                               color: "var(--text)",
                               cursor: "pointer",
-                              display: "inline-block",
+                              display: "block",
                               font: "inherit",
-                              maxWidth: "180px",
+                              maxWidth: "100%",
+                              overflow: "hidden",
                               padding: 0,
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                               lineHeight: "1.05",
                               fontSize: "14px",
                               textAlign: "left",
-                              verticalAlign: "middle",
+                              width: "100%",
                             }}
                           >
                             {`${exercise.name}${
@@ -7586,7 +7685,7 @@ export default function SessionView({
                         </strong>
                       </div>
 
-                      <div>
+                      <div style={{ display: "flex", gap: "4px" }}>
                         <IconButton
                           label="Replace exercise"
                           size={34}
@@ -7616,7 +7715,7 @@ export default function SessionView({
                           }}
                         >
                           <RefreshCw size={17} />
-                        </IconButton>{" "}
+                        </IconButton>
                         <IconButton
                           label="Delete exercise"
                           size={34}
