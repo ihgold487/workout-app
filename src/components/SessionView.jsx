@@ -487,7 +487,6 @@ export default function SessionView({
   const exerciseThumbnailRefs = useRef({});
   const addExerciseButtonRef = useRef(null);
   const returnToCurrentSetScrollTimerRef = useRef(null);
-  const previousExercisePanelIdRef = useRef(null);
   const [exercisePanelTransition, setExercisePanelTransition] = useState({
     direction: "next",
     sequence: 0,
@@ -2041,10 +2040,37 @@ export default function SessionView({
     [session.id, setSessions]
   );
 
+  function prepareExercisePanelTransition(nextExerciseId) {
+    if (
+      !nextExerciseId ||
+      !activeExerciseId ||
+      idsMatch(nextExerciseId, activeExerciseId)
+    ) {
+      return;
+    }
+
+    const previousIndex = session.exercises.findIndex((exercise) =>
+      idsMatch(exercise.id, activeExerciseId)
+    );
+    const nextIndex = session.exercises.findIndex((exercise) =>
+      idsMatch(exercise.id, nextExerciseId)
+    );
+    const direction =
+      previousIndex >= 0 && nextIndex >= 0 && nextIndex < previousIndex
+        ? "previous"
+        : "next";
+
+    setExercisePanelTransition((current) => ({
+      direction,
+      sequence: current.sequence + 1,
+    }));
+  }
+
   function setActiveWorkoutFocus(nextActiveSet, nextActiveExerciseId) {
     const resolvedExerciseId =
       nextActiveExerciseId || nextActiveSet?.exerciseId || null;
 
+    prepareExercisePanelTransition(resolvedExerciseId);
     setActiveSet(nextActiveSet || null);
     setActiveExerciseId(resolvedExerciseId);
     setTargetSuggestionPreview(null);
@@ -5110,34 +5136,6 @@ export default function SessionView({
     : [];
   const shouldAnimateExercisePanel = exercisePanelTransition.sequence > 0;
 
-  useLayoutEffect(() => {
-    const currentExerciseId = currentExercise?.id || null;
-    const previousExerciseId = previousExercisePanelIdRef.current;
-
-    if (!currentExerciseId || previousExerciseId === currentExerciseId) {
-      return;
-    }
-
-    if (!previousExerciseId) {
-      previousExercisePanelIdRef.current = currentExerciseId;
-      return;
-    }
-
-    const previousExerciseIndex = session.exercises.findIndex(
-      (exercise) => exercise.id === previousExerciseId
-    );
-    const nextDirection =
-      previousExerciseIndex >= 0 && currentExerciseIndex < previousExerciseIndex
-        ? "previous"
-        : "next";
-
-    previousExercisePanelIdRef.current = currentExerciseId;
-    setExercisePanelTransition((current) => ({
-      direction: nextDirection,
-      sequence: current.sequence + 1,
-    }));
-  }, [currentExercise?.id, currentExerciseIndex, session.exercises]);
-
   useEffect(() => {
     const strip = exerciseStripRef.current;
     const currentExerciseId = currentExercise?.id || null;
@@ -5207,6 +5205,7 @@ export default function SessionView({
       return;
     }
 
+    prepareExercisePanelTransition(exercise.id);
     setActiveExerciseId(exercise.id);
     setTargetSuggestionPreview(null);
     updateSession((currentSession) => ({
@@ -5240,7 +5239,7 @@ export default function SessionView({
         behavior: "smooth",
         block: "center",
       });
-    }, 460);
+    }, 280);
   }
 
   function renderLatestSetHistory(exercise) {
@@ -6039,9 +6038,9 @@ export default function SessionView({
           }
 
           .session-current-exercise-panel {
-            animation-duration: 440ms;
+            animation-duration: 260ms;
             animation-fill-mode: both;
-            animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+            animation-timing-function: cubic-bezier(.2, .8, .2, 1);
             will-change: opacity, transform;
           }
 
@@ -6068,8 +6067,8 @@ export default function SessionView({
 
           @keyframes sessionExerciseSlideNext {
             from {
-              opacity: 0.25;
-              transform: translateX(64px);
+              opacity: 0.82;
+              transform: translateX(22px);
             }
 
             to {
@@ -6080,8 +6079,8 @@ export default function SessionView({
 
           @keyframes sessionExerciseSlidePrevious {
             from {
-              opacity: 0.25;
-              transform: translateX(-64px);
+              opacity: 0.82;
+              transform: translateX(-22px);
             }
 
             to {
