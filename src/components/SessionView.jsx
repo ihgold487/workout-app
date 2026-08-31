@@ -67,8 +67,10 @@ import {
 } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import {
+  recommendNextSetTargetAfterPerformance,
   recommendSetTarget,
   recommendTargetPrescription,
+  resolvePlanGoalMode,
 } from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
@@ -744,9 +746,11 @@ export default function SessionView({
       return "maintenance";
     }
 
-    const goal = getLinkedPlan()?.goal;
+    const linkedPlan = getLinkedPlan();
 
-    return goal === "progress" ? "progress" : "maintenance";
+    return linkedPlan
+      ? resolvePlanGoalMode(linkedPlan.goal)
+      : "maintenance";
   }
 
   function getPlanTargetValues() {
@@ -1485,24 +1489,15 @@ export default function SessionView({
       return false;
     }
 
-    const maximumReps = parseSessionNumber(prescription.reps);
-    const minimumReps = Math.max(
-      1,
-      Math.min(
-        maximumReps,
-        parseSessionNumber(prescription.minimumReps) ??
-          maximumReps - SAME_WEIGHT_TARGET_REP_WINDOW
-      )
-    );
     const actualReps = parseSessionNumber(set.actualReps);
+    const targetReps = parseSessionNumber(prescription.reps);
 
     return (
       !isBlankValue(set.actualWeight) &&
       !isBlankValue(set.actualReps) &&
       !isBlankValue(set.actualRir) &&
       valuesMatch(set.actualWeight, prescription.weight) &&
-      actualReps >= minimumReps &&
-      actualReps <= maximumReps &&
+      actualReps === targetReps &&
       valuesMatch(set.actualRir, prescription.rir)
     );
   }
@@ -4356,60 +4351,27 @@ export default function SessionView({
     );
     const actualRirNumber = parseSessionNumber(actualRir);
     const targetRirNumber = parseSessionNumber(targetRir);
-    const effortExceededPrescription =
-      actualRirNumber != null &&
-      targetRirNumber != null &&
-      actualRirNumber < targetRirNumber;
-    const rangeMissed =
-      actualReps != null &&
-      minimumAcceptableReps != null &&
-      actualReps < minimumAcceptableReps;
-    const rangeMetBelowUpperTarget =
-      actualReps != null &&
-      minimumAcceptableReps != null &&
-      prescribedReps != null &&
-      actualReps >= minimumAcceptableReps &&
-      actualReps < prescribedReps;
+    const performanceAdjustment = recommendNextSetTargetAfterPerformance({
+      actualReps,
+      actualRir: actualRirNumber,
+      actualWeight,
+      bodyWeight: sessionBodyWeight,
+      exercise: calculationExercise,
+      minimumReps: minimumAcceptableReps,
+      normalizeWeight: (weight) =>
+        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+      prescribedReps,
+      targetRir: targetRirNumber,
+      weightIncrement: (weight) =>
+        getExerciseWeightIncrement(calculationExercise, undefined, weight),
+    });
 
-    if (rangeMissed || effortExceededPrescription) {
-      const rawTargetWeight =
-        actualE1RM == null || prescribedReps == null
-          ? null
-          : estimateWeightForE1RM(
-              actualE1RM,
-              prescribedReps,
-              targetRirNumber || 0,
-              {
-                bodyWeight: sessionBodyWeight,
-                exercise: calculationExercise,
-              }
-            );
-      const reducedWeight =
-        rawTargetWeight == null
-          ? ""
-          : roundWeightToIncrement(
-              Math.max(0, rawTargetWeight),
-              getExerciseWeightIncrement(calculationExercise)
-            );
-
+    if (performanceAdjustment) {
       return {
         targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
-        targetReps: getSetTargetReps(nextSet, String(prescribedReps ?? "")),
-        targetRir: targetRir || getSetTargetRir(nextSet),
-        targetWeight:
-          reducedWeight != null && reducedWeight !== ""
-            ? String(reducedWeight)
-            : nextSet.targetWeight,
-      };
-    }
-
-    if (rangeMetBelowUpperTarget) {
-      return {
-        targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
-        targetWeight:
-          currentSet.actualWeight || currentSet.targetWeight || nextSet.targetWeight,
-        targetReps: getSetTargetReps(nextSet, getSetTargetReps(currentSet)),
-        targetRir: getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet)),
+        targetReps: String(performanceAdjustment.reps),
+        targetRir: String(performanceAdjustment.rir),
+        targetWeight: String(performanceAdjustment.weight),
       };
     }
 

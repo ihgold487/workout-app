@@ -2899,7 +2899,8 @@ function buildAiPlanDraftInstructions() {
         daysPerWeek: "number",
         deloadWeeks:
           "number; deload weeks after the training block. Use 0 when no deload is planned.",
-        goal: "string",
+        goal:
+          '"progress" or "maintain"; use "progress" for ordinary strength or hypertrophy progression blocks',
         name: "string",
         trainingWeeks:
           "number; count of normal training weeks, not including deload weeks",
@@ -3805,6 +3806,10 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
       workoutTypeLabel: workoutDraft.workoutTypeLabel || workoutDraft.workoutType || null,
     };
   });
+  const importedGoal = String(draft.plan?.goal || "").trim();
+  const normalizedGoal = /maintain|maintenance/i.test(importedGoal)
+    ? "maintain"
+    : "progress";
   const plan = {
     config: {
       deload:
@@ -3822,7 +3827,10 @@ function buildImportedAiPlanDraft({ draft, exerciseLibrary = [] }) {
     currentWeek: 1,
     daysPerWeek,
     durationWeeks,
-    goal: draft.plan?.goal || "Hybrid strength and hypertrophy",
+    goal: normalizedGoal,
+    ...(importedGoal && !/^(progress|maintain|maintenance)$/i.test(importedGoal)
+      ? { goalDescription: importedGoal }
+      : {}),
     id: planId,
     aiAnalysis,
     name: planName,

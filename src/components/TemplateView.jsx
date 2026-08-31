@@ -36,6 +36,7 @@ import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import {
   recommendSetTarget,
   recommendTargetPrescription,
+  resolvePlanGoalMode,
 } from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
@@ -411,7 +412,7 @@ export default function TemplateView({
       return "maintenance";
     }
 
-    return plan?.goal === "progress" ? "progress" : "maintenance";
+    return plan ? resolvePlanGoalMode(plan.goal) : "maintenance";
   }
 
   function isDeloadPlanWorkout(plan) {

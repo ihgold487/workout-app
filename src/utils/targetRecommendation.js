@@ -7,6 +7,20 @@ export const GOAL_MODE_PROGRESSIONS = {
   progress: 0.02,
 };
 
+export function resolvePlanGoalMode(goal) {
+  const normalizedGoal = String(goal || "").trim().toLowerCase();
+
+  if (
+    normalizedGoal === "maintain" ||
+    normalizedGoal === "maintenance" ||
+    normalizedGoal.includes("maintain")
+  ) {
+    return "maintenance";
+  }
+
+  return "progress";
+}
+
 function toNumber(value) {
   if (value === "" || value == null) {
     return null;
@@ -506,6 +520,122 @@ export function recommendTargetPrescription({
     recommendation,
     targetE1RM,
   };
+}
+
+export function recommendNextSetTargetAfterPerformance({
+  bodyWeight,
+  exercise,
+  minimumReps,
+  normalizeWeight,
+  actualReps,
+  actualRir,
+  actualWeight,
+  prescribedReps,
+  targetRir,
+  weightIncrement = 2.5,
+}) {
+  const weight = toNumber(actualWeight);
+  const reps = toNumber(actualReps);
+  const rir = toNumber(actualRir);
+  const prescribed = toNumber(prescribedReps);
+  const prescribedRir = toNumber(targetRir) ?? 0;
+
+  if (weight == null || reps == null || prescribed == null) {
+    return null;
+  }
+
+  const minimum = Math.max(
+    1,
+    Math.min(prescribed, toNumber(minimumReps) ?? prescribed - 2)
+  );
+  const actualE1RM = calculateE1RM(weight, reps, rir ?? 0, null, null, null, {
+    bodyWeight,
+    exercise,
+  });
+  const effortExceeded = rir != null && rir < prescribedRir;
+  const rangeMissed = reps < minimum;
+
+  if (!rangeMissed && !effortExceeded && reps < prescribed) {
+    return {
+      reason: "repeat-achieved-range",
+      reps,
+      rir: prescribedRir,
+      weight,
+    };
+  }
+
+  if (!rangeMissed && !effortExceeded) {
+    return null;
+  }
+
+  if (actualE1RM != null) {
+    const sameWeightCandidates = [];
+
+    for (
+      let candidateReps = Math.round(minimum);
+      candidateReps <= Math.round(prescribed);
+      candidateReps += 1
+    ) {
+      const candidateE1RM = calculateE1RM(
+        weight,
+        candidateReps,
+        prescribedRir,
+        null,
+        null,
+        null,
+        { bodyWeight, exercise }
+      );
+
+      if (candidateE1RM != null && candidateE1RM <= actualE1RM + 0.0001) {
+        sameWeightCandidates.push({
+          e1rm: candidateE1RM,
+          reps: candidateReps,
+        });
+      }
+    }
+
+    const sameWeightTarget = sameWeightCandidates.sort(
+      (a, b) =>
+        Math.abs(a.e1rm - actualE1RM) - Math.abs(b.e1rm - actualE1RM) ||
+        b.reps - a.reps
+    )[0];
+
+    if (sameWeightTarget) {
+      return {
+        reason: "same-weight-fatigue-adjustment",
+        reps: sameWeightTarget.reps,
+        rir: prescribedRir,
+        weight,
+      };
+    }
+
+    const rawWeight = estimateWeightForE1RM(
+      actualE1RM,
+      prescribed,
+      prescribedRir,
+      { bodyWeight, exercise }
+    );
+    const increment = resolveWeightIncrement(weightIncrement, rawWeight);
+    const roundedWeight = roundWeightToIncrement(
+      Math.max(0, rawWeight ?? 0),
+      increment
+    );
+    const resolvedWeight =
+      typeof normalizeWeight === "function"
+        ? normalizeWeight(roundedWeight)
+        : roundedWeight;
+
+    if (Number.isFinite(resolvedWeight)) {
+      return {
+        reason: "reduced-weight-fatigue-adjustment",
+        reps: prescribed,
+        rir: prescribedRir,
+        weight: resolvedWeight,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function recommendSetTarget({
