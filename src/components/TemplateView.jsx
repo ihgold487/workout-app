@@ -290,6 +290,7 @@ export default function TemplateView({
   const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
   const [confirmPreviousWeekIncomplete, setConfirmPreviousWeekIncomplete] =
     useState(false);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const templateBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
@@ -1068,8 +1069,13 @@ export default function TemplateView({
     return getLatestHistoryPerformance(templateExercise)?.exercise;
   }
 
-  function getActualDefaultsForSet(templateExercise, setIndex, targetSet) {
-    const historySet = getLatestHistoryExercise(templateExercise)?.sets?.[setIndex];
+  function getActualDefaultsForSet(
+    templateExercise,
+    setIndex,
+    targetSet,
+    latestHistoryExercise = getLatestHistoryExercise(templateExercise)
+  ) {
+    const historySet = latestHistoryExercise?.sets?.[setIndex];
 
     if (historySet) {
       return {
@@ -1099,6 +1105,7 @@ export default function TemplateView({
     setIndex,
     targetReps,
     targetRir,
+    latestPerformance = getLatestHistoryPerformance(exercise),
   }) {
     const recommendationExercise = {
       ...(libraryExercise || {}),
@@ -1110,7 +1117,6 @@ export default function TemplateView({
     const isDeload = isDeloadPlanWorkout(plan);
 
     if (isDeload || (getGoalMode(plan) === "progress" && setIndex === 0)) {
-      const latestPerformance = getLatestHistoryPerformance(exercise);
       const latestHistoryExercise = latestPerformance?.exercise;
       const historicalBodyWeight = getLatestBodyWeightForDate(
         bodyWeightEntries,
@@ -1217,7 +1223,7 @@ export default function TemplateView({
   };
 
   function startWorkout() {
-    if (!canStartWorkout) {
+    if (!canStartWorkout || isStartingWorkout) {
       return;
     }
 
@@ -1231,7 +1237,18 @@ export default function TemplateView({
       return;
     }
 
-    startWorkoutSession(plan);
+    beginStartWorkout(plan);
+  }
+
+  function beginStartWorkout(plan) {
+    if (isStartingWorkout) {
+      return;
+    }
+
+    setIsStartingWorkout(true);
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => startWorkoutSession(plan), 0);
+    });
   }
 
   function startWorkoutSession(
@@ -1258,6 +1275,8 @@ export default function TemplateView({
         const libraryExercise = exerciseLibrary.find(
           (ex) => ex.id === exercise.exerciseId
         );
+        const latestPerformance = getLatestHistoryPerformance(exercise);
+        const latestHistoryExercise = latestPerformance?.exercise;
 
         return {
           ...exercise,
@@ -1286,6 +1305,7 @@ export default function TemplateView({
                 setIndex,
                 targetReps: plannedPrescription.reps,
                 targetRir: plannedPrescription.rir,
+                latestPerformance,
               });
 
               const targetSet = {
@@ -1314,7 +1334,8 @@ export default function TemplateView({
               const actualDefaults = getActualDefaultsForSet(
                 exercise,
                 setIndex,
-                targetSet
+                targetSet,
+                latestHistoryExercise
               );
 
               return {
@@ -1697,7 +1718,8 @@ export default function TemplateView({
         >
           {!isEditMode && (
             <button
-              disabled={!canStartWorkout}
+              aria-busy={isStartingWorkout}
+              disabled={!canStartWorkout || isStartingWorkout}
               onClick={startWorkout}
               style={{
                 alignItems: "center",
@@ -1707,7 +1729,7 @@ export default function TemplateView({
                 minHeight: "34px",
               }}
             >
-              <Play size={16} /> Start
+              <Play size={16} /> {isStartingWorkout ? "Starting…" : "Start"}
             </button>
           )}
           <button
@@ -2575,7 +2597,7 @@ export default function TemplateView({
               <button
                 onClick={() => {
                   setConfirmPreviousWeekIncomplete(false);
-                  startWorkoutSession(linkedPlan);
+                  beginStartWorkout(linkedPlan);
                 }}
                 type="button"
               >

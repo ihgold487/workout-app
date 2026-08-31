@@ -52,6 +52,7 @@ import {
   markStorageVersion,
   saveWorkoutData,
   saveWorkoutDataToIndexedDb,
+  saveWorkoutSessionJournal,
 } from "./storage/workoutStorage";
 import {
   getCurrentSession,
@@ -7638,6 +7639,8 @@ export default function App() {
     }
   }
 
+  const persistedWorkoutDataRef = useRef(null);
+
   useEffect(() => {
     const normalizedPlanData = normalizeStoredPlanWorkoutTypes(plans, templates);
     const data = {
@@ -7651,13 +7654,9 @@ export default function App() {
       templates: normalizedPlanData.templates,
     };
 
-    saveWorkoutData(data, STORAGE_VERSION);
+    persistedWorkoutDataRef.current = data;
 
-    if (indexedDbReady) {
-      saveWorkoutDataToIndexedDb(data, STORAGE_VERSION).catch((error) => {
-        console.error("Failed to save workout data to IndexedDB:", error);
-      });
-    }
+    saveWorkoutData(data, STORAGE_VERSION);
   }, [
     templates,
     plans,
@@ -7667,8 +7666,71 @@ export default function App() {
     exerciseMetadata,
     localOwnerUserId,
     selectedSessionId,
+  ]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    saveWorkoutSessionJournal({
+      ownerUserId: localOwnerUserId,
+      selectedSessionId,
+      sessions,
+    }).catch((error) => {
+      console.error("Failed to journal active workout session:", error);
+    });
+  }, [
+    indexedDbReady,
+    localOwnerUserId,
+    selectedSessionId,
+    sessions,
+  ]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    const data = persistedWorkoutDataRef.current;
+
+    if (!data) {
+      return;
+    }
+
+    saveWorkoutDataToIndexedDb(data, STORAGE_VERSION).catch((error) => {
+      console.error("Failed to save workout data to IndexedDB:", error);
+    });
+  }, [
+    templates,
+    plans,
+    history,
+    exerciseLibrary,
+    exerciseMetadata,
+    localOwnerUserId,
     indexedDbReady,
   ]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return undefined;
+    }
+
+    const checkpointTimer = window.setTimeout(() => {
+      if (!persistedWorkoutDataRef.current) {
+        return;
+      }
+
+      saveWorkoutDataToIndexedDb(
+        persistedWorkoutDataRef.current,
+        STORAGE_VERSION
+      ).catch((error) => {
+        console.error("Failed to checkpoint workout data:", error);
+      });
+    }, 5000);
+
+    return () => window.clearTimeout(checkpointTimer);
+  }, [indexedDbReady, selectedSessionId, sessions]);
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 

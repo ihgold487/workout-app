@@ -388,13 +388,27 @@ export function findLatestExercisePerformance({
   plans = [],
   templateId,
 }) {
+  const matchingExerciseCache = new WeakMap();
+  const deloadStatusCache = new WeakMap();
   const isCurrentSessionHistoryWorkout = (historyWorkout) =>
     String(historyWorkout.id) === String(currentSessionId) ||
     String(historyWorkout.sourceSessionId || "") === String(currentSessionId);
-  const getMatchingHistoryExercise = (historyWorkout) =>
-    historyWorkout?.exercises?.find((historyExercise) =>
+  const getMatchingHistoryExercise = (historyWorkout) => {
+    if (!historyWorkout || typeof historyWorkout !== "object") {
+      return undefined;
+    }
+
+    if (matchingExerciseCache.has(historyWorkout)) {
+      return matchingExerciseCache.get(historyWorkout);
+    }
+
+    const matchingExercise = historyWorkout.exercises?.find((historyExercise) =>
       exercisesMatch(exercise, historyExercise)
     );
+
+    matchingExerciseCache.set(historyWorkout, matchingExercise);
+    return matchingExercise;
+  };
   const allPlans = [plan, ...plans].filter(
     (item, index, items) =>
       item?.id != null &&
@@ -433,11 +447,16 @@ export function findLatestExercisePerformance({
 
   const findForDeloadStatus = (expectedDeload) => {
     const matchesDeloadStatus = (historyWorkout) => {
+      if (deloadStatusCache.has(historyWorkout)) {
+        return deloadStatusCache.get(historyWorkout) === expectedDeload;
+      }
+
       const historyExercise = getMatchingHistoryExercise(historyWorkout);
       const isDeload =
         isHistoryWorkoutDeload(historyWorkout, allPlans) ||
         isHistoryExerciseDeload(historyExercise);
 
+      deloadStatusCache.set(historyWorkout, isDeload);
       return isDeload === expectedDeload;
     };
 

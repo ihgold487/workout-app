@@ -9,6 +9,7 @@ export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
 const STORAGE_VERSION_KEY = "storageVersion";
 const WORKOUT_DATA_RECORD_ID = "current";
+const WORKOUT_SESSION_JOURNAL_ID = "active";
 
 const WORKOUT_DATA_KEYS = {
   exerciseLibrary: "exerciseLibrary",
@@ -206,17 +207,63 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
     return null;
   }
 
-  return normalizeWorkoutData(record.data, {
+  const journal = await db.workoutSessionJournal.get(
+    WORKOUT_SESSION_JOURNAL_ID
+  );
+  const journalIsCurrent =
+    journal &&
+    new Date(journal.updatedAt).getTime() >= new Date(record.updatedAt).getTime() &&
+    (!journal.ownerUserId ||
+      !record.data.ownerUserId ||
+      String(journal.ownerUserId) === String(record.data.ownerUserId));
+  const recoveredData = journalIsCurrent
+    ? {
+        ...record.data,
+        selectedSessionId: journal.selectedSessionId,
+        sessions: journal.sessions,
+      }
+    : record.data;
+
+  return normalizeWorkoutData(recoveredData, {
     seedExercises,
   });
 }
 
 export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
-  await db.appData.put({
-    data: createWorkoutBackup(data).data,
-    id: WORKOUT_DATA_RECORD_ID,
-    schemaVersion: WORKOUT_DATA_SCHEMA_VERSION,
-    storageVersion,
+  const updatedAt = new Date().toISOString();
+
+  await db.transaction("rw", db.appData, db.workoutSessionJournal, async () => {
+    await db.appData.put({
+      data: createWorkoutBackup(data).data,
+      id: WORKOUT_DATA_RECORD_ID,
+      schemaVersion: WORKOUT_DATA_SCHEMA_VERSION,
+      storageVersion,
+      updatedAt,
+    });
+
+    const journal = await db.workoutSessionJournal.get(
+      WORKOUT_SESSION_JOURNAL_ID
+    );
+
+    if (
+      journal &&
+      new Date(journal.updatedAt).getTime() <= new Date(updatedAt).getTime()
+    ) {
+      await db.workoutSessionJournal.delete(WORKOUT_SESSION_JOURNAL_ID);
+    }
+  });
+}
+
+export async function saveWorkoutSessionJournal({
+  ownerUserId,
+  selectedSessionId,
+  sessions,
+}) {
+  await db.workoutSessionJournal.put({
+    id: WORKOUT_SESSION_JOURNAL_ID,
+    ownerUserId: ownerUserId || null,
+    selectedSessionId: selectedSessionId ?? null,
+    sessions: arrayOrEmpty(sessions),
     updatedAt: new Date().toISOString(),
   });
 }

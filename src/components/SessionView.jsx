@@ -4,7 +4,9 @@ import {
   useEffect,
   useCallback,
   useLayoutEffect,
+  useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   MouseSensor,
@@ -599,8 +601,24 @@ export default function SessionView({
     };
   }
 
+  const latestHistoryPerformanceCache = useMemo(() => new Map(), [
+    history,
+    plans,
+    session.exercises,
+    session.id,
+    session.planId,
+    session.planWeek,
+    session.planWorkoutId,
+    session.templateId,
+    templates,
+  ]);
+
   const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
-    return findLatestExercisePerformance({
+    if (latestHistoryPerformanceCache.has(sessionExercise)) {
+      return latestHistoryPerformanceCache.get(sessionExercise);
+    }
+
+    const performance = findLatestExercisePerformance({
       currentSessionId: session.id,
       currentIsDeload: isDeloadPlanWorkout(),
       exercise: sessionExercise,
@@ -612,8 +630,12 @@ export default function SessionView({
       templateId: session.templateId,
       templates,
     });
+
+    latestHistoryPerformanceCache.set(sessionExercise, performance);
+    return performance;
   }, [
     history,
+    latestHistoryPerformanceCache,
     plans,
     session.id,
     session.planId,
@@ -2090,6 +2112,13 @@ export default function SessionView({
         }
 
         const defaultKey = `${session.id}:${exercise.id}:${set.id}`;
+        const previousDefault =
+          getStoredHistoryDefault(set) || nextAppliedDefaults.get(defaultKey);
+
+        if (previousDefault?.sourceKey) {
+          return set;
+        }
+
         const defaults = getHistoryDefaultsForSet(exercise, setIndex);
 
         if (!defaults) {
@@ -2099,7 +2128,7 @@ export default function SessionView({
         const defaultUpdate = getHistoryDefaultUpdates(
           set,
           defaults,
-          getStoredHistoryDefault(set) || nextAppliedDefaults.get(defaultKey)
+          previousDefault
         );
 
         if (!defaultUpdate) {
@@ -9613,7 +9642,8 @@ export default function SessionView({
           </div>
         )}
 
-        {(sessionActionsOpen || sessionActionsClosing) && (
+        {(sessionActionsOpen || sessionActionsClosing) &&
+          createPortal(
           <div
             role="dialog"
             aria-modal="true"
@@ -9623,11 +9653,8 @@ export default function SessionView({
               alignItems: "flex-end",
               background: "rgba(0,0,0,.45)",
               boxSizing: "border-box",
-              display: "flex",
+              display: "block",
               inset: 0,
-              justifyContent: "center",
-              paddingLeft: "env(safe-area-inset-left)",
-              paddingRight: "env(safe-area-inset-right)",
               position: "fixed",
               zIndex: 2200,
             }}
@@ -9648,26 +9675,39 @@ export default function SessionView({
               style={{
                 background: "var(--surface-raised)",
                 borderRadius: "18px 18px 0 0",
+                bottom: 0,
                 boxShadow: "0 -8px 28px rgba(0,0,0,.22)",
                 boxSizing: "border-box",
                 display: "grid",
                 gap: "12px",
+                left: "env(safe-area-inset-left)",
+                margin: "0 auto",
                 maxWidth: "520px",
                 minWidth: 0,
                 overflowX: "hidden",
                 padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
-                width: "100%",
+                position: "absolute",
+                right: "env(safe-area-inset-right)",
+                width: "auto",
               }}
             >
               <div
                 style={{
                   alignItems: "center",
                   display: "flex",
+                  minWidth: 0,
                   justifyContent: "space-between",
                   gap: "12px",
                 }}
               >
-                <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    flex: "1 1 0",
+                    minWidth: 0,
+                    overflow: "hidden",
+                    width: 0,
+                  }}
+                >
                   <h2
                     style={{
                       fontSize: "18px",
@@ -9913,7 +9953,8 @@ export default function SessionView({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {confirmComplete && (
