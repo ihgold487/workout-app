@@ -9,6 +9,7 @@ import {
   Sun,
   Sunrise,
   Sunset,
+  Timer,
   Utensils,
   X,
 } from "lucide-react";
@@ -33,6 +34,29 @@ const BASE_MEAL_OPTIONS = [
 const DEFAULT_MEAL = "breakfast";
 const DEFAULT_SNACK_MEAL = "snack-1";
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
+
+function getCompletedWorkoutDurationSeconds(workout) {
+  const duration = Number(
+    workout?.durationSeconds ?? workout?.duration_seconds
+  );
+
+  return Number.isFinite(duration) && duration > 0
+    ? Math.round(duration)
+    : null;
+}
+
+function formatWorkoutDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(
+        remainingSeconds
+      ).padStart(2, "0")}`
+    : `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
 
 function getLocalDateKey(date) {
   const year = date.getFullYear();
@@ -430,6 +454,7 @@ export function CompletedWorkoutSheet({
     bodyWeightEntries,
     workout.completedAtIso || workout.completed_at || workout.completedAt
   );
+  const workoutDurationSeconds = getCompletedWorkoutDurationSeconds(workout);
 
   const closeSheet = () => {
     setSelectedWorkoutExerciseDetail(null);
@@ -538,6 +563,24 @@ export function CompletedWorkoutSheet({
                     })
                   : workout.completedAt || "on selected date"}
               </div>
+              {workoutDurationSeconds != null && (
+                <div
+                  style={{
+                    alignItems: "center",
+                    color: "var(--text-muted)",
+                    display: "inline-flex",
+                    fontSize: "12px",
+                    fontVariantNumeric: "tabular-nums",
+                    gap: "5px",
+                    marginTop: "4px",
+                  }}
+                >
+                  <Timer aria-hidden="true" size={13} />
+                  <span>
+                    Workout duration {formatWorkoutDuration(workoutDurationSeconds)}
+                  </span>
+                </div>
+              )}
             </div>
             <button
               aria-label="Close workout details"
