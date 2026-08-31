@@ -38,6 +38,28 @@ The safest direction is:
 
 Current content combines branding, synchronization status, calendar, plans, workouts, history access, sorting, and management controls.
 
+#### Progress
+
+Initial Home/Today hierarchy implemented for native and PWA validation.
+
+- [x] Add a compact shared page-header, section-card, section-heading, status-pill, and action baseline.
+- [x] Reduce the visual prominence of the app icon and Workout Log branding on Home.
+- [x] Add a prominent Today card with active plan/week progress and the next incomplete workout.
+- [x] Add a primary Today action that genuinely starts the next workout through the same validated Template View workflow.
+- [x] Surface the most recent completed workout with direct access to its details.
+- [x] Keep the existing compact calendar and all plan/workout management workflows intact.
+- [x] Restyle Plans and standalone Workouts with the shared card hierarchy and 44px controls.
+- [x] Separate the active plan from other saved plans on Home.
+- [x] Rename New Template to New Workout and move duplicate/delete actions into a contextual menu.
+- [x] Align the compact calendar with the shared card radius, spacing, surface, and elevation.
+- [x] Remove the redundant calendar-to-Plans divider and default detailed plan cards to collapsed.
+- [x] Add a subtle empty state when no standalone workouts exist.
+- [x] Add explicit Edit and Delete actions to completed workouts opened from Calendar or History.
+- [x] Keep historical weight, reps, and RIR edits in a sheet-level draft until Save; Cancel discards the entire draft.
+- [x] Require timestamped confirmation before deleting a completed workout and retain the underlying sheet when deletion is canceled.
+- [ ] Validate the Today hierarchy, long names, no-active-plan state, completed-week state, calendar expansion, and PWA layout in real use.
+- [ ] Apply the shared Home primitives to Template View after Home validation.
+
 - Turn the top of Home into a useful **Today** area: current plan and week, next workout, recent completion, and one prominent **Start Workout** action.
 - Reduce the visual prominence of the app icon and **Workout Log** title after onboarding; valuable workout information should occupy the top of the screen.
 - Keep the calendar, but allow a compact default state with an obvious expansion gesture.
@@ -174,6 +196,8 @@ Settings currently combines routine preferences with synchronization recovery, m
 The code currently relies heavily on inline styles and a small token set. That makes gradual visual drift likely.
 
 A modernization pass should first define:
+
+Initial shared primitives now exist for page headers, section cards, section headings, status pills, and primary/secondary actions. They are intentionally limited to the Home modernization checkpoint and should be expanded only as subsequent pages are validated.
 
 - A restrained semantic palette with light and dark modes.
 - Consistent typography roles: page title, section heading, body, label, and metadata.

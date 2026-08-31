@@ -20,6 +20,7 @@ import {
   Dumbbell,
   History,
   Home,
+  MoreHorizontal,
   Pencil,
   Play,
   Plus,
@@ -44,6 +45,12 @@ import PlansView from "./components/PlansView";
 import NutritionView from "./components/NutritionView";
 import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
+import {
+  AppPageHeader,
+  AppSectionCard,
+  AppSectionHeading,
+  AppStatusPill,
+} from "./components/ui/AppSurface";
 import {
   clearLegacyEquipmentStorage,
   getSavedStorageVersion,
@@ -4809,10 +4816,12 @@ export default function App() {
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [selectedTemplatePlanWeek, setSelectedTemplatePlanWeek] = useState(null);
+  const [autoStartTemplateId, setAutoStartTemplateId] = useState(null);
   const [templatePreviewEditActive, setTemplatePreviewEditActive] =
     useState(false);
 
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState(null);
+  const [workoutMenuTemplateId, setWorkoutMenuTemplateId] = useState(null);
 
   const [templateSort, setTemplateSort] = useState("recent");
 
@@ -7739,16 +7748,6 @@ export default function App() {
   const editingPlan = plans.find(
     (plan) => String(plan.id) === String(editingPlanId)
   );
-  const isHomeView =
-    !showExercises &&
-    !showPlans &&
-    !showNutrition &&
-    !showSettings &&
-    !selectedTemplateId &&
-    !selectedSessionId &&
-    !selectedHistory &&
-    !selectedHistoryList;
-
   useEffect(() => {
     if (selectedSessionId) {
       return;
@@ -7805,7 +7804,7 @@ export default function App() {
   }, [selectedSessionId]);
 
   function addTemplate() {
-    const name = prompt("Template name");
+    const name = prompt("Workout name");
 
     if (!name) return;
 
@@ -8879,7 +8878,7 @@ export default function App() {
     const weekStatus = getPlanWeekStatus(plan, displayWeek, history);
     const active = plan.status === "active";
     const completed = plan.status === "completed";
-    const expanded = expandedPlanIds[plan.id] ?? (isHomeView && active);
+    const expanded = expandedPlanIds[plan.id] ?? false;
     const missingWorkouts = getMissingPlanWorkouts(plan, templates);
 
     function toggleExpanded() {
@@ -8894,21 +8893,22 @@ export default function App() {
         key={plan.id}
         style={{
           background: active ? "var(--surface-muted)" : "var(--surface)",
-          border: active ? "2px solid var(--accent)" : "1px solid var(--border)",
-          borderRadius: "8px",
+          border: active
+            ? "1px solid color-mix(in srgb, var(--accent) 38%, var(--border))"
+            : "1px solid var(--border)",
+          borderRadius: "14px",
+          boxShadow: active ? "0 8px 22px rgba(0,0,0,.06)" : "none",
           marginBottom: "12px",
-          padding: "12px",
+          padding: "14px",
           textAlign: "left",
         }}
       >
         <div
           style={{
-            alignItems: "start",
             display: "grid",
             gap: "8px",
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-        }}
-      >
+          }}
+        >
           <div
             style={{
               alignItems: "center",
@@ -8924,8 +8924,8 @@ export default function App() {
                 alignItems: "center",
                 display: "inline-flex",
                 justifyContent: "center",
-                minHeight: "32px",
-                minWidth: "32px",
+                minHeight: "44px",
+                minWidth: "44px",
                 padding: "4px",
               }}
             >
@@ -8938,22 +8938,36 @@ export default function App() {
                 border: "none",
                 color: "var(--text)",
                 cursor: "pointer",
+                flex: "1 1 auto",
+                minHeight: "44px",
                 minWidth: 0,
                 padding: 0,
                 textAlign: "left",
+                width: "100%",
               }}
             >
               <strong
                 style={{
                   display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  lineHeight: 1.3,
+                  overflowWrap: "anywhere",
+                  whiteSpace: "normal",
                 }}
               >
                 {plan.name}
               </strong>
             </button>
+          </div>
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px",
+              justifyContent: "flex-end",
+            }}
+          >
             <button
               aria-label={`Edit ${plan.name}`}
               onClick={() => openPlanEditor(plan)}
@@ -8961,13 +8975,14 @@ export default function App() {
               style={{
                 alignItems: "center",
                 display: "inline-flex",
+                gap: "5px",
                 justifyContent: "center",
-                minHeight: "32px",
-                minWidth: "32px",
-                padding: "4px",
+                minHeight: "44px",
+                padding: "6px 9px",
               }}
             >
               <Pencil size={15} />
+              <span style={{ fontSize: "12px" }}>Edit</span>
             </button>
             {plan.aiAnalysis && (
               <button
@@ -8979,8 +8994,8 @@ export default function App() {
                   display: "inline-flex",
                   gap: "5px",
                   justifyContent: "center",
-                  minHeight: "32px",
-                  padding: "4px 7px",
+                  minHeight: "44px",
+                  padding: "6px 9px",
                 }}
                 type="button"
               >
@@ -8988,15 +9003,6 @@ export default function App() {
                 <span style={{ fontSize: "12px" }}>AI</span>
               </button>
             )}
-          </div>
-
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: "6px",
-            }}
-          >
             <button
               disabled={active}
               onClick={() => {
@@ -9019,8 +9025,8 @@ export default function App() {
                 cursor: active ? "default" : "pointer",
                 fontSize: "11px",
                 fontWeight: "bold",
-                minHeight: "30px",
-                padding: "3px 8px",
+                minHeight: "44px",
+                padding: "6px 10px",
                 whiteSpace: "nowrap",
               }}
             >
@@ -9033,8 +9039,8 @@ export default function App() {
                 alignItems: "center",
                 display: "inline-flex",
                 justifyContent: "center",
-                minHeight: "30px",
-                minWidth: "32px",
+                minHeight: "44px",
+                minWidth: "44px",
                 padding: "4px",
               }}
             >
@@ -9221,19 +9227,6 @@ export default function App() {
                 );
               })}
             </div>
-
-            {active && !completed && (
-              <div
-                style={{
-                  color: "var(--accent)",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  marginTop: "10px",
-                }}
-              >
-                This is your active plan
-              </div>
-            )}
           </>
         )}
 
@@ -9701,7 +9694,7 @@ export default function App() {
     );
   }
 
-  function renderAuthSyncIndicator() {
+  function renderAuthSyncIndicator({ inHeader = false } = {}) {
     const signedIn = Boolean(authSession?.user?.id);
     const hasPendingApprovals = signedIn && pendingApprovalCount > 0;
 
@@ -9711,8 +9704,9 @@ export default function App() {
           alignItems: "center",
           display: "inline-flex",
           gap: "6px",
-          justifySelf: "center",
-          margin: "-6px 0 14px",
+          justifyContent: inHeader ? "flex-end" : "center",
+          justifySelf: inHeader ? "end" : "center",
+          margin: inHeader ? 0 : "-6px 0 14px",
           maxWidth: "100%",
         }}
       >
@@ -9727,10 +9721,10 @@ export default function App() {
             borderRadius: "999px",
             color: signedIn ? "#1b5e20" : "#7a4f01",
             display: "inline-flex",
-            fontSize: "12px",
+            fontSize: inHeader ? "11px" : "12px",
             gap: "6px",
             lineHeight: 1.2,
-            padding: "5px 10px",
+            padding: inHeader ? "4px 8px" : "5px 10px",
           }}
         >
           <span
@@ -9754,10 +9748,10 @@ export default function App() {
               borderRadius: "999px",
               color: "#b71c1c",
               display: "inline-flex",
-              fontSize: "12px",
+              fontSize: inHeader ? "11px" : "12px",
               gap: "6px",
               lineHeight: 1.2,
-              padding: "5px 10px",
+              padding: inHeader ? "4px 8px" : "5px 10px",
             }}
           >
             <span
@@ -12574,6 +12568,7 @@ export default function App() {
             exerciseLibrary={exerciseLibrary}
             history={history}
             onClose={() => setSelectedHistory(null)}
+            onDelete={deleteHistoryWorkout}
             onUpdateSet={updateHistoryWorkoutSet}
             workout={selectedHistory}
           />
@@ -12707,6 +12702,7 @@ export default function App() {
   if (selectedTemplate) {
     return renderAppShell(
       <TemplateView
+        autoStart={String(autoStartTemplateId) === String(selectedTemplate.id)}
         bodyWeightEntries={localBodyWeightEntries}
         canEditBuiltInExercises={isIraSettingsUser}
         template={selectedTemplate}
@@ -12727,6 +12723,7 @@ export default function App() {
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         history={history}
+        onAutoStartHandled={() => setAutoStartTemplateId(null)}
         plans={plans}
         setPlans={(nextPlans) => {
           setPlans(nextPlans);
@@ -12750,6 +12747,37 @@ export default function App() {
 
       return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
     });
+  const activeHomePlan = plans.find((plan) => plan.status === "active") || null;
+  const activeHomeWeekStatus = activeHomePlan
+    ? getPlanWeekStatus(
+        activeHomePlan,
+        activeHomePlan.currentWeek || 1,
+        history
+      )
+    : null;
+  const nextPlanWorkout = activeHomePlan
+    ? (activeHomePlan.workouts || []).find(
+        (planWorkout) =>
+          !isPlanWorkoutComplete(
+            activeHomePlan,
+            planWorkout.planWorkoutId,
+            activeHomeWeekStatus.currentWeek,
+            history
+          ) &&
+          templates.some(
+            (template) =>
+              String(template.id) === String(planWorkout.templateId)
+          )
+      ) || null
+    : null;
+  const nextWorkoutTemplate = nextPlanWorkout
+    ? templates.find(
+        (template) => String(template.id) === String(nextPlanWorkout.templateId)
+      ) || null
+    : null;
+  const latestCompletedWorkout = [...history].sort(
+    (left, right) => getHistoryWorkoutTime(right) - getHistoryWorkoutTime(left)
+  )[0] || null;
 
   return renderAppShell(
     <>
@@ -12758,60 +12786,148 @@ export default function App() {
           padding: "20px",
         }}
       >
-      <div
-        style={{
-          alignItems: "center",
-          display: "grid",
-          gap: "10px",
-          gridTemplateColumns: "44px minmax(0, 1fr) 44px",
-          marginBottom: "16px",
-        }}
-      >
-        <img
-          alt=""
-          src={HOME_WORKOUT_ICON}
-          style={{
-            borderRadius: "10px",
-            height: "44px",
-            width: "44px",
-          }}
-        />
-        <h1
-          style={{
-            fontSize: "1.85rem",
-            margin: 0,
-            textAlign: "center",
-          }}
-        >
-          Workout Log
-        </h1>
-        <span />
-      </div>
+      <AppPageHeader
+        action={renderAuthSyncIndicator({ inHeader: true })}
+        icon={
+          <img
+            alt=""
+            src={HOME_WORKOUT_ICON}
+            style={{ height: "100%", width: "100%" }}
+          />
+        }
+        subtitle="Training overview"
+        title="Home"
+      />
 
-      {renderAuthSyncIndicator()}
+      <AppSectionCard className="home-today-card" tone="accent">
+        <AppSectionHeading
+          action={
+            activeHomePlan ? (
+              <AppStatusPill tone="accent">Active plan</AppStatusPill>
+            ) : null
+          }
+          eyebrow="Today"
+          subtitle={
+            activeHomePlan && activeHomeWeekStatus
+              ? `${activeHomePlan.name} · ${getPlanWeekLabel(
+                  activeHomePlan,
+                  activeHomeWeekStatus.currentWeek
+                )} · ${activeHomeWeekStatus.completedThisWeek} of ${
+                  activeHomeWeekStatus.totalThisWeek
+                } complete`
+              : "Choose a workout whenever you are ready to train."
+          }
+          title={
+            nextWorkoutTemplate?.name ||
+            (activeHomePlan ? "This week is complete" : "Ready to train?")
+          }
+        />
+
+        <div className="home-today-card__details">
+          <div className="home-today-card__next">
+            {nextPlanWorkout ? (
+              <div className="home-today-card__metadata">
+                Next in plan · Day {nextPlanWorkout.dayNumber}
+              </div>
+            ) : activeHomePlan ? (
+              <div className="home-today-card__metadata">
+                Review the plan or select another workout below.
+              </div>
+            ) : (
+              <div className="home-today-card__metadata">
+                Start from one of your saved workouts.
+              </div>
+            )}
+
+            <button
+              className="app-primary-action home-today-card__primary"
+              onClick={() => {
+                if (nextWorkoutTemplate && nextPlanWorkout) {
+                  setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
+                  setAutoStartTemplateId(nextWorkoutTemplate.id);
+                  setSelectedTemplateId(nextWorkoutTemplate.id);
+                  return;
+                }
+
+                if (activeHomePlan) {
+                  setPlansExpanded(true);
+                  setExpandedPlanIds((current) => ({
+                    ...current,
+                    [activeHomePlan.id]: true,
+                  }));
+                  return;
+                }
+
+                setWorkoutsExpanded(true);
+              }}
+              type="button"
+            >
+              <Play size={18} />
+              {nextWorkoutTemplate
+                ? "Start Workout"
+                : activeHomePlan
+                  ? "Review Plan"
+                  : "Choose Workout"}
+            </button>
+          </div>
+
+          <div className="home-today-card__recent">
+            <div className="home-today-card__recent-label">Most recent</div>
+            {latestCompletedWorkout ? (
+              <button
+                className="home-today-card__recent-button"
+                onClick={() => setSelectedHistory(latestCompletedWorkout)}
+                type="button"
+              >
+                <span className="home-today-card__recent-name">
+                  {getWorkoutName(latestCompletedWorkout)}
+                </span>
+                <span className="home-today-card__recent-date">
+                  {formatHistoryTimestamp(latestCompletedWorkout)}
+                </span>
+                <span className="home-today-card__recent-link">
+                  View workout <ChevronRight size={14} />
+                </span>
+              </button>
+            ) : (
+              <div className="home-today-card__empty">
+                Your latest completed workout will appear here.
+              </div>
+            )}
+          </div>
+        </div>
+      </AppSectionCard>
+
+      <div className="home-section-label">
+        <span>Calendar</span>
+        <span>Tap to expand</span>
+      </div>
 
       <WorkoutCalendar
         bodyWeightEntries={localBodyWeightEntries}
         exerciseLibrary={exerciseLibrary}
         history={history}
         nutritionEntries={calendarNutritionEntries}
+        onDeleteWorkout={deleteHistoryWorkout}
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
         session={authSession}
       />
-
-      <hr />
 
       {plans.length > 0 && (
         <>
           <div
             style={{
               alignItems: "center",
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "14px",
               color: "var(--text-h)",
               display: "grid",
+              gap: "4px",
               font: "inherit",
-              gridTemplateColumns: "32px minmax(0, 1fr) auto",
-              margin: "0 0 10px",
-              padding: 0,
+              gridTemplateColumns: "44px minmax(0, 1fr) auto",
+              margin: "8px 0 12px",
+              padding: "8px",
               width: "100%",
             }}
           >
@@ -12827,7 +12943,7 @@ export default function App() {
                 display: "inline-flex",
                 font: "inherit",
                 justifyContent: "center",
-                minHeight: "32px",
+                minHeight: "44px",
                 padding: "4px",
               }}
               type="button"
@@ -12845,22 +12961,27 @@ export default function App() {
                 background: "transparent",
                 border: "none",
                 color: "var(--text-h)",
-                fontSize: "18px",
+                display: "grid",
+                fontSize: "17px",
                 fontWeight: "bold",
-                minHeight: "32px",
+                lineHeight: 1.2,
+                minHeight: "44px",
                 padding: "4px 0",
-                textAlign: "center",
+                textAlign: "left",
               }}
               type="button"
             >
-              Plans{" "}
+              Plans
               <span
                 style={{
-                  fontSize: "14px",
+                  color: "var(--text-muted)",
+                  fontSize: "11px",
                   fontWeight: "normal",
                 }}
               >
-                ({plans.length} {plans.length === 1 ? "plan" : "plans"})
+                {activeHomePlan
+                  ? `Active · ${activeHomePlan.name}`
+                  : `${plans.length} saved ${plans.length === 1 ? "plan" : "plans"}`}
               </span>
             </button>
             <button
@@ -12872,8 +12993,8 @@ export default function App() {
                 display: "inline-flex",
                 gap: "5px",
                 justifyContent: "center",
-                minHeight: "32px",
-                padding: "4px 8px",
+                minHeight: "44px",
+                padding: "6px 9px",
                 whiteSpace: "nowrap",
               }}
               title="Compare plans"
@@ -12886,19 +13007,34 @@ export default function App() {
 
           {plansExpanded && (
             <>
+              {activeHomePlan ? renderPlanCard(activeHomePlan) : null}
+              {plans.some((plan) => plan.status !== "active") && (
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: ".06em",
+                    margin: "14px 2px 8px",
+                    textAlign: "left",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Other plans
+                </div>
+              )}
               {[...plans]
-                .sort((a, b) => {
-                  if (a.status === "active" && b.status !== "active") return -1;
-                  if (b.status === "active" && a.status !== "active") return 1;
-                  return (b.createdAt || "").localeCompare(a.createdAt || "");
-                })
+                .filter((plan) => plan.status !== "active")
+                .sort((left, right) =>
+                  (right.createdAt || "").localeCompare(left.createdAt || "")
+                )
                 .map(renderPlanCard)}
             </>
           )}
           {renderCompletedPlanActions()}
           {renderExtendPlanPicker()}
           {renderWeekPicker()}
-          <hr />
+          <div style={{ height: "8px" }} />
         </>
       )}
 
@@ -12907,14 +13043,16 @@ export default function App() {
         onClick={() => setWorkoutsExpanded((expanded) => !expanded)}
         style={{
           alignItems: "center",
-          background: "transparent",
-          border: "none",
+          background: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "14px",
           color: "var(--text-h)",
           display: "grid",
           font: "inherit",
-          gridTemplateColumns: "32px minmax(0, 1fr) 32px",
-          margin: "12px 0 8px",
-          padding: "4px 0",
+          gridTemplateColumns: "44px minmax(0, 1fr) 44px",
+          margin: "8px 0 12px",
+          minHeight: "60px",
+          padding: "7px",
           width: "100%",
         }}
       >
@@ -12933,19 +13071,23 @@ export default function App() {
         </span>
         <span
           style={{
-            fontSize: "18px",
+            display: "grid",
+            fontSize: "17px",
             fontWeight: "bold",
+            lineHeight: 1.2,
+            textAlign: "left",
           }}
         >
-          Workouts{" "}
+          Workouts
           <span
             style={{
-              fontSize: "14px",
+              color: "var(--text-muted)",
+              fontSize: "11px",
               fontWeight: "normal",
             }}
           >
-            ({standaloneTemplates.length}{" "}
-            {standaloneTemplates.length === 1 ? "workout" : "workouts"})
+            {standaloneTemplates.length} saved standalone{" "}
+            {standaloneTemplates.length === 1 ? "workout" : "workouts"}
           </span>
         </span>
         <span />
@@ -12963,20 +13105,20 @@ export default function App() {
             }}
           >
             <button
+              className="app-secondary-action"
               onClick={addTemplate}
               style={{
-                minHeight: "40px",
-                padding: "8px 12px",
+                minHeight: "44px",
               }}
             >
-              + New Template
+              <Plus size={16} /> New Workout
             </button>
 
             <select
               value={templateSort}
               onChange={(e) => setTemplateSort(e.target.value)}
               style={{
-                minHeight: "40px",
+                minHeight: "44px",
                 padding: "8px 10px",
               }}
             >
@@ -12986,17 +13128,37 @@ export default function App() {
             </select>
           </div>
 
+          {standaloneTemplates.length === 0 && (
+            <div
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px dashed var(--border)",
+                borderRadius: "12px",
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                lineHeight: 1.45,
+                marginBottom: "10px",
+                padding: "16px",
+                textAlign: "center",
+              }}
+            >
+              No standalone workouts yet. Create one when you want a workout
+              outside your active plan.
+            </div>
+          )}
+
           {standaloneTemplates.map((template) => (
             <div
               key={template.id}
               style={{
-                background: "var(--surface-muted)",
+                background: "var(--surface-raised)",
                 border: "1px solid var(--border)",
-                borderRadius: "8px",
+                borderRadius: "14px",
+                boxShadow: "0 6px 18px rgba(0,0,0,.045)",
                 display: "grid",
                 gap: "10px",
-                marginBottom: "8px",
-                padding: "10px",
+                marginBottom: "10px",
+                padding: "12px",
               }}
             >
               <div
@@ -13013,6 +13175,7 @@ export default function App() {
                     border: "none",
                     color: "var(--text)",
                     cursor: "pointer",
+                    minHeight: "44px",
                     minWidth: 0,
                     padding: 0,
                     textAlign: "left",
@@ -13058,34 +13221,29 @@ export default function App() {
                   alignItems: "center",
                   display: "flex",
                   gap: "6px",
+                  position: "relative",
                 }}
               >
                 <button
-                  aria-label={`Duplicate ${template.name}`}
+                  aria-expanded={
+                    String(workoutMenuTemplateId) === String(template.id)
+                  }
+                  aria-label={`More actions for ${template.name}`}
                   onClick={() => {
-                    const copy = {
-                      ...template,
-
-                      id: getCurrentTimeMs(),
-
-                      name: template.name + " copy",
-
-                      lastCompleted: null,
-                    };
-
-                    setTemplates([...templates, copy]);
-                    requestSyncCheckpoint(["workouts"], "workout save");
+                    setWorkoutMenuTemplateId((current) =>
+                      String(current) === String(template.id) ? null : template.id
+                    );
                   }}
                   style={{
                     alignItems: "center",
                     display: "inline-flex",
                     justifyContent: "center",
-                    minHeight: "34px",
-                    minWidth: "34px",
+                    minHeight: "44px",
+                    minWidth: "44px",
                     padding: "5px",
                   }}
                 >
-                  <Copy size={16} />
+                  <MoreHorizontal size={18} />
                 </button>{" "}
                 <button
                   aria-label={`${template.name} history`}
@@ -13102,27 +13260,87 @@ export default function App() {
                     alignItems: "center",
                     display: "inline-flex",
                     justifyContent: "center",
-                    minHeight: "34px",
-                    minWidth: "34px",
+                    minHeight: "44px",
+                    minWidth: "44px",
                     padding: "5px",
                   }}
                 >
                   <History size={16} />
                 </button>
-                <button
-                  aria-label={`Delete ${template.name}`}
-                  onClick={() => setConfirmDeleteTemplate(template)}
-                  style={{
-                    alignItems: "center",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    minHeight: "34px",
-                    minWidth: "34px",
-                    padding: "5px",
-                  }}
-                >
-                  <Trash2 size={16} />
-                </button>{" "}
+                {String(workoutMenuTemplateId) === String(template.id) && (
+                  <>
+                    <div
+                      aria-hidden="true"
+                      onClick={() => setWorkoutMenuTemplateId(null)}
+                      style={{
+                        background: "transparent",
+                        inset: 0,
+                        position: "fixed",
+                        zIndex: 39,
+                      }}
+                    />
+                    <div
+                      style={{
+                        background: "var(--surface-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "10px",
+                        boxShadow: "0 12px 32px rgba(0,0,0,.2)",
+                        display: "grid",
+                        gap: "4px",
+                        minWidth: "150px",
+                        padding: "6px",
+                        position: "absolute",
+                        right: 0,
+                        top: "48px",
+                        zIndex: 40,
+                      }}
+                    >
+                    <button
+                      onClick={() => {
+                        const copy = {
+                          ...template,
+                          id: getCurrentTimeMs(),
+                          name: template.name + " copy",
+                          lastCompleted: null,
+                        };
+
+                        setTemplates([...templates, copy]);
+                        setWorkoutMenuTemplateId(null);
+                        requestSyncCheckpoint(["workouts"], "workout save");
+                      }}
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        gap: "8px",
+                        minHeight: "44px",
+                        padding: "8px 10px",
+                        textAlign: "left",
+                      }}
+                      type="button"
+                    >
+                      <Copy size={16} /> Duplicate
+                    </button>
+                    <button
+                      onClick={() => {
+                        setWorkoutMenuTemplateId(null);
+                        setConfirmDeleteTemplate(template);
+                      }}
+                      style={{
+                        alignItems: "center",
+                        color: "var(--danger-text)",
+                        display: "flex",
+                        gap: "8px",
+                        minHeight: "44px",
+                        padding: "8px 10px",
+                        textAlign: "left",
+                      }}
+                      type="button"
+                    >
+                      <Trash2 size={16} /> Delete
+                    </button>
+                    </div>
+                  </>
+                )}
                 {confirmDeleteTemplate && (
                   <div
                     style={{
@@ -13210,6 +13428,7 @@ export default function App() {
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => setSelectedHistory(null)}
+          onDelete={deleteHistoryWorkout}
           onUpdateSet={updateHistoryWorkoutSet}
           workout={selectedHistory}
         />

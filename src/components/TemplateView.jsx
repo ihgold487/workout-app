@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Check,
@@ -244,6 +244,7 @@ function TemplateMuscleMapSheet({ onClose, template }) {
 }
 
 export default function TemplateView({
+  autoStart = false,
   template,
   templates,
   setTemplates,
@@ -262,7 +263,9 @@ export default function TemplateView({
   setSessions,
   setSelectedSessionId,
   onEditModeChange,
+  onAutoStartHandled,
 }) {
+  const autoStartHandledRef = useRef(false);
   const [search, setSearch] = useState("");
 
   const [selectedMuscle, setSelectedMuscle] = useState("");
@@ -1353,6 +1356,16 @@ export default function TemplateView({
 
     setSelectedSessionId(session.id);
   }
+
+  useEffect(() => {
+    if (!autoStart || autoStartHandledRef.current) {
+      return;
+    }
+
+    autoStartHandledRef.current = true;
+    onAutoStartHandled?.();
+    startWorkout();
+  }, [autoStart, onAutoStartHandled]);
 
   function addExercise(exercise) {
     enterEditMode();

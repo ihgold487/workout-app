@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowUp,
   ChevronDown,
   ChevronUp,
   Coffee,
   Dumbbell,
+  Pencil,
   Scale,
   Sun,
   Sunrise,
   Sunset,
   Timer,
+  Trash2,
   Utensils,
   X,
 } from "lucide-react";
@@ -435,6 +437,7 @@ export function CompletedWorkoutSheet({
   exerciseLibrary = [],
   history = [],
   onClose,
+  onDelete,
   onUpdateSet,
   workout,
   zIndex = 2200,
@@ -445,11 +448,20 @@ export function CompletedWorkoutSheet({
   const [weightPickerData, setWeightPickerData] = useState(null);
   const [repsPickerData, setRepsPickerData] = useState(null);
   const [rirPickerData, setRirPickerData] = useState(null);
+  const [draftWorkout, setDraftWorkout] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setDraftWorkout(null);
+    setConfirmDelete(false);
+  }, [workout?.id]);
 
   if (!workout) {
     return null;
   }
 
+  const displayedWorkout = draftWorkout || workout;
+  const isEditing = Boolean(draftWorkout);
   const workoutBodyWeight = getLatestBodyWeightForDate(
     bodyWeightEntries,
     workout.completedAtIso || workout.completed_at || workout.completedAt
@@ -462,33 +474,81 @@ export function CompletedWorkoutSheet({
     setWeightPickerData(null);
     setRepsPickerData(null);
     setRirPickerData(null);
+    setDraftWorkout(null);
+    setConfirmDelete(false);
     onClose?.();
   };
 
-  const updateWorkoutSet = ({ exerciseId, field, setId, value }) => {
-    onUpdateSet?.({
-      exerciseId,
-      field,
-      setId,
-      value: String(value),
-      workoutId: workout.id,
+  const beginEditing = () => {
+    setSelectedWorkoutExercise(null);
+    setSelectedWorkoutExerciseDetail(null);
+    setDraftWorkout({
+      ...workout,
+      exercises: (workout.exercises || []).map((exercise) => ({
+        ...exercise,
+        sets: (exercise.sets || []).map((set) => ({ ...set })),
+      })),
+    });
+  };
+
+  const cancelEditing = () => {
+    setWeightPickerData(null);
+    setRepsPickerData(null);
+    setRirPickerData(null);
+    setDraftWorkout(null);
+  };
+
+  const updateDraftSet = ({ exerciseIndex, field, setIndex, value }) => {
+    setDraftWorkout((current) => ({
+      ...current,
+      exercises: (current?.exercises || []).map((exercise, currentExerciseIndex) =>
+        currentExerciseIndex === exerciseIndex
+          ? {
+              ...exercise,
+              sets: (exercise.sets || []).map((set, currentSetIndex) =>
+                currentSetIndex === setIndex
+                  ? { ...set, [field]: String(value) }
+                  : set
+              ),
+            }
+          : exercise
+      ),
+    }));
+  };
+
+  const saveEditing = () => {
+    if (!draftWorkout) {
+      return;
+    }
+
+    const updates = [];
+    (draftWorkout.exercises || []).forEach((exercise, exerciseIndex) => {
+      (exercise.sets || []).forEach((set, setIndex) => {
+        const originalSet = workout.exercises?.[exerciseIndex]?.sets?.[setIndex] || {};
+
+        ["actualWeight", "actualReps", "actualRir"].forEach((field) => {
+          const draftValue = String(firstPresentValue(set[field], set[field.replace("actual", "actual_").toLowerCase()]) ?? "");
+          const originalValue = String(firstPresentValue(originalSet[field], originalSet[field.replace("actual", "actual_").toLowerCase()]) ?? "");
+
+          if (draftValue !== originalValue) {
+            updates.push({
+              exerciseId: exercise.id,
+              exerciseIndex,
+              field,
+              setId: set.id,
+              setIndex,
+              value: draftValue,
+            });
+          }
+        });
+      });
     });
 
-    setSelectedWorkoutExercise((current) =>
-      current && String(current.id) === String(exerciseId)
-        ? {
-            ...current,
-            sets: (current.sets || []).map((set) =>
-              String(set.id) === String(setId)
-                ? {
-                    ...set,
-                    [field]: String(value),
-                  }
-                : set
-            ),
-          }
-        : current
-    );
+    if (updates.length > 0) {
+      onUpdateSet?.({ updates, workoutId: workout.id });
+    }
+
+    setDraftWorkout(null);
   };
 
   return (
@@ -529,9 +589,10 @@ export function CompletedWorkoutSheet({
         >
           <div
             style={{
-              alignItems: "center",
-              display: "flex",
-              justifyContent: "space-between",
+              alignItems: "start",
+              display: "grid",
+              gap: "10px",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
             }}
           >
             <div
@@ -589,8 +650,8 @@ export function CompletedWorkoutSheet({
                 alignItems: "center",
                 display: "inline-flex",
                 justifyContent: "center",
-                minHeight: "36px",
-                minWidth: "36px",
+                minHeight: "40px",
+                minWidth: "40px",
                 padding: 0,
               }}
               type="button"
@@ -599,7 +660,60 @@ export function CompletedWorkoutSheet({
             </button>
           </div>
 
-          {(workout.exercises || []).map((exercise) => {
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "1fr 1fr",
+            }}
+          >
+            {isEditing ? (
+              <>
+                <button
+                  onClick={cancelEditing}
+                  style={{ minHeight: "44px" }}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEditing}
+                  style={{ fontWeight: 700, minHeight: "44px" }}
+                  type="button"
+                >
+                  Save changes
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  aria-label="Edit completed workout"
+                  onClick={beginEditing}
+                  style={{ minHeight: "44px" }}
+                  type="button"
+                >
+                  <Pencil size={16} /> Edit
+                </button>
+                {onDelete ? (
+                  <button
+                    aria-label="Delete completed workout"
+                    onClick={() => setConfirmDelete(true)}
+                    style={{
+                      color: "var(--danger-text)",
+                      minHeight: "44px",
+                    }}
+                    type="button"
+                  >
+                    <Trash2 size={16} /> Delete
+                  </button>
+                ) : (
+                  <span />
+                )}
+              </>
+            )}
+          </div>
+
+          {(displayedWorkout.exercises || []).map((exercise, exerciseIndex) => {
             const exerciseContext = findExerciseForHistoryExercise(
               exercise,
               exerciseLibrary
@@ -617,9 +731,9 @@ export function CompletedWorkoutSheet({
             return (
               <div
                 key={exercise.id}
-                onClick={() => setSelectedWorkoutExercise(exercise)}
+                onClick={() => !isEditing && setSelectedWorkoutExercise(exercise)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
+                  if (!isEditing && (event.key === "Enter" || event.key === " ")) {
                     event.preventDefault();
                     setSelectedWorkoutExercise(exercise);
                   }
@@ -630,7 +744,7 @@ export function CompletedWorkoutSheet({
                   border: "1px solid var(--border)",
                   borderRadius: "8px",
                   color: "var(--text-h)",
-                  cursor: "pointer",
+                  cursor: isEditing ? "default" : "pointer",
                   display: "grid",
                   gap: "10px",
                   font: "inherit",
@@ -638,7 +752,7 @@ export function CompletedWorkoutSheet({
                   textAlign: "left",
                   width: "100%",
                 }}
-                tabIndex={0}
+                tabIndex={isEditing ? -1 : 0}
               >
                 <div
                   style={{
@@ -737,16 +851,18 @@ export function CompletedWorkoutSheet({
                       >
                         <strong>Set {setIndex + 1}</strong>
                         <button
+                          disabled={!isEditing}
                           onClick={(event) => {
                             event.stopPropagation();
                             setWeightPickerData({
-                              exerciseId: exercise.id,
+                              exerciseIndex,
                               increment: getExerciseWeightIncrement(
                                 exercise,
                                 undefined,
                                 actualWeight
                               ),
                               setId: set.id,
+                              setIndex,
                               value: Number(actualWeight || 0),
                             });
                           }}
@@ -765,11 +881,13 @@ export function CompletedWorkoutSheet({
                           {actualWeight || "-"} lb
                         </button>
                         <button
+                          disabled={!isEditing}
                           onClick={(event) => {
                             event.stopPropagation();
                             setRepsPickerData({
-                              exerciseId: exercise.id,
+                              exerciseIndex,
                               setId: set.id,
+                              setIndex,
                               value: Number(actualReps || 0),
                             });
                           }}
@@ -788,11 +906,13 @@ export function CompletedWorkoutSheet({
                           {actualReps || "-"} reps
                         </button>
                         <button
+                          disabled={!isEditing}
                           onClick={(event) => {
                             event.stopPropagation();
                             setRirPickerData({
-                              exerciseId: exercise.id,
+                              exerciseIndex,
                               setId: set.id,
+                              setIndex,
                               value: Number(actualRir || 0),
                             });
                           }}
@@ -829,8 +949,115 @@ export function CompletedWorkoutSheet({
               </div>
             );
           })}
+          {isEditing && (
+            <div
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                display: "grid",
+                gap: "8px",
+                gridTemplateColumns: "1fr 1fr",
+                padding: "10px",
+              }}
+            >
+              <button
+                onClick={cancelEditing}
+                style={{ minHeight: "44px" }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditing}
+                style={{ fontWeight: 700, minHeight: "44px" }}
+                type="button"
+              >
+                Save workout changes
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div
+          aria-label="Delete completed workout"
+          aria-modal="true"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.55)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "20px",
+            position: "fixed",
+            zIndex: zIndex + 400,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "var(--danger-bg)",
+              border: "2px solid #c66",
+              borderRadius: "12px",
+              color: "var(--danger-text)",
+              maxWidth: "380px",
+              padding: "18px",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                fontSize: "18px",
+                fontWeight: 700,
+                gap: "8px",
+              }}
+            >
+              <Trash2 size={19} />
+              Delete completed workout?
+            </div>
+            <p style={{ color: "var(--danger-text)", fontSize: "14px" }}>
+              Delete <strong>{workout.templateName || workout.workout_name || "Workout"}</strong>{" "}
+              completed {workout.completedAtIso
+                ? new Date(workout.completedAtIso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+                : workout.completedAt || "on the selected date"}? This cannot be undone.
+            </p>
+            <div style={{ display: "grid", gap: "8px", gridTemplateColumns: "1fr 1fr" }}>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setConfirmDelete(false);
+                }}
+                style={{ minHeight: "44px" }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(workout);
+                }}
+                style={{
+                  background: "var(--danger-bg)",
+                  border: "1px solid var(--danger-text)",
+                  color: "var(--danger-text)",
+                  fontWeight: 700,
+                  minHeight: "44px",
+                }}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedWorkoutExercise && (() => {
         const exerciseContext = findExerciseForHistoryExercise(
@@ -1102,10 +1329,11 @@ export function CompletedWorkoutSheet({
             return;
           }
 
-          updateWorkoutSet({
-            exerciseId: weightPickerData.exerciseId,
+          updateDraftSet({
+            exerciseIndex: weightPickerData.exerciseIndex,
             field: "actualWeight",
             setId: weightPickerData.setId,
+            setIndex: weightPickerData.setIndex,
             value,
           });
         }}
@@ -1124,10 +1352,11 @@ export function CompletedWorkoutSheet({
             return;
           }
 
-          updateWorkoutSet({
-            exerciseId: repsPickerData.exerciseId,
+          updateDraftSet({
+            exerciseIndex: repsPickerData.exerciseIndex,
             field: "actualReps",
             setId: repsPickerData.setId,
+            setIndex: repsPickerData.setIndex,
             value,
           });
         }}
@@ -1145,10 +1374,11 @@ export function CompletedWorkoutSheet({
             return;
           }
 
-          updateWorkoutSet({
-            exerciseId: rirPickerData.exerciseId,
+          updateDraftSet({
+            exerciseIndex: rirPickerData.exerciseIndex,
             field: "actualRir",
             setId: rirPickerData.setId,
+            setIndex: rirPickerData.setIndex,
             value,
           });
         }}
@@ -1163,6 +1393,7 @@ export default function WorkoutCalendar({
   exerciseLibrary = [],
   history,
   nutritionEntries = [],
+  onDeleteWorkout,
   onUpdateWorkoutSet,
   session = null,
 }) {
@@ -1438,11 +1669,14 @@ export default function WorkoutCalendar({
         });
       }}
       style={{
-        marginBottom: "20px",
-        padding: "12px",
+        background: "var(--surface-raised)",
         border: "1px solid var(--border)",
-        borderRadius: "12px",
+        borderRadius: "16px",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.06)",
+        boxSizing: "border-box",
         cursor: "pointer",
+        marginBottom: "18px",
+        padding: "14px",
       }}
     >
       <div
@@ -2298,6 +2532,10 @@ export default function WorkoutCalendar({
           exerciseLibrary={exerciseLibrary}
           history={history}
           onClose={() => {
+            setSelectedWorkout(null);
+          }}
+          onDelete={(workoutToDelete) => {
+            onDeleteWorkout?.(workoutToDelete);
             setSelectedWorkout(null);
           }}
           onUpdateSet={(payload) => {
