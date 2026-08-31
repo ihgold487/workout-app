@@ -1052,11 +1052,13 @@ export default function TemplateView({
 
   function getLatestHistoryPerformance(templateExercise) {
     return findLatestExercisePerformance({
+      currentIsDeload: isDeloadPlanWorkout(linkedPlan),
       exercise: templateExercise,
       history,
       plan: linkedPlan,
       planWeek: currentPlanWeek,
       planWorkoutId: template.planWorkoutId,
+      plans,
       templateId: template.id,
       templates,
     });

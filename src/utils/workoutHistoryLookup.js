@@ -190,6 +190,69 @@ function getWorkoutDisplayName(workout) {
   );
 }
 
+export function isHistoryWorkoutDeload(workout, plans = []) {
+  if (workout?.isDeload || workout?.is_deload) {
+    return true;
+  }
+
+  if (/\bdeload\b/i.test(getWorkoutDisplayName(workout))) {
+    return true;
+  }
+
+  const prescribedWorkingSetRirs = (workout?.exercises || []).flatMap(
+    (exercise) =>
+      (exercise.sets || [])
+        .filter((set) => !set.isDropSet)
+        .map((set) => getSetPrescribedRir(set))
+        .filter((rir) => rir !== "")
+        .map(Number)
+        .filter(Number.isFinite)
+  );
+
+  if (
+    prescribedWorkingSetRirs.length > 0 &&
+    prescribedWorkingSetRirs.every((rir) => rir === 5)
+  ) {
+    return true;
+  }
+
+  const workoutPlanId = workout?.planId || workout?.plan_id;
+  const plan = plans.find(
+    (item) => String(item.id) === String(workoutPlanId)
+  );
+  const planWeek = Number(workout?.planWeek || workout?.plan_week);
+
+  return Boolean(
+    plan?.config?.deload &&
+      planWeek &&
+      planWeek === Number(plan.durationWeeks || 0) + 1
+  );
+}
+
+export function isHistoryExerciseDeload(exercise) {
+  const workingSets = (exercise?.sets || []).filter((set) => !set.isDropSet);
+  const prescribedWorkingSetRirs = workingSets
+    .map((set) => getSetPrescribedRir(set))
+    .filter((rir) => rir !== "")
+    .map(Number)
+    .filter(Number.isFinite);
+
+  if (prescribedWorkingSetRirs.length > 0) {
+    return prescribedWorkingSetRirs.every((rir) => rir === 5);
+  }
+
+  const actualWorkingSetRirs = workingSets
+    .map((set) => set.actualRir)
+    .filter((rir) => rir != null && rir !== "")
+    .map(Number)
+    .filter(Number.isFinite);
+
+  return (
+    actualWorkingSetRirs.length > 0 &&
+    actualWorkingSetRirs.every((rir) => rir === 5)
+  );
+}
+
 function getPlanWorkout(plan, planWorkoutId) {
   return (plan?.workouts || []).find(
     (workout) => String(workout.planWorkoutId || "") === String(planWorkoutId)
@@ -243,6 +306,7 @@ export function findPlanWorkoutHistory({
   plan,
   planWorkoutId,
   weekNumber,
+  workoutFilter = () => true,
 }) {
   if (!plan?.id || planWorkoutId == null) {
     return null;
@@ -273,6 +337,7 @@ export function findPlanWorkoutHistory({
     const completionMatch = history.find(
       (historyWorkout) =>
         !isCurrentSessionHistoryWorkout(historyWorkout) &&
+        workoutFilter(historyWorkout) &&
         String(historyWorkout.id) === sessionId
     );
 
@@ -285,6 +350,7 @@ export function findPlanWorkoutHistory({
   const byMetadata = history.find(
     (historyWorkout) =>
       !isCurrentSessionHistoryWorkout(historyWorkout) &&
+      workoutFilter(historyWorkout) &&
       String(historyWorkout.planId || "") === String(plan.id) &&
       String(historyWorkout.planWorkoutId || "") === String(planWorkoutId) &&
       (weekNumber == null ||
@@ -297,6 +363,7 @@ export function findPlanWorkoutHistory({
 
   return [...history]
     .filter((historyWorkout) => !isCurrentSessionHistoryWorkout(historyWorkout))
+    .filter(workoutFilter)
     .filter((historyWorkout) =>
       historyWorkoutMatchesPlanWorkoutName({
         historyWorkout,
@@ -312,11 +379,13 @@ export function findPlanWorkoutHistory({
 
 export function findLatestExercisePerformance({
   currentSessionId,
+  currentIsDeload,
   exercise,
   history = [],
   plan,
   planWeek,
   planWorkoutId,
+  plans = [],
   templateId,
 }) {
   const isCurrentSessionHistoryWorkout = (historyWorkout) =>
@@ -325,6 +394,18 @@ export function findLatestExercisePerformance({
   const getMatchingHistoryExercise = (historyWorkout) =>
     historyWorkout?.exercises?.find((historyExercise) =>
       exercisesMatch(exercise, historyExercise)
+    );
+  const allPlans = [plan, ...plans].filter(
+    (item, index, items) =>
+      item?.id != null &&
+      items.findIndex((candidate) => String(candidate?.id) === String(item.id)) ===
+        index
+  );
+  const resolvedCurrentIsDeload =
+    currentIsDeload ??
+    Boolean(
+      plan?.config?.deload &&
+        Number(planWeek) === Number(plan.durationWeeks || 0) + 1
     );
   const findMatchingPerformance = (workoutFilter, isPlanWorkoutScoped = false) => {
     const workout = [...history]
@@ -350,83 +431,110 @@ export function findLatestExercisePerformance({
   const canMatchPrescription =
     hasUsefulPrescriptionSignature(currentPrescriptionSignature);
 
-  if (hasPlanWorkoutScope) {
-    const previousWeekNumber =
-      planWeek != null && Number(planWeek) > 1 ? Number(planWeek) - 1 : null;
-    const previousPlanWorkout = findPlanWorkoutHistory({
-      currentSessionId,
-      history,
-      plan,
-      planWorkoutId,
-      weekNumber: previousWeekNumber,
-    });
+  const findForDeloadStatus = (expectedDeload) => {
+    const matchesDeloadStatus = (historyWorkout) => {
+      const historyExercise = getMatchingHistoryExercise(historyWorkout);
+      const isDeload =
+        isHistoryWorkoutDeload(historyWorkout, allPlans) ||
+        isHistoryExerciseDeload(historyExercise);
 
-    if (previousPlanWorkout) {
-      const historyExercise = getMatchingHistoryExercise(previousPlanWorkout);
+      return isDeload === expectedDeload;
+    };
 
-      if (historyExercise) {
-        return {
-          exercise: historyExercise,
-          isPlanWorkoutScoped: true,
-          workout: previousPlanWorkout,
-        };
+    if (hasPlanWorkoutScope) {
+      const previousWeekNumber =
+        planWeek != null && Number(planWeek) > 1 ? Number(planWeek) - 1 : null;
+      const previousPlanWorkout = findPlanWorkoutHistory({
+        currentSessionId,
+        history,
+        plan,
+        planWorkoutId,
+        weekNumber: previousWeekNumber,
+        workoutFilter: matchesDeloadStatus,
+      });
+
+      if (previousPlanWorkout) {
+        const historyExercise = getMatchingHistoryExercise(previousPlanWorkout);
+
+        if (historyExercise) {
+          return {
+            exercise: historyExercise,
+            isPlanWorkoutScoped: true,
+            workout: previousPlanWorkout,
+          };
+        }
+      }
+
+      const scopedFilter = (historyWorkout) =>
+        matchesDeloadStatus(historyWorkout) &&
+        String(historyWorkout.planId || "") === String(plan.id) &&
+        String(historyWorkout.planWorkoutId || "") === String(planWorkoutId);
+
+      const scopedPerformance = findMatchingPerformance(scopedFilter, true);
+
+      if (scopedPerformance) {
+        return scopedPerformance;
       }
     }
 
-    const scopedFilter = (historyWorkout) =>
-      String(historyWorkout.planId || "") === String(plan.id) &&
-      String(historyWorkout.planWorkoutId || "") === String(planWorkoutId);
+    if (hasTemplateScope) {
+      const scopedFilter = (historyWorkout) =>
+        matchesDeloadStatus(historyWorkout) &&
+        String(historyWorkout.templateId || "") === String(templateId);
 
-    const scopedPerformance = findMatchingPerformance(scopedFilter, true);
+      const scopedPerformance = findMatchingPerformance(scopedFilter, true);
 
-    if (scopedPerformance) {
-      return scopedPerformance;
+      if (scopedPerformance) {
+        return scopedPerformance;
+      }
     }
-  }
 
-  if (hasTemplateScope) {
-    const scopedFilter = (historyWorkout) =>
-      String(historyWorkout.templateId || "") === String(templateId);
+    if (plan?.id != null && canMatchPrescription) {
+      const scopedFilter = (historyWorkout) =>
+        matchesDeloadStatus(historyWorkout) &&
+        (!historyWorkout.planId ||
+          String(historyWorkout.planId) === String(plan.id)) &&
+        (historyWorkout.exercises || []).some(
+          (historyExercise) =>
+            exercisesMatch(exercise, historyExercise) &&
+            getExercisePrescriptionSignature(historyExercise) ===
+              currentPrescriptionSignature
+        );
 
-    const scopedPerformance = findMatchingPerformance(scopedFilter, true);
+      const scopedPerformance = findMatchingPerformance(scopedFilter, true);
 
-    if (scopedPerformance) {
-      return scopedPerformance;
+      if (scopedPerformance) {
+        return scopedPerformance;
+      }
     }
-  }
 
-  if (plan?.id != null && canMatchPrescription) {
-    const scopedFilter = (historyWorkout) =>
-      (!historyWorkout.planId || String(historyWorkout.planId) === String(plan.id)) &&
-      (historyWorkout.exercises || []).some(
-        (historyExercise) =>
-          exercisesMatch(exercise, historyExercise) &&
-          getExercisePrescriptionSignature(historyExercise) ===
-            currentPrescriptionSignature
+    if (canMatchPrescription) {
+      const broadWithoutKnownMismatches = findMatchingPerformance(
+        (historyWorkout) => {
+          if (!matchesDeloadStatus(historyWorkout)) {
+            return false;
+          }
+
+          const historyExercise = getMatchingHistoryExercise(historyWorkout);
+          const historySignature = getExercisePrescriptionSignature(historyExercise);
+
+          return (
+            !hasUsefulPrescriptionSignature(historySignature) ||
+            historySignature === currentPrescriptionSignature
+          );
+        }
       );
 
-    const scopedPerformance = findMatchingPerformance(scopedFilter, true);
-
-    if (scopedPerformance) {
-      return scopedPerformance;
+      if (broadWithoutKnownMismatches) {
+        return broadWithoutKnownMismatches;
+      }
     }
-  }
 
-  if (canMatchPrescription) {
-    const broadWithoutKnownMismatches = findMatchingPerformance((historyWorkout) => {
-      const historyExercise = getMatchingHistoryExercise(historyWorkout);
-      const historySignature = getExercisePrescriptionSignature(historyExercise);
+    return findMatchingPerformance(matchesDeloadStatus);
+  };
 
-      return (
-        !hasUsefulPrescriptionSignature(historySignature) ||
-        historySignature === currentPrescriptionSignature
-      );
-    });
-
-    if (broadWithoutKnownMismatches) {
-      return broadWithoutKnownMismatches;
-    }
-  }
-
-  return findMatchingPerformance(() => true);
+  return (
+    findForDeloadStatus(resolvedCurrentIsDeload) ||
+    findForDeloadStatus(!resolvedCurrentIsDeload)
+  );
 }

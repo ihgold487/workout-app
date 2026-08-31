@@ -602,11 +602,13 @@ export default function SessionView({
   const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
     return findLatestExercisePerformance({
       currentSessionId: session.id,
+      currentIsDeload: isDeloadPlanWorkout(),
       exercise: sessionExercise,
       history,
       plan: getLinkedPlan(),
       planWeek: session.planWeek,
       planWorkoutId: session.planWorkoutId,
+      plans,
       templateId: session.templateId,
       templates,
     });
