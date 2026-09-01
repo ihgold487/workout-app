@@ -5696,23 +5696,14 @@ export default function App() {
     setAuthLoading(true);
 
     try {
-      const userId = authSession?.user?.id;
-
-      if (userId && appAccessAllowed && !approvalFromCache) {
-        setAuthStatus("Syncing queued changes before sign-out...");
-        if (normalizedSyncDirtyDomainsRef.current.size > 0) {
-          await performNormalizedSync("manual", authSession);
-        }
-        const result = await flushNutritionOutbox(userId, authSession);
-
-        if (result.failed.length > 0 || result.remaining.length > 0) {
-          throw new Error(
-            "Queued changes could not be uploaded. You remain signed in so they can retry."
-          );
-        }
-      }
-
+      // Pending sync work is durable and user-scoped, so a network failure must
+      // not prevent the local account session from being cleared.
       await signOut();
+      authSessionRef.current = null;
+      setAuthSession(null);
+      setApprovalStatus(null);
+      setApprovalError("");
+      setApprovalFromCache(false);
       nutritionStartupHydratedUserRef.current = null;
       setAuthStatus("Signed out.");
     } catch (error) {
@@ -10846,7 +10837,11 @@ export default function App() {
                 >
                   Change Password
                 </button>
-                <button disabled={authLoading} onClick={handleSignOut}>
+                <button
+                  disabled={authLoading}
+                  onClick={handleSignOut}
+                  type="button"
+                >
                   Sign Out
                 </button>
               </div>

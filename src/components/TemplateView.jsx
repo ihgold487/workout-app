@@ -102,9 +102,10 @@ function IconButton({
   );
 }
 
-function SortableExerciseRow({ exercise, children }) {
+function SortableExerciseRow({ disabled = false, exercise, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
+      disabled,
       id: exercise.id,
     });
 
@@ -323,6 +324,14 @@ export default function TemplateView({
   const templateBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
+  const hasOpenEditDialog = Boolean(
+    editingTemplateName ||
+      showAdd ||
+      pendingExercise ||
+      replacingExercise ||
+      editingExercise ||
+      libraryEditingExercise
+  );
   const [addToWorkoutsState, setAddToWorkoutsState] = useState({
     added: false,
     templateId: null,
@@ -645,6 +654,7 @@ export default function TemplateView({
   function cloneTemplateEditState(sourceTemplate = template) {
     return {
       exercises: structuredClone(sourceTemplate.exercises || []),
+      name: sourceTemplate.name,
     };
   }
 
@@ -742,6 +752,10 @@ export default function TemplateView({
   }
 
   function commitEditMode() {
+    if (hasOpenEditDialog) {
+      return;
+    }
+
     updateCurrentTemplate(
       (currentTemplate) => ({
         ...currentTemplate,
@@ -761,6 +775,10 @@ export default function TemplateView({
   }
 
   function cancelEditMode() {
+    if (hasOpenEditDialog) {
+      return;
+    }
+
     if (editSnapshot) {
       setTemplates((currentTemplates) =>
         currentTemplates.map((currentTemplate) => {
@@ -771,6 +789,7 @@ export default function TemplateView({
           const restoredTemplate = {
             ...currentTemplate,
             exercises: structuredClone(editSnapshot.exercises || []),
+            name: editSnapshot.name,
           };
 
           syncLinkedPlanTemplate(restoredTemplate);
@@ -1471,15 +1490,12 @@ export default function TemplateView({
       return;
     }
 
-    setTemplates(
-      templates.map((t) =>
-        t.id === template.id
-          ? {
-              ...t,
-              name: nextName,
-            }
-          : t
-      )
+    updateCurrentTemplate(
+      (currentTemplate) => ({
+        ...currentTemplate,
+        name: nextName,
+      }),
+      { requireEdit: false }
     );
     setEditingTemplateName(false);
     setAddToWorkoutsState({
@@ -1706,17 +1722,21 @@ export default function TemplateView({
       <AppPageHeader
         subtitle={planContextLabel}
         title={
-          <button
-            aria-label={`Edit workout name: ${template.name}`}
-            className="template-view__title-button"
-            onClick={() => {
-              setTemplateNameDraft(template.name);
-              setEditingTemplateName(true);
-            }}
-            type="button"
-          >
-            {template.name}
-          </button>
+          isEditMode ? (
+            <button
+              aria-label={`Edit workout name: ${template.name}`}
+              className="template-view__title-button template-view__title-button--editable"
+              onClick={() => {
+                setTemplateNameDraft(template.name);
+                setEditingTemplateName(true);
+              }}
+              type="button"
+            >
+              {template.name}
+            </button>
+          ) : (
+            <span className="template-view__title-text">{template.name}</span>
+          )
         }
       />
 
@@ -1971,29 +1991,41 @@ export default function TemplateView({
       )}
 
       {pendingExercise && (
+        <div
+          aria-label={`Configure ${pendingExercise.name}`}
+          aria-modal="true"
+          onClick={() => {
+            setPendingExercise(null);
+            setNewExerciseValues({
+              weight: "",
+              minimumReps: "",
+              reps: "",
+              sets: "",
+              rir: "",
+            });
+          }}
+          role="dialog"
+          style={{
+            alignItems: "center",
+            background: "rgba(0,0,0,.42)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "16px",
+            position: "fixed",
+            zIndex: 1200,
+          }}
+        >
             <div
+              onClick={(event) => event.stopPropagation()}
               style={{
-                position: "fixed",
-
-                top: "50%",
-
-                left: "50%",
-
-                transform: "translate(-50%, -50%)",
-
                 background: "var(--surface-raised)",
-
                 border: "1px solid var(--border)",
-
                 borderRadius: "12px",
-
+                boxShadow: "0 8px 28px rgba(0,0,0,.22)",
+                boxSizing: "border-box",
                 padding: "20px",
-
-                width: "280px",
-
-                zIndex: "1000",
-
-                boxShadow: "0 4px 12px rgba(0,0,0,.2)",
+                width: "min(100%, 320px)",
               }}
             >
               <h3>
@@ -2010,6 +2042,7 @@ export default function TemplateView({
                 exerciseMetadata={exerciseMetadata}
                 getLatestWorkoutPerformance={getLatestWorkoutPerformance}
               calculateE1RM={calculateE1RM}
+              pickerZIndex={1300}
               values={newExerciseValues}
                 setValues={setNewExerciseValues}
               />
@@ -2061,6 +2094,7 @@ export default function TemplateView({
                 </IconButton>
               </div>
             </div>
+        </div>
       )}
       <div className="template-view__exercise-heading">
         <span>Exercises</span>
@@ -2070,7 +2104,7 @@ export default function TemplateView({
         <DndContext
           collisionDetection={closestCenter}
           onDragEnd={({ active, over }) => {
-            if (!over || active.id === over.id) {
+            if (!isEditMode || !over || active.id === over.id) {
               return;
             }
 
@@ -2098,6 +2132,7 @@ export default function TemplateView({
               <WorkoutExercisePreviewGroup
                 key={group.group || group.exercises[0].id}
                 group={group.group}
+                variant="template"
               >
                 {group.exercises.map((exercise) => {
                   const templateExercise =
@@ -2107,7 +2142,11 @@ export default function TemplateView({
                     getExerciseWithCurrentInstancePrescription(templateExercise);
                   const exerciseDetail = getExerciseDetailRecord(exercise);
                   return (
-                    <SortableExerciseRow key={exercise.id} exercise={exercise}>
+                    <SortableExerciseRow
+                      disabled={!isEditMode}
+                      key={exercise.id}
+                      exercise={exercise}
+                    >
                       {({ attributes, listeners }) => (
                         <WorkoutExercisePreviewRow
                           compact
@@ -2116,45 +2155,53 @@ export default function TemplateView({
                           layout="templateCompact"
                           onExerciseClick={() => setDetailExercise(exerciseDetail)}
                           showNote={false}
-                          onSetClick={() => {
-                            setEditingExercise(prescriptionExercise);
-
-                            setEditingExerciseDraft(
-                              structuredClone(prescriptionExercise)
-                            );
-                          }}
-                          onPrescriptionClick={() => {
-                            setEditingExercise(prescriptionExercise);
-                            setEditingExerciseDraft(
-                              structuredClone(prescriptionExercise)
-                            );
-                          }}
+                          onSetClick={
+                            isEditMode
+                              ? () => {
+                                  setEditingExercise(prescriptionExercise);
+                                  setEditingExerciseDraft(
+                                    structuredClone(prescriptionExercise)
+                                  );
+                                }
+                              : undefined
+                          }
+                          onPrescriptionClick={
+                            isEditMode
+                              ? () => {
+                                  setEditingExercise(prescriptionExercise);
+                                  setEditingExerciseDraft(
+                                    structuredClone(prescriptionExercise)
+                                  );
+                                }
+                              : undefined
+                          }
                           prescriptionSummary={getWorkoutPrescriptionSummary(
                             prescriptionExercise
                           )}
                           actions={
-                            <>
-                              <span
-                                {...attributes}
-                                {...listeners}
-                                style={{
-                                  alignItems: "center",
-                                  background: "var(--surface-raised)",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: "999px",
-                                  color: "var(--text-muted)",
-                                  cursor: "grab",
-                                  display: "inline-flex",
-                                  height: "32px",
-                                  justifyContent: "center",
-                                  padding: 0,
-                                  touchAction: "none",
-                                  userSelect: "none",
-                                  width: "32px",
-                                }}
-                              >
-                                <GripVertical size={17} />
-                              </span>
+                            isEditMode ? (
+                              <>
+                                <span
+                                  {...attributes}
+                                  {...listeners}
+                                  style={{
+                                    alignItems: "center",
+                                    background: "var(--surface-raised)",
+                                    border: "1px solid var(--border)",
+                                    borderRadius: "999px",
+                                    color: "var(--text-muted)",
+                                    cursor: "grab",
+                                    display: "inline-flex",
+                                    height: "32px",
+                                    justifyContent: "center",
+                                    padding: 0,
+                                    touchAction: "none",
+                                    userSelect: "none",
+                                    width: "32px",
+                                  }}
+                                >
+                                  <GripVertical size={17} />
+                                </span>
 
                               <IconButton
                                 label="Replace exercise"
@@ -2228,7 +2275,8 @@ export default function TemplateView({
                               >
                                 <Trash2 size={16} />
                               </IconButton>
-                            </>
+                              </>
+                            ) : null
                           }
                         />
                       )}
@@ -2287,6 +2335,7 @@ export default function TemplateView({
           }}
         >
           <button
+            disabled={hasOpenEditDialog}
             onClick={cancelEditMode}
             style={{
               alignItems: "center",
@@ -2306,6 +2355,7 @@ export default function TemplateView({
             Cancel <X size={20} strokeWidth={2.6} />
           </button>
           <button
+            disabled={hasOpenEditDialog}
             onClick={commitEditMode}
             style={{
               alignItems: "center",
@@ -2341,7 +2391,7 @@ export default function TemplateView({
             justifyContent: "center",
             padding: "16px",
             position: "fixed",
-            zIndex: 1000,
+            zIndex: 1200,
           }}
         >
           <div
@@ -2476,6 +2526,7 @@ export default function TemplateView({
                 onSelect={(value) => {
                   updateEditingPrescription(editingPrescriptionField, value);
                 }}
+                zIndex={1300}
               />
             )}
 

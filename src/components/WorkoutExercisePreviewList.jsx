@@ -1,9 +1,32 @@
-import { NotebookPen, Target, X } from "lucide-react";
+import { Link2, NotebookPen, Target, X } from "lucide-react";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 
-export function WorkoutExercisePreviewGroup({ children, group }) {
+export function WorkoutExercisePreviewGroup({
+  children,
+  group,
+  variant = "default",
+}) {
+  if (variant === "template") {
+    return (
+      <section
+        aria-label={group ? `Superset ${group}` : undefined}
+        className={`template-preview-group${
+          group ? " template-preview-group--superset" : ""
+        }`}
+      >
+        {group ? (
+          <div className="template-preview-group__label">
+            <Link2 aria-hidden="true" size={14} />
+            <span>Superset {group}</span>
+          </div>
+        ) : null}
+        <div className="template-preview-group__exercises">{children}</div>
+      </section>
+    );
+  }
+
   return (
     <div
       style={{
@@ -42,6 +65,7 @@ export function WorkoutExercisePreviewRow({
   const prescriptionParts = String(prescriptionSummary || "")
     .split(/\s*(?:\||\n)\s*/)
     .filter(Boolean);
+  const PrescriptionContainer = onPrescriptionClick ? "button" : "div";
   const exerciseTitle = (
     <span style={{ lineHeight: 1.25 }}>
       {benchmark ? (
@@ -96,9 +120,13 @@ export function WorkoutExercisePreviewRow({
     </span>
   );
   const prescriptionContent = prescriptionSummary ? (
-    <button
-      onClick={onPrescriptionClick}
-      type="button"
+    <PrescriptionContainer
+      {...(onPrescriptionClick
+        ? {
+            onClick: onPrescriptionClick,
+            type: "button",
+          }
+        : {})}
       style={{
         background: "var(--surface-raised)",
         border: "1px solid var(--border)",
@@ -122,7 +150,7 @@ export function WorkoutExercisePreviewRow({
           {part}
         </span>
       ))}
-    </button>
+    </PrescriptionContainer>
   ) : (
     exercise.sets.map((set) => {
       const reps = set.prescribedReps || set.reps || set.targetReps || "";

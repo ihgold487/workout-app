@@ -80,8 +80,11 @@ Initial Template View presentation checkpoint implemented for native and PWA val
 - [x] Establish a top hierarchy with workout name, plan/week context, exercise and set totals, estimated duration, and primary-muscle summary.
 - [x] Present exercises as consistent raised cards without changing their existing detail or prescription interactions.
 - [x] Add a sticky **Start Workout** action that uses the existing validation and launch workflow.
-- [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, and phone/PWA layouts.
-- [ ] Revisit explicit view/edit disclosure only after the presentation checkpoint is validated.
+- [x] Complete initial hands-on validation of the presentation checkpoint.
+- [x] Make editing an explicit mode: the default view remains focused on workout review and launch, while reordering, replacement, superset, deletion, name, and prescription controls appear in Edit Workout.
+- [x] Keep workout-level Save/Cancel unavailable while any nested template edit is open, so adding, replacing, renaming, library editing, and prescription drafts must be resolved first.
+- [x] Replace the heavy superset enclosure with a subtle accent rail, linked-card surface, and clear Superset label.
+- [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, edit Save/Cancel, and phone/PWA layouts in real use.
 
 - Establish a clear top hierarchy: workout name, plan/week context, estimated duration, muscle summary, then exercises.
 - Use a sticky bottom action for **Start Workout**. It should remain reachable regardless of template length.

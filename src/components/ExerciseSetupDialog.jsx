@@ -8,6 +8,7 @@ export default function ExerciseSetupDialog({
   exerciseMetadata,
   getLatestWorkoutPerformance,
   calculateE1RM,
+  pickerZIndex,
   values,
   setValues,
 }) {
@@ -200,6 +201,7 @@ export default function ExerciseSetupDialog({
         value={values?.weight}
         title="Select Weight"
         onSelect={(value) => setValue("weight", value)}
+        zIndex={pickerZIndex}
       />
 
       <WeightPickerModal
@@ -210,6 +212,7 @@ export default function ExerciseSetupDialog({
         title="Select Minimum Reps"
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => setValue("minimumReps", value)}
+        zIndex={pickerZIndex}
       />
 
       <WeightPickerModal
@@ -220,6 +223,7 @@ export default function ExerciseSetupDialog({
         title="Select Maximum Reps"
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => setValue("reps", value)}
+        zIndex={pickerZIndex}
       />
 
       <WeightPickerModal
@@ -229,6 +233,7 @@ export default function ExerciseSetupDialog({
         title="Select RIR"
         values={[0, 1, 2, 3, 4, 5, 6]}
         onSelect={(value) => setValue("rir", value)}
+        zIndex={pickerZIndex}
       />
 
       <WeightPickerModal
@@ -239,6 +244,7 @@ export default function ExerciseSetupDialog({
         title="Select Sets"
         values={Array.from({ length: 10 }, (_, index) => index + 1)}
         onSelect={(value) => setValue("sets", value)}
+        zIndex={pickerZIndex}
       />
     </>
   );
