@@ -72,6 +72,17 @@ Initial Home/Today hierarchy implemented for native and PWA validation.
 
 ### Workout template and detail
 
+#### Progress
+
+Initial Template View presentation checkpoint implemented for native and PWA validation.
+
+- [x] Apply the shared Home page-header, section-card, status-pill, and action styling.
+- [x] Establish a top hierarchy with workout name, plan/week context, exercise and set totals, estimated duration, and primary-muscle summary.
+- [x] Present exercises as consistent raised cards without changing their existing detail or prescription interactions.
+- [x] Add a sticky **Start Workout** action that uses the existing validation and launch workflow.
+- [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, and phone/PWA layouts.
+- [ ] Revisit explicit view/edit disclosure only after the presentation checkpoint is validated.
+
 - Establish a clear top hierarchy: workout name, plan/week context, estimated duration, muscle summary, then exercises.
 - Use a sticky bottom action for **Start Workout**. It should remain reachable regardless of template length.
 - Make editing an explicit mode. Outside edit mode, hide replacement, reordering, prescription, and deletion controls.

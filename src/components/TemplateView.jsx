@@ -26,6 +26,12 @@ import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseLibraryEditDialog from "./ExerciseLibraryEditDialog";
 import MuscleMap from "./MuscleMap";
 import {
+  AppPageHeader,
+  AppSectionCard,
+  AppSectionHeading,
+  AppStatusPill,
+} from "./ui/AppSurface";
+import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
@@ -108,7 +114,7 @@ function SortableExerciseRow({ exercise, children }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div className="template-view__exercise-card" ref={setNodeRef} style={style}>
       {children({
         attributes,
         listeners,
@@ -134,11 +140,31 @@ function getTemplateWorkoutSummary(template) {
   );
 
   return {
+    exerciseCount: exercises.length,
     muscleSets: Object.entries(muscleSets).sort((a, b) =>
       a[0].localeCompare(b[0])
     ),
     totalSets,
   };
+}
+
+function getEstimatedWorkoutMinutes(template) {
+  const exercises = template.exercises || [];
+  const totalSeconds = exercises.reduce((workoutSeconds, exercise) => {
+    const sets = exercise.sets || [];
+    const exerciseSeconds = sets.reduce((setSeconds, set, setIndex) => {
+      const restSeconds = Number(
+        set.prescribedRestSeconds ?? set.restSeconds ?? 90
+      );
+      const includesRest = setIndex < sets.length - 1 && !set.isDropSet;
+
+      return setSeconds + 45 + (includesRest ? restSeconds : 0);
+    }, 0);
+
+    return workoutSeconds + exerciseSeconds + 45;
+  }, 0);
+
+  return Math.max(1, Math.round(totalSeconds / 60));
 }
 
 function TemplateMuscleMapSheet({ onClose, template }) {
@@ -153,7 +179,7 @@ function TemplateMuscleMapSheet({ onClose, template }) {
         background: "rgba(0,0,0,.38)",
         inset: 0,
         position: "fixed",
-        zIndex: 1000,
+        zIndex: 1200,
       }}
     >
       <div
@@ -899,7 +925,7 @@ export default function TemplateView({
 
     return `${setCount}\u00a0${setLabel} | ${dropSetCount}\u00a0drops | ${
       reps || "—"
-    }\u00a0reps\n${rir || "—"}\u00a0RIR | ${rest || "—"}\u00a0rest`;
+    }\u00a0reps | ${rir || "—"}\u00a0RIR | ${rest || "—"}\u00a0rest`;
   }
 
   function getExerciseWithCurrentInstancePrescription(exercise) {
@@ -1224,6 +1250,11 @@ export default function TemplateView({
     ...template,
     exercises: previewExercises,
   };
+  const workoutSummary = getTemplateWorkoutSummary(previewTemplate);
+  const estimatedWorkoutMinutes = getEstimatedWorkoutMinutes(previewTemplate);
+  const planContextLabel = linkedPlan
+    ? `${linkedPlan.name} · Week ${currentPlanWeek}`
+    : "Standalone workout";
 
   function startWorkout() {
     if (!canStartWorkout || isStartingWorkout) {
@@ -1667,85 +1698,71 @@ export default function TemplateView({
 
   return (
     <div
+      className="template-view"
       style={{
-        padding: isEditMode ? "20px 20px 150px" : "20px",
+        padding: "20px 20px 150px",
       }}
     >
-      <div
-        style={{
-          alignItems: "start",
-          display: "grid",
-          gap: "8px",
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-          marginBottom: "20px",
-        }}
-      >
-        <button
-          aria-label={`Edit workout name: ${template.name}`}
-          onClick={() => {
-            setTemplateNameDraft(template.name);
-            setEditingTemplateName(true);
-          }}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--text-h)",
-            display: "block",
-            fontSize: "2rem",
-            fontWeight: "bold",
-            lineHeight: 1.15,
-            minWidth: 0,
-            overflow: "hidden",
-            padding: 0,
-            textAlign: "left",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            width: "100%",
-          }}
-        >
-          {template.name}
-        </button>
+      <AppPageHeader
+        subtitle={planContextLabel}
+        title={
+          <button
+            aria-label={`Edit workout name: ${template.name}`}
+            className="template-view__title-button"
+            onClick={() => {
+              setTemplateNameDraft(template.name);
+              setEditingTemplateName(true);
+            }}
+            type="button"
+          >
+            {template.name}
+          </button>
+        }
+      />
 
-        <IconButton
-          label={`${template.name} muscle map`}
-          onClick={() => setShowTemplateMuscleMap(true)}
-          size={38}
-        >
-          <BarChart3 size={18} />
-        </IconButton>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: "8px",
-          justifyContent: "space-between",
-          marginBottom: "10px",
-        }}
-      >
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            gap: "8px",
-          }}
-        >
-          {!isEditMode && (
+      <AppSectionCard className="template-view__summary" tone="accent">
+        <AppSectionHeading
+          action={
+            <AppStatusPill tone={isPlanWorkout ? "accent" : "neutral"}>
+              {isPlanWorkout ? `Week ${currentPlanWeek}` : "Workout"}
+            </AppStatusPill>
+          }
+          eyebrow="Workout overview"
+          subtitle={`${workoutSummary.exerciseCount} exercise${
+            workoutSummary.exerciseCount === 1 ? "" : "s"
+          } · ${workoutSummary.totalSets} planned set${
+            workoutSummary.totalSets === 1 ? "" : "s"
+          } · About ${estimatedWorkoutMinutes} min`}
+          title="Ready when you are"
+        />
+
+        <div className="template-view__muscles">
+          {workoutSummary.muscleSets.slice(0, 4).map(([muscle, sets]) => (
+            <span className="template-view__muscle-chip" key={muscle}>
+              {muscle} · {sets}
+            </span>
+          ))}
+          {workoutSummary.muscleSets.length > 4 && (
             <button
-              aria-busy={isStartingWorkout}
-              disabled={!canStartWorkout || isStartingWorkout}
-              onClick={startWorkout}
-              style={{
-                alignItems: "center",
-                boxSizing: "border-box",
-                display: "inline-flex",
-                gap: "6px",
-                minHeight: "34px",
-              }}
+              className="template-view__muscle-more"
+              onClick={() => setShowTemplateMuscleMap(true)}
+              type="button"
             >
-              <Play size={16} /> {isStartingWorkout ? "Starting…" : "Start"}
+              +{workoutSummary.muscleSets.length - 4} more
             </button>
           )}
+        </div>
+
+        <div className="template-view__toolbar">
           <button
+            className="app-secondary-action"
+            onClick={() => setShowTemplateMuscleMap(true)}
+            type="button"
+          >
+            <BarChart3 size={17} /> Muscle Map
+          </button>
+          <button
+            className="app-secondary-action"
             onClick={() => {
               if (!isEditMode) {
                 enterEditMode();
@@ -1754,13 +1771,7 @@ export default function TemplateView({
 
               setShowAdd(true);
             }}
-            style={{
-              alignItems: "center",
-              boxSizing: "border-box",
-              display: "inline-flex",
-              gap: "6px",
-              minHeight: "34px",
-            }}
+            type="button"
           >
             {isEditMode ? (
               <>
@@ -1768,40 +1779,44 @@ export default function TemplateView({
               </>
             ) : (
               <>
-                <Pencil size={16} /> Edit
+                <Pencil size={16} /> Edit Workout
               </>
             )}
           </button>
-        </div>
 
-        {isPlanWorkout && !isEditMode && (
-          <button
-            disabled={addedToWorkouts}
-            onClick={addPlanWorkoutToWorkouts}
-            style={{
-              alignItems: "center",
-              display: "inline-flex",
-              gap: "6px",
-            }}
-          >
-            {addedToWorkouts ? (
-              <>
-                <Check size={16} /> Added
-              </>
-            ) : (
-              <>
-                <Plus size={16} /> Add to Workouts
-              </>
-            )}
-          </button>
-        )}
-      </div>
+          {isPlanWorkout && !isEditMode && (
+            <button
+              className="app-secondary-action"
+              disabled={addedToWorkouts}
+              onClick={addPlanWorkoutToWorkouts}
+              type="button"
+            >
+              {addedToWorkouts ? (
+                <>
+                  <Check size={16} /> Added
+                </>
+              ) : (
+                <>
+                  <Plus size={16} /> Add to Workouts
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </AppSectionCard>
+
       {!isEditMode && startDisabledReason && (
         <div
+          role="status"
           style={{
+            background: "var(--surface-muted)",
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
             color: "var(--text-muted)",
             fontSize: "12px",
-            marginBottom: "10px",
+            marginBottom: "12px",
+            padding: "9px 11px",
+            textAlign: "left",
           }}
         >
           {startDisabledReason}
@@ -2047,7 +2062,10 @@ export default function TemplateView({
               </div>
             </div>
       )}
-      <hr />
+      <div className="template-view__exercise-heading">
+        <span>Exercises</span>
+        <span>{workoutSummary.exerciseCount}</span>
+      </div>
       {
         <DndContext
           collisionDetection={closestCenter}
@@ -2222,6 +2240,20 @@ export default function TemplateView({
           </SortableContext>
         </DndContext>
       }
+      {!isEditMode && (
+        <div className="template-view__start-bar">
+          <button
+            aria-busy={isStartingWorkout}
+            className="app-primary-action template-view__start-button"
+            disabled={!canStartWorkout || isStartingWorkout}
+            onClick={startWorkout}
+            type="button"
+          >
+            <Play size={18} />
+            {isStartingWorkout ? "Starting workout…" : "Start Workout"}
+          </button>
+        </div>
+      )}
       {isEditMode && (
         <div
           aria-hidden="true"

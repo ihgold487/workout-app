@@ -349,6 +349,113 @@ h2 {
   font-weight: 500;
 }
 
+.template-view .app-page-header {
+  margin-bottom: 14px;
+}
+
+.template-view__title-button {
+  background: transparent;
+  border: 0;
+  color: var(--text-h);
+  display: block;
+  font: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-view__summary {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.template-view__muscles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.template-view__muscle-chip,
+.template-view__muscle-more {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  min-height: 30px;
+  padding: 4px 9px;
+}
+
+.template-view__muscle-more {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.template-view__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-view__exercise-heading {
+  align-items: baseline;
+  color: var(--text-h);
+  display: flex;
+  font-size: 16px;
+  font-weight: 800;
+  justify-content: space-between;
+  margin: 18px 2px 9px;
+  text-align: left;
+}
+
+.template-view__exercise-heading span:last-child {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.template-view__exercise-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.045);
+  margin-bottom: 10px;
+  padding: 11px;
+}
+
+.template-view__exercise-card > div {
+  margin-bottom: 0 !important;
+}
+
+.template-view__start-bar {
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  border-top: 1px solid var(--border);
+  bottom: calc(62px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.09);
+  box-sizing: border-box;
+  left: 0;
+  padding: 10px 16px;
+  position: fixed;
+  right: 0;
+  z-index: 1080;
+}
+
+.template-view__start-button {
+  margin: 0 auto;
+  max-width: 680px;
+  width: 100%;
+}
+
 @media (max-width: 620px) {
   .home-today-card__details {
     grid-template-columns: minmax(0, 1fr);
@@ -364,6 +471,10 @@ h2 {
   .home-today-card__primary {
     justify-self: stretch;
     width: 100%;
+  }
+
+  .template-view__toolbar .app-secondary-action {
+    flex: 1 1 150px;
   }
 }
 

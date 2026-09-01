@@ -39,19 +39,18 @@ export function WorkoutExercisePreviewRow({
   const isTemplateCompact = layout === "templateCompact";
   const equipmentLabel = exercise.equipment?.[0] || "";
   const benchmark = isExerciseBenchmark(exerciseDetail || exercise);
-  const hasMultiLinePrescription = String(prescriptionSummary || "").includes("\n");
+  const prescriptionParts = String(prescriptionSummary || "")
+    .split(/\s*(?:\||\n)\s*/)
+    .filter(Boolean);
   const exerciseTitle = (
-    <>
-      <span
-        style={{
-          alignItems: "center",
-          display: "inline-flex",
-          gap: "5px",
-        }}
-      >
-        {benchmark ? <BenchmarkTrophy size={15} /> : null}
-        <span style={{ fontWeight: "bold" }}>{exercise.name}</span>
-      </span>
+    <span style={{ lineHeight: 1.25 }}>
+      {benchmark ? (
+        <BenchmarkTrophy
+          size={15}
+          style={{ marginRight: "5px", verticalAlign: "-2px" }}
+        />
+      ) : null}
+      <strong>{exercise.name}</strong>
       {equipmentLabel ? (
         <span
           style={{
@@ -63,7 +62,7 @@ export function WorkoutExercisePreviewRow({
           {`, ${equipmentLabel}`}
         </span>
       ) : null}
-    </>
+    </span>
   );
   const titleContent = onExerciseClick ? (
     <button
@@ -106,23 +105,23 @@ export function WorkoutExercisePreviewRow({
         borderRadius: "6px",
         color: "var(--text)",
         cursor: onPrescriptionClick ? "pointer" : "default",
+        display: "flex",
+        flexWrap: "wrap",
         font: "inherit",
         fontSize: isTemplateCompact ? "12.5px" : "13px",
+        gap: "2px 12px",
         minHeight: isTemplateCompact ? "28px" : compact ? "30px" : "34px",
         minWidth: 0,
-        overflow: isTemplateCompact && !hasMultiLinePrescription ? "hidden" : undefined,
         padding: compact ? "4px 6px" : "6px 8px",
         textAlign: "left",
-        textOverflow: isTemplateCompact && !hasMultiLinePrescription ? "ellipsis" : undefined,
-        whiteSpace:
-          isTemplateCompact && !hasMultiLinePrescription
-            ? "nowrap"
-            : hasMultiLinePrescription
-              ? "pre"
-              : "pre-line",
+        whiteSpace: "normal",
       }}
     >
-      {prescriptionSummary}
+      {prescriptionParts.map((part, index) => (
+        <span key={`${part}-${index}`} style={{ whiteSpace: "nowrap" }}>
+          {part}
+        </span>
+      ))}
     </button>
   ) : (
     exercise.sets.map((set) => {
@@ -239,8 +238,9 @@ export function WorkoutExercisePreviewRow({
         <div
           style={{
             alignItems: "center",
-            display: "flex",
+            display: "grid",
             gap: "6px",
+            gridTemplateColumns: "minmax(0, 1fr)",
             marginTop: "6px",
             minWidth: 0,
           }}
@@ -248,9 +248,9 @@ export function WorkoutExercisePreviewRow({
           <div
             style={{
               display: "grid",
-              flex: "0 1 auto",
-              maxWidth: "min(48vw, 202px)",
+              maxWidth: "100%",
               minWidth: 0,
+              width: "100%",
             }}
           >
             {prescriptionContent}
@@ -262,7 +262,7 @@ export function WorkoutExercisePreviewRow({
                 display: "flex",
                 flexShrink: 0,
                 gap: "4px",
-                marginLeft: "auto",
+                justifySelf: "end",
               }}
             >
               {actions}
