@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
             )
             .replace(
               "__STARTUP_WORKOUT_ICON__",
-              isNative ? "workout-icon-native.png?v=1" : "workout-icon.png?v=2"
+              isNative ? "workout-icon-native.png?v=2" : "workout-icon.png?v=4"
             );
         },
       },

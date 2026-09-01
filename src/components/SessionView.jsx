@@ -132,10 +132,12 @@ const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
 const WORKOUT_PAUSE_REMINDER_SECONDS = 300;
 const WORKOUT_INACTIVITY_REMINDER_SECONDS = 360;
-const REST_NOTIFICATION_ICON = `${import.meta.env.BASE_URL || "/"}icon-192.png`;
 const NATIVE_APP_ICON = `${
   import.meta.env.BASE_URL || "/"
 }workout-icon-native.png`;
+const REST_NOTIFICATION_ICON = __IS_NATIVE_BUILD__
+  ? NATIVE_APP_ICON
+  : `${import.meta.env.BASE_URL || "/"}icon-192.png`;
 const HISTORY_DEFAULT_SOURCE_FIELDS = [
   "historyDefaultSourceKey",
   "historyDefaultActualWeight",
