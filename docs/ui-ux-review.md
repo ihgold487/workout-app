@@ -167,6 +167,20 @@ This is the most complex management surface and should use progressive disclosur
 
 The feature set is extensive enough that a single long page risks becoming overwhelming.
 
+#### Progress
+
+Initial presentation-only Nutrition checkpoint implemented for native and PWA validation.
+
+- [x] Apply the shared page-header and raised-card visual language without changing nutrition persistence or mutation workflows.
+- [x] Establish a visible Today sequence of date, calorie/macro progress, meal log, and add-food tools.
+- [x] Add one prominent **Add Food** action while retaining every existing search, scan, copy, recipe, library, and manual-entry control.
+- [x] Present body weight, daily goal, and creatine as consistent secondary utility cards.
+- [x] Modernize meal-group surfaces while preserving expansion, editing, moving, recipe detail, and deletion behavior.
+- [x] Match Home disclosure behavior with a right chevron when collapsed and a down chevron when expanded, reinforced by explicit Show/Hide details text.
+- [x] Separate secondary utilities under **Tracking** and keep the prominent **Add Food** action directly beneath the daily summary in both disclosure states.
+- [x] Separate nutrition visualization colors from the purple brand palette with consistent blue calories, teal protein, amber carbohydrates, and coral fat across cards, donut charts, legends, and calorie-history charts.
+- [ ] Validate dense meal logs, empty days, historical dates, Add Food from Another Day, serving edits, barcode/search flows, and PWA layout in real use.
+
 - Divide the experience into **Today**, **Trends**, and **Library** rather than placing everything in one continuous surface.
 - Today should prioritize calorie progress, macro progress, meals, and **Add food**.
 - Make meal sections compact and collapsible, with totals visible while collapsed.

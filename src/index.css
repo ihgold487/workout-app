@@ -614,6 +614,107 @@ h2 {
   width: 100%;
 }
 
+.nutrition-view {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px 30px;
+  text-align: left;
+}
+
+.nutrition-view .app-page-header {
+  margin-bottom: 14px;
+  order: 1;
+}
+
+.nutrition-view__quick-actions {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 14px;
+  order: 3;
+}
+
+.nutrition-view__tracking-heading {
+  align-items: baseline;
+  color: var(--text-h);
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 2px 8px;
+  order: 3;
+}
+
+.nutrition-view__tracking-heading span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.nutrition-view__utility-status {
+  order: 3;
+}
+
+.nutrition-view__utility-card {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.035);
+}
+
+.nutrition-view__today-card {
+  box-shadow: 0 7px 22px rgba(0, 0, 0, 0.055);
+  order: 2;
+}
+
+.nutrition-view > :not(.app-page-header):not(.nutrition-view__today-card):not(.nutrition-view__tracking-heading):not(.nutrition-view__quick-actions):not(.nutrition-view__utility-status) {
+  order: 4;
+}
+
+.nutrition-view__primary-add {
+  padding: 0 12px 12px;
+}
+
+.nutrition-view__primary-add .app-primary-action {
+  min-height: 46px;
+  width: 100%;
+}
+
+.nutrition-view__disclosure-label {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.nutrition-view__day-content {
+  display: grid;
+}
+
+.nutrition-view__calendar {
+  order: 1;
+}
+
+.nutrition-view__macro-summary {
+  order: 2;
+}
+
+.nutrition-view__meal-log {
+  margin-top: 0 !important;
+  order: 3;
+}
+
+.nutrition-view__add-food {
+  order: 4;
+  scroll-margin-top: 12px;
+}
+
+.nutrition-view__meal-card {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.035);
+}
+
+@media (min-width: 700px) {
+  .nutrition-view__quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 620px) {
   .home-today-card__details {
     grid-template-columns: minmax(0, 1fr);

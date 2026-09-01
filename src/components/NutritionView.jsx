@@ -15,6 +15,7 @@ import {
   ChefHat,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Clock3,
   Coffee,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
+import { AppPageHeader } from "./ui/AppSurface";
 import {
   getNutritionOutbox,
   initializeNutritionPersistence,
@@ -226,10 +228,10 @@ const ALWAYS_VISIBLE_MEALS = new Set([
 ]);
 const DEFAULT_MEAL = "breakfast";
 const MACRO_COLORS = {
-  calories: "#1769aa",
-  carbs: "#b06000",
-  fat: "#7b3fc7",
-  protein: "#137333",
+  calories: "#0072b2",
+  carbs: "#d58a00",
+  fat: "#c84f2f",
+  protein: "#00866f",
 };
 const DAILY_PROTEIN_TARGET_GRAMS = 200;
 const DAILY_PROTEIN_TARGET_CALORIES = DAILY_PROTEIN_TARGET_GRAMS * 4;
@@ -3065,7 +3067,7 @@ function CalorieHistoryChart({ calorieGoal, goalHistory, rangeDays, rows }) {
               x2={selectedX}
               y1={paddingTop}
               y2={height - paddingBottom}
-              stroke="color-mix(in srgb, #1769aa 45%, var(--border))"
+              stroke={`color-mix(in srgb, ${MACRO_COLORS.calories} 45%, var(--border))`}
               strokeDasharray="4 4"
             />
             <circle cx={selectedX} cy={selectedY} fill={selectedIndicatorColor} r="3.5" />
@@ -4250,6 +4252,7 @@ export default function NutritionView({ session = null }) {
   const [recipeIngredientErrorByRecipeId, setRecipeIngredientErrorByRecipeId] =
     useState({});
   const entryFormRef = useRef(null);
+  const addFoodSectionRef = useRef(null);
   const foodNameInputRef = useRef(null);
   const servingAmountInputRef = useRef(null);
   const recipeImageInputRef = useRef(null);
@@ -6755,6 +6758,18 @@ export default function NutritionView({ session = null }) {
     });
   }
 
+  function openAddFoodComposer() {
+    setDayPanelOpen(true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        addFoodSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+  }
+
   async function saveBodyWeight(entryDate, weightValue) {
     const weight = parseMacroValue(weightValue);
 
@@ -6956,44 +6971,20 @@ export default function NutritionView({ session = null }) {
   ];
 
   return (
-    <div
-      style={{
-        padding: "18px 16px",
-        textAlign: "left",
-      }}
-    >
-      <header
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "10px",
-          marginBottom: "16px",
-        }}
-      >
-        <Utensils size={26} />
-        <div>
-          <h1
-            style={{
-              fontSize: "30px",
-              lineHeight: 1,
-              margin: 0,
-            }}
-          >
-            Nutrition
-          </h1>
-          <div
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "13px",
-              marginTop: "4px",
-            }}
-          >
-            Manual calories and macros
-          </div>
-        </div>
-      </header>
+    <div className="nutrition-view">
+      <AppPageHeader
+        icon={<Utensils size={24} />}
+        subtitle="Calories, macros, meals, and body weight"
+        title="Nutrition"
+      />
 
+      <div className="nutrition-view__tracking-heading">
+        <strong>Tracking</strong>
+        <span>Weight, goals, and reminders</span>
+      </div>
+      <div className="nutrition-view__quick-actions">
       <section
+        className="nutrition-view__utility-card"
         aria-label="Body weight"
         onClick={() => {
           setWeightSheetInitialAdding(false);
@@ -7010,11 +7001,11 @@ export default function NutritionView({ session = null }) {
         style={{
           alignItems: "center",
           border: "1px solid var(--border)",
-          borderRadius: "8px",
+          background: "var(--surface-raised)",
+          borderRadius: "14px",
           display: "grid",
           gap: "10px",
           gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
-          marginBottom: "14px",
           padding: "10px 12px",
           cursor: "pointer",
         }}
@@ -7062,6 +7053,7 @@ export default function NutritionView({ session = null }) {
       </section>
 
 	      <section
+	        className="nutrition-view__utility-card"
 	        aria-label="Daily calorie goal"
 	        onClick={() => setCalorieHistorySheetOpen(true)}
 	        onKeyDown={(event) => {
@@ -7074,17 +7066,17 @@ export default function NutritionView({ session = null }) {
         style={{
           alignItems: "center",
           border: "1px solid var(--border)",
-          borderRadius: "8px",
+          background: "var(--surface-raised)",
+          borderRadius: "14px",
           cursor: "pointer",
           display: "grid",
           gap: "10px",
           gridTemplateColumns: "auto auto minmax(0, 1fr) auto",
-          marginBottom: "14px",
           padding: "10px 12px",
         }}
         tabIndex={0}
       >
-        <Target size={20} color="#1769aa" />
+        <Target size={20} color={MACRO_COLORS.calories} />
         <strong>Daily goal</strong>
         <span
           style={{
@@ -7119,6 +7111,7 @@ export default function NutritionView({ session = null }) {
 	      </section>
 
       <section
+        className="nutrition-view__utility-card nutrition-view__utility-card--creatine"
         aria-label="Daily creatine"
         style={{
           alignItems: "center",
@@ -7126,11 +7119,10 @@ export default function NutritionView({ session = null }) {
           border: creatineReminderDue
             ? "1px solid #8a1f11"
             : "1px solid var(--border)",
-          borderRadius: "8px",
+          borderRadius: "14px",
           display: "grid",
           gap: "8px",
           gridTemplateColumns: "auto minmax(0, 1fr) auto auto auto",
-          marginBottom: "14px",
           padding: "10px 12px",
           WebkitTouchCallout: "none",
           WebkitUserSelect: "none",
@@ -7230,9 +7222,11 @@ export default function NutritionView({ session = null }) {
           type="checkbox"
         />
       </section>
+      </div>
 
       {creatineReminderStatus && (
         <p
+          className="nutrition-view__utility-status"
           aria-live="polite"
           style={{
             color: "#8a1f11",
@@ -7327,6 +7321,7 @@ export default function NutritionView({ session = null }) {
 
       {calorieTargetSyncStatus && (
         <div
+          className="nutrition-view__utility-status"
           style={{
             color: calorieTargetSyncStatus.includes("failed")
               ? "#8a1f11"
@@ -7341,6 +7336,7 @@ export default function NutritionView({ session = null }) {
 
       {weightSyncStatus && (
         <div
+          className="nutrition-view__utility-status"
           style={{
             color: weightSyncStatus.includes("failed")
               ? "var(--danger-text)"
@@ -7401,13 +7397,15 @@ export default function NutritionView({ session = null }) {
       )}
 
 	      <section
+        className="nutrition-view__today-card"
         aria-label="Current day"
         style={{
           border: "1px solid var(--border)",
-          borderRadius: "8px",
+          background: "var(--surface-raised)",
+          borderRadius: "16px",
           display: "grid",
           gap: dayPanelOpen ? "12px" : 0,
-          marginBottom: "16px",
+          marginBottom: "18px",
           overflow: "hidden",
         }}
       >
@@ -7442,7 +7440,11 @@ export default function NutritionView({ session = null }) {
                 justifyContent: "space-between",
               }}
             >
-              <strong>Day</strong>
+              <strong>
+                {selectedDate === getTodayKey()
+                  ? "Today’s nutrition"
+                  : "Selected day’s nutrition"}
+              </strong>
               <span
                 style={{
                   color: "var(--text-muted)",
@@ -7478,7 +7480,10 @@ export default function NutritionView({ session = null }) {
             >
               <span
                 style={{
-                  background: caloriesRemaining < 0 ? "#c62828" : "#1769aa",
+                  background:
+                    caloriesRemaining < 0
+                      ? "#c62828"
+                      : MACRO_COLORS.calories,
                   display: "block",
                   height: "100%",
                   width: `${calorieGoalProgress}%`,
@@ -7486,25 +7491,46 @@ export default function NutritionView({ session = null }) {
               />
             </span>
           </span>
-          {dayPanelOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          <span className="nutrition-view__disclosure-label">
+            {dayPanelOpen ? "Hide details" : "Show details"}
+            {dayPanelOpen ? (
+              <ChevronDown size={20} />
+            ) : (
+              <ChevronRight size={20} />
+            )}
+          </span>
         </button>
+
+        <div className="nutrition-view__primary-add">
+          <button
+            className="app-primary-action"
+            onClick={openAddFoodComposer}
+            type="button"
+          >
+            <Plus size={18} /> Add Food
+          </button>
+        </div>
 
         {dayPanelOpen && (
           <div
+            className="nutrition-view__day-content"
             style={{
               display: "grid",
               gap: "14px",
               padding: "0 12px 12px",
             }}
           >
-            <NutritionDateCalendar
-              bodyWeightEntries={bodyWeightEntries}
-              entries={entries}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-            />
+            <div className="nutrition-view__calendar">
+              <NutritionDateCalendar
+                bodyWeightEntries={bodyWeightEntries}
+                entries={entries}
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+              />
+            </div>
 
             <section
+              className="nutrition-view__macro-summary"
               aria-label="Daily macro totals"
               style={{
                 alignItems: "center",
@@ -7611,6 +7637,8 @@ export default function NutritionView({ session = null }) {
             </section>
 
             <section
+              className="nutrition-view__add-food"
+              ref={addFoodSectionRef}
               style={{
                 borderTop: "1px solid var(--border)",
                 paddingTop: "14px",
@@ -9545,6 +9573,7 @@ export default function NutritionView({ session = null }) {
       )}
 
       <section
+        className="nutrition-view__meal-log"
         style={{
           marginTop: "18px",
         }}
@@ -9583,11 +9612,13 @@ export default function NutritionView({ session = null }) {
 
 	              return (
 	                <section
+	                  className="nutrition-view__meal-card"
 	                  key={group.meal}
 	                  aria-label={`${group.label} foods`}
 	                  style={{
 	                    border: "1px solid var(--border)",
-	                    borderRadius: "8px",
+	                    background: "var(--surface-raised)",
+	                    borderRadius: "14px",
 	                    overflow: "hidden",
 	                  }}
 	                >
@@ -9602,7 +9633,8 @@ export default function NutritionView({ session = null }) {
 	                    }
 	                    style={{
 	                      alignItems: "center",
-	                      background: "var(--surface-muted)",
+	                      background:
+	                        "color-mix(in srgb, var(--accent) 4%, var(--surface-raised))",
 	                      border: 0,
 	                      borderRadius: 0,
 	                      color: hasEntries ? "var(--text-h)" : "var(--text-muted)",
