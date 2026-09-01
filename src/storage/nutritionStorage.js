@@ -10,6 +10,13 @@ import {
   upsertBodyWeightEntry,
 } from "../sync/bodyMeasurementCloudSync";
 import { upsertNutritionTarget } from "../sync/nutritionTargetCloudSync";
+import {
+  buildProtectedNutritionSnapshot,
+  mergeNutritionEntryCollections,
+  nutritionEntryTimestamp,
+} from "./nutritionIntegrity";
+
+export { mergeNutritionEntryCollections } from "./nutritionIntegrity";
 
 const SNAPSHOT_PREFIX = "nutrition:";
 const MAX_NUTRITION_BACKUPS = 20;
@@ -177,13 +184,22 @@ export async function initializeNutritionPersistence(userId, legacyEntries) {
   );
 }
 
-async function persistNutritionEntriesUnlocked(userId, entries) {
+async function persistNutritionEntriesUnlocked(
+  userId,
+  entries,
+  { removedEntryIds = [] } = {}
+) {
   const id = snapshotId(userId);
   const existing = await db.nutritionSnapshots.get(id);
+  const nextEntries = buildProtectedNutritionSnapshot(
+    existing?.entries,
+    entries,
+    { removedEntryIds }
+  );
 
   if (
     Array.isArray(existing?.entries) &&
-    JSON.stringify(existing.entries) !== JSON.stringify(entries)
+    JSON.stringify(existing.entries) !== JSON.stringify(nextEntries)
   ) {
     await backupNutritionEntriesUnlocked(
       userId,
@@ -194,16 +210,18 @@ async function persistNutritionEntriesUnlocked(userId, entries) {
 
   await db.nutritionSnapshots.put({
     ...(existing || {}),
-    entries: Array.isArray(entries) ? entries : [],
+    entries: nextEntries,
     id,
     updatedAt: new Date().toISOString(),
     userId: normalizeUserId(userId),
   });
+
+  return nextEntries;
 }
 
-export async function persistNutritionEntries(userId, entries) {
+export async function persistNutritionEntries(userId, entries, options) {
   return enqueueNutritionMutation(userId, () =>
-    persistNutritionEntriesUnlocked(userId, entries)
+    persistNutritionEntriesUnlocked(userId, entries, options)
   );
 }
 
@@ -256,7 +274,9 @@ export async function queueNutritionDelete(
   deletedEntry = null
 ) {
   if (!userId) {
-    await persistNutritionEntries(userId, snapshotEntries);
+    await persistNutritionEntries(userId, snapshotEntries, {
+      removedEntryIds: [entryId],
+    });
     return;
   }
 
@@ -269,7 +289,9 @@ export async function queueNutritionDelete(
       db.nutritionOutbox,
       db.nutritionBackups,
       async () => {
-        await persistNutritionEntriesUnlocked(userId, snapshotEntries);
+        await persistNutritionEntriesUnlocked(userId, snapshotEntries, {
+          removedEntryIds: [entryId],
+        });
         await db.nutritionOutbox.put({
           entry: deletedEntry,
           entryId,
@@ -438,33 +460,6 @@ async function flushNutritionOutboxUnlocked(userId, session) {
   };
 }
 
-function entryTimestamp(entry) {
-  return Date.parse(entry?.updatedAt || entry?.createdAt || "") || 0;
-}
-
-export function mergeNutritionEntryCollections(...collections) {
-  const entriesById = new Map();
-
-  collections.forEach((entries) => {
-    (entries || []).forEach((entry) => {
-      if (entry?.id === undefined || entry?.id === null) return;
-
-      const id = String(entry.id);
-      const existing = entriesById.get(id);
-
-      if (!existing || entryTimestamp(entry) >= entryTimestamp(existing)) {
-        entriesById.set(id, entry);
-      }
-    });
-  });
-
-  return [...entriesById.values()].sort(
-    (a, b) =>
-      String(a.date || "").localeCompare(String(b.date || "")) ||
-      String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
-  );
-}
-
 export async function recoverNutritionEntries(
   userId,
   candidateEntries = [],
@@ -570,7 +565,10 @@ async function reconcileNutritionEntriesUnlocked(userId, session, options = {}) 
     }
 
     const local = entriesById.get(id);
-    if (!local || entryTimestamp(entry) >= entryTimestamp(local)) {
+    if (
+      !local ||
+      nutritionEntryTimestamp(entry) >= nutritionEntryTimestamp(local)
+    ) {
       entriesById.set(id, entry);
     }
   });

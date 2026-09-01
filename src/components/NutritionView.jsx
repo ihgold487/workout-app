@@ -45,6 +45,7 @@ import {
   queueNutritionTargetUpsert,
   queueNutritionUpserts,
 } from "../storage/nutritionStorage";
+import { saveNutritionCompatibilityEntries } from "../storage/nutritionCompatibilityStorage";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
 import {
@@ -409,7 +410,7 @@ function readNutritionEntries(storageKey = NUTRITION_LOG_KEY) {
 }
 
 function saveNutritionEntries(entries, storageKey = NUTRITION_LOG_KEY) {
-  localStorage.setItem(storageKey, JSON.stringify(entries));
+  return saveNutritionCompatibilityEntries(storageKey, entries);
 }
 
 function readBodyWeightEntries() {
@@ -5079,8 +5080,14 @@ export default function NutritionView({ session = null }) {
   function updateEntries(nextEntries, entriesToSync = nextEntries) {
     latestNutritionEntriesRef.current = nextEntries;
     setEntries(nextEntries);
+    const durableWrite = queueNutritionUpserts(
+      signedInUserId,
+      entriesToSync,
+      nextEntries
+    );
+
     saveNutritionEntries(nextEntries, nutritionStorageKeyRef.current);
-    queueNutritionUpserts(signedInUserId, entriesToSync, nextEntries)
+    durableWrite
       .catch((error) => {
         console.error("Failed to queue nutrition changes:", error);
         setNutritionSyncStatus(
@@ -6585,8 +6592,15 @@ export default function NutritionView({ session = null }) {
 
     latestNutritionEntriesRef.current = nextEntries;
     setEntries(nextEntries);
+    const durableWrite = queueNutritionDelete(
+      signedInUserId,
+      entryId,
+      nextEntries,
+      deletedEntry
+    );
+
     saveNutritionEntries(nextEntries, nutritionStorageKeyRef.current);
-    queueNutritionDelete(signedInUserId, entryId, nextEntries, deletedEntry)
+    durableWrite
       .catch((error) => {
         console.error("Failed to queue nutrition deletion:", error);
         setNutritionSyncStatus(

@@ -102,11 +102,15 @@ import {
   getNutritionPersistenceStatus,
   initializeNutritionPersistence,
   loadNutritionSnapshot,
+  mergeNutritionEntryCollections,
   NUTRITION_OUTBOX_QUEUED_EVENT,
   persistNutritionEntries,
+  queueNutritionUpserts,
   recoverNutritionEntries,
   reconcileNutritionEntries,
 } from "./storage/nutritionStorage";
+import { saveNutritionCompatibilityEntries } from "./storage/nutritionCompatibilityStorage";
+import { findNutritionEntriesMissingFrom } from "./storage/nutritionIntegrity";
 import { getNormalizedCloudSummary } from "./sync/normalizedCloudSummary";
 import { downloadBodyWeightEntries } from "./sync/bodyMeasurementCloudSync";
 import { downloadNutritionTargets } from "./sync/nutritionTargetCloudSync";
@@ -718,7 +722,7 @@ function readLocalArray(key) {
 }
 
 function saveLocalArray(key, entries) {
-  localStorage.setItem(key, JSON.stringify(entries));
+  return saveNutritionCompatibilityEntries(key, entries);
 }
 
 function preservePendingNutritionSupportChanges(bodyWeights, targets, pendingItems) {
@@ -5291,15 +5295,47 @@ export default function App() {
 
   useEffect(() => {
     if (showNutrition) {
-      return;
+      return undefined;
     }
 
     const userId = authSession?.user?.id || null;
     const storageKey = getNutritionLogStorageKey(userId);
+    let cancelled = false;
 
-    queueMicrotask(() => {
-      setCalendarNutritionEntries(readLocalArray(storageKey));
-    });
+    async function refreshCalendarNutritionEntries() {
+      const snapshotEntries = await loadNutritionSnapshot(userId);
+      const compatibilityEntries = readLocalArray(storageKey);
+      const compatibilityOnlyEntries = findNutritionEntriesMissingFrom(
+        snapshotEntries,
+        compatibilityEntries
+      );
+      const mergedEntries = mergeNutritionEntryCollections(
+        snapshotEntries || [],
+        compatibilityEntries
+      );
+
+      if (cancelled) return;
+
+      setCalendarNutritionEntries(mergedEntries);
+      saveLocalArray(storageKey, mergedEntries);
+      if (userId && compatibilityOnlyEntries.length > 0) {
+        await queueNutritionUpserts(
+          userId,
+          compatibilityOnlyEntries,
+          mergedEntries
+        );
+      } else {
+        await persistNutritionEntries(userId, mergedEntries);
+      }
+    }
+
+    refreshCalendarNutritionEntries().catch((error) =>
+      console.error("Failed to refresh calendar nutrition entries:", error)
+    );
+
+    return () => {
+      cancelled = true;
+    };
   }, [authSession?.user?.id, showNutrition]);
 
   useEffect(() => {
