@@ -29,7 +29,6 @@ import {
   Settings,
   Trash2,
   Trophy,
-  Utensils,
   X,
 } from "lucide-react";
 import { seedExercises } from "./data/seedExercises";
@@ -51,6 +50,9 @@ import {
   AppSectionHeading,
   AppStatusPill,
 } from "./components/ui/AppSurface";
+import NutritionBowlIcon from "./components/ui/NutritionBowlIcon";
+import ExerciseArmIcon from "./components/ui/ExerciseArmIcon";
+import PlansBrainIcon from "./components/ui/PlansBrainIcon";
 import {
   clearLegacyEquipmentStorage,
   getSavedStorageVersion,
@@ -128,7 +130,7 @@ const BUILD_TIME = __BUILD_TIME__;
 
 const HOME_WORKOUT_ICON = `${import.meta.env.BASE_URL}${
   __IS_NATIVE_BUILD__ ? "workout-icon-native.png" : "workout-icon.png"
-}`;
+}${__IS_NATIVE_BUILD__ ? "?v=6" : ""}`;
 
 const PENDING_UPDATE_KEY = "pendingPwaUpdate";
 const LAST_SEEN_BUILD_KEY = "lastSeenBuildTime";
@@ -9525,19 +9527,19 @@ export default function App() {
         onClick: goHome,
       },
       {
-        icon: Dumbbell,
+        icon: ExerciseArmIcon,
         key: "exercises",
         label: "Exercises",
         onClick: goExercises,
       },
       {
-        icon: ClipboardList,
+        icon: PlansBrainIcon,
         key: "plans",
         label: "Plans",
         onClick: goPlans,
       },
       {
-        icon: Utensils,
+        icon: NutritionBowlIcon,
         key: "nutrition",
         label: "Nutrition",
         onClick: goNutrition,
@@ -9595,7 +9597,23 @@ export default function App() {
                     : bottomNavButtonStyle
               }
             >
-              <Icon size={20} strokeWidth={active ? 2.5 : 2} />
+              <span className="bottom-nav__icon-slot">
+                {["exercises", "plans"].includes(item.key) ? (
+                  <Icon
+                    active={active}
+                    emphasized
+                    monochrome
+                    size={item.key === "exercises" ? 28 : 25}
+                  />
+                ) : (
+                  <Icon
+                    size={item.key === "nutrition" ? 24 : 22}
+                    strokeWidth={
+                      item.key === "nutrition" ? 1.55 : active ? 2.5 : 2
+                    }
+                  />
+                )}
+              </span>
               <span>{item.label}</span>
             </button>
           );
@@ -10721,7 +10739,7 @@ export default function App() {
             marginBottom: "16px",
           }}
         >
-          <Settings size={26} />
+          <Settings color="var(--accent)" size={26} />
           <h2
             style={{
               margin: 0,
@@ -12813,6 +12831,7 @@ export default function App() {
   return renderAppShell(
     <>
       <div
+        className="home-view"
         style={{
           padding: "20px",
         }}

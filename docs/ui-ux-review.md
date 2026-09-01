@@ -143,6 +143,7 @@ Initial session-header increment implemented and build-validated; longer real-wo
 - Keep search persistently available below the page title.
 - Use filter chips for muscle, equipment, and status instead of exposing many simultaneous controls.
 - Make each result row primarily informational: thumbnail, name, equipment, primary muscles, and recent performance.
+- Use the approved simplified arm-and-dumbbell mark for the Exercises page and navigation, with a larger full-color header treatment and a compact navigation treatment.
 - Put administrative editing and image-management controls behind a contextual menu.
 - Distinguish custom exercises visually without making them feel second-class.
 - Exercise detail should lead with image and instructions, then personal performance, muscle map, history, and administrative metadata.
@@ -159,6 +160,7 @@ This is the most complex management surface and should use progressive disclosur
 - Replace dense inline numeric editors with consistent mobile sheets, while retaining standard inputs on desktop and PWA.
 - Make activation, duplication, completion, extension, and deletion visually distinct. Only one should look primary at a time.
 - Show unsaved or draft status persistently.
+- Use the approved brain-and-checklist mark for the Plans page and navigation, preserving the app icon's brain perimeter in a simplified planning symbol.
 - Plan comparison should emphasize differences and trends, not only raw set totals.
 - Native enhancement: share and import through the native share sheet and Files document picker. The PWA retains paste, upload, copy, and download.
 - Longer term: AI planning would feel more native as a guided handoff or embedded conversation, but the existing JSON import must remain available as the reliable universal path.
@@ -179,6 +181,7 @@ Initial presentation-only Nutrition checkpoint implemented for native and PWA va
 - [x] Use consistent icon-only disclosures for Today and meal sections, with a left chevron when collapsed and a down chevron when expanded.
 - [x] Separate secondary utilities under **Tracking** and keep the prominent **Add Food** action directly beneath the daily summary in both disclosure states.
 - [x] Separate nutrition visualization colors from the purple brand palette with consistent blue calories, teal protein, amber carbohydrates, and coral fat across cards, donut charts, legends, and calorie-history charts.
+- [x] Carry the app identity into Nutrition with a simplified food-bowl navigation icon and a coordinated detailed page-header version.
 - [ ] Validate dense meal logs, empty days, historical dates, Add Food from Another Day, serving edits, barcode/search flows, and PWA layout in real use.
 
 - Divide the experience into **Today**, **Trends**, and **Library** rather than placing everything in one continuous surface.

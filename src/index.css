@@ -116,7 +116,24 @@ h2 {
   height: 40px;
   justify-content: center;
   overflow: hidden;
+  color: var(--accent);
   width: 40px;
+}
+
+.home-view .app-page-header__icon,
+.nutrition-view .app-page-header__icon {
+  background: transparent;
+  border-color: transparent;
+}
+
+.bottom-nav__icon-slot {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 26px;
+  height: 26px;
+  justify-content: center;
+  line-height: 0;
+  width: 28px;
 }
 
 .app-page-header__copy,

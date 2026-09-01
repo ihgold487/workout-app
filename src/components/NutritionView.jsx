@@ -35,6 +35,7 @@ import {
 import BodyWeightSheet from "./BodyWeightSheet";
 import WeightPickerModal from "./WeightPickerModal";
 import { AppPageHeader } from "./ui/AppSurface";
+import NutritionBowlIcon from "./ui/NutritionBowlIcon";
 import {
   getNutritionOutbox,
   initializeNutritionPersistence,
@@ -6973,7 +6974,7 @@ export default function NutritionView({ session = null }) {
   return (
     <div className="nutrition-view">
       <AppPageHeader
-        icon={<Utensils size={24} />}
+        icon={<NutritionBowlIcon size={31} strokeWidth={1.45} />}
         subtitle="Calories, macros, meals, and body weight"
         title="Nutrition"
       />

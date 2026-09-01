@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   Copy,
   ExternalLink,
   FileJson,
@@ -44,6 +43,7 @@ import AiPlanningGuidancePanel from "./AiPlanningGuidancePanel";
 import MuscleMap from "./MuscleMap";
 import WeightPickerModal from "./WeightPickerModal";
 import RestDurationInput from "./RestDurationInput";
+import PlansBrainIcon from "./ui/PlansBrainIcon";
 import {
   WorkoutExercisePreviewGroup,
   WorkoutExercisePreviewRow,
@@ -4194,7 +4194,12 @@ export default function PlansView({
           marginBottom: "16px",
         }}
       >
-        <ClipboardList size={26} />
+        <PlansBrainIcon
+          color="var(--accent)"
+          emphasized
+          monochrome
+          size={36}
+        />
         <h1
           style={{
             fontSize: "1.6rem",

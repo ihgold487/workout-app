@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Dumbbell, ImagePlus, X } from "lucide-react";
+import { Copy, ImagePlus, X } from "lucide-react";
 
 import { equipmentOptions } from "../data/seedEquipment";
 import {
@@ -21,6 +21,7 @@ import {
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseThumbnail from "./ExerciseThumbnail";
+import ExerciseArmIcon from "./ui/ExerciseArmIcon";
 
 const muscleGroups = [
   "Abs",
@@ -1540,7 +1541,12 @@ export default function ExerciseView({
           marginBottom: "12px",
         }}
       >
-        <Dumbbell size={26} />
+        <ExerciseArmIcon
+          color="var(--accent)"
+          emphasized
+          monochrome
+          size={36}
+        />
         <h1
           style={{
             fontSize: "1.6rem",

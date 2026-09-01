@@ -134,7 +134,7 @@ const WORKOUT_PAUSE_REMINDER_SECONDS = 300;
 const WORKOUT_INACTIVITY_REMINDER_SECONDS = 360;
 const NATIVE_APP_ICON = `${
   import.meta.env.BASE_URL || "/"
-}workout-icon-native.png`;
+}workout-icon-native.png?v=6`;
 const REST_NOTIFICATION_ICON = __IS_NATIVE_BUILD__
   ? NATIVE_APP_ICON
   : `${import.meta.env.BASE_URL || "/"}icon-192.png`;
