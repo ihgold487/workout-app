@@ -84,6 +84,11 @@ Initial Template View presentation checkpoint implemented for native and PWA val
 - [x] Make editing an explicit mode: the default view remains focused on workout review and launch, while reordering, replacement, superset, deletion, name, and prescription controls appear in Edit Workout.
 - [x] Keep workout-level Save/Cancel unavailable while any nested template edit is open, so adding, replacing, renaming, library editing, and prescription drafts must be resolved first.
 - [x] Replace the heavy superset enclosure with a subtle accent rail, linked-card surface, and clear Superset label.
+- [x] Place unavailable and completed-state explanations directly beside the sticky Start Workout action and give the button a state-specific label.
+- [x] Add polished empty-workout, incomplete-previous-week, inactive-plan, completed-workout, and long-name treatments.
+- [x] Add restrained native-only haptics for entering and saving Edit mode, successful reordering, exercise deletion, and accepted workout starts; PWA behavior remains unchanged.
+- [x] Confirm before canceling Edit Workout only when the current edit snapshot contains changes that would be discarded.
+- [x] Reduce muscle chips to quiet white metadata surfaces and give **Edit Workout** the lavender action emphasis.
 - [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, edit Save/Cancel, and phone/PWA layouts in real use.
 
 - Establish a clear top hierarchy: workout name, plan/week context, estimated duration, muscle summary, then exercises.

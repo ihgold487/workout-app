@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Check,
+  Dumbbell,
   GripVertical,
   Link2,
   Pencil,
@@ -50,7 +51,12 @@ import {
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
-import { triggerNativeWarningHaptic } from "../native/pickerHaptics";
+import {
+  triggerNativeActionHaptic,
+  triggerNativePickerSelectionHaptic,
+  triggerNativeSuccessHaptic,
+  triggerNativeWarningHaptic,
+} from "../native/pickerHaptics";
 
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
@@ -324,13 +330,22 @@ export default function TemplateView({
   const templateBodyWeight = getLatestBodyWeightForDate(bodyWeightEntries);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
+  const [confirmCancelEdit, setConfirmCancelEdit] = useState(false);
   const hasOpenEditDialog = Boolean(
     editingTemplateName ||
       showAdd ||
       pendingExercise ||
       replacingExercise ||
       editingExercise ||
-      libraryEditingExercise
+      libraryEditingExercise ||
+      confirmCancelEdit
+  );
+  const hasUnsavedEditChanges = Boolean(
+    isEditMode &&
+      editSnapshot &&
+      (template.name !== editSnapshot.name ||
+        JSON.stringify(template.exercises || []) !==
+          JSON.stringify(editSnapshot.exercises || []))
   );
   const [addToWorkoutsState, setAddToWorkoutsState] = useState({
     added: false,
@@ -351,12 +366,16 @@ export default function TemplateView({
     )
   );
   const isPlanWorkout = Boolean(template.planId);
+  const hasExercises = (template.exercises || []).length > 0;
   const canStartWorkout =
-    !isPlanWorkout ||
-    (linkedPlan?.status === "active" && !planWorkoutCompleteThisWeek);
-  const startDisabledReason = !isPlanWorkout
-    ? ""
-    : !linkedPlan
+    hasExercises &&
+    (!isPlanWorkout ||
+      (linkedPlan?.status === "active" && !planWorkoutCompleteThisWeek));
+  const startDisabledReason = !hasExercises
+    ? "Add at least one exercise before starting this workout."
+    : !isPlanWorkout
+      ? ""
+      : !linkedPlan
       ? "This plan workout is no longer linked to an active plan."
       : linkedPlan.status === "completed"
         ? "This plan is complete."
@@ -365,6 +384,19 @@ export default function TemplateView({
           : planWorkoutCompleteThisWeek
             ? `This workout is already complete for week ${currentPlanWeek}.`
             : "";
+  const startButtonLabel = isStartingWorkout
+    ? "Starting workout…"
+    : !hasExercises
+      ? "Add Exercises to Start"
+      : planWorkoutCompleteThisWeek
+        ? "Workout Complete"
+        : linkedPlan?.status === "completed"
+          ? "Plan Complete"
+          : isPlanWorkout && linkedPlan?.status !== "active"
+            ? linkedPlan
+              ? "Plan Inactive"
+              : "Workout Unavailable"
+          : "Start Workout";
 
   function isPreviousPlanWeekIncomplete(plan) {
     const previousWeek = Number(currentPlanWeek) - 1;
@@ -665,6 +697,7 @@ export default function TemplateView({
 
     setEditSnapshot(cloneTemplateEditState(sourceTemplate));
     setIsEditMode(true);
+    void triggerNativeActionHaptic();
     onEditModeChange?.(true);
   }
 
@@ -767,6 +800,7 @@ export default function TemplateView({
     );
     setIsEditMode(false);
     setEditSnapshot(null);
+    void triggerNativeSuccessHaptic();
     onEditModeChange?.(false);
     setAddToWorkoutsState({
       added: false,
@@ -774,8 +808,8 @@ export default function TemplateView({
     });
   }
 
-  function cancelEditMode() {
-    if (hasOpenEditDialog) {
+  function cancelEditMode({ force = false } = {}) {
+    if (hasOpenEditDialog && !force) {
       return;
     }
 
@@ -812,9 +846,24 @@ export default function TemplateView({
     setEditingExercise(null);
     setEditingExerciseDraft(null);
     setEditingPrescriptionField(null);
+    setConfirmCancelEdit(false);
     setIsEditMode(false);
     setEditSnapshot(null);
     onEditModeChange?.(false);
+  }
+
+  function requestCancelEditMode() {
+    if (hasOpenEditDialog) {
+      return;
+    }
+
+    if (hasUnsavedEditChanges) {
+      void triggerNativeWarningHaptic();
+      setConfirmCancelEdit(true);
+      return;
+    }
+
+    cancelEditMode();
   }
 
   function formatTargetValue(value, fallback = "") {
@@ -1274,6 +1323,31 @@ export default function TemplateView({
   const planContextLabel = linkedPlan
     ? `${linkedPlan.name} · Week ${currentPlanWeek}`
     : "Standalone workout";
+  const previousPlanWeekIncomplete = Boolean(
+    linkedPlan?.status === "active" &&
+      !planWorkoutCompleteThisWeek &&
+      isPreviousPlanWeekIncomplete(linkedPlan)
+  );
+  const overviewStatusLabel = !hasExercises
+    ? "Needs exercises"
+    : planWorkoutCompleteThisWeek
+      ? `Week ${currentPlanWeek} · Complete`
+      : isPlanWorkout && !linkedPlan
+        ? "Plan unavailable"
+        : linkedPlan?.status === "completed"
+          ? "Plan complete"
+          : isPlanWorkout && linkedPlan?.status !== "active"
+            ? `Week ${currentPlanWeek} · Inactive`
+        : isPlanWorkout
+          ? `Week ${currentPlanWeek}`
+          : "Workout";
+  const overviewStatusTone = planWorkoutCompleteThisWeek
+    ? "success"
+    : !hasExercises || (isPlanWorkout && linkedPlan?.status !== "active")
+      ? "neutral"
+      : isPlanWorkout
+        ? "accent"
+        : "neutral";
 
   function startWorkout() {
     if (!canStartWorkout || isStartingWorkout) {
@@ -1299,6 +1373,7 @@ export default function TemplateView({
     }
 
     setIsStartingWorkout(true);
+    void triggerNativeActionHaptic();
     window.requestAnimationFrame(() => {
       window.setTimeout(() => startWorkoutSession(plan), 0);
     });
@@ -1743,8 +1818,8 @@ export default function TemplateView({
       <AppSectionCard className="template-view__summary" tone="accent">
         <AppSectionHeading
           action={
-            <AppStatusPill tone={isPlanWorkout ? "accent" : "neutral"}>
-              {isPlanWorkout ? `Week ${currentPlanWeek}` : "Workout"}
+            <AppStatusPill tone={overviewStatusTone}>
+              {overviewStatusLabel}
             </AppStatusPill>
           }
           eyebrow="Workout overview"
@@ -1753,7 +1828,7 @@ export default function TemplateView({
           } · ${workoutSummary.totalSets} planned set${
             workoutSummary.totalSets === 1 ? "" : "s"
           } · About ${estimatedWorkoutMinutes} min`}
-          title="Ready when you are"
+          title={hasExercises ? "Ready when you are" : "Build your workout"}
         />
 
         <div className="template-view__muscles">
@@ -1782,7 +1857,9 @@ export default function TemplateView({
             <BarChart3 size={17} /> Muscle Map
           </button>
           <button
-            className="app-secondary-action"
+            className={`app-secondary-action${
+              isEditMode ? "" : " template-view__edit-action"
+            }`}
             onClick={() => {
               if (!isEditMode) {
                 enterEditMode();
@@ -1824,24 +1901,6 @@ export default function TemplateView({
           )}
         </div>
       </AppSectionCard>
-
-      {!isEditMode && startDisabledReason && (
-        <div
-          role="status"
-          style={{
-            background: "var(--surface-muted)",
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            color: "var(--text-muted)",
-            fontSize: "12px",
-            marginBottom: "12px",
-            padding: "9px 11px",
-            textAlign: "left",
-          }}
-        >
-          {startDisabledReason}
-        </div>
-      )}
 
       {editingTemplateName && (
         <div
@@ -2100,6 +2159,23 @@ export default function TemplateView({
         <span>Exercises</span>
         <span>{workoutSummary.exerciseCount}</span>
       </div>
+      {!hasExercises && (
+        <div className="template-view__empty-state">
+          <Dumbbell aria-hidden="true" size={28} />
+          <strong>No exercises yet</strong>
+          <span>Add the first exercise to make this workout ready to start.</span>
+          <button
+            className="app-secondary-action"
+            onClick={() => {
+              enterEditMode();
+              setShowAdd(true);
+            }}
+            type="button"
+          >
+            <Plus size={16} /> Add Exercise
+          </button>
+        </div>
+      )}
       {
         <DndContext
           collisionDetection={closestCenter}
@@ -2122,6 +2198,7 @@ export default function TemplateView({
               ...currentTemplate,
               exercises: reordered,
             }));
+            void triggerNativePickerSelectionHaptic();
           }}
         >
           <SortableContext
@@ -2264,6 +2341,7 @@ export default function TemplateView({
                                 size={32}
                                 tone="danger"
                                 onClick={() => {
+                                  void triggerNativeWarningHaptic();
                                   updateCurrentTemplate((currentTemplate) => ({
                                     ...currentTemplate,
 
@@ -2290,6 +2368,19 @@ export default function TemplateView({
       }
       {!isEditMode && (
         <div className="template-view__start-bar">
+          {(startDisabledReason || previousPlanWeekIncomplete) && (
+            <div
+              className={`template-view__start-notice${
+                previousPlanWeekIncomplete && !startDisabledReason
+                  ? " template-view__start-notice--warning"
+                  : ""
+              }`}
+              role="status"
+            >
+              {startDisabledReason ||
+                `Week ${currentPlanWeek - 1} is incomplete. You’ll confirm before starting.`}
+            </div>
+          )}
           <button
             aria-busy={isStartingWorkout}
             className="app-primary-action template-view__start-button"
@@ -2297,8 +2388,14 @@ export default function TemplateView({
             onClick={startWorkout}
             type="button"
           >
-            <Play size={18} />
-            {isStartingWorkout ? "Starting workout…" : "Start Workout"}
+            {planWorkoutCompleteThisWeek ? (
+              <Check size={18} />
+            ) : !hasExercises ? (
+              <Plus size={18} />
+            ) : (
+              <Play size={18} />
+            )}
+            {startButtonLabel}
           </button>
         </div>
       )}
@@ -2336,7 +2433,7 @@ export default function TemplateView({
         >
           <button
             disabled={hasOpenEditDialog}
-            onClick={cancelEditMode}
+            onClick={requestCancelEditMode}
             style={{
               alignItems: "center",
               background: "var(--danger-bg)",
@@ -2634,6 +2731,40 @@ export default function TemplateView({
           template={previewTemplate}
           onClose={() => setShowTemplateMuscleMap(false)}
         />
+      )}
+      {confirmCancelEdit && (
+        <div
+          aria-label="Discard workout changes"
+          aria-modal="true"
+          className="template-view__discard-backdrop"
+          onClick={() => setConfirmCancelEdit(false)}
+          role="dialog"
+        >
+          <div
+            className="template-view__discard-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <strong>Discard workout changes?</strong>
+            <span>
+              Changes made since entering Edit Workout will be lost.
+            </span>
+            <div className="template-view__discard-actions">
+              <button
+                onClick={() => setConfirmCancelEdit(false)}
+                type="button"
+              >
+                Keep Editing
+              </button>
+              <button
+                className="template-view__discard-confirm"
+                onClick={() => cancelEditMode({ force: true })}
+                type="button"
+              >
+                Discard Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {confirmPreviousWeekIncomplete && (
         <div
