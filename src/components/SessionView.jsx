@@ -4384,12 +4384,38 @@ export default function SessionView({
     );
     const actualRirNumber = parseSessionNumber(actualRir);
     const targetRirNumber = parseSessionNumber(targetRir);
+    const previousCompletedSet = exercise.sets[nextSetIndex - 2];
+    const previousActualWeight = parseSessionNumber(
+      previousCompletedSet?.actualWeight
+    );
+    const previousActualReps = parseSessionNumber(
+      previousCompletedSet?.actualReps
+    );
+    const previousActualRir = parseSessionNumber(previousCompletedSet?.actualRir);
+    const hasComparableLiveSets =
+      previousActualWeight != null &&
+      actualWeight != null &&
+      Math.abs(previousActualWeight - actualWeight) < 0.001 &&
+      previousActualRir != null &&
+      actualRirNumber != null &&
+      Math.abs(previousActualRir - actualRirNumber) < 0.001;
+    const liveRepDrop = hasComparableLiveSets
+      ? Math.max(0, previousActualReps - actualReps)
+      : 0;
+    const liveProjectedReps =
+      liveRepDrop > 0
+        ? actualReps - Math.max(1, Math.round(liveRepDrop / 2))
+        : null;
+    const historicalFatigueRatio =
+      getLatestAdjacentFatigueRatio(exercise, nextSetIndex);
     const performanceAdjustment = recommendNextSetTargetAfterPerformance({
       actualReps,
       actualRir: actualRirNumber,
       actualWeight,
       bodyWeight: sessionBodyWeight,
       exercise: calculationExercise,
+      historicalFatigueRatio,
+      liveProjectedReps,
       minimumReps: minimumAcceptableReps,
       normalizeWeight: (weight) =>
         getLoadableWeightForExercise(calculationExercise, weight) ?? weight,

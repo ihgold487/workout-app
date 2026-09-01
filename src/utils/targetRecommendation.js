@@ -525,6 +525,8 @@ export function recommendTargetPrescription({
 export function recommendNextSetTargetAfterPerformance({
   bodyWeight,
   exercise,
+  historicalFatigueRatio,
+  liveProjectedReps,
   minimumReps,
   normalizeWeight,
   actualReps,
@@ -554,6 +556,77 @@ export function recommendNextSetTargetAfterPerformance({
   });
   const effortExceeded = rir != null && rir < prescribedRir;
   const rangeMissed = reps < minimum;
+  const historicalRatio = toNumber(historicalFatigueRatio);
+  const projectedReps = toNumber(liveProjectedReps);
+  const hasLiveRepDrop = projectedReps != null && projectedReps < reps;
+
+  if (
+    !rangeMissed &&
+    !effortExceeded &&
+    hasLiveRepDrop &&
+    projectedReps >= minimum
+  ) {
+    return {
+      reason: "live-fatigue-rep-adjustment",
+      reps: projectedReps,
+      rir: prescribedRir,
+      weight,
+    };
+  }
+
+  if (
+    !rangeMissed &&
+    !effortExceeded &&
+    hasLiveRepDrop &&
+    projectedReps < minimum &&
+    actualE1RM != null
+  ) {
+    const liveProjectedE1RM = calculateE1RM(
+      weight,
+      projectedReps,
+      prescribedRir,
+      null,
+      null,
+      null,
+      { bodyWeight, exercise }
+    );
+    const liveFatigueRatio =
+      liveProjectedE1RM == null ? null : liveProjectedE1RM / actualE1RM;
+    const fatigueRatio =
+      liveFatigueRatio != null && historicalRatio > 0
+        ? liveFatigueRatio * 0.75 + Math.min(1, historicalRatio) * 0.25
+        : liveFatigueRatio;
+
+    if (fatigueRatio == null || fatigueRatio <= 0 || fatigueRatio >= 1) {
+      return null;
+    }
+
+    const projectedE1RM = actualE1RM * fatigueRatio;
+    const rawWeight = estimateWeightForE1RM(
+      projectedE1RM,
+      prescribed,
+      prescribedRir,
+      { bodyWeight, exercise }
+    );
+    const increment = resolveWeightIncrement(weightIncrement, rawWeight);
+    const roundedWeight = roundWeightToIncrement(
+      Math.max(0, rawWeight ?? 0),
+      increment
+    );
+    const resolvedWeight =
+      typeof normalizeWeight === "function"
+        ? normalizeWeight(roundedWeight)
+        : roundedWeight;
+
+    if (Number.isFinite(resolvedWeight) && resolvedWeight < weight) {
+      return {
+        reason: "projected-fatigue-weight-adjustment",
+        reps: prescribed,
+        rir: prescribedRir,
+        weight: resolvedWeight,
+      };
+    }
+  }
 
   if (!rangeMissed && !effortExceeded && reps < prescribed) {
     return {
