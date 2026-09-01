@@ -176,7 +176,7 @@ Initial presentation-only Nutrition checkpoint implemented for native and PWA va
 - [x] Add one prominent **Add Food** action while retaining every existing search, scan, copy, recipe, library, and manual-entry control.
 - [x] Present body weight, daily goal, and creatine as consistent secondary utility cards.
 - [x] Modernize meal-group surfaces while preserving expansion, editing, moving, recipe detail, and deletion behavior.
-- [x] Match Home disclosure behavior with a right chevron when collapsed and a down chevron when expanded, reinforced by explicit Show/Hide details text.
+- [x] Use consistent icon-only disclosures for Today and meal sections, with a left chevron when collapsed and a down chevron when expanded.
 - [x] Separate secondary utilities under **Tracking** and keep the prominent **Add Food** action directly beneath the daily summary in both disclosure states.
 - [x] Separate nutrition visualization colors from the purple brand palette with consistent blue calories, teal protein, amber carbohydrates, and coral fat across cards, donut charts, legends, and calorie-history charts.
 - [ ] Validate dense meal logs, empty days, historical dates, Add Food from Another Day, serving edits, barcode/search flows, and PWA layout in real use.

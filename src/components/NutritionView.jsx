@@ -15,7 +15,7 @@ import {
   ChefHat,
   Check,
   ChevronDown,
-  ChevronRight,
+  ChevronLeft,
   ChevronUp,
   Clock3,
   Coffee,
@@ -7492,11 +7492,10 @@ export default function NutritionView({ session = null }) {
             </span>
           </span>
           <span className="nutrition-view__disclosure-label">
-            {dayPanelOpen ? "Hide details" : "Show details"}
             {dayPanelOpen ? (
               <ChevronDown size={20} />
             ) : (
-              <ChevronRight size={20} />
+              <ChevronLeft size={20} />
             )}
           </span>
         </button>
@@ -9684,9 +9683,9 @@ export default function NutritionView({ session = null }) {
 	                    </span>
 	                    {hasEntries ? (
 	                      group.expanded ? (
-	                        <ChevronUp size={18} />
-	                      ) : (
 	                        <ChevronDown size={18} />
+	                      ) : (
+	                        <ChevronLeft size={18} />
 	                      )
 	                    ) : null}
 	                  </button>
