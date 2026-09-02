@@ -263,18 +263,34 @@ export async function uploadNutritionEntries(entries, session) {
   const rows = validEntries.map((entry) =>
     localEntryToCloud(entry, session.user.id)
   );
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(NUTRITION_ENTRIES_TABLE)
     .upsert(rows, {
       onConflict: "user_id,source,source_key",
-    });
+    })
+    .select("source_key");
 
   if (error) {
     throw error;
   }
 
+  const confirmedSourceKeys = new Set(
+    (data || []).map((row) => String(row.source_key))
+  );
+  const missingSourceKeys = rows
+    .map((row) => row.source_key)
+    .filter((sourceKey) => !confirmedSourceKeys.has(String(sourceKey)));
+
+  if (missingSourceKeys.length > 0) {
+    throw new Error(
+      `Supabase did not return ${missingSourceKeys.length} persisted nutrition entr${
+        missingSourceKeys.length === 1 ? "y" : "ies"
+      } for verification.`
+    );
+  }
+
   return {
-    uploaded: rows.length,
+    uploaded: confirmedSourceKeys.size,
   };
 }
 
@@ -286,14 +302,23 @@ export async function upsertNutritionEntry(entry, session) {
   assertCloudReady(session);
 
   const row = localEntryToCloud(entry, session.user.id);
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(NUTRITION_ENTRIES_TABLE)
     .upsert(row, {
       onConflict: "user_id,source,source_key",
-    });
+    })
+    .select("source_key");
 
   if (error) {
     throw error;
+  }
+
+  const persisted = (data || []).some(
+    (record) => String(record.source_key) === String(row.source_key)
+  );
+
+  if (!persisted) {
+    throw new Error("Supabase did not return the persisted nutrition entry for verification.");
   }
 
   return {

@@ -1347,8 +1347,8 @@ export default function SessionView({
     return firstPresentValue(set?.targetReps, getSetPrescribedReps(set), fallback);
   }
 
-  function getSetTargetRepDisplay(set) {
-    const maximumReps = getSetTargetReps(set);
+  function getSetPrescribedRepDisplay(set) {
+    const maximumReps = getSetPrescribedReps(set);
     const minimumReps = getSetMinimumReps(set);
 
     return minimumReps && String(minimumReps) !== String(maximumReps)
@@ -1678,13 +1678,13 @@ export default function SessionView({
 
   function getExercisePrescriptionDisplay(exercise) {
     const targetSet =
-      exercise?.sets?.find((set) => !set.completed) || exercise?.sets?.[0];
+      exercise?.sets?.find((set) => !set.isDropSet) || exercise?.sets?.[0];
 
     const prescribedRestSeconds = getSetPrescribedRestSeconds(targetSet);
     const targetReps = parseTimerReps(getSetPrescribedReps(targetSet));
 
     return {
-      reps: formatPrescriptionValue(getSetTargetRepDisplay(targetSet)),
+      reps: formatPrescriptionValue(getSetPrescribedRepDisplay(targetSet)),
       restSeconds:
         prescribedRestSeconds ||
         (targetReps == null ? null : getRestDurationForReps(targetReps)),
@@ -2371,10 +2371,6 @@ export default function SessionView({
   );
 
   function applyTargetToActual(exerciseId, setId) {
-    if (session.workoutTimerPaused) {
-      return;
-    }
-
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
 
@@ -2390,10 +2386,6 @@ export default function SessionView({
   }
 
   function applyDropSetTargetWeight(exerciseId, setId) {
-    if (session.workoutTimerPaused) {
-      return;
-    }
-
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
 
@@ -2409,10 +2401,6 @@ export default function SessionView({
   }
 
   function applyPrescriptionToActual(exerciseId, setId, prescription) {
-    if (session.workoutTimerPaused) {
-      return;
-    }
-
     appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
 
     updateSession((s) => ({
@@ -2536,10 +2524,6 @@ export default function SessionView({
   }
 
   function openTargetAlternatives(exercise, set, setIndex) {
-    if (session.workoutTimerPaused) {
-      return;
-    }
-
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
     const current = getLatestActualForSet(exercise, setIndex);
     const suggested = {
@@ -4072,6 +4056,19 @@ export default function SessionView({
     return getSetPrescribedRestSeconds(nextSet);
   }
 
+  function resetWorkoutInactivityReminder(startedAt = Date.now()) {
+    const inactivityResetAtIso = new Date(startedAt).toISOString();
+
+    updateSession((currentSession) => ({
+      ...currentSession,
+      workoutInactivityReminderStartedAtIso: inactivityResetAtIso,
+    }));
+    inactivityReminderHandledKeyRef.current = null;
+    setInactivityReminderOpen(false);
+    setInactivityWarningFlash(false);
+    void cancelWorkoutInactivityNotification();
+  }
+
   function setRestTimerForNextSet(
     nextActiveSet,
     completedSetContext = {},
@@ -4112,6 +4109,8 @@ export default function SessionView({
     }
 
     const duration = prescribedRestSeconds || getRestDurationForReps(reps);
+
+    resetWorkoutInactivityReminder(startedAt || Date.now());
 
     setRestMinutes(Math.floor(duration / 60));
     setRestRemainder(duration % 60);
@@ -4199,6 +4198,8 @@ export default function SessionView({
       return;
     }
 
+    resetWorkoutInactivityReminder();
+
     setTimerPaused(false);
     setTimerExpiredAt(null);
     restNotificationSentKeyRef.current = null;
@@ -4233,6 +4234,7 @@ export default function SessionView({
 
       if (signedRemaining > 0) {
         const adjustedSeconds = Math.max(0, Math.min(10 * 60, signedRemaining));
+        resetWorkoutInactivityReminder();
         restSecondsRef.current = adjustedSeconds;
         setRestSeconds(adjustedSeconds);
         setRestTimerRunDuration(adjustedSeconds);
@@ -7938,7 +7940,7 @@ export default function SessionView({
                     {exercise.equipment?.[0] ? (
                       <div
                         style={{
-                          color: "var(--text-muted)",
+                          color: "var(--accent)",
                           fontSize: "0.8rem",
                           fontWeight: 400,
                           lineHeight: 1.3,
@@ -8533,7 +8535,6 @@ export default function SessionView({
                                         setIndex + 1
                                       }`
                                 }
-                                disabled={session.workoutTimerPaused}
                                 type="button"
                                 onClick={(event) => {
                                   event.preventDefault();
@@ -8931,7 +8932,6 @@ export default function SessionView({
                                     aria-label={`Use suggested target ${formatPrescriptionLabel(
                                       suggestedTarget
                                     )}`}
-                                    disabled={session.workoutTimerPaused}
                                     onClick={() => {
                                       applyTargetToActual(exercise.id, set.id);
                                       setTargetSuggestionPreview(null);
