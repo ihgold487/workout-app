@@ -7880,6 +7880,8 @@ export default function SessionView({
 
                   padding: "12px",
 
+                  paddingTop: group.group ? "8px" : "12px",
+
                   marginBottom: "8px",
 
                   borderRadius: "8px",
@@ -7900,110 +7902,56 @@ export default function SessionView({
                       marginBottom: "20px",
                     }}
                   >
-                    <div
-                      style={{
-                        alignItems: "center",
-                        display: "grid",
-                        gap: "8px",
-                        gridTemplateColumns: "minmax(0, 1fr) auto",
-                      }}
-                    >
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ minWidth: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDetailExercise(
+                              getExerciseDetailRecord(exercise)
+                            )
+                          }
+                          style={{
+                            background: "transparent",
+                            border: 0,
+                            color: "var(--accent)",
+                            cursor: "pointer",
+                            display: "block",
+                            font: "inherit",
+                            fontSize: "1.1rem",
+                            fontWeight: 800,
+                            lineHeight: 1.2,
+                            maxWidth: "100%",
+                            overflow: "hidden",
+                            padding: 0,
+                            textAlign: "left",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            width: "100%",
+                          }}
+                        >
+                          {exercise.name}
+                        </button>
+                      </strong>
+                    </div>
+
+                    {exercise.equipment?.[0] ? (
                       <div
                         style={{
-                          alignItems: "center",
-                          display: "grid",
-                          gap: "6px",
-                          gridTemplateColumns: "34px minmax(0, 1fr)",
-                          minWidth: 0,
+                          color: "var(--text-muted)",
+                          fontSize: "0.8rem",
+                          fontWeight: 400,
+                          lineHeight: 1.3,
+                          marginTop: "3px",
+                          overflow: "hidden",
+                          textAlign: "left",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        <IconButton
-                          disabled={session.workoutTimerPaused}
-                          label="Exercise notes"
-                          size={34}
-                          onClick={() => openExerciseNoteEditor(exercise)}
-                        >
-                          <NotebookPen size={17} />
-                        </IconButton>
-                        <strong style={{ minWidth: 0 }}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDetailExercise(
-                                getExerciseDetailRecord(exercise)
-                              )
-                            }
-                            style={{
-                              background: "transparent",
-                              border: 0,
-                              color: "var(--text)",
-                              cursor: "pointer",
-                              display: "block",
-                              font: "inherit",
-                              maxWidth: "100%",
-                              overflow: "hidden",
-                              padding: 0,
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              lineHeight: "1.05",
-                              fontSize: "14px",
-                              textAlign: "left",
-                              width: "100%",
-                            }}
-                          >
-                            {`${exercise.name}${
-                              exercise.equipment?.[0]
-                                ? ", " + exercise.equipment[0]
-                                : ""
-                            }`}
-                          </button>
-                        </strong>
+                        {exercise.equipment.join(", ")}
                       </div>
-
-                      <div style={{ display: "flex", gap: "4px" }}>
-                        <IconButton
-                          label="Replace exercise"
-                          size={34}
-                          onClick={() => {
-                            const nextReplacingExerciseId =
-                              replacingExerciseId === exercise.id
-                                ? null
-                                : exercise.id;
-
-                            setShowAddExercise(false);
-                            setReplacingExerciseId(nextReplacingExerciseId);
-
-                            if (!nextReplacingExerciseId) {
-                              setSelectedMuscle("");
-                              setSearch("");
-                              return;
-                            }
-
-                            const originalExercise =
-                              getExerciseDetailRecord(exercise);
-
-                            setSelectedMuscle(
-                              originalExercise?.muscles?.[0] || ""
-                            );
-
-                            setSearch("");
-                          }}
-                        >
-                          <RefreshCw size={17} />
-                        </IconButton>
-                        <IconButton
-                          label="Delete exercise"
-                          size={34}
-                          tone="danger"
-                          onClick={() => {
-                            void triggerNativeWarningHaptic();
-                            setPendingDeleteExercise(exercise);
-                          }}
-                        >
-                          <Trash2 size={17} />
-                        </IconButton>
-                      </div>
-                    </div>
+                    ) : null}
 
                     {editingNote ? (
                       <div
@@ -8110,13 +8058,101 @@ export default function SessionView({
 
                     <div
                       style={{
-                        alignItems: "stretch",
+                        alignItems: "center",
                         display: "flex",
                         gap: "8px",
-                        justifyContent: "flex-start",
+                        justifyContent: "space-between",
                         marginTop: "8px",
                       }}
                     >
+                      <div
+                        aria-label="Prescribed reps, RIR, and rest time"
+                        title="Prescribed reps, RIR, and rest time"
+                        style={{
+                          alignItems: "center",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--text)",
+                          display: "inline-flex",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          justifyContent: "flex-start",
+                          minHeight: "24px",
+                          padding: "2px 8px",
+                          textAlign: "left",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {prescriptionDisplay.reps} reps ·{" "}
+                        {prescriptionDisplay.rir} RIR ·{" "}
+                        {prescriptionDisplay.restSeconds == null
+                          ? "—"
+                          : formatWorkoutDuration(
+                              prescriptionDisplay.restSeconds
+                            )}{" "}
+                        rest
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexShrink: 0,
+                          gap: "4px",
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        <IconButton
+                          disabled={session.workoutTimerPaused}
+                          label="Exercise notes"
+                          size={34}
+                          onClick={() => openExerciseNoteEditor(exercise)}
+                        >
+                          <NotebookPen size={17} />
+                        </IconButton>
+                        <IconButton
+                          label="Replace exercise"
+                          size={34}
+                          onClick={() => {
+                            const nextReplacingExerciseId =
+                              replacingExerciseId === exercise.id
+                                ? null
+                                : exercise.id;
+
+                            setShowAddExercise(false);
+                            setReplacingExerciseId(nextReplacingExerciseId);
+
+                            if (!nextReplacingExerciseId) {
+                              setSelectedMuscle("");
+                              setSearch("");
+                              return;
+                            }
+
+                            const originalExercise =
+                              getExerciseDetailRecord(exercise);
+
+                            setSelectedMuscle(
+                              originalExercise?.muscles?.[0] || ""
+                            );
+                            setSearch("");
+                          }}
+                        >
+                          <RefreshCw size={17} />
+                        </IconButton>
+                        <IconButton
+                          label="Delete exercise"
+                          size={34}
+                          tone="danger"
+                          onClick={() => {
+                            void triggerNativeWarningHaptic();
+                            setPendingDeleteExercise(exercise);
+                          }}
+                        >
+                          <Trash2 size={17} />
+                        </IconButton>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: "8px", textAlign: "left" }}>
                       <button
                         type="button"
                         onClick={() => setWarmupExerciseId(exercise.id)}
@@ -8130,32 +8166,6 @@ export default function SessionView({
                       >
                         <Flame size={15} /> Warmup sets
                       </button>
-                      <div
-                        aria-label="Prescribed reps, RIR, and rest time"
-                        title="Prescribed reps, RIR, and rest time"
-                        style={{
-                          alignItems: "center",
-                          border: "1px solid var(--border)",
-                          borderRadius: "6px",
-                          color: "var(--text)",
-                          display: "inline-flex",
-                          fontSize: "13px",
-                          fontWeight: 700,
-                          justifyContent: "center",
-                          minHeight: "24px",
-                          padding: "2px 8px",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {prescriptionDisplay.reps} reps ·{" "}
-                        {prescriptionDisplay.rir} RIR ·{" "}
-                        {prescriptionDisplay.restSeconds == null
-                          ? "—"
-                          : formatWorkoutDuration(
-                              prescriptionDisplay.restSeconds
-                            )}{" "}
-                        rest
-                      </div>
                     </div>
 
                     {
