@@ -44,10 +44,12 @@ import {
   persistNutritionEntries,
   queueBodyWeightDelete,
   queueBodyWeightUpsert,
+  queueCreatineReminderSettingsUpsert,
   queueNutritionDelete,
   queueNutritionTargetUpsert,
   queueNutritionUpserts,
 } from "../storage/nutritionStorage";
+import { downloadCreatineReminderSettings } from "../sync/creatineReminderCloudSync";
 import { saveNutritionCompatibilityEntries } from "../storage/nutritionCompatibilityStorage";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
@@ -4613,13 +4615,80 @@ export default function NutritionView({ session = null }) {
     const scopedReminderTime = readDailyCreatineReminderTime(
       dailyCreatineReminderTimeStorageKey
     );
+    const legacyReminderTime = signedInUserId
+      ? readDailyCreatineReminderTime(DAILY_CREATINE_REMINDER_TIME_KEY)
+      : DEFAULT_DAILY_CREATINE_REMINDER_TIME;
+    const hasScopedReminderTime =
+      localStorage.getItem(dailyCreatineReminderTimeStorageKey) !== null;
+    const seededReminderTime = hasScopedReminderTime
+      ? scopedReminderTime
+      : legacyReminderTime;
 
-    setDailyCreatineReminderTime(scopedReminderTime);
+    setDailyCreatineReminderTime(seededReminderTime);
     saveDailyCreatineReminderTime(
-      scopedReminderTime,
+      seededReminderTime,
       dailyCreatineReminderTimeStorageKey
     );
-  }, [dailyCreatineReminderTimeStorageKey]);
+  }, [dailyCreatineReminderTimeStorageKey, signedInUserId]);
+
+  useEffect(() => {
+    if (!signedInUserId || !isSupabaseConfigured || !session) return undefined;
+
+    let cancelled = false;
+
+    async function hydrateCreatineReminderSettings() {
+      const remote = await downloadCreatineReminderSettings(session);
+      if (cancelled) return;
+
+      if (remote) {
+        setDailyCreatineReminderEnabled(remote.enabled);
+        setDailyCreatineReminderTime(remote.time);
+        saveDailyCreatineReminderEnabled(
+          remote.enabled,
+          dailyCreatineReminderStorageKey
+        );
+        saveDailyCreatineReminderTime(remote.time, dailyCreatineReminderTimeStorageKey);
+        return;
+      }
+
+      const hasLocalEnabled = hasStoredDailyCreatineReminderEnabled(
+        dailyCreatineReminderStorageKey
+      );
+      const localEnabled = hasLocalEnabled
+        ? readDailyCreatineReminderEnabled(dailyCreatineReminderStorageKey)
+        : readDailyCreatineReminderEnabled(DAILY_CREATINE_REMINDER_KEY);
+      const hasLocalTime =
+        localStorage.getItem(dailyCreatineReminderTimeStorageKey) !== null;
+      const localTime = hasLocalTime
+        ? readDailyCreatineReminderTime(dailyCreatineReminderTimeStorageKey)
+        : readDailyCreatineReminderTime(DAILY_CREATINE_REMINDER_TIME_KEY);
+
+      setDailyCreatineReminderEnabled(localEnabled);
+      setDailyCreatineReminderTime(localTime);
+      saveDailyCreatineReminderEnabled(
+        localEnabled,
+        dailyCreatineReminderStorageKey
+      );
+      saveDailyCreatineReminderTime(localTime, dailyCreatineReminderTimeStorageKey);
+      await queueCreatineReminderSettingsUpsert(signedInUserId, {
+        enabled: localEnabled,
+        time: localTime,
+      });
+    }
+
+    hydrateCreatineReminderSettings().catch((error) =>
+      console.error("Failed to hydrate creatine reminder settings:", error)
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dailyCreatineReminderStorageKey,
+    dailyCreatineReminderTimeStorageKey,
+    signedInUserId,
+    session,
+  ]);
 
   useEffect(() => {
     if (
@@ -6870,6 +6939,10 @@ export default function NutritionView({ session = null }) {
       nextValue,
       dailyCreatineReminderStorageKeyRef.current
     );
+    void queueCreatineReminderSettingsUpsert(signedInUserId, {
+      enabled: nextValue,
+      time: dailyCreatineReminderTime,
+    });
     setCreatineReminderTick(Date.now());
     setCreatineReminderStatus("");
   }
@@ -6882,6 +6955,10 @@ export default function NutritionView({ session = null }) {
       nextTime,
       dailyCreatineReminderTimeStorageKeyRef.current
     );
+    void queueCreatineReminderSettingsUpsert(signedInUserId, {
+      enabled: dailyCreatineReminderEnabled,
+      time: nextTime,
+    });
     setCreatineReminderTick(Date.now());
   }
 

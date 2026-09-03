@@ -10,6 +10,7 @@ import {
   upsertBodyWeightEntry,
 } from "../sync/bodyMeasurementCloudSync";
 import { upsertNutritionTarget } from "../sync/nutritionTargetCloudSync";
+import { upsertCreatineReminderSettings } from "../sync/creatineReminderCloudSync";
 import {
   buildProtectedNutritionSnapshot,
   mergeNutritionEntryCollections,
@@ -345,6 +346,23 @@ export async function queueNutritionTargetUpsert(userId, target) {
   notifyNutritionOutboxQueued();
 }
 
+export async function queueCreatineReminderSettingsUpsert(userId, settings) {
+  if (!userId || !settings) return;
+
+  await db.nutritionOutbox.put({
+    id: `${userId}:creatine-reminder-settings`,
+    operation: "creatine-reminder-settings-upsert",
+    settings: {
+      enabled: Boolean(settings.enabled),
+      time: settings.time,
+      updatedAt: settings.updatedAt || new Date().toISOString(),
+    },
+    updatedAt: settings.updatedAt || new Date().toISOString(),
+    userId,
+  });
+  notifyNutritionOutboxQueued();
+}
+
 export async function getNutritionOutbox(userId) {
   if (!userId) return [];
 
@@ -430,6 +448,8 @@ async function flushNutritionOutboxUnlocked(userId, session) {
         result = await upsertBodyWeightEntry(item.entry, session);
       } else if (item.operation === "nutrition-target-upsert") {
         result = await upsertNutritionTarget(item.target, session);
+      } else if (item.operation === "creatine-reminder-settings-upsert") {
+        result = await upsertCreatineReminderSettings(item.settings, session);
       } else if (item.operation === "delete") {
         result = await deleteNutritionEntry(
           item.entryId,
