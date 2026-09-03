@@ -295,8 +295,36 @@ h2 {
   line-height: 1.4;
 }
 
-.home-today-card__primary {
+.home-today-card__actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  width: 100%;
+}
+
+.home-today-card__actions > :only-child {
+  grid-column: 1 / -1;
   justify-self: start;
+}
+
+.home-today-card__preview {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 72%, white);
+  border: 1px solid color-mix(in srgb, var(--accent) 72%, white);
+  border-radius: 12px;
+  color: white;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 46px;
+  padding: 8px;
+}
+
+.home-today-card__preview svg {
+  flex: 0 0 auto;
 }
 
 .home-today-card__recent {
@@ -744,7 +772,7 @@ h2 {
     padding-top: 10px;
   }
 
-  .home-today-card__primary {
+  .home-today-card__actions > :only-child {
     justify-self: stretch;
     width: 100%;
   }

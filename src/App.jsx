@@ -18,6 +18,7 @@ import {
   Copy,
   Download,
   Dumbbell,
+  Eye,
   History,
   Home,
   MoreHorizontal,
@@ -12856,7 +12857,7 @@ export default function App() {
               <AppStatusPill tone="accent">Active plan</AppStatusPill>
             ) : null
           }
-          eyebrow="Today"
+          eyebrow="Next up"
           subtitle={
             activeHomePlan && activeHomeWeekStatus
               ? `${activeHomePlan.name} · ${getPlanWeekLabel(
@@ -12889,36 +12890,53 @@ export default function App() {
               </div>
             )}
 
-            <button
-              className="app-primary-action home-today-card__primary"
-              onClick={() => {
-                if (nextWorkoutTemplate && nextPlanWorkout) {
-                  setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
-                  setAutoStartTemplateId(nextWorkoutTemplate.id);
-                  setSelectedTemplateId(nextWorkoutTemplate.id);
-                  return;
-                }
+            <div className="home-today-card__actions">
+              <button
+                className="app-primary-action home-today-card__primary"
+                onClick={() => {
+                  if (nextWorkoutTemplate && nextPlanWorkout) {
+                    setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
+                    setAutoStartTemplateId(nextWorkoutTemplate.id);
+                    setSelectedTemplateId(nextWorkoutTemplate.id);
+                    return;
+                  }
 
-                if (activeHomePlan) {
-                  setPlansExpanded(true);
-                  setExpandedPlanIds((current) => ({
-                    ...current,
-                    [activeHomePlan.id]: true,
-                  }));
-                  return;
-                }
+                  if (activeHomePlan) {
+                    setPlansExpanded(true);
+                    setExpandedPlanIds((current) => ({
+                      ...current,
+                      [activeHomePlan.id]: true,
+                    }));
+                    return;
+                  }
 
-                setWorkoutsExpanded(true);
-              }}
-              type="button"
-            >
-              <Play size={18} />
-              {nextWorkoutTemplate
-                ? "Start Workout"
-                : activeHomePlan
-                  ? "Review Plan"
-                  : "Choose Workout"}
-            </button>
+                  setWorkoutsExpanded(true);
+                }}
+                type="button"
+              >
+                <Play size={18} />
+                {nextWorkoutTemplate
+                  ? "Start Workout"
+                  : activeHomePlan
+                    ? "Review Plan"
+                    : "Choose Workout"}
+              </button>
+
+              {nextWorkoutTemplate && nextPlanWorkout ? (
+                <button
+                  className="home-today-card__preview"
+                  onClick={() => {
+                    setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
+                    setAutoStartTemplateId(null);
+                    setSelectedTemplateId(nextWorkoutTemplate.id);
+                  }}
+                  type="button"
+                >
+                  <Eye size={16} />
+                  <span>Preview Workout</span>
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="home-today-card__recent">
