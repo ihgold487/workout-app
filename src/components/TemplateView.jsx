@@ -990,8 +990,9 @@ export default function TemplateView({
       workingSets.map((set) => getEffectiveSetRestSeconds(set))
     );
     const setLabel = setCount === 1 ? "set" : "sets";
+    const dropSetSummary = dropSetCount ? `${dropSetCount}\u00a0drops | ` : "";
 
-    return `${setCount}\u00a0${setLabel} | ${dropSetCount}\u00a0drops | ${
+    return `${setCount}\u00a0${setLabel} | ${dropSetSummary}${
       reps || "—"
     }\u00a0reps | ${rir || "—"}\u00a0RIR | ${rest || "—"}\u00a0rest`;
   }
