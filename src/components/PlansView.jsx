@@ -2725,7 +2725,19 @@ export default function PlansView({
   templates,
 }) {
   const [aiActionFeedback, setAiActionFeedback] = useState(null);
+  const [planEditorTouched, setPlanEditorTouched] = useState(false);
   const aiActionFeedbackTimerRef = useRef(null);
+
+  function exitPlanEditor() {
+    if (
+      planEditorTouched &&
+      !window.confirm("Discard your unsaved plan changes?")
+    ) {
+      return;
+    }
+
+    onCancel?.();
+  }
 
   const runAiPlanActionWithFeedback = async (actionKey, action) => {
     void triggerNativeActionHaptic();
@@ -4182,6 +4194,12 @@ export default function PlansView({
 
   return (
     <div
+      onChangeCapture={() => setPlanEditorTouched(true)}
+      onClickCapture={(event) => {
+        if (!event.target.closest("[data-plan-editor-exit]")) {
+          setPlanEditorTouched(true);
+        }
+      }}
       style={{
         padding: "20px",
       }}
@@ -4402,7 +4420,8 @@ export default function PlansView({
               </button>
 
               <button
-                onClick={onCancel}
+                data-plan-editor-exit
+                onClick={exitPlanEditor}
                 style={{
                   alignItems: "center",
                   display: "inline-flex",
@@ -4503,6 +4522,22 @@ export default function PlansView({
               >
                 <Save size={16} />
                 {generationMode === "workout" ? "Save Workout" : "Save Plan"}
+              </button>
+
+              <button
+                data-plan-editor-exit
+                onClick={exitPlanEditor}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                <X size={16} />
+                Back to Plans
               </button>
             </>
           )}

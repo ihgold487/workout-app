@@ -153,6 +153,22 @@ Initial session-header increment implemented and build-validated; longer real-wo
 
 This is the most complex management surface and should use progressive disclosure.
 
+#### Progress
+
+Initial Plans library checkpoint implemented for native and PWA validation.
+
+- [x] Make the Plans tab a management and reference library instead of opening directly into plan creation.
+- [x] Separate saved plans into **Active**, **Drafts & inactive**, and **Past plans** sections.
+- [x] Keep the active plan contextual and secondary to Home, where the next workout and primary Start Workout action remain.
+- [x] Preserve the existing plan editor and generator behind explicit **New Plan** and **Edit** actions.
+- [x] Reuse existing activation, duplication, deletion, completion, extension, week-selection, AI-notes, and comparison behavior without changing plan persistence.
+- [x] Keep Home focused on the active plan and move inactive and completed-plan management into Plans.
+- [x] Treat completed plans as historical references: show completion as status, expose Restart/Extend/Duplicate, and require duplication before editing.
+- [x] Provide an explicit, guarded return from plan creation and editing rather than relying on bottom navigation.
+- [x] Separate plan status badges from consistently ordered action rows, with Delete last.
+- [x] Confirm before replacing an unfinished active plan or restarting a completed plan.
+- [ ] Validate empty, active-only, draft-heavy, and completed-plan libraries; duplication and deletion; editor cancel/save; comparison; and PWA layout.
+
 - Separate the landing page into **Active**, **Drafts**, and **Completed**.
 - Provide a plan summary card before exposing its full editor: duration, week, training days, focus, adherence, and next workout.
 - Turn plan creation into a short staged flow: basics, schedule, workouts, progression, and review.

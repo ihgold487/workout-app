@@ -4845,6 +4845,7 @@ export default function App() {
 
   const [showPlans, setShowPlans] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState(null);
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
 
   const [showNutrition, setShowNutrition] = useState(false);
 
@@ -7860,6 +7861,23 @@ export default function App() {
   }
 
   function activatePlan(planId) {
+    const planToActivate = plans.find(
+      (plan) => String(plan.id) === String(planId)
+    );
+    const unfinishedActivePlan = plans.find(
+      (plan) =>
+        plan.status === "active" && String(plan.id) !== String(planId)
+    );
+
+    if (
+      unfinishedActivePlan &&
+      !window.confirm(
+        `Activate ${planToActivate?.name || "this plan"}? ${unfinishedActivePlan.name} is still active and has not been completed. It will become inactive, but its progress will be kept.`
+      )
+    ) {
+      return;
+    }
+
     setPlans(
       plans.map((plan) => ({
         ...plan,
@@ -7880,6 +7898,17 @@ export default function App() {
   }
 
   function restartPlan(planId) {
+    const planToRestart = plans.find(
+      (plan) => String(plan.id) === String(planId)
+    );
+    const confirmed = window.confirm(
+      `Restart ${planToRestart?.name || "this plan"}? Its plan progress will return to week 1 and it will become the active plan. Completed workout history will be kept.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     setPlans(
       plans.map((plan) => ({
         ...plan,
@@ -9000,25 +9029,63 @@ export default function App() {
               display: "flex",
               flexWrap: "wrap",
               gap: "6px",
-              justifyContent: "flex-end",
+              justifyContent: "flex-start",
             }}
           >
-            <button
-              aria-label={`Edit ${plan.name}`}
-              onClick={() => openPlanEditor(plan)}
-              title="Edit plan"
+            <span
               style={{
                 alignItems: "center",
+                background: completed
+                  ? "color-mix(in srgb, var(--success-text) 10%, var(--surface))"
+                  : active
+                    ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
+                    : "var(--surface-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "999px",
+                color: completed
+                  ? "var(--success-text)"
+                  : active
+                    ? "var(--accent)"
+                    : "var(--text-muted)",
                 display: "inline-flex",
-                gap: "5px",
-                justifyContent: "center",
-                minHeight: "44px",
-                padding: "6px 9px",
+                fontSize: "11px",
+                fontWeight: "bold",
+                minHeight: "32px",
+                padding: "4px 10px",
+                whiteSpace: "nowrap",
               }}
             >
-              <Pencil size={15} />
-              <span style={{ fontSize: "12px" }}>Edit</span>
-            </button>
+              {completed ? "Complete" : active ? "Active" : "Inactive"}
+            </span>
+          </div>
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px",
+              justifyContent: "flex-start",
+            }}
+          >
+            {!completed && (
+              <button
+                aria-label={`Edit ${plan.name}`}
+                onClick={() => openPlanEditor(plan)}
+                title="Edit plan"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "5px",
+                  justifyContent: "center",
+                  minHeight: "44px",
+                  padding: "6px 9px",
+                }}
+              >
+                <Pencil size={15} />
+                <span style={{ fontSize: "12px" }}>Edit</span>
+              </button>
+            )}
             {plan.aiAnalysis && (
               <button
                 aria-label={`Show AI notes for ${plan.name}`}
@@ -9038,35 +9105,72 @@ export default function App() {
                 <span style={{ fontSize: "12px" }}>AI</span>
               </button>
             )}
-            <button
-              disabled={active}
-              onClick={() => {
-                if (completed) {
-                  setCompletedPlanActions(plan);
-                  return;
-                }
-
-                if (!active) {
-                  activatePlan(plan.id);
-                }
-              }}
-              style={{
-                background: active
-                  ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
-                  : "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                color: active ? "var(--accent)" : "var(--text-muted)",
-                cursor: active ? "default" : "pointer",
-                fontSize: "11px",
-                fontWeight: "bold",
-                minHeight: "44px",
-                padding: "6px 10px",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {completed ? "Complete" : active ? "Active" : "Inactive"}
-            </button>
+            {!active && (
+              <button
+                aria-label={`Duplicate ${plan.name}`}
+                onClick={() => clonePlan(plan)}
+                title="Duplicate plan"
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "5px",
+                  justifyContent: "center",
+                  minHeight: "44px",
+                  padding: "6px 9px",
+                }}
+                type="button"
+              >
+                <Copy size={15} />
+                <span style={{ fontSize: "12px" }}>Duplicate</span>
+              </button>
+            )}
+            {completed ? (
+              <>
+                <button
+                  onClick={() => restartPlan(plan.id)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "5px",
+                    minHeight: "44px",
+                    padding: "6px 9px",
+                  }}
+                  type="button"
+                >
+                  <RotateCcw size={15} />
+                  <span style={{ fontSize: "12px" }}>Restart</span>
+                </button>
+                <button
+                  onClick={() => setExtendPlanTarget(plan)}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "5px",
+                    minHeight: "44px",
+                    padding: "6px 9px",
+                  }}
+                  type="button"
+                >
+                  <CalendarPlus size={15} />
+                  <span style={{ fontSize: "12px" }}>Extend</span>
+                </button>
+              </>
+            ) : !active ? (
+              <button
+                onClick={() => activatePlan(plan.id)}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "5px",
+                  minHeight: "44px",
+                  padding: "6px 9px",
+                }}
+                type="button"
+              >
+                <Play size={15} />
+                <span style={{ fontSize: "12px" }}>Activate</span>
+              </button>
+            ) : null}
             <button
               aria-label={`Delete ${plan.name}`}
               onClick={() => deletePlan(plan)}
@@ -9432,6 +9536,7 @@ export default function App() {
     setShowExercises(false);
     setShowPlans(false);
     setEditingPlanId(null);
+    setPlanEditorOpen(false);
     setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -9448,6 +9553,7 @@ export default function App() {
     setShowExercises(true);
     setShowPlans(false);
     setEditingPlanId(null);
+    setPlanEditorOpen(false);
     setShowNutrition(false);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -9463,6 +9569,14 @@ export default function App() {
 
     setShowExercises(false);
     setEditingPlanId(null);
+    setPlanEditorOpen(false);
+    setExpandedPlanIds((current) => {
+      const next = { ...current };
+      plans.forEach((plan) => {
+        next[plan.id] = false;
+      });
+      return next;
+    });
     setShowPlans(true);
     setShowNutrition(false);
     setShowSettings(false);
@@ -9480,6 +9594,7 @@ export default function App() {
     setShowExercises(false);
     setShowPlans(false);
     setEditingPlanId(null);
+    setPlanEditorOpen(false);
     setShowNutrition(true);
     setShowSettings(false);
     setSelectedHistory(null);
@@ -9496,6 +9611,7 @@ export default function App() {
     setShowExercises(false);
     setShowPlans(false);
     setEditingPlanId(null);
+    setPlanEditorOpen(false);
     setShowNutrition(false);
     setShowSettings(true);
     setSelectedHistory(null);
@@ -9510,6 +9626,7 @@ export default function App() {
     }
 
     setEditingPlanId(plan.id);
+    setPlanEditorOpen(true);
     setExpandedPlanIds((current) => ({
       ...current,
       [plan.id]: true,
@@ -9607,6 +9724,7 @@ export default function App() {
                 {["exercises", "plans"].includes(item.key) ? (
                   <Icon
                     active={active}
+                    color={active ? "var(--accent)" : "var(--text-muted)"}
                     emphasized
                     monochrome
                     size={item.key === "exercises" ? 28 : 25}
@@ -12499,6 +12617,154 @@ export default function App() {
   }
 
   if (showPlans) {
+    if (!planEditorOpen) {
+      const activePlans = plans.filter((plan) => plan.status === "active");
+      const pastPlans = plans
+        .filter((plan) => plan.status === "completed")
+        .sort((left, right) =>
+          (right.createdAt || "").localeCompare(left.createdAt || "")
+        );
+      const inactivePlans = plans
+        .filter(
+          (plan) => plan.status !== "active" && plan.status !== "completed"
+        )
+        .sort((left, right) =>
+          (right.createdAt || "").localeCompare(left.createdAt || "")
+        );
+
+      return renderAppShell(
+        <div className="plans-library-view" style={{ padding: "20px" }}>
+          <AppPageHeader
+            icon={
+              <PlansBrainIcon
+                color="var(--accent)"
+                emphasized
+                monochrome
+                size={36}
+              />
+            }
+            subtitle="Create, manage, and reuse your training programs"
+            title="Plans"
+          />
+
+          <button
+            className="app-primary-action"
+            onClick={() => {
+              setEditingPlanId(null);
+              setPlanEditorOpen(true);
+            }}
+            style={{
+              justifyContent: "center",
+              margin: "14px 0 12px",
+              whiteSpace: "nowrap",
+              width: "100%",
+            }}
+            type="button"
+          >
+            <Plus size={17} />
+            New Plan
+          </button>
+
+          {plans.length >= 2 ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                margin: "-4px 0 12px",
+              }}
+            >
+              <button
+                onClick={openPlanComparison}
+                style={{
+                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "6px",
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                <BarChart3 size={16} />
+                Compare plans
+              </button>
+            </div>
+          ) : null}
+
+          {plans.length === 0 ? (
+            <AppSectionCard tone="accent">
+              <AppSectionHeading
+                eyebrow="Plan library"
+                subtitle="Build a structured program, then return here to edit or reuse it."
+                title="Create your first plan"
+              />
+              <button
+                className="app-primary-action"
+                onClick={() => setPlanEditorOpen(true)}
+                style={{ whiteSpace: "nowrap" }}
+                type="button"
+              >
+                <Plus size={17} />
+                New Plan
+              </button>
+            </AppSectionCard>
+          ) : (
+            <>
+              <AppSectionCard tone="accent">
+                <AppSectionHeading
+                  eyebrow="Current program"
+                  subtitle="Your next workout remains available from Home."
+                  title="Active"
+                />
+                {activePlans.length > 0 ? (
+                  activePlans.map(renderPlanCard)
+                ) : (
+                  <div className="home-today-card__empty">
+                    No plan is active. Activate a saved plan below whenever you
+                    are ready.
+                  </div>
+                )}
+              </AppSectionCard>
+
+              <AppSectionCard>
+                <AppSectionHeading
+                  eyebrow="Build and revise"
+                  subtitle="Inactive plans remain available to edit, activate, duplicate, or remove."
+                  title="Drafts & inactive"
+                />
+                {inactivePlans.length > 0 ? (
+                  inactivePlans.map(renderPlanCard)
+                ) : (
+                  <div className="home-today-card__empty">
+                    No draft or inactive plans.
+                  </div>
+                )}
+              </AppSectionCard>
+
+              <AppSectionCard>
+                <AppSectionHeading
+                  eyebrow="Reference and reuse"
+                  subtitle="Review completed programs, duplicate them, or compare their structure."
+                  title="Past plans"
+                />
+                {pastPlans.length > 0 ? (
+                  pastPlans.map(renderPlanCard)
+                ) : (
+                  <div className="home-today-card__empty">
+                    Completed plans will remain available here.
+                  </div>
+                )}
+              </AppSectionCard>
+            </>
+          )}
+
+          {renderCompletedPlanActions()}
+          {renderExtendPlanPicker()}
+          {renderWeekPicker()}
+        </div>,
+        "plans"
+      );
+    }
+
     return renderAppShell(
       <PlansView
         bodyWeightEntries={localBodyWeightEntries}
@@ -12509,7 +12775,7 @@ export default function App() {
         onBuildAiPlanDraft={buildAiPlanDraftFromText}
         onCancel={() => {
           setEditingPlanId(null);
-          goHome();
+          setPlanEditorOpen(false);
         }}
         onCopyAiPlanPrompt={copyAiPlanPrompt}
         onCopyAiPlanContext={copyAiPlanContext}
@@ -12519,7 +12785,7 @@ export default function App() {
         onShareAiPlanContext={shareAiPlanContext}
         onSave={(result) => {
           setEditingPlanId(null);
-          goHome();
+          setPlanEditorOpen(false);
           if (result?.type === "trainer-plan" || result?.type === "trainer-workout") {
             return;
           }
@@ -12986,7 +13252,7 @@ export default function App() {
         session={authSession}
       />
 
-      {plans.length > 0 && (
+      {activeHomePlan && (
         <>
           <div
             style={{
@@ -12998,7 +13264,7 @@ export default function App() {
               display: "grid",
               gap: "4px",
               font: "inherit",
-              gridTemplateColumns: "44px minmax(0, 1fr) auto",
+              gridTemplateColumns: "44px minmax(0, 1fr) 44px",
               margin: "8px 0 12px",
               padding: "8px",
               width: "100%",
@@ -13052,60 +13318,15 @@ export default function App() {
                   fontWeight: "normal",
                 }}
               >
-                {activeHomePlan
-                  ? `Active · ${activeHomePlan.name}`
-                  : `${plans.length} saved ${plans.length === 1 ? "plan" : "plans"}`}
+                {`Active · ${activeHomePlan.name}`}
               </span>
             </button>
-            <button
-              aria-label="Compare plan muscle sets"
-              disabled={plans.length < 2}
-              onClick={openPlanComparison}
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "5px",
-                justifyContent: "center",
-                minHeight: "44px",
-                padding: "6px 9px",
-                whiteSpace: "nowrap",
-              }}
-              title="Compare plans"
-              type="button"
-            >
-              <BarChart3 size={15} />
-              <span style={{ fontSize: "12px" }}>Compare</span>
-            </button>
+            <span />
           </div>
 
           {plansExpanded && (
-            <>
-              {activeHomePlan ? renderPlanCard(activeHomePlan) : null}
-              {plans.some((plan) => plan.status !== "active") && (
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "11px",
-                    fontWeight: 800,
-                    letterSpacing: ".06em",
-                    margin: "14px 2px 8px",
-                    textAlign: "left",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Other plans
-                </div>
-              )}
-              {[...plans]
-                .filter((plan) => plan.status !== "active")
-                .sort((left, right) =>
-                  (right.createdAt || "").localeCompare(left.createdAt || "")
-                )
-                .map(renderPlanCard)}
-            </>
+            renderPlanCard(activeHomePlan)
           )}
-          {renderCompletedPlanActions()}
-          {renderExtendPlanPicker()}
           {renderWeekPicker()}
           <div style={{ height: "8px" }} />
         </>
