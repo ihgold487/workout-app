@@ -9247,7 +9247,7 @@ export default function App() {
                     >
                       {template ? (
                         <>
-                          <Play size={15} /> Review
+                          <Eye size={15} /> {done ? "Review" : "Preview"}
                         </>
                       ) : (
                         "Missing"
@@ -12954,7 +12954,7 @@ export default function App() {
                   {formatHistoryTimestamp(latestCompletedWorkout)}
                 </span>
                 <span className="home-today-card__recent-link">
-                  View workout <ChevronRight size={14} />
+                  Review workout <ChevronRight size={14} />
                 </span>
               </button>
             ) : (

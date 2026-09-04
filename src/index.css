@@ -298,7 +298,7 @@ h2 {
 .home-today-card__actions {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 13fr) minmax(0, 7fr);
   width: 100%;
 }
 
