@@ -1409,7 +1409,8 @@ export default function TemplateView({
         return {
           ...exercise,
 
-          note: libraryExercise?.note || "",
+          sessionNote:
+            exerciseMetadata?.[exercise.exerciseId || exercise.id]?.note || "",
 
           sets: applyInitialDropSetWeights(
             getExerciseSetsForPlanWeek(

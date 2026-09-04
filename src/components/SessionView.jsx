@@ -2176,6 +2176,22 @@ export default function SessionView({
     return String(left) === String(right);
   }
 
+  function getExerciseMetadataId(exercise) {
+    const exerciseId = exercise?.exerciseId ?? exercise?.id;
+
+    return exerciseId == null || exerciseId === "" ? null : String(exerciseId);
+  }
+
+  function getExerciseNote(exercise) {
+    if (Object.prototype.hasOwnProperty.call(exercise || {}, "sessionNote")) {
+      return String(exercise.sessionNote || "");
+    }
+
+    const exerciseId = getExerciseMetadataId(exercise);
+
+    return exerciseId ? String(exerciseMetadata?.[exerciseId]?.note || "") : "";
+  }
+
   function resetSupersetOrders(supersetOrders, groupsToReset) {
     if (!groupsToReset.size) {
       return supersetOrders || {};
@@ -2796,17 +2812,13 @@ export default function SessionView({
     }
 
     const noteKey = String(exercise.id);
-    const metadata = exerciseMetadata?.[exercise.exerciseId] || {};
-
     setNoteEditSnapshots((snapshots) =>
       snapshots[noteKey]
         ? snapshots
         : {
             ...snapshots,
             [noteKey]: {
-              exerciseId: exercise.exerciseId,
-              hadNote: Object.prototype.hasOwnProperty.call(metadata, "note"),
-              note: metadata.note || "",
+              note: getExerciseNote(exercise),
             },
           }
     );
@@ -2837,26 +2849,14 @@ export default function SessionView({
     const snapshot = noteEditSnapshots[noteKey];
 
     if (snapshot) {
-      setExerciseMetadata((metadata) => {
-        const next = { ...(metadata || {}) };
-        const currentExerciseMetadata = {
-          ...(next[snapshot.exerciseId] || {}),
-        };
-
-        if (snapshot.hadNote) {
-          currentExerciseMetadata.note = snapshot.note;
-        } else {
-          delete currentExerciseMetadata.note;
-        }
-
-        if (Object.keys(currentExerciseMetadata).length) {
-          next[snapshot.exerciseId] = currentExerciseMetadata;
-        } else {
-          delete next[snapshot.exerciseId];
-        }
-
-        return next;
-      });
+      updateSession((currentSession) => ({
+        ...currentSession,
+        exercises: currentSession.exercises.map((currentExercise) =>
+          idsMatch(currentExercise.id, exercise.id)
+            ? { ...currentExercise, sessionNote: snapshot.note }
+            : currentExercise
+        ),
+      }));
     }
 
     setNoteEditSnapshots((snapshots) => {
@@ -4983,9 +4983,11 @@ export default function SessionView({
     return session.exercises.map((exercise) => {
       const exerciseWithUpdatedPlanPrescription =
         applyPlanPrescriptionUpdates(exercise);
+      const { sessionNote, ...templateExercise } =
+        exerciseWithUpdatedPlanPrescription;
 
       return {
-        ...exerciseWithUpdatedPlanPrescription,
+        ...templateExercise,
         sets: exercise.sets.map((set) => ({
           id: Date.now() + Math.random(),
           ...(getSetMinimumReps(set)
@@ -5050,25 +5052,29 @@ export default function SessionView({
     return {
       ...historyWorkout,
       exercises: (historyWorkout.exercises || [])
-        .map((exercise) => ({
-          ...exercise,
-          sets: (exercise.sets || [])
-            .filter((set) => set.completed)
-            .map(
-              ({
-                reps,
-                rir,
-                targetReps,
-                targetRir,
-                targetWeight,
-                historyDefaultActualReps,
-                historyDefaultActualRir,
-                historyDefaultActualWeight,
-                historyDefaultSourceKey,
-                ...set
-              }) => set
-            ),
-        }))
+        .map((exercise) => {
+          const { sessionNote, ...historyExercise } = exercise;
+
+          return {
+            ...historyExercise,
+            sets: (exercise.sets || [])
+              .filter((set) => set.completed)
+              .map(
+                ({
+                  reps,
+                  rir,
+                  targetReps,
+                  targetRir,
+                  targetWeight,
+                  historyDefaultActualReps,
+                  historyDefaultActualRir,
+                  historyDefaultActualWeight,
+                  historyDefaultSourceKey,
+                  ...set
+                }) => set
+              ),
+          };
+        })
         .filter((exercise) => exercise.sets.length > 0),
     };
   }
@@ -5898,6 +5904,25 @@ export default function SessionView({
     };
 
     completedWorkout.exercises.forEach((exercise) => {
+      const exerciseMetadataId = getExerciseMetadataId(exercise);
+
+      if (!exerciseMetadataId) {
+        return;
+      }
+
+      const existing = metadataUpdates[exerciseMetadataId] || {};
+      const hasStagedNote = Object.prototype.hasOwnProperty.call(
+        exercise,
+        "sessionNote"
+      );
+
+      if (hasStagedNote) {
+        metadataUpdates[exerciseMetadataId] = {
+          ...existing,
+          note: exercise.sessionNote || "",
+        };
+      }
+
       let bestE1RM = null;
 
       exercise.sets
@@ -5919,10 +5944,10 @@ export default function SessionView({
         return;
       }
 
-      const existing = metadataUpdates[exercise.exerciseId] || {};
+      const currentMetadata = metadataUpdates[exerciseMetadataId] || {};
 
-      metadataUpdates[exercise.exerciseId] = {
-        ...existing,
+      metadataUpdates[exerciseMetadataId] = {
+        ...currentMetadata,
 
         latestE1RM: {
           value: bestE1RM,
@@ -5930,12 +5955,12 @@ export default function SessionView({
         },
 
         maxE1RM:
-          !existing.maxE1RM || bestE1RM > existing.maxE1RM.value
+          !currentMetadata.maxE1RM || bestE1RM > currentMetadata.maxE1RM.value
             ? {
                 value: bestE1RM,
                 date: completedWorkout.completedAt,
               }
-            : existing.maxE1RM,
+            : currentMetadata.maxE1RM,
       };
     });
 
@@ -7895,8 +7920,7 @@ export default function SessionView({
                 }}
               >
                 {group.exercises.map((exercise) => {
-                  const exerciseNote =
-                    exerciseMetadata?.[exercise.exerciseId]?.note || "";
+                  const exerciseNote = getExerciseNote(exercise);
                   const exerciseNoteText = exerciseNote.trim();
                   const editingNote = !!expandedNotes[exercise.id];
                   const prescriptionDisplay =
@@ -7989,20 +8013,23 @@ export default function SessionView({
                             textAlign: "left",
                             width: "100%",
                           }}
-                          value={
-                            exerciseMetadata?.[exercise.exerciseId]?.note || ""
-                          }
+                          value={exerciseNote}
                           onChange={(e) => {
                             if (session.workoutTimerPaused) {
                               return;
                             }
 
-                            setExerciseMetadata((metadata) => ({
-                              ...(metadata || {}),
-                              [exercise.exerciseId]: {
-                                ...(metadata?.[exercise.exerciseId] || {}),
-                                note: e.target.value,
-                              },
+                            updateSession((currentSession) => ({
+                              ...currentSession,
+                              exercises: currentSession.exercises.map(
+                                (currentExercise) =>
+                                  idsMatch(currentExercise.id, exercise.id)
+                                    ? {
+                                        ...currentExercise,
+                                        sessionNote: e.target.value,
+                                      }
+                                    : currentExercise
+                              ),
                             }));
                           }}
                         />

@@ -5855,7 +5855,12 @@ export default function App() {
 
     currentWorkoutDataRef.current = data;
     localDataRevisionRef.current += 1;
-    markNormalizedSyncDirty(["history", "plans", "workouts"]);
+    markNormalizedSyncDirty([
+      "exercisePreferences",
+      "history",
+      "plans",
+      "workouts",
+    ]);
     workoutCompletionSyncHistoryLengthRef.current = data.history.length;
     window.setTimeout(() => {
       runAutomaticNormalizedSync("workout completion");
