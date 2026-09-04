@@ -5222,6 +5222,11 @@ export default function SessionView({
   }
 
   function activateExerciseFromThumbnail(exercise) {
+    if (idsMatch(currentExercise?.id, exercise.id)) {
+      setDetailExercise(getExerciseDetailRecord(exercise));
+      return;
+    }
+
     const nextSet = getThumbnailSetForExercise(exercise);
 
     if (!nextSet) {
@@ -8194,8 +8199,12 @@ export default function SessionView({
                           }}
                         >
                           <span
+                            aria-hidden="true"
+                            className="session-set-number"
+                          />
+                          <span
                             style={{
-                              width: "36px",
+                              width: "24px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8211,7 +8220,9 @@ export default function SessionView({
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
-                              flex: "0 0 auto",
+                              flex: "1 1 auto",
+                              justifyContent: "space-between",
+                              minWidth: 0,
                             }}
                           >
                             <button
@@ -8232,7 +8243,7 @@ export default function SessionView({
                                 background: "transparent",
                                 border: "none",
                                 color: "inherit",
-                                width: "56px",
+                                width: "46px",
                                 whiteSpace: "nowrap",
                                 fontSize: "14px",
                                 alignItems: "center",
@@ -8247,7 +8258,7 @@ export default function SessionView({
                               <Weight size={15} aria-label="Actual weight" />
                             </button>
 
-                            <span aria-hidden="true" style={{ width: "10px" }} />
+                            <span aria-hidden="true" style={{ width: "12px" }} />
 
                             <button
                             aria-label="Edit prescribed reps"
@@ -8269,7 +8280,7 @@ export default function SessionView({
                               background: "transparent",
                               border: "none",
                               color: "inherit",
-                              width: "38px",
+                              width: "28px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8284,7 +8295,7 @@ export default function SessionView({
                             <Hash size={15} aria-label="Target reps" />
                             </button>
 
-                            <span aria-hidden="true" style={{ width: "10px" }} />
+                            <span aria-hidden="true" style={{ width: "12px" }} />
 
                             <button
                             aria-label="Edit prescribed RIR"
@@ -8306,7 +8317,7 @@ export default function SessionView({
                               background: "transparent",
                               border: "none",
                               color: "inherit",
-                              width: "38px",
+                              width: "30px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8324,7 +8335,7 @@ export default function SessionView({
                             <span
                               title="e1RM"
                               style={{
-                                width: "36px",
+                                width: "48px",
                               whiteSpace: "nowrap",
                               fontSize: "14px",
                               alignItems: "center",
@@ -8339,7 +8350,7 @@ export default function SessionView({
                           <span
                             title="Completed"
                             style={{
-                              marginLeft: "8px",
+                              marginLeft: 0,
                               width: "30px",
                               justifyContent: "center",
                               whiteSpace: "nowrap",
@@ -8350,6 +8361,7 @@ export default function SessionView({
                           >
                             <CheckCircle2 size={15} aria-label="Completed" />
                           </span>
+                          <span aria-hidden="true" style={{ width: "33px" }} />
                         </div>
 
                         {exercise.sets.map((set, setIndex) => {
@@ -8358,6 +8370,14 @@ export default function SessionView({
                             activeSet?.setId === set.id;
 
                           const isCompleted = !!set.completed;
+                          const isFirstIncompleteSet =
+                            !isCompleted &&
+                            !exercise.sets
+                              .slice(0, setIndex)
+                              .some((previousSet) => !previousSet.completed);
+                          const emphasizeActualValues =
+                            isActive ||
+                            (isPreviewingExercise && isFirstIncompleteSet);
                           const dropSetActualReps = parseSessionNumber(
                             set.actualReps
                           );
@@ -8419,6 +8439,8 @@ export default function SessionView({
 
                           const valueColor = isActive
                             ? "var(--accent)"
+                            : isPreviewingExercise && isFirstIncompleteSet
+                            ? "var(--text)"
                             : isCompleted
                             ? "#444"
                             : "#aaa";
@@ -8526,6 +8548,12 @@ export default function SessionView({
                                 fontWeight: isActive ? "bold" : "normal",
                               }}
                             >
+                              <span
+                                aria-hidden="true"
+                                className="session-set-number"
+                              >
+                                {setIndex + 1}
+                              </span>
                               <button
                                 aria-expanded={targetPreviewOpen}
                                 aria-label={
@@ -8636,14 +8664,14 @@ export default function SessionView({
                                   cursor: "pointer",
                                   boxSizing: "border-box",
                                   display: "inline-flex",
-                                  flex: "0 0 36px",
+                                  flex: "0 0 24px",
                                   font: "inherit",
                                   height: "30px",
                                   justifyContent: "center",
                                   opacity: isActive ? 1 : 0.52,
                                   padding: 0,
                                   position: "relative",
-                                  width: "36px",
+                                  width: "24px",
                                   touchAction: "manipulation",
                                   userSelect: "none",
                                   WebkitUserSelect: "none",
@@ -8678,7 +8706,9 @@ export default function SessionView({
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
-                                  flex: "0 0 auto",
+                                  flex: "1 1 auto",
+                                  justifyContent: "space-between",
+                                  minWidth: 0,
                                   whiteSpace: "nowrap",
                                 }}
                               >
@@ -8703,16 +8733,20 @@ export default function SessionView({
                                     setShowWeightPicker(true);
                                   }}
                                   style={{
-                                    width: "56px",
+                                    width: "46px",
                                     marginLeft: 0,
                                     fontSize: isActive ? "14px" : "12px",
-                                    border: "1px solid var(--border)",
+                                    border: isCompleted
+                                      ? "1px solid var(--surface-raised)"
+                                      : "1px solid var(--border)",
                                     background: "var(--surface-raised)",
                                     height: "28px",
                                     textAlign: "center",
                                     boxSizing: "border-box",
                                     color: valueColor,
-                                    fontWeight: isActive ? "bold" : "normal",
+                                    fontWeight: emphasizeActualValues
+                                      ? "bold"
+                                      : "normal",
                                     overflow: "hidden",
                                     padding: 0,
                                   }}
@@ -8732,7 +8766,7 @@ export default function SessionView({
                                 <span
                                   style={{
                                     display: "inline-block",
-                                    width: "10px",
+                                    width: "12px",
                                     textAlign: "center",
                                     fontSize: isActive ? "14px" : "12px",
                                   }}
@@ -8755,15 +8789,19 @@ export default function SessionView({
                                     setShowRepsPicker(true);
                                   }}
                                   style={{
-                                    width: "38px",
+                                    width: "28px",
                                     marginLeft: "0px",
                                     fontSize: isActive ? "14px" : "12px",
-                                    border: "1px solid var(--border)",
+                                    border: isCompleted
+                                      ? "1px solid var(--surface-raised)"
+                                      : "1px solid var(--border)",
                                     background: "var(--surface-raised)",
                                     height: "28px",
                                     boxSizing: "border-box",
                                     color: valueColor,
-                                    fontWeight: isActive ? "bold" : "normal",
+                                    fontWeight: emphasizeActualValues
+                                      ? "bold"
+                                      : "normal",
                                     overflow: "hidden",
                                     padding: 0,
                                   }}
@@ -8780,7 +8818,7 @@ export default function SessionView({
                                 <span
                                   style={{
                                     display: "inline-block",
-                                    width: "10px",
+                                    width: "12px",
                                     textAlign: "center",
                                     fontSize: isActive ? "14px" : "12px",
                                   }}
@@ -8803,15 +8841,19 @@ export default function SessionView({
                                     setShowRirPicker(true);
                                   }}
                                   style={{
-                                    width: "38px",
+                                    width: "30px",
                                     height: "28px",
                                     marginLeft: "0px",
                                     fontSize: isActive ? "14px" : "12px",
-                                    border: "1px solid var(--border)",
+                                    border: isCompleted
+                                      ? "1px solid var(--surface-raised)"
+                                      : "1px solid var(--border)",
                                     background: "var(--surface-raised)",
                                     boxSizing: "border-box",
                                     color: valueColor,
-                                    fontWeight: isActive ? "bold" : "normal",
+                                    fontWeight: emphasizeActualValues
+                                      ? "bold"
+                                      : "normal",
                                     overflow: "hidden",
                                     padding: 0,
                                   }}
@@ -8828,7 +8870,7 @@ export default function SessionView({
                                 <span
                                   style={{
                                   display: "inline-block",
-                                  width: "36px",
+                                  width: "48px",
                                   textAlign: "center",
                                   fontSize: isActive ? "14px" : "13px",
                                   color: "var(--text-muted)",
@@ -8859,7 +8901,7 @@ export default function SessionView({
                                   background: set.completed
                                     ? "var(--success-bg)"
                                     : "var(--surface-raised)",
-                                  marginLeft: "8px",
+                                  marginLeft: 0,
                                 }}
                                 tone={set.completed ? "success" : "neutral"}
                                 disabled={

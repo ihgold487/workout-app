@@ -307,6 +307,22 @@ h2 {
   justify-self: start;
 }
 
+.session-set-number {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  flex: 0 0 16px;
+  font-size: 12px;
+  justify-content: center;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .session-set-number {
+    display: none;
+  }
+}
+
 .home-today-card__preview {
   align-items: center;
   background: color-mix(in srgb, var(--accent) 72%, white);
