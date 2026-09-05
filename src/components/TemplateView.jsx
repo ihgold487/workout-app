@@ -10,6 +10,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Target,
   Trash2,
   X,
 } from "lucide-react";
@@ -37,7 +38,11 @@ import {
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
 import WeightPickerModal from "./WeightPickerModal";
-import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
+import {
+  calculateE1RM,
+  formatE1RM,
+  getLatestBodyWeightForDate,
+} from "../utils/e1rm";
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import {
@@ -1287,6 +1292,67 @@ export default function TemplateView({
     return recommendation.result?.recommendation || null;
   }
 
+  function getFirstSetSuggestedTarget(exercise, plan = linkedPlan) {
+    const weekPrescription = getExerciseWeekPrescription(
+      exercise,
+      plan,
+      currentPlanWeek
+    );
+    const firstSet = getExerciseSetsForPlanWeek(exercise, weekPrescription)[0];
+
+    if (!firstSet) {
+      return null;
+    }
+
+    const plannedPrescription = getPlannedSetPrescription({
+      plan,
+      set: firstSet,
+      weekPrescription,
+    });
+    const libraryExercise = exerciseLibrary.find(
+      (item) => String(item.id) === String(exercise.exerciseId)
+    );
+    const recommendationExercise = {
+      ...(libraryExercise || {}),
+      ...exercise,
+      id: exercise.exerciseId || libraryExercise?.id || exercise.id,
+      exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
+    };
+    const dynamicTarget = getDynamicTargetPrescription({
+      exercise,
+      libraryExercise,
+      plan,
+      setIndex: 0,
+      targetReps: plannedPrescription.reps,
+      targetRir: plannedPrescription.rir,
+    });
+    const weight = formatTargetValue(dynamicTarget?.weight);
+
+    if (!weight) {
+      return null;
+    }
+
+    const e1rm = calculateE1RM(
+      weight,
+      plannedPrescription.reps,
+      plannedPrescription.rir,
+      null,
+      null,
+      null,
+      {
+        bodyWeight: templateBodyWeight,
+        exercise: recommendationExercise,
+      }
+    );
+
+    return {
+      e1rm,
+      reps: plannedPrescription.reps,
+      rir: plannedPrescription.rir,
+      weight,
+    };
+  }
+
   function getEffectivePlanExercise(exercise, plan) {
     const weekPrescription = getExerciseWeekPrescription(
       exercise,
@@ -2220,6 +2286,9 @@ export default function TemplateView({
                   const prescriptionExercise =
                     getExerciseWithCurrentInstancePrescription(templateExercise);
                   const exerciseDetail = getExerciseDetailRecord(exercise);
+                  const firstSetTarget = !isEditMode
+                    ? getFirstSetSuggestedTarget(templateExercise)
+                    : null;
                   return (
                     <SortableExerciseRow
                       disabled={!isEditMode}
@@ -2257,6 +2326,22 @@ export default function TemplateView({
                           prescriptionSummary={getWorkoutPrescriptionSummary(
                             prescriptionExercise
                           )}
+                          targetSummary={
+                            firstSetTarget ? (
+                              <>
+                                <Target
+                                  aria-hidden="true"
+                                  color="color-mix(in srgb, #16a34a 72%, var(--text-muted))"
+                                  size={15}
+                                />
+                                <span style={{ minWidth: 0 }}>
+                                  First set {firstSetTarget.weight} ×{" "}
+                                  {firstSetTarget.reps} @ {firstSetTarget.rir} · e1RM{" "}
+                                  {formatE1RM(firstSetTarget.e1rm)}
+                                </span>
+                              </>
+                            ) : null
+                          }
                           actions={
                             isEditMode ? (
                               <>

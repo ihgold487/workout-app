@@ -89,6 +89,7 @@ Initial Template View presentation checkpoint implemented for native and PWA val
 - [x] Add restrained native-only haptics for entering and saving Edit mode, successful reordering, exercise deletion, and accepted workout starts; PWA behavior remains unchanged.
 - [x] Confirm before canceling Edit Workout only when the current edit snapshot contains changes that would be discarded.
 - [x] Reduce muscle chips to quiet white metadata surfaces and give **Edit Workout** the lavender action emphasis.
+- [x] Preview each exercise's history-aware first-set target, including weight, reps, RIR, and e1RM, beneath its prescription.
 - [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, edit Save/Cancel, and phone/PWA layouts in real use.
 
 - Establish a clear top hierarchy: workout name, plan/week context, estimated duration, muscle summary, then exercises.

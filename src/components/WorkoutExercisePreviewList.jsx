@@ -58,6 +58,7 @@ export function WorkoutExercisePreviewRow({
   prescriptionSummary,
   showNote = true,
   sideContent,
+  targetSummary,
 }) {
   const isTemplateCompact = layout === "templateCompact";
   const equipmentLabel = exercise.equipment?.[0] || "";
@@ -282,6 +283,23 @@ export function WorkoutExercisePreviewRow({
             }}
           >
             {prescriptionContent}
+            {targetSummary ? (
+              <div
+                style={{
+                  alignItems: "center",
+                  color: "var(--text-muted)",
+                  display: "flex",
+                  fontSize: "12px",
+                  gap: "6px",
+                  marginTop: "6px",
+                  minWidth: 0,
+                  padding: "0 4px",
+                  textAlign: "left",
+                }}
+              >
+                {targetSummary}
+              </div>
+            ) : null}
           </div>
 
           {actions && (
