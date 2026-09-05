@@ -1,5 +1,6 @@
 /* global __BUILD_TIME__, __IS_NATIVE_BUILD__ */
 import { useState, useEffect, useRef, useDeferredValue } from "react";
+import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
@@ -9655,7 +9656,7 @@ export default function App() {
       },
     ];
 
-    return (
+    const navigation = (
       <nav
         aria-label="Primary"
         style={{
@@ -9724,6 +9725,8 @@ export default function App() {
         })}
       </nav>
     );
+
+    return createPortal(navigation, document.body);
   }
 
   function renderAppShell(content, activeView) {

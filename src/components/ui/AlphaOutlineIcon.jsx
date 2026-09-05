@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 
 export default function AlphaOutlineIcon({
   className,
@@ -8,6 +8,34 @@ export default function AlphaOutlineIcon({
   strokeExpansion = 0,
 }) {
   const filterId = `alpha-outline-${useId().replaceAll(":", "")}`;
+  const [assetVersion, setAssetVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    let frameId = null;
+    const image = new Image();
+    const refreshFilteredImage = () => {
+      if (!active) {
+        return;
+      }
+      setAssetVersion((current) => current + 1);
+    };
+
+    image.addEventListener("load", refreshFilteredImage, { once: true });
+    image.addEventListener("error", refreshFilteredImage, { once: true });
+    image.src = src;
+
+    if (image.complete) {
+      frameId = window.requestAnimationFrame(refreshFilteredImage);
+    }
+
+    return () => {
+      active = false;
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [src]);
 
   return (
     <svg
@@ -37,6 +65,7 @@ export default function AlphaOutlineIcon({
         </filter>
       </defs>
       <image
+        key={`${src}-${assetVersion}`}
         filter={`url(#${filterId})`}
         height="512"
         href={src}
