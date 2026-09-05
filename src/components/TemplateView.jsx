@@ -3,6 +3,7 @@ import {
   BarChart3,
   Check,
   Dumbbell,
+  Flame,
   GripVertical,
   Link2,
   Pencil,
@@ -38,6 +39,7 @@ import {
   WorkoutExercisePreviewRow,
 } from "./WorkoutExercisePreviewList";
 import WeightPickerModal from "./WeightPickerModal";
+import WarmupSetsSheet from "./WarmupSetsSheet";
 import {
   calculateE1RM,
   formatE1RM,
@@ -56,6 +58,7 @@ import {
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
+import { buildWarmupRecommendations } from "../utils/warmupRecommendations";
 import {
   triggerNativeActionHaptic,
   triggerNativePickerSelectionHaptic,
@@ -329,6 +332,7 @@ export default function TemplateView({
   const [detailExercise, setDetailExercise] = useState(null);
   const [libraryEditingExercise, setLibraryEditingExercise] = useState(null);
   const [showTemplateMuscleMap, setShowTemplateMuscleMap] = useState(false);
+  const [warmupPreview, setWarmupPreview] = useState(null);
   const [confirmPreviousWeekIncomplete, setConfirmPreviousWeekIncomplete] =
     useState(false);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
@@ -1346,6 +1350,7 @@ export default function TemplateView({
     );
 
     return {
+      calculationExercise: recommendationExercise,
       e1rm,
       reps: plannedPrescription.reps,
       rir: plannedPrescription.rir,
@@ -2334,11 +2339,52 @@ export default function TemplateView({
                                   color="color-mix(in srgb, #16a34a 72%, var(--text-muted))"
                                   size={15}
                                 />
-                                <span style={{ minWidth: 0 }}>
+                                <span style={{ flex: "1 1 auto", minWidth: 0 }}>
                                   First set {firstSetTarget.weight} ×{" "}
                                   {firstSetTarget.reps} @ {firstSetTarget.rir} · e1RM{" "}
                                   {formatE1RM(firstSetTarget.e1rm)}
                                 </span>
+                                <button
+                                  aria-label={`View warmup sets for ${exercise.name}`}
+                                  onClick={() => {
+                                    const recommendations =
+                                      buildWarmupRecommendations({
+                                        bodyWeight: templateBodyWeight,
+                                        exercise:
+                                          firstSetTarget.calculationExercise,
+                                        reps: firstSetTarget.reps,
+                                        rir: firstSetTarget.rir,
+                                        weight: firstSetTarget.weight,
+                                        weightIncrement:
+                                          getExerciseWeightIncrement(
+                                            firstSetTarget.calculationExercise,
+                                            undefined,
+                                            firstSetTarget.weight
+                                          ),
+                                      });
+
+                                    if (recommendations) {
+                                      setWarmupPreview({
+                                        exerciseName: exercise.name,
+                                        recommendations,
+                                      });
+                                      void triggerNativeActionHaptic();
+                                    }
+                                  }}
+                                  style={{
+                                    alignItems: "center",
+                                    display: "inline-flex",
+                                    flex: "0 0 auto",
+                                    justifyContent: "center",
+                                    minHeight: "36px",
+                                    minWidth: "36px",
+                                    padding: "4px",
+                                  }}
+                                  title="Warmup sets"
+                                  type="button"
+                                >
+                                  <Flame aria-hidden="true" size={16} />
+                                </button>
                               </>
                             ) : null
                           }
@@ -2773,6 +2819,14 @@ export default function TemplateView({
           </div>
         </div>
       )}
+      {warmupPreview && (
+        <WarmupSetsSheet
+          exerciseName={warmupPreview.exerciseName}
+          onClose={() => setWarmupPreview(null)}
+          recommendations={warmupPreview.recommendations}
+        />
+      )}
+
       {detailExercise && (
         <ExerciseDetailDialog
           bodyWeightEntries={bodyWeightEntries}

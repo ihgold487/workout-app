@@ -90,6 +90,7 @@ Initial Template View presentation checkpoint implemented for native and PWA val
 - [x] Confirm before canceling Edit Workout only when the current edit snapshot contains changes that would be discarded.
 - [x] Reduce muscle chips to quiet white metadata surfaces and give **Edit Workout** the lavender action emphasis.
 - [x] Preview each exercise's history-aware first-set target, including weight, reps, RIR, and e1RM, beneath its prescription.
+- [x] Open a read-only warmup-set sheet from each first-set target using that suggested target as the calculation input.
 - [ ] Validate long workout names, plan and standalone workouts, supersets, disabled-start states, direct start from Home, edit Save/Cancel, and phone/PWA layouts in real use.
 
 - Establish a clear top hierarchy: workout name, plan/week context, estimated duration, muscle summary, then exercises.
@@ -164,9 +165,12 @@ Initial Plans library checkpoint implemented for native and PWA validation.
 - [x] Preserve the existing plan editor and generator behind explicit **New Plan** and **Edit** actions.
 - [x] Reuse existing activation, duplication, deletion, completion, extension, week-selection, AI-notes, and comparison behavior without changing plan persistence.
 - [x] Keep Home focused on the active plan and move inactive and completed-plan management into Plans.
+- [x] Remove the redundant collapsible active-plan detail from Home and retain access through a compact **View Plan** action in Today.
+- [x] Offer **Create Plan** beside **Choose Workout** in Today when no plan is active.
 - [x] Treat completed plans as historical references: show completion as status, expose Restart/Extend/Duplicate, and require duplication before editing.
 - [x] Provide an explicit, guarded return from plan creation and editing rather than relying on bottom navigation.
-- [x] Separate plan status badges from consistently ordered action rows, with Delete last.
+- [x] Organize plan controls into consistent action rows.
+- [x] Remove section-redundant plan status badges and place Delete at the trailing edge of each plan-name row.
 - [x] Confirm before replacing an unfinished active plan or restarting a completed plan.
 - [ ] Validate empty, active-only, draft-heavy, and completed-plan libraries; duplication and deletion; editor cancel/save; comparison; and PWA layout.
 

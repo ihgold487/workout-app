@@ -307,6 +307,14 @@ h2 {
   justify-self: start;
 }
 
+.home-today-card__actions--with-plan-links {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.home-today-card__actions--with-plan-links .home-today-card__primary {
+  grid-column: 1 / -1;
+}
+
 .session-set-number {
   align-items: center;
   color: var(--text-muted);

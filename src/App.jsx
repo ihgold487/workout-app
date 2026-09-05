@@ -4877,7 +4877,6 @@ export default function App() {
   const [expandedPlanIds, setExpandedPlanIds] = useState({});
   const [planDisplayWeeks, setPlanDisplayWeeks] = useState({});
   const [weekPickerPlanId, setWeekPickerPlanId] = useState(null);
-  const [plansExpanded, setPlansExpanded] = useState(true);
   const [planComparisonOpen, setPlanComparisonOpen] = useState(false);
   const [selectedPlanComparisonIds, setSelectedPlanComparisonIds] = useState([]);
   const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
@@ -9021,42 +9020,23 @@ export default function App() {
                 {plan.name}
               </strong>
             </button>
-          </div>
-
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "6px",
-              justifyContent: "flex-start",
-            }}
-          >
-            <span
+            <button
+              aria-label={`Delete ${plan.name}`}
+              onClick={() => deletePlan(plan)}
               style={{
                 alignItems: "center",
-                background: completed
-                  ? "color-mix(in srgb, var(--success-text) 10%, var(--surface))"
-                  : active
-                    ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
-                    : "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                color: completed
-                  ? "var(--success-text)"
-                  : active
-                    ? "var(--accent)"
-                    : "var(--text-muted)",
                 display: "inline-flex",
-                fontSize: "11px",
-                fontWeight: "bold",
-                minHeight: "32px",
-                padding: "4px 10px",
-                whiteSpace: "nowrap",
+                flex: "0 0 auto",
+                justifyContent: "center",
+                minHeight: "44px",
+                minWidth: "44px",
+                padding: "4px",
               }}
+              title="Delete plan"
+              type="button"
             >
-              {completed ? "Complete" : active ? "Active" : "Inactive"}
-            </span>
+              <Trash2 size={15} />
+            </button>
           </div>
 
           <div
@@ -9171,20 +9151,6 @@ export default function App() {
                 <span style={{ fontSize: "12px" }}>Activate</span>
               </button>
             ) : null}
-            <button
-              aria-label={`Delete ${plan.name}`}
-              onClick={() => deletePlan(plan)}
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                justifyContent: "center",
-                minHeight: "44px",
-                minWidth: "44px",
-                padding: "4px",
-              }}
-            >
-              <Trash2 size={15} />
-            </button>
           </div>
         </div>
 
@@ -9584,6 +9550,20 @@ export default function App() {
     setSelectedHistoryList(null);
     setSelectedTemplateId(null);
     setSelectedTemplatePlanWeek(null);
+  }
+
+  function openActivePlanInPlans(plan) {
+    goPlans();
+    setExpandedPlanIds((current) => ({
+      ...current,
+      [plan.id]: true,
+    }));
+  }
+
+  function openNewPlanBuilder() {
+    goPlans();
+    setEditingPlanId(null);
+    setPlanEditorOpen(true);
   }
 
   function goNutrition() {
@@ -13153,15 +13133,21 @@ export default function App() {
               </div>
             ) : activeHomePlan ? (
               <div className="home-today-card__metadata">
-                Review the plan or select another workout below.
+                Review the plan in Plans or select another workout below.
               </div>
             ) : (
               <div className="home-today-card__metadata">
-                Start from one of your saved workouts.
+                Start a saved workout or create a training plan.
               </div>
             )}
 
-            <div className="home-today-card__actions">
+            <div
+              className={`home-today-card__actions${
+                nextWorkoutTemplate && nextPlanWorkout
+                  ? " home-today-card__actions--with-plan-links"
+                  : ""
+              }`}
+            >
               <button
                 className="app-primary-action home-today-card__primary"
                 onClick={() => {
@@ -13173,11 +13159,7 @@ export default function App() {
                   }
 
                   if (activeHomePlan) {
-                    setPlansExpanded(true);
-                    setExpandedPlanIds((current) => ({
-                      ...current,
-                      [activeHomePlan.id]: true,
-                    }));
+                    openActivePlanInPlans(activeHomePlan);
                     return;
                   }
 
@@ -13194,17 +13176,36 @@ export default function App() {
               </button>
 
               {nextWorkoutTemplate && nextPlanWorkout ? (
+                <>
+                  <button
+                    className="home-today-card__preview"
+                    onClick={() => {
+                      setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
+                      setAutoStartTemplateId(null);
+                      setSelectedTemplateId(nextWorkoutTemplate.id);
+                    }}
+                    type="button"
+                  >
+                    <Eye size={16} />
+                    <span>Preview Workout</span>
+                  </button>
+                  <button
+                    className="home-today-card__preview"
+                    onClick={() => openActivePlanInPlans(activeHomePlan)}
+                    type="button"
+                  >
+                    <ClipboardList size={16} />
+                    <span>View Plan</span>
+                  </button>
+                </>
+              ) : !activeHomePlan ? (
                 <button
                   className="home-today-card__preview"
-                  onClick={() => {
-                    setSelectedTemplatePlanWeek(activeHomeWeekStatus.currentWeek);
-                    setAutoStartTemplateId(null);
-                    setSelectedTemplateId(nextWorkoutTemplate.id);
-                  }}
+                  onClick={openNewPlanBuilder}
                   type="button"
                 >
-                  <Eye size={16} />
-                  <span>Preview Workout</span>
+                  <Plus size={16} />
+                  <span>Create Plan</span>
                 </button>
               ) : null}
             </div>
@@ -13251,86 +13252,6 @@ export default function App() {
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
         session={authSession}
       />
-
-      {activeHomePlan && (
-        <>
-          <div
-            style={{
-              alignItems: "center",
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              borderRadius: "14px",
-              color: "var(--text-h)",
-              display: "grid",
-              gap: "4px",
-              font: "inherit",
-              gridTemplateColumns: "44px minmax(0, 1fr) 44px",
-              margin: "8px 0 12px",
-              padding: "8px",
-              width: "100%",
-            }}
-          >
-            <button
-              aria-expanded={plansExpanded}
-              aria-label={`${plansExpanded ? "Collapse" : "Expand"} plans`}
-              onClick={() => setPlansExpanded((expanded) => !expanded)}
-              style={{
-                alignItems: "center",
-                background: "transparent",
-                border: "none",
-                color: "var(--text-h)",
-                display: "inline-flex",
-                font: "inherit",
-                justifyContent: "center",
-                minHeight: "44px",
-                padding: "4px",
-              }}
-              type="button"
-            >
-              {plansExpanded ? (
-                <ChevronDown size={18} />
-              ) : (
-                <ChevronRight size={18} />
-              )}
-            </button>
-            <button
-              aria-expanded={plansExpanded}
-              onClick={() => setPlansExpanded((expanded) => !expanded)}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "var(--text-h)",
-                display: "grid",
-                fontSize: "17px",
-                fontWeight: "bold",
-                lineHeight: 1.2,
-                minHeight: "44px",
-                padding: "4px 0",
-                textAlign: "left",
-              }}
-              type="button"
-            >
-              Plans
-              <span
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "11px",
-                  fontWeight: "normal",
-                }}
-              >
-                {`Active · ${activeHomePlan.name}`}
-              </span>
-            </button>
-            <span />
-          </div>
-
-          {plansExpanded && (
-            renderPlanCard(activeHomePlan)
-          )}
-          {renderWeekPicker()}
-          <div style={{ height: "8px" }} />
-        </>
-      )}
 
       <button
         aria-expanded={workoutsExpanded}
