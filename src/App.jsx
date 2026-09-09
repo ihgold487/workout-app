@@ -12989,7 +12989,10 @@ export default function App() {
           requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
         }}
         exerciseMetadata={exerciseMetadata}
-        setExerciseMetadata={setExerciseMetadata}
+        setExerciseMetadata={(updater) => {
+          setExerciseMetadata(updater);
+          requestSyncCheckpoint(["exercisePreferences"], "exercise notes");
+        }}
         setSelectedSessionId={setSelectedSessionId}
         setSelectedTemplateId={setSelectedTemplateId}
         plateInventory={plateInventory}

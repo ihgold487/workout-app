@@ -2830,6 +2830,17 @@ export default function SessionView({
 
   function acceptExerciseNoteEdit(exercise) {
     const noteKey = String(exercise.id);
+    const exerciseMetadataId = getExerciseMetadataId(exercise);
+
+    if (exerciseMetadataId) {
+      setExerciseMetadata((currentMetadata) => ({
+        ...currentMetadata,
+        [exerciseMetadataId]: {
+          ...(currentMetadata?.[exerciseMetadataId] || {}),
+          note: getExerciseNote(exercise),
+        },
+      }));
+    }
 
     setNoteEditSnapshots((snapshots) => {
       const next = { ...snapshots };
@@ -4783,8 +4794,11 @@ export default function SessionView({
             ? firstPresentValue(getSetMinimumReps(set), prescribedReps)
             : firstPresentValue(replacementValues.minimumReps, prescribedReps);
 
+        const replacement = { ...ex };
+        delete replacement.sessionNote;
+
         return {
-          ...ex,
+          ...replacement,
 
           name: newExercise.name,
 
