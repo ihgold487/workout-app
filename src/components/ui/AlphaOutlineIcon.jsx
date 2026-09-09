@@ -1,3 +1,4 @@
+/* global __IS_NATIVE_BUILD__ */
 import { useEffect, useId, useState } from "react";
 
 export default function AlphaOutlineIcon({
@@ -8,6 +9,9 @@ export default function AlphaOutlineIcon({
   strokeExpansion = 0,
 }) {
   const filterId = `alpha-outline-${useId().replaceAll(":", "")}`;
+  const resolvedSrc = __IS_NATIVE_BUILD__
+    ? src
+    : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, "")}`;
   const [assetVersion, setAssetVersion] = useState(0);
 
   useEffect(() => {
@@ -23,7 +27,7 @@ export default function AlphaOutlineIcon({
 
     image.addEventListener("load", refreshFilteredImage, { once: true });
     image.addEventListener("error", refreshFilteredImage, { once: true });
-    image.src = src;
+    image.src = resolvedSrc;
 
     if (image.complete) {
       frameId = window.requestAnimationFrame(refreshFilteredImage);
@@ -35,7 +39,7 @@ export default function AlphaOutlineIcon({
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [src]);
+  }, [resolvedSrc]);
 
   return (
     <svg
@@ -65,10 +69,10 @@ export default function AlphaOutlineIcon({
         </filter>
       </defs>
       <image
-        key={`${src}-${assetVersion}`}
+        key={`${resolvedSrc}-${assetVersion}`}
         filter={`url(#${filterId})`}
         height="512"
-        href={src}
+        href={resolvedSrc}
         preserveAspectRatio="xMidYMid meet"
         width="512"
       />

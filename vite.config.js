@@ -42,15 +42,22 @@ export default defineConfig(({ mode }) => {
       {
         name: "workout-build-time-meta",
         transformIndexHtml(html) {
-          return html
+          const transformedHtml = html
             .replace(
               '<meta name="color-scheme" content="light" />',
               `<meta name="color-scheme" content="light" />\n\n    <meta name="app-build-time" content="${escapeHtmlAttribute(buildTime)}" />`
             )
             .replace(
               "__STARTUP_WORKOUT_ICON__",
-              isNative ? "workout-icon-native.png?v=6" : "workout-icon.png?v=4"
+              isNative ? "workout-icon-native.png?v=6" : "workout-icon.png?v=5"
             );
+
+          return isNative
+            ? transformedHtml
+            : transformedHtml.replaceAll(
+                "workout-icon.png?v=4",
+                "workout-icon.png?v=5"
+              );
         },
       },
 
@@ -60,7 +67,7 @@ export default defineConfig(({ mode }) => {
         disable: isNative,
         registerType: "prompt",
 
-        includeAssets: ["icon-192.png", "icon-512.png"],
+        includeAssets: ["icon-192-v2.png", "icon-512-v2.png"],
 
         manifest: {
           name: "Workout Tracker",
@@ -83,13 +90,13 @@ export default defineConfig(({ mode }) => {
 
           icons: [
             {
-              src: "icon-192.png",
+              src: "icon-192-v2.png",
               sizes: "192x192",
               type: "image/png",
             },
 
             {
-              src: "icon-512.png",
+              src: "icon-512-v2.png",
               sizes: "512x512",
               type: "image/png",
             },
