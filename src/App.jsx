@@ -9264,11 +9264,13 @@ export default function App() {
 
                       if (completedWorkout) {
                         setSelectedHistory(completedWorkout);
+                        setShowPlans(false);
                         return;
                       }
 
                       setSelectedTemplatePlanWeek(weekStatus.currentWeek);
                       setSelectedTemplateId(template.id);
+                      setShowPlans(false);
                     }}
                     style={{
                       alignItems: "center",

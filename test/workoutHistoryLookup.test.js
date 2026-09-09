@@ -96,6 +96,92 @@ test("normal training falls back to deload history when no normal result exists"
   assert.equal(performance?.workout.id, "deload-workout");
 });
 
+test("uses the latest same-plan performance from another day for matching reps", () => {
+  const currentExercise = {
+    ...exercise,
+    sets: [{ reps: "10", rir: "2" }],
+  };
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: false,
+    exercise: currentExercise,
+    history: [
+      {
+        completedAtIso: "2026-09-02T12:00:00.000Z",
+        exercises: [
+          {
+            ...currentExercise,
+            sets: [{ actualWeight: "95", actualReps: "9", reps: "9", rir: "2" }],
+          },
+        ],
+        id: "other-day-most-recent",
+        planId: "new-plan",
+        planWorkoutId: "day-two",
+      },
+      {
+        completedAtIso: "2026-08-30T12:00:00.000Z",
+        exercises: [
+          {
+            ...currentExercise,
+            sets: [{ actualWeight: "90", actualReps: "10", reps: "10", rir: "2" }],
+          },
+        ],
+        id: "same-day-older",
+        planId: "new-plan",
+        planWorkoutId: "day-one",
+      },
+    ],
+    plan: plans[1],
+    planWeek: 2,
+    planWorkoutId: "day-one",
+    plans,
+  });
+
+  assert.equal(performance?.workout.id, "other-day-most-recent");
+});
+
+test("keeps plan-day history when the other day's reps differ materially", () => {
+  const currentExercise = {
+    ...exercise,
+    sets: [{ reps: "5", rir: "2" }],
+  };
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: false,
+    exercise: currentExercise,
+    history: [
+      {
+        completedAtIso: "2026-09-02T12:00:00.000Z",
+        exercises: [
+          {
+            ...currentExercise,
+            sets: [{ actualWeight: "135", actualReps: "10", reps: "10", rir: "2" }],
+          },
+        ],
+        id: "other-day-different-reps",
+        planId: "new-plan",
+        planWorkoutId: "day-two",
+      },
+      {
+        completedAtIso: "2026-08-30T12:00:00.000Z",
+        exercises: [
+          {
+            ...currentExercise,
+            sets: [{ actualWeight: "155", actualReps: "5", reps: "5", rir: "2" }],
+          },
+        ],
+        id: "same-day-matching-reps",
+        planId: "new-plan",
+        planWorkoutId: "day-one",
+      },
+    ],
+    plan: plans[1],
+    planWeek: 2,
+    planWorkoutId: "day-one",
+    plans,
+  });
+
+  assert.equal(performance?.workout.id, "same-day-matching-reps");
+});
+
 test("RIR 5 prescriptions identify legacy deload history without plan metadata", () => {
   assert.equal(
     isHistoryWorkoutDeload({

@@ -174,6 +174,33 @@ function hasUsefulPrescriptionSignature(signature) {
     .some((setSignature) => setSignature.split(":").some(Boolean));
 }
 
+function prescriptionsHaveSimilarReps(currentExercise, historyExercise) {
+  const currentSets = currentExercise?.sets || [];
+  const historySets = historyExercise?.sets || [];
+
+  if (!currentSets.length || currentSets.length !== historySets.length) {
+    return false;
+  }
+
+  return currentSets.every((currentSet, index) => {
+    const currentReps = getSetPrescribedReps(currentSet);
+    const historyReps = getSetPrescribedReps(historySets[index]);
+    const currentNumericReps = Number(currentReps);
+    const historyNumericReps = Number(historyReps);
+
+    if (
+      Number.isFinite(currentNumericReps) &&
+      Number.isFinite(historyNumericReps)
+    ) {
+      // A one-rep difference remains comparable (for example, 9 vs. 10),
+      // while keeping clearly distinct heavy and moderate prescriptions apart.
+      return Math.abs(currentNumericReps - historyNumericReps) <= 1;
+    }
+
+    return Boolean(currentReps) && currentReps === historyReps;
+  });
+}
+
 function getPlanCompletionTime(completion) {
   const parsed = new Date(completion?.completedAt || completion?.completedAtIso || 0).getTime();
 
@@ -459,6 +486,27 @@ export function findLatestExercisePerformance({
       deloadStatusCache.set(historyWorkout, isDeload);
       return isDeload === expectedDeload;
     };
+
+    // When the same exercise appears on multiple days of this plan, an
+    // equivalent rep prescription is more useful than the older occurrence of
+    // the current day. This keeps repeated accessory work current without
+    // mixing distinct prescriptions such as heavy and moderate bench press.
+    if (plan?.id != null && canMatchPrescription) {
+      const comparablePlanPerformance = findMatchingPerformance(
+        (historyWorkout) =>
+          matchesDeloadStatus(historyWorkout) &&
+          String(historyWorkout.planId || "") === String(plan.id) &&
+          prescriptionsHaveSimilarReps(
+            exercise,
+            getMatchingHistoryExercise(historyWorkout)
+          ),
+        true
+      );
+
+      if (comparablePlanPerformance) {
+        return comparablePlanPerformance;
+      }
+    }
 
     if (hasPlanWorkoutScope) {
       const previousWeekNumber =
