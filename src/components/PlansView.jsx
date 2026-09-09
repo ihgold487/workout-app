@@ -1098,6 +1098,45 @@ function buildEditablePlanWorkouts(plan, templates) {
   });
 }
 
+function isPlanWeekComplete(plan, weekNumber, history = []) {
+  const planWorkoutIds = new Set(
+    (plan?.workouts || [])
+      .map((workout) => workout?.planWorkoutId)
+      .filter((planWorkoutId) => planWorkoutId != null)
+      .map(String)
+  );
+
+  if (planWorkoutIds.size === 0) {
+    return false;
+  }
+
+  const completedWorkoutIds = new Set(
+    [
+      ...(plan?.completions || []),
+      ...(history || []).filter(
+        (workout) =>
+          String(workout?.planId ?? workout?.plan_id ?? "") ===
+          String(plan?.id)
+      ),
+    ]
+      .filter(
+        (completion) =>
+          Number(completion?.weekNumber ?? completion?.planWeek ?? completion?.plan_week) ===
+          Number(weekNumber)
+      )
+      .map(
+        (completion) =>
+          completion?.planWorkoutId ?? completion?.plan_workout_id
+      )
+      .filter((planWorkoutId) => planWorkoutId != null)
+      .map(String)
+  );
+
+  return [...planWorkoutIds].every((planWorkoutId) =>
+    completedWorkoutIds.has(planWorkoutId)
+  );
+}
+
 function buildRecentPlanHistoryWorkouts(plans, templates, excludedPlanId) {
   const templateById = new Map(
     (templates || []).map((template) => [String(template.id), template])
@@ -2795,6 +2834,7 @@ export default function PlansView({
   const [durationWeeks, setDurationWeeks] = useState(
     initialDurationWeeks
   );
+  const [currentWeekOverride, setCurrentWeekOverride] = useState(null);
   const [deload, setDeload] = useState(
     editingPlanConfig.deload ?? initialPlanDefaults.deload ?? false
   );
@@ -3406,6 +3446,66 @@ export default function PlansView({
     if (!editPreviewWorkouts) {
       setEditPreviewWorkouts(clonePlanEditWorkouts(workouts));
     }
+  }
+
+  function addWorkingWeek() {
+    if (!editingPlan || editingPlan.status !== "active") {
+      return;
+    }
+
+    const previousDurationWeeks = Math.max(1, Number(durationWeeks) || 1);
+    const nextDurationWeeks = previousDurationWeeks + 1;
+    const nextWorkouts = clonePlanEditWorkouts(previewWorkouts).map(
+      (workout) => ({
+        ...workout,
+        exercises: workout.exercises.map((exercise) => {
+          const weeklyPrescriptions = exercise.weeklyPrescriptions || [];
+          const finalWorkingWeek = weeklyPrescriptions.find(
+            (week) =>
+              !week.isDeload &&
+              Number(week.weekNumber) === previousDurationWeeks
+          );
+
+          if (!finalWorkingWeek) {
+            return exercise;
+          }
+
+          const finalWeekPrescription = { ...finalWorkingWeek };
+          delete finalWeekPrescription.isDeload;
+          delete finalWeekPrescription.label;
+          delete finalWeekPrescription.weekNumber;
+          const insertedWeek = {
+            ...finalWeekPrescription,
+            weekNumber: nextDurationWeeks,
+          };
+          const deloadWeek = weeklyPrescriptions.find((week) => week.isDeload);
+
+          return {
+            ...exercise,
+            weeklyPrescriptions: [
+              ...weeklyPrescriptions.filter((week) => !week.isDeload),
+              insertedWeek,
+              ...(deloadWeek
+                ? [{ ...deloadWeek, weekNumber: nextDurationWeeks + 1 }]
+                : []),
+            ],
+          };
+        }),
+      })
+    );
+
+    setDurationWeeks(String(nextDurationWeeks));
+    setEditPreviewWorkouts(nextWorkouts);
+    setWeeklyPrescriptionBySlot({});
+    setCurrentWeekOverride(
+      isPlanWeekComplete(editingPlan, previousDurationWeeks, history)
+        ? nextDurationWeeks
+        : null
+    );
+    setPlanEditorTouched(true);
+    setSaveStatus(
+      `Added Week ${nextDurationWeeks}. Update Plan to save the copied prescription.`
+    );
   }
 
   function updateWeeklyPrescriptionValue(
@@ -4089,7 +4189,9 @@ export default function PlansView({
       goal,
       daysPerWeek: Number(daysPerWeek),
       durationWeeks: Number(durationWeeks),
-      currentWeek: isEditingExistingPlan ? editingPlan?.currentWeek || 1 : 1,
+      currentWeek: isEditingExistingPlan
+        ? currentWeekOverride ?? (editingPlan?.currentWeek || 1)
+        : 1,
       status: isEditingExistingPlan ? editingPlan?.status || "inactive" : "inactive",
       createdAt:
         isEditingExistingPlan && editingPlan?.createdAt
@@ -4387,6 +4489,41 @@ export default function PlansView({
                   <Brain size={16} />
                   AI Notes
                 </button>
+              )}
+
+              {editingPlan.status === "active" && (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "2px",
+                  }}
+                >
+                  <button
+                    onClick={addWorkingWeek}
+                    style={{
+                      alignItems: "center",
+                      display: "inline-flex",
+                      gap: "6px",
+                      minHeight: "40px",
+                      padding: "6px 10px",
+                    }}
+                    type="button"
+                  >
+                    <Plus size={16} />
+                    Add Week
+                  </button>
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "11px",
+                      lineHeight: 1.2,
+                      maxWidth: "180px",
+                    }}
+                  >
+                    Adds a working week before deload, copying the final
+                    working-week prescription.
+                  </span>
+                </div>
               )}
 
               <button
