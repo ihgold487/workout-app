@@ -3405,7 +3405,12 @@ export default function SessionView({
 
         setTimeout(() => setRestComplete(false), 1200);
 
-        setTimerExpiredAt(Date.now());
+        // The interval may resume after the app has been backgrounded. Keep
+        // the scheduled end time so the count-up immediately reflects the
+        // full time since the alert, rather than restarting at zero.
+        setTimerExpiredAt(
+          (timerStartedAt || Date.now()) + restTimerRunDuration * 1000
+        );
         setTimerFinished(true);
         setTimerRunning(false);
         setTimerPaused(false);

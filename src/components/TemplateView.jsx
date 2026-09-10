@@ -165,6 +165,13 @@ function getTemplateWorkoutSummary(template) {
 
 function getEstimatedWorkoutMinutes(template) {
   const exercises = template.exercises || [];
+  // The preview should reflect time in the gym, not just time under load. This
+  // includes setup and logging for each set, a brief general warm-up, and a
+  // practical transition when changing exercises. Prescribed rest is still
+  // used between working sets below.
+  const generalWarmupSeconds = exercises.length ? 8 * 60 : 0;
+  const secondsPerSet = 90;
+  const betweenExerciseSeconds = 2 * 60;
   const totalSeconds = exercises.reduce((workoutSeconds, exercise) => {
     const sets = exercise.sets || [];
     const exerciseSeconds = sets.reduce((setSeconds, set, setIndex) => {
@@ -173,11 +180,11 @@ function getEstimatedWorkoutMinutes(template) {
       );
       const includesRest = setIndex < sets.length - 1 && !set.isDropSet;
 
-      return setSeconds + 45 + (includesRest ? restSeconds : 0);
+      return setSeconds + secondsPerSet + (includesRest ? restSeconds : 0);
     }, 0);
 
-    return workoutSeconds + exerciseSeconds + 45;
-  }, 0);
+    return workoutSeconds + exerciseSeconds + betweenExerciseSeconds;
+  }, generalWarmupSeconds);
 
   return Math.max(1, Math.round(totalSeconds / 60));
 }

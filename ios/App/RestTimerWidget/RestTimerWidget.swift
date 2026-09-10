@@ -140,11 +140,21 @@ private struct RestTimerText: View {
         if let pausedSeconds = state.pausedSeconds {
             Text(Self.format(seconds: pausedSeconds))
         } else {
-            Text(
-                timerInterval: state.startedAt...state.endsAt,
-                countsDown: true,
-                showsHours: false
-            )
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                if timeline.date < state.endsAt {
+                    Text(
+                        timerInterval: state.startedAt...state.endsAt,
+                        countsDown: true,
+                        showsHours: false
+                    )
+                } else {
+                    Text(
+                        timerInterval: state.endsAt...Date.distantFuture,
+                        countsDown: false,
+                        showsHours: false
+                    )
+                }
+            }
         }
     }
 
@@ -158,8 +168,15 @@ private struct RestTimerProgress: View {
 
     var body: some View {
         if state.pausedSeconds == nil {
-            ProgressView(timerInterval: state.startedAt...state.endsAt, countsDown: true)
-                .tint(.workoutPurple)
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                if timeline.date < state.endsAt {
+                    ProgressView(timerInterval: state.startedAt...state.endsAt, countsDown: true)
+                        .tint(.workoutPurple)
+                } else {
+                    ProgressView(value: 0)
+                        .tint(.workoutPurple)
+                }
+            }
         } else {
             ProgressView(value: 0)
                 .tint(.workoutPurple)
