@@ -1347,7 +1347,6 @@ const PLAN_EXPORT_WORKOUT_TYPE_DISPLAY_LABELS = {
 
 const PLAN_EXPORT_WORKOUT_TYPE_SEQUENCE = {
   "type-3": ["push", "pull", "lower", "upper", "lower"],
-  "type-5": ["push", "pull", "lower", "upper", "lower"],
 };
 
 function normalizePlanExportWorkoutType(value) {

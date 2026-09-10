@@ -11,7 +11,7 @@ export const RIR_PERIODIZATION_ORDER = [
 ];
 
 export function getDefaultRirPeriodizationMode(planType) {
-  return ["type-3", "type-5"].includes(planType)
+  return planType === "type-3"
     ? RIR_PERIODIZATION_MODES.STEP
     : RIR_PERIODIZATION_MODES.CONSTANT;
 }

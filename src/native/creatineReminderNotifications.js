@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const CREATINE_NOTIFICATION_ID_START = 1100;
 const CREATINE_NOTIFICATION_DAYS = 30;
+const DEFAULT_NOTIFICATION_SOUND = "coach-whistle.wav";
 const LocalNotifications = registerPlugin("LocalNotifications");
 let notificationOperation = Promise.resolve();
 
@@ -109,7 +110,7 @@ export async function scheduleNativeCreatineNotifications({
           title: "Creatine reminder",
           body: "Remember to take your creatine today.",
           schedule: { at: date },
-          sound: "default",
+          sound: DEFAULT_NOTIFICATION_SOUND,
         })),
       });
 

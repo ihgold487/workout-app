@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const WORKOUT_INACTIVITY_NOTIFICATION_ID = 1003;
+const DEFAULT_NOTIFICATION_SOUND = "coach-whistle.wav";
 const LocalNotifications = registerPlugin("LocalNotifications");
 
 export function canUseNativeWorkoutInactivityNotifications() {
@@ -43,7 +44,7 @@ export async function scheduleWorkoutInactivityNotification(delaySeconds) {
           id: WORKOUT_INACTIVITY_NOTIFICATION_ID,
           title: "⚠️ No recent sets",
           body: "No sets have been completed in 6 minutes. Are you still working out?",
-          sound: "default",
+          sound: DEFAULT_NOTIFICATION_SOUND,
           schedule: {
             at: new Date(Date.now() + Math.ceil(delaySeconds) * 1000),
           },

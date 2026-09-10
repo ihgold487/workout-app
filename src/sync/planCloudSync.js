@@ -4,7 +4,6 @@ import { uploadWorkouts } from "./workoutCloudSync";
 
 const LOCAL_APP_SOURCE = "local_app";
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
-const TYPE_5_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
 const WORKOUT_TYPE_LABELS = {
   push: "Push",
   pull: "Pull",
@@ -52,11 +51,7 @@ function inferWorkoutTypeFromName(name) {
 
 function getSequenceWorkoutType(planType, position) {
   const sequence =
-    planType === "type-3"
-      ? TYPE_3_WORKOUT_SEQUENCE
-      : planType === "type-5"
-        ? TYPE_5_WORKOUT_SEQUENCE
-        : null;
+    planType === "type-3" ? TYPE_3_WORKOUT_SEQUENCE : null;
 
   return sequence?.[((Number(position) || 1) - 1) % sequence.length] || "";
 }

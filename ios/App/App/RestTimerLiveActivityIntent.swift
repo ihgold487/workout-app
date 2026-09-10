@@ -70,7 +70,7 @@ struct RestTimerToggleIntent: LiveActivityIntent {
         let content = UNMutableNotificationContent()
         content.title = "Rest complete"
         content.body = "Ready for next set"
-        content.sound = .default
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("coach-whistle.wav"))
 
         let request = UNNotificationRequest(
             identifier: Self.notificationIdentifier,

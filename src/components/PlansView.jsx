@@ -872,7 +872,7 @@ function WorkoutSummarySheet({
 function getDefaultSavedWorkoutName(workout, workoutIndex, planType) {
   const compactPrefix = getCompactPlanTypeLabel(planType);
 
-  if (["type-3", "type-5"].includes(planType) && workout?.workoutTypeLabel) {
+  if (planType === "type-3" && workout?.workoutTypeLabel) {
     return `${compactPrefix} W${workoutIndex + 1} ${workout.workoutTypeLabel}`;
   }
 
@@ -959,16 +959,6 @@ const PLAN_TYPE_DEFAULTS = {
     reps: "12",
     rir: "2",
   },
-  "type-3": {
-    deload: true,
-    daysPerWeek: "5",
-    durationWeeks: "5",
-    goal: "progress",
-    rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
-    reps: "8",
-    rir: "3",
-    sets: "3",
-  },
   "type-4": {
     deload: false,
     daysPerWeek: "3",
@@ -979,7 +969,7 @@ const PLAN_TYPE_DEFAULTS = {
     rir: "2",
     sets: "3",
   },
-  "type-5": {
+  "type-3": {
     deload: true,
     daysPerWeek: "5",
     durationWeeks: "5",
@@ -1466,7 +1456,6 @@ function getPlanTypeLabel(planType) {
     "type-2": "Plan Type 2 'Sam'",
     "type-3": "Plan Type 3 'Ira'",
     "type-4": "Plan Type 4 'General'",
-    "type-5": "Plan Type 5 'App'",
     ai: "Plan Type AI",
   };
 
@@ -1479,7 +1468,6 @@ function getCompactPlanTypeLabel(planType) {
     "type-2": "P2",
     "type-3": "P3",
     "type-4": "P4",
-    "type-5": "P5",
     ai: "AI",
   };
 
@@ -2941,7 +2929,7 @@ export default function PlansView({
   const isAiPlanType = generationMode === "plan" && planType === "ai";
   const showPlanSetPicker =
     generationMode === "plan" &&
-    ["type-3", "type-4", "type-5"].includes(planType);
+    ["type-3", "type-4"].includes(planType);
 
   useEffect(() => {
     let cancelled = false;
@@ -3393,7 +3381,7 @@ export default function PlansView({
       ...workout,
       dayNumber: workoutIndex + 1,
       name:
-        ["type-4", "type-5"].includes(planType)
+        ["type-3", "type-4"].includes(planType)
           ? `${getCompactPlanTypeLabel(planType)} W${workoutIndex + 1} ${
               workout.workoutTypeLabel || getWorkoutTypeLabel(workoutTypeValue)
             }`
@@ -4792,7 +4780,6 @@ export default function PlansView({
               <option value="type-2">{getPlanTypeLabel("type-2")}</option>
               <option value="type-3">{getPlanTypeLabel("type-3")}</option>
               <option value="type-4">{getPlanTypeLabel("type-4")}</option>
-              <option value="type-5">{getPlanTypeLabel("type-5")}</option>
               <option value="ai">{getPlanTypeLabel("ai")}</option>
             </select>
           </label>
@@ -4912,7 +4899,7 @@ export default function PlansView({
           </>
         )}
 
-        {isAiPlanType && (
+        {isAiPlanType && !isPlanEditMode && (
           <div
             onDragOver={(event) => event.preventDefault()}
             onDrop={handleAiPlanDraftDrop}
@@ -5892,7 +5879,7 @@ export default function PlansView({
         onClose={() => setActiveValuePicker(null)}
         value={rir}
         title="Select RIR"
-        values={[0, 1, 2, 3, 4, 5, 6]}
+        values={Array.from({ length: 13 }, (_, index) => index * 0.5)}
         onSelect={(value) => {
           setRir(String(value));
           if (!preservePlanDraftEditMode()) {

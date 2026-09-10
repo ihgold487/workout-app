@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const REST_TIMER_NOTIFICATION_ID = 1001;
+const DEFAULT_NOTIFICATION_SOUND = "coach-whistle.wav";
 const LocalNotifications = registerPlugin("LocalNotifications");
 
 export function canUseNativeRestNotifications() {
@@ -49,7 +50,7 @@ export async function scheduleNativeRestTimerNotification(seconds) {
           id: REST_TIMER_NOTIFICATION_ID,
           title: "Rest complete",
           body: "Ready for next set",
-          sound: "default",
+          sound: DEFAULT_NOTIFICATION_SOUND,
           schedule: {
             at: new Date(Date.now() + Math.ceil(seconds) * 1000),
           },

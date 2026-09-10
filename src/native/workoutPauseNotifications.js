@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const WORKOUT_PAUSE_NOTIFICATION_ID = 1002;
+const DEFAULT_NOTIFICATION_SOUND = "coach-whistle.wav";
 const LocalNotifications = registerPlugin("LocalNotifications");
 
 export function canUseNativeWorkoutPauseNotifications() {
@@ -57,7 +58,7 @@ export async function scheduleWorkoutPauseNotification(
           body: `Your workout has been paused for ${formatWorkoutPauseDuration(
             pausedDurationSeconds
           )}. Are you still working out?`,
-          sound: "default",
+          sound: DEFAULT_NOTIFICATION_SOUND,
           schedule: {
             at: new Date(Date.now() + Math.ceil(delaySeconds) * 1000),
           },

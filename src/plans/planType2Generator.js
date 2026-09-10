@@ -12,14 +12,11 @@ const PLAN_CONFIGS = {
   "type-2": {
     label: "Plan Type 2 'Sam'",
   },
-  "type-3": {
-    label: "Plan Type 3 'Ira'",
-  },
   "type-4": {
     label: "Plan Type 4 'General'",
   },
-  "type-5": {
-    label: "Plan Type 5 'App'",
+  "type-3": {
+    label: "Plan Type 3 'Ira'",
   },
   ai: {
     label: "Plan Type AI",
@@ -27,7 +24,6 @@ const PLAN_CONFIGS = {
 };
 
 const TYPE_3_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
-const TYPE_5_WORKOUT_SEQUENCE = ["push", "pull", "lower", "upper", "lower"];
 
 const WORKOUT_TYPE_CONFIGS = {
   "type-1": {
@@ -367,7 +363,7 @@ function getRecentSetTotal(recentPlanContext, muscle) {
   );
 }
 
-function adjustType5VolumeForRecentContext(groups, recentPlanContext) {
+function adjustType3VolumeForRecentContext(groups, recentPlanContext) {
   if (!recentPlanContext) {
     return groups;
   }
@@ -627,12 +623,12 @@ function buildNamedWorkout(workoutType, setCount = 3) {
   };
 }
 
-function buildType5Workout(workoutIndex, recentPlanContext) {
+function buildType3Workout(workoutIndex, recentPlanContext) {
   const workoutType =
-    TYPE_5_WORKOUT_SEQUENCE[workoutIndex % TYPE_5_WORKOUT_SEQUENCE.length];
+    TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length];
   const isSecondLowerDay =
     workoutType === "lower" &&
-    workoutIndex % TYPE_5_WORKOUT_SEQUENCE.length === 4;
+    workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length === 4;
   const workoutDefinitionsByType = {
     push: {
       groups: [
@@ -875,7 +871,7 @@ function buildType5Workout(workoutIndex, recentPlanContext) {
 
   const targetMinutes = workoutType === "lower" ? 82 : 90;
   const groups = trimWorkoutDuration(
-    adjustType5VolumeForRecentContext(
+    adjustType3VolumeForRecentContext(
       workoutDefinitionsByType[workoutType].groups,
       recentPlanContext
     ),
@@ -905,24 +901,15 @@ function buildWorkoutDefinitions({
     return [];
   }
 
-  if (planType === "type-3") {
-    return Array.from({ length: workoutCount }, (_, workoutIndex) =>
-      buildNamedWorkout(
-        TYPE_3_WORKOUT_SEQUENCE[workoutIndex % TYPE_3_WORKOUT_SEQUENCE.length],
-        setCount
-      )
-    );
-  }
-
   if (planType === "type-4") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>
       buildNamedWorkout(workoutTypeByDay?.[workoutIndex] || "full-body", setCount)
     );
   }
 
-  if (planType === "type-5") {
+  if (planType === "type-3") {
     return Array.from({ length: workoutCount }, (_, workoutIndex) =>
-      buildType5Workout(workoutIndex, recentPlanContext)
+      buildType3Workout(workoutIndex, recentPlanContext)
     );
   }
 
@@ -1145,7 +1132,7 @@ export function generatePlanWorkouts({
   const resolvedPlanType = PLAN_CONFIGS[planType] ? planType : "type-2";
   const isWorkoutMode = generationMode === "workout";
   const recentPlanContext =
-    resolvedPlanType === "type-5"
+    resolvedPlanType === "type-3"
       ? getRecentPlanContext(planHistoryWorkouts)
       : null;
   const workoutConfig =

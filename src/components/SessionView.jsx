@@ -122,7 +122,7 @@ import {
 } from "../native/spotifyPlayback";
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
-const TARGET_RIR_PICKER_VALUES = Array.from({ length: 7 }, (_, index) => index);
+const TARGET_RIR_PICKER_VALUES = RIR_PICKER_VALUES;
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;

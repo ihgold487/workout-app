@@ -231,7 +231,7 @@ export default function ExerciseSetupDialog({
         onClose={() => setActivePicker(null)}
         value={values?.rir}
         title="Select RIR"
-        values={[0, 1, 2, 3, 4, 5, 6]}
+        values={Array.from({ length: 13 }, (_, index) => index * 0.5)}
         onSelect={(value) => setValue("rir", value)}
         zIndex={pickerZIndex}
       />
