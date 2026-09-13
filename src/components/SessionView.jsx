@@ -2603,7 +2603,7 @@ export default function SessionView({
   }
 
   function openPlateLoadingCalculator(exercise, set) {
-    if (session.workoutTimerPaused || !exercise || !set) {
+    if (!exercise || !set) {
       return;
     }
 
@@ -8273,7 +8273,6 @@ export default function SessionView({
                           >
                             <button
                               aria-label="Open plate loading calculator"
-                              disabled={session.workoutTimerPaused}
                               onClick={() => {
                                 const targetSet =
                                   exercise.sets.find(

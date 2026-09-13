@@ -45,7 +45,13 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 _ = try Activity<RestTimerActivityAttributes>.request(
                     attributes: RestTimerActivityAttributes(workoutName: workoutName),
-                    content: ActivityContent(state: state, staleDate: endsAt),
+                    // Give the active rest countdown priority when iOS decides
+                    // which Live Activities to surface on the Lock Screen.
+                    content: ActivityContent(
+                        state: state,
+                        staleDate: endsAt,
+                        relevanceScore: 1.0
+                    ),
                     pushType: nil
                 )
                 call.resolve(["supported": true])
@@ -124,7 +130,11 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         state: RestTimerActivityAttributes.ContentState,
         staleDate: Date?
     ) async {
-        let content = ActivityContent(state: state, staleDate: staleDate)
+        let content = ActivityContent(
+            state: state,
+            staleDate: staleDate,
+            relevanceScore: 1.0
+        )
 
         for activity in Activity<RestTimerActivityAttributes>.activities {
             await activity.update(content)

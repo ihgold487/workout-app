@@ -417,6 +417,18 @@ function buildHistorySummary(exerciseHistory) {
   };
 }
 
+function getHistoryEntryForMetric(exerciseHistory, metric) {
+  const field = metric === "e1rm" ? "maxE1RM" : "maxWeight";
+
+  return exerciseHistory.reduce((bestEntry, entry) => {
+    if (!Number.isFinite(entry?.[field])) {
+      return bestEntry;
+    }
+
+    return !bestEntry || entry[field] > bestEntry[field] ? entry : bestEntry;
+  }, null);
+}
+
 function getLatestHistoryEntry(exerciseHistory) {
   return [...exerciseHistory]
     .filter((entry) => entry.completedDateKey)
@@ -919,15 +931,25 @@ function buildBenchPressExperiment(exerciseHistory) {
   };
 }
 
-function HistorySummaryItem({ icon: Icon, label, value }) {
+function HistorySummaryItem({ icon: Icon, label, onClick, value }) {
   return (
-    <div
+    <button
+      aria-label={onClick ? `Show ${label.toLowerCase()} in history` : undefined}
+      disabled={!onClick}
+      onClick={onClick}
+      type="button"
       style={{
         alignItems: "center",
+        background: "transparent",
+        border: 0,
+        color: "inherit",
+        cursor: onClick ? "pointer" : "default",
         display: "grid",
         gap: "6px",
         gridTemplateColumns: "auto minmax(0, 1fr)",
         minWidth: 0,
+        padding: 0,
+        textAlign: "left",
       }}
     >
       <Icon size={17} color="var(--accent)" />
@@ -954,7 +976,7 @@ function HistorySummaryItem({ icon: Icon, label, value }) {
           {value}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -1215,13 +1237,20 @@ function PortalSelectionSheet(props) {
   return createPortal(<SelectionSheet {...props} />, document.body);
 }
 
-function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
-  const [selectedPointKey, setSelectedPointKey] = useState(null);
+function MetricChart({
+  colorTrend,
+  data,
+  metric,
+  onSelectPoint,
+  rangeDays,
+  selectedPointKey,
+  trendDays,
+}) {
   const scrubbingRef = useRef(false);
   const allPoints = data
     .map((entry, index) => ({
       dateKey: entry.completedDateKey,
-      key: `${entry.completedDateKey || "date"}-${index}`,
+      key: getHistoryEntryKey(entry) || `${entry.completedDateKey || "date"}-${index}`,
       label: entry.completedAt,
       value: metric === "maxWeight" ? entry.maxWeight : entry.maxE1RM,
     }))
@@ -1324,7 +1353,7 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
       y < plotTop - hitPadding ||
       y > plotBottom + hitPadding
     ) {
-      setSelectedPointKey(null);
+      onSelectPoint?.(null);
       return;
     }
 
@@ -1336,7 +1365,7 @@ function MetricChart({ colorTrend, data, metric, rangeDays, trendDays }) {
       .sort((a, b) => a.distance - b.distance)[0]?.point;
 
     if (nearest) {
-      setSelectedPointKey(nearest.key);
+      onSelectPoint?.(nearest.key);
     }
   };
   const startPointScrub = (event) => {
@@ -2398,6 +2427,8 @@ export default function ExerciseDetailDialog({
   const [weightPickerData, setWeightPickerData] = useState(null);
   const [repsPickerData, setRepsPickerData] = useState(null);
   const [rirPickerData, setRirPickerData] = useState(null);
+  const [selectedHistoryKey, setSelectedHistoryKey] = useState(null);
+  const historyChartRef = useRef(null);
   const exerciseHistory = useMemo(
     () => buildExerciseHistory(exercise, history, bodyWeightEntries),
     [bodyWeightEntries, exercise, history]
@@ -2446,6 +2477,53 @@ export default function ExerciseDetailDialog({
 
       return updatedSettings;
     });
+  }
+
+  function selectHistoryEntry(entry, { ensureChartVisible = false } = {}) {
+    if (!entry) {
+      setSelectedHistoryKey(null);
+      return;
+    }
+
+    if (ensureChartVisible && rangeDays && entry.completedDateKey) {
+      const latestDateKey = exerciseHistory.at(-1)?.completedDateKey;
+
+      if (
+        latestDateKey &&
+        daysBetween(entry.completedDateKey, latestDateKey) > rangeDays
+      ) {
+        updateChartSettings({ rangeDays: null });
+      }
+    }
+
+    setSelectedHistoryKey(getHistoryEntryKey(entry));
+    window.requestAnimationFrame(() => {
+      historyChartRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+  }
+
+  function selectMetricHistoryEntry(metric) {
+    const entry = getHistoryEntryForMetric(exerciseHistory, metric);
+
+    if (!entry) {
+      return;
+    }
+
+    const latestDateKey = exerciseHistory.at(-1)?.completedDateKey;
+    const shouldShowAllHistory =
+      rangeDays &&
+      latestDateKey &&
+      entry.completedDateKey &&
+      daysBetween(entry.completedDateKey, latestDateKey) > rangeDays;
+
+    updateChartSettings({
+      metric,
+      ...(shouldShowAllHistory ? { rangeDays: null } : {}),
+    });
+    setSelectedHistoryKey(getHistoryEntryKey(entry));
   }
 
   function closeExerciseDetail() {
@@ -2731,6 +2809,7 @@ export default function ExerciseDetailDialog({
             <HistorySummaryItem
               icon={Trophy}
               label="Max weight"
+              onClick={() => selectMetricHistoryEntry("maxWeight")}
               value={
                 historySummary.maxWeight == null
                   ? "—"
@@ -2740,6 +2819,7 @@ export default function ExerciseDetailDialog({
             <HistorySummaryItem
               icon={Dumbbell}
               label="e1RM"
+              onClick={() => selectMetricHistoryEntry("e1rm")}
               value={formatE1RM(historySummary.maxE1RM)}
             />
           </div>
@@ -3051,13 +3131,17 @@ export default function ExerciseDetailDialog({
               </button>
             </div>
 
-            <MetricChart
-              colorTrend={colorTrend}
-              data={exerciseHistory}
-              metric={chartMetric}
-              rangeDays={rangeDays}
-              trendDays={trendDays}
-            />
+            <div ref={historyChartRef}>
+              <MetricChart
+                colorTrend={colorTrend}
+                data={exerciseHistory}
+                metric={chartMetric}
+                onSelectPoint={setSelectedHistoryKey}
+                rangeDays={rangeDays}
+                selectedPointKey={selectedHistoryKey}
+                trendDays={trendDays}
+              />
+            </div>
 
             {exerciseHistory.length === 0 ? (
               <div
@@ -3076,32 +3160,48 @@ export default function ExerciseDetailDialog({
                 .map((entry) => {
                   const entryKey = getHistoryEntryKey(entry);
                   const isEditingEntry = editingHistoryKey === entryKey;
+                  const isSelectedEntry = selectedHistoryKey === entryKey;
 
                   return (
                     <div
                       key={`${entryKey}-${entry.templateName}`}
                       style={{
-                        border: "1px solid var(--border)",
+                        background: isSelectedEntry
+                          ? "color-mix(in srgb, var(--accent) 12%, var(--surface-muted))"
+                          : "transparent",
+                        border: isSelectedEntry
+                          ? "2px solid var(--accent)"
+                          : "1px solid var(--border)",
                         borderRadius: "6px",
                         padding: "10px",
                       }}
                     >
-                      <div
-                        style={{
-                          alignItems: "center",
-                          display: "flex",
-                          gap: "8px",
-                          justifyContent: "space-between",
-                        }}
-                      >
                         <div
                           style={{
-                            fontWeight: "bold",
-                            minWidth: 0,
+                            alignItems: "center",
+                            display: "flex",
+                            gap: "8px",
+                            justifyContent: "space-between",
                           }}
                         >
-                          {entry.completedAt}
-                        </div>
+                          <button
+                            aria-pressed={isSelectedEntry}
+                            onClick={() => selectHistoryEntry(entry)}
+                            type="button"
+                            style={{
+                              background: "transparent",
+                              border: 0,
+                              color: "inherit",
+                              cursor: "pointer",
+                              font: "inherit",
+                              fontWeight: "bold",
+                              minWidth: 0,
+                              padding: 0,
+                              textAlign: "left",
+                            }}
+                          >
+                            {entry.completedAt}
+                          </button>
                         {onUpdateHistoryWorkoutSet && (
                           <div
                             style={{
