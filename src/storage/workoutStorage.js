@@ -1,13 +1,15 @@
-import { db } from "../db";
+import { db } from "../db.js";
 import {
   getBenchmarkFamilyKeyForExercise,
   isExerciseBenchmark,
-} from "../utils/exerciseBenchmark";
-import { withDefaultExerciseStatus } from "../utils/exerciseStatus";
+} from "../utils/exerciseBenchmark.js";
+import { withDefaultExerciseStatus } from "../utils/exerciseStatus.js";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
 const STORAGE_VERSION_KEY = "storageVersion";
+const COMPLETED_WORKOUT_RECOVERY_KEY = "completedWorkoutRecovery";
+const LEGACY_FULL_BACKUP_UPDATED_AT_KEY = "workoutDataUpdatedAt";
 const WORKOUT_DATA_RECORD_ID = "current";
 const WORKOUT_SESSION_JOURNAL_ID = "active";
 
@@ -114,6 +116,47 @@ function normalizeWorkoutData(data, { seedExercises }) {
   };
 }
 
+function readLegacyFullWorkoutBackup() {
+  const updatedAt = Date.parse(
+    readJson(LEGACY_FULL_BACKUP_UPDATED_AT_KEY, null) || ""
+  );
+  const history = readJson(WORKOUT_DATA_KEYS.history, []);
+  const hasLegacyData =
+    localStorage.getItem(WORKOUT_DATA_KEYS.exerciseLibrary) != null ||
+    localStorage.getItem(WORKOUT_DATA_KEYS.history) != null ||
+    localStorage.getItem(WORKOUT_DATA_KEYS.plans) != null ||
+    localStorage.getItem(WORKOUT_DATA_KEYS.sessions) != null ||
+    localStorage.getItem(WORKOUT_DATA_KEYS.templates) != null;
+
+  if (!hasLegacyData) {
+    return null;
+  }
+
+  return {
+    data: {
+      exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
+      exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
+      history,
+      ownerUserId: readJson(WORKOUT_DATA_KEYS.ownerUserId, null),
+      plans: readJson(WORKOUT_DATA_KEYS.plans, []),
+      selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
+      sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
+      templates: readJson(WORKOUT_DATA_KEYS.templates, []),
+    },
+    updatedAt,
+  };
+}
+
+function clearLegacyFullWorkoutBackup() {
+  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseLibrary);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseMetadata);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.history);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.plans);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.sessions);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.templates);
+  localStorage.removeItem(LEGACY_FULL_BACKUP_UPDATED_AT_KEY);
+}
+
 function withDefaultExerciseBenchmark(exercise) {
   return {
     ...exercise,
@@ -189,27 +232,40 @@ export function loadWorkoutData({ seedExercises }) {
 }
 
 export function saveWorkoutData(data, storageVersion) {
-  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseLibrary);
-  localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseMetadata);
-  localStorage.removeItem(WORKOUT_DATA_KEYS.history);
-  localStorage.removeItem(WORKOUT_DATA_KEYS.plans);
-  localStorage.removeItem(WORKOUT_DATA_KEYS.sessions);
-  localStorage.removeItem(WORKOUT_DATA_KEYS.templates);
+  // Large workout collections belong in IndexedDB. Keeping them in
+  // localStorage can exceed the iOS WebView quota and make every save fail.
+  // Do not clear a legacy full backup here. The first render runs before the
+  // IndexedDB restore; cleanup happens only after that restored data commits.
   writeJson(WORKOUT_DATA_KEYS.ownerUserId, data.ownerUserId || null);
   writeJson(WORKOUT_DATA_KEYS.selectedSessionId, data.selectedSessionId);
   writeJson(STORAGE_VERSION_KEY, storageVersion);
 }
 
+export function saveCompletedWorkoutRecovery(workout, ownerUserId) {
+  if (!workout?.id) return;
+
+  // This is intentionally one completed workout, not a second full app
+  // snapshot. It is small enough for localStorage and bridges the brief gap
+  // before the primary IndexedDB transaction commits.
+  writeJson(COMPLETED_WORKOUT_RECOVERY_KEY, {
+    ownerUserId: ownerUserId || null,
+    workout,
+  });
+}
+
 export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
   const record = await db.appData.get(WORKOUT_DATA_RECORD_ID);
+  const legacyFullBackup = readLegacyFullWorkoutBackup();
 
-  if (!record?.data) {
+  if (!record?.data && !legacyFullBackup?.data) {
     return null;
   }
 
-  const journal = await db.workoutSessionJournal.get(
-    WORKOUT_SESSION_JOURNAL_ID
-  );
+  const journal = record?.data
+    ? await db.workoutSessionJournal.get(
+        WORKOUT_SESSION_JOURNAL_ID
+      )
+    : null;
   const journalIsCurrent =
     journal &&
     new Date(journal.updatedAt).getTime() >= new Date(record.updatedAt).getTime() &&
@@ -222,13 +278,42 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
         selectedSessionId: journal.selectedSessionId,
         sessions: journal.sessions,
       }
-    : record.data;
+    : record?.data || legacyFullBackup.data;
 
-  return normalizeWorkoutData(recoveredData, {
+  const indexedDbUpdatedAt = Date.parse(record?.updatedAt || "");
+  const useLegacyFullBackup =
+    legacyFullBackup &&
+    (Number.isFinite(legacyFullBackup.updatedAt)
+      ? !Number.isFinite(indexedDbUpdatedAt) ||
+        legacyFullBackup.updatedAt > indexedDbUpdatedAt
+      : !record?.data);
+
+  const completionRecovery = readJson(COMPLETED_WORKOUT_RECOVERY_KEY, null);
+  const recoveryMatchesOwner =
+    completionRecovery?.workout?.id &&
+    (!completionRecovery.ownerUserId ||
+      !recoveredData.ownerUserId ||
+      String(completionRecovery.ownerUserId) === String(recoveredData.ownerUserId));
+  const recoveryAlreadyStored = recoveredData.history?.some(
+    (workout) => String(workout.id) === String(completionRecovery?.workout?.id)
+  );
+  const preferredData =
+    useLegacyFullBackup
+      ? legacyFullBackup.data
+      : recoveryMatchesOwner && !recoveryAlreadyStored
+        ? {
+            ...recoveredData,
+            history: [
+              completionRecovery.workout,
+              ...(recoveredData.history || []),
+            ],
+          }
+        : recoveredData;
+
+  return normalizeWorkoutData(preferredData, {
     seedExercises,
   });
 }
-
 export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
   const updatedAt = new Date().toISOString();
 
@@ -252,6 +337,20 @@ export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
       await db.workoutSessionJournal.delete(WORKOUT_SESSION_JOURNAL_ID);
     }
   });
+
+  // A successful IndexedDB transaction is the handoff point for a large
+  // legacy localStorage snapshot. Only now is it safe to free that quota.
+  clearLegacyFullWorkoutBackup();
+
+  const completionRecovery = readJson(COMPLETED_WORKOUT_RECOVERY_KEY, null);
+  if (
+    completionRecovery?.workout?.id &&
+    (data.history || []).some(
+      (workout) => String(workout.id) === String(completionRecovery.workout.id)
+    )
+  ) {
+    localStorage.removeItem(COMPLETED_WORKOUT_RECOVERY_KEY);
+  }
 }
 
 export async function saveWorkoutSessionJournal({

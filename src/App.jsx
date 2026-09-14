@@ -63,6 +63,7 @@ import {
   markStorageVersion,
   saveWorkoutData,
   saveWorkoutDataToIndexedDb,
+  saveCompletedWorkoutRecovery,
   saveWorkoutSessionJournal,
 } from "./storage/workoutStorage";
 import {
@@ -4984,6 +4985,7 @@ export default function App() {
   const checkpointSyncTimeoutRef = useRef(null);
 
   const localDataRevisionRef = useRef(0);
+  const localDataRevisionReadyRef = useRef(false);
 
   const plateInventoryRef = useRef(plateInventory);
 
@@ -5854,6 +5856,7 @@ export default function App() {
     };
 
     currentWorkoutDataRef.current = data;
+    saveCompletedWorkoutRecovery(data.history[0], data.ownerUserId);
     localDataRevisionRef.current += 1;
     markNormalizedSyncDirty([
       "exercisePreferences",
@@ -6652,11 +6655,22 @@ export default function App() {
       );
     } finally {
       if (automaticSyncAttemptIdRef.current === syncAttemptId) {
+        const shouldRunQueuedSync = automaticSyncQueuedRef.current;
+
         automaticSyncInFlightRef.current = false;
         automaticSyncQueuedRef.current = false;
         if (visibleSyncAction) {
           setActiveSyncAction(null);
           setSyncLoading(false);
+        }
+
+        // A completion can arrive while a startup or checkpoint sync is still
+        // in flight. That earlier attempt cannot include the newer workout, so
+        // run its queued checkpoint instead of silently dropping it.
+        if (shouldRunQueuedSync) {
+          window.setTimeout(() => {
+            runAutomaticNormalizedSync("queued checkpoint");
+          }, 0);
         }
       }
     }
@@ -7710,6 +7724,32 @@ export default function App() {
     exerciseMetadata,
     localOwnerUserId,
     selectedSessionId,
+  ]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    // A cloud download is allowed to replace state only if nothing changed
+    // locally while it was in flight. This includes starting a workout during
+    // the startup cloud check.
+    if (!localDataRevisionReadyRef.current) {
+      localDataRevisionReadyRef.current = true;
+      return;
+    }
+
+    localDataRevisionRef.current += 1;
+  }, [
+    exerciseLibrary,
+    exerciseMetadata,
+    history,
+    indexedDbReady,
+    localOwnerUserId,
+    plans,
+    selectedSessionId,
+    sessions,
+    templates,
   ]);
 
   useEffect(() => {
@@ -9850,6 +9890,16 @@ export default function App() {
   function renderAuthSyncIndicator({ inHeader = false } = {}) {
     const signedIn = Boolean(authSession?.user?.id);
     const hasPendingApprovals = signedIn && pendingApprovalCount > 0;
+    const checkingCloudBackup =
+      signedIn &&
+      (syncStatus.startsWith("Auto sync") ||
+        syncStatus.startsWith("Syncing now") ||
+        syncStatus.startsWith("Pulling latest"));
+    const syncLabel = checkingCloudBackup
+      ? "Checking cloud backup…"
+      : signedIn
+        ? "Signed in - sync on"
+        : "Signed out - local only";
 
     return (
       <div
@@ -9865,14 +9915,28 @@ export default function App() {
       >
         <span
           aria-label={
-            signedIn ? "Signed in; sync is on" : "Signed out; local only"
+            checkingCloudBackup
+              ? "Checking cloud backup"
+              : signedIn
+                ? "Signed in; sync is on"
+                : "Signed out; local only"
           }
           style={{
             alignItems: "center",
-            background: signedIn ? "#e8f5e9" : "#fff8e1",
-            border: `1px solid ${signedIn ? "#a5d6a7" : "#ffe082"}`,
+            background: checkingCloudBackup
+              ? "#e3f2fd"
+              : signedIn
+                ? "#e8f5e9"
+                : "#fff8e1",
+            border: `1px solid ${
+              checkingCloudBackup ? "#90caf9" : signedIn ? "#a5d6a7" : "#ffe082"
+            }`,
             borderRadius: "999px",
-            color: signedIn ? "#1b5e20" : "#7a4f01",
+            color: checkingCloudBackup
+              ? "#0d47a1"
+              : signedIn
+                ? "#1b5e20"
+                : "#7a4f01",
             display: "inline-flex",
             fontSize: inHeader ? "11px" : "12px",
             gap: "6px",
@@ -9883,13 +9947,17 @@ export default function App() {
           <span
             aria-hidden="true"
             style={{
-              background: signedIn ? "#2e7d32" : "#f9a825",
+              background: checkingCloudBackup
+                ? "#1976d2"
+                : signedIn
+                  ? "#2e7d32"
+                  : "#f9a825",
               borderRadius: "999px",
               height: "8px",
               width: "8px",
             }}
           />
-          {signedIn ? "Signed in - sync on" : "Signed out - local only"}
+          {syncLabel}
         </span>
         {hasPendingApprovals && (
           <span
@@ -12573,8 +12641,60 @@ export default function App() {
     );
   }
 
+  function renderWorkoutStartupRestore() {
+    return (
+      <div
+        style={{
+          alignItems: "center",
+          display: "grid",
+          minHeight: "100vh",
+          padding: "20px",
+          placeItems: "center",
+        }}
+      >
+        <div
+          aria-live="polite"
+          role="status"
+          style={{
+            maxWidth: "320px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              color: "var(--accent)",
+              fontSize: "28px",
+              lineHeight: 1,
+              marginBottom: "12px",
+            }}
+          >
+            <Circle aria-hidden="true" size={28} />
+          </div>
+          <h2 style={{ margin: "0 0 8px" }}>Restoring your workouts…</h2>
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "13px",
+              lineHeight: 1.45,
+              margin: 0,
+            }}
+          >
+            Loading your saved plan, completed workouts, and calendar before
+            showing your training schedule.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!appAccessAllowed) {
     return renderAccessGate();
+  }
+
+  // Never briefly render an empty calendar or a misleading plan status while
+  // the durable local snapshot is still being restored.
+  if (!indexedDbReady) {
+    return renderWorkoutStartupRestore();
   }
 
   if (showSettings) {
@@ -13086,6 +13206,21 @@ export default function App() {
   const latestCompletedWorkout = [...history].sort(
     (left, right) => getHistoryWorkoutTime(right) - getHistoryWorkoutTime(left)
   )[0] || null;
+  const historySyncPending = normalizedSyncDirtyDomains.includes("history");
+  const canAttemptAutomaticSync =
+    isSupabaseConfigured &&
+    Boolean(authSession?.user?.id) &&
+    appAccessAllowed &&
+    !approvalFromCache &&
+    (typeof navigator === "undefined" || navigator.onLine);
+  const latestWorkoutSyncMessage =
+    latestCompletedWorkout && historySyncPending
+      ? syncStatus.toLowerCase().includes("failed")
+        ? "Saved on this device · cloud backup needs attention"
+        : canAttemptAutomaticSync
+          ? "Saved on this device · syncing to cloud"
+          : "Saved on this device · will sync when available"
+      : null;
 
   return renderAppShell(
     <>
@@ -13221,21 +13356,38 @@ export default function App() {
           <div className="home-today-card__recent">
             <div className="home-today-card__recent-label">Most recent</div>
             {latestCompletedWorkout ? (
-              <button
-                className="home-today-card__recent-button"
-                onClick={() => setSelectedHistory(latestCompletedWorkout)}
-                type="button"
-              >
-                <span className="home-today-card__recent-name">
-                  {getWorkoutName(latestCompletedWorkout)}
-                </span>
-                <span className="home-today-card__recent-date">
-                  {formatHistoryTimestamp(latestCompletedWorkout)}
-                </span>
-                <span className="home-today-card__recent-link">
-                  Review workout <ChevronRight size={14} />
-                </span>
-              </button>
+              <>
+                <button
+                  className="home-today-card__recent-button"
+                  onClick={() => setSelectedHistory(latestCompletedWorkout)}
+                  type="button"
+                >
+                  <span className="home-today-card__recent-name">
+                    {getWorkoutName(latestCompletedWorkout)}
+                  </span>
+                  <span className="home-today-card__recent-date">
+                    {formatHistoryTimestamp(latestCompletedWorkout)}
+                  </span>
+                  <span className="home-today-card__recent-link">
+                    Review workout <ChevronRight size={14} />
+                  </span>
+                </button>
+                {latestWorkoutSyncMessage && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      color: latestWorkoutSyncMessage.includes("needs attention")
+                        ? "var(--danger-text)"
+                        : "var(--text-muted)",
+                      fontSize: "12px",
+                      marginTop: "7px",
+                    }}
+                  >
+                    {latestWorkoutSyncMessage}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="home-today-card__empty">
                 Your latest completed workout will appear here.
