@@ -58,7 +58,7 @@ Initial Home/Today hierarchy implemented for native and PWA validation.
 - [x] Keep historical weight, reps, and RIR edits in a sheet-level draft until Save; Cancel discards the entire draft.
 - [x] Require timestamped confirmation before deleting a completed workout and retain the underlying sheet when deletion is canceled.
 - [ ] Validate the Today hierarchy, long names, no-active-plan state, completed-week state, calendar expansion, and PWA layout in real use.
-- [ ] Apply the shared Home primitives to Template View after Home validation.
+- [x] Apply the shared Home primitives to Template View after Home validation.
 
 - Turn the top of Home into a useful **Today** area: current plan and week, next workout, recent completion, and one prominent **Start Workout** action.
 - Reduce the visual prominence of the app icon and **Workout Log** title after onboarding; valuable workout information should occupy the top of the screen.
@@ -140,6 +140,18 @@ Initial session-header increment implemented and build-validated; longer real-wo
 - PWA fallback: in-app timer, vibration where supported, visible notification-permission status, and fully usable on-screen controls.
 
 ### Exercises
+
+#### Progress
+
+Initial Exercises library presentation checkpoint implemented for native and PWA validation.
+
+- [x] Apply the shared page-header, raised-card, status-pill, and action styling while preserving the existing exercise data and management workflows.
+- [x] Keep search immediately available and place muscle, equipment, type, status, and benchmark controls in a compact disclosure with an explicit clear action.
+- [x] Present exercise results as consistent cards with image, equipment, muscle, benchmark/custom/status metadata, and recent-use context.
+- [x] Move activation, duplication, editing, deletion, and trainer promotion into a discoverable contextual menu with reliable outside-tap dismissal.
+- [x] Collapse the full custom-exercise form behind a prominent **New Exercise** action.
+- [x] Add a polished empty result state without changing filtering behavior.
+- [ ] Validate large libraries, long names and descriptions, every filter combination, trainer-user management, custom exercise creation/editing/images, contextual actions, and native/PWA phone layouts in real use.
 
 - Introduce clear browse modes: **All**, **Favorites**, **Recently Used**, **Benchmarks**, and **Custom**.
 - Keep search persistently available below the page title.

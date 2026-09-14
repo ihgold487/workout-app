@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, ImagePlus, X } from "lucide-react";
+import {
+  Copy,
+  ImagePlus,
+  MoreHorizontal,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 
 import { equipmentOptions } from "../data/seedEquipment";
 import {
@@ -13,6 +21,7 @@ import {
 } from "../sync/exerciseCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
+import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import {
   BENCHMARK_FAMILY_OPTIONS,
   getBenchmarkFamilyKeyForExercise,
@@ -22,6 +31,12 @@ import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import ExerciseArmIcon from "./ui/ExerciseArmIcon";
+import {
+  AppPageHeader,
+  AppSectionCard,
+  AppSectionHeading,
+  AppStatusPill,
+} from "./ui/AppSurface";
 
 const muscleGroups = [
   "Abs",
@@ -152,17 +167,6 @@ function toggleMuscle(muscles, muscle) {
     : [...muscles, muscle];
 }
 
-function getExerciseStatusButtonStyle(active) {
-  return {
-    background: active ? "var(--success-bg)" : "var(--danger-bg)",
-    border: `1px solid ${
-      active ? "var(--success-text)" : "var(--danger-text)"
-    }`,
-    color: active ? "var(--success-text)" : "var(--danger-text)",
-    fontWeight: "bold",
-  };
-}
-
 function getFirstEquipmentValue(exercise) {
   return Array.isArray(exercise?.equipment)
     ? exercise.equipment[0] || ""
@@ -229,6 +233,7 @@ export default function ExerciseView({
     y: 0,
   });
   const [cropZoom, setCropZoom] = useState(1);
+  const [exerciseBenchmark, setExerciseBenchmark] = useState("");
   const [exerciseType, setExerciseType] = useState("");
   const [promoteExerciseStatus, setPromoteExerciseStatus] = useState("");
   const [promotingExerciseId, setPromotingExerciseId] = useState(null);
@@ -243,6 +248,9 @@ export default function ExerciseView({
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("");
   const [search, setSearch] = useState("");
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [openExerciseMenuId, setOpenExerciseMenuId] = useState(null);
 
   const selectedTrainerUser =
     trainerUsers.find((user) => user.user_id === selectedTrainerUserId) ||
@@ -453,24 +461,75 @@ export default function ExerciseView({
           (exerciseType === "custom" && !exercise.builtin);
         const matchesStatus =
           !exerciseStatus || getExerciseStatus(exercise) === exerciseStatus;
+        const matchesBenchmark =
+          !exerciseBenchmark ||
+          (exerciseBenchmark === "benchmark" && isExerciseBenchmark(exercise)) ||
+          (exerciseBenchmark === "standard" && !isExerciseBenchmark(exercise));
 
         return (
           matchesSearch &&
           matchesMuscle &&
           matchesEquipment &&
           matchesType &&
-          matchesStatus
+          matchesStatus &&
+          matchesBenchmark
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [
     displayedExerciseLibrary,
+    exerciseBenchmark,
     exerciseStatus,
     exerciseType,
     search,
     selectedEquipment,
     selectedMuscle,
   ]);
+
+  const recentPerformanceByExerciseId = useMemo(() => {
+    const recentPerformance = new Map();
+
+    if (!isTrainerTargetSelf) {
+      return recentPerformance;
+    }
+
+    displayedExerciseLibrary.forEach((exercise) => {
+      let latest = null;
+
+      history.forEach((workout) => {
+        const historyExercise = workout.exercises?.find((candidate) =>
+          exercisesMatch(exercise, candidate)
+        );
+
+        if (!historyExercise) {
+          return;
+        }
+
+        const completedAt =
+          workout.completedAtIso ||
+          workout.completed_at ||
+          workout.completedAt ||
+          workout.created_at;
+        const completedTime = Date.parse(completedAt);
+
+        if (!Number.isFinite(completedTime) || completedTime <= (latest?.time || 0)) {
+          return;
+        }
+
+        latest = {
+          completedAt,
+          setCount: historyExercise.sets?.length || 0,
+          time: completedTime,
+        };
+      });
+
+      if (latest) {
+        recentPerformance.set(String(exercise.id), latest);
+      }
+    });
+
+    return recentPerformance;
+  }, [displayedExerciseLibrary, history, isTrainerTargetSelf]);
 
   const copyImageExercises = useMemo(() => {
     if (!imageExercise) {
@@ -523,6 +582,7 @@ export default function ExerciseView({
       }),
     ]);
     setDraft(emptyDraft);
+    setShowAddExercise(false);
   }
 
   function startEdit(exercise) {
@@ -688,6 +748,8 @@ export default function ExerciseView({
 
   function duplicateExercise(event, exercise) {
     event.stopPropagation();
+    setOpenExerciseMenuId(null);
+    setShowAddExercise(true);
     setDraft({
       ...getExerciseDraft(exercise),
       name: `${exercise.name} - copy`,
@@ -1524,48 +1586,34 @@ export default function ExerciseView({
   }
 
   return (
-    <div
-      style={{
-        margin: "0 auto",
-        maxWidth: "760px",
-        padding: "16px",
-        textAlign: "left",
-      }}
-    >
-      <div
-        style={{
-          alignItems: "center",
-          display: "grid",
-          gap: "10px",
-          gridTemplateColumns: "auto minmax(0, 1fr) auto",
-          marginBottom: "12px",
-        }}
-      >
-        <ExerciseArmIcon
-          color="var(--accent)"
-          emphasized
-          monochrome
-          size={36}
-        />
-        <h1
-          style={{
-            fontSize: "1.6rem",
-            margin: 0,
-          }}
-        >
-          Exercises
-        </h1>
-        <div
-          style={{
-            color: "var(--text-muted)",
-            fontSize: "12px",
-            textAlign: "right",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {displayedExerciseLibrary.length} exercises · {customExerciseCount} custom
-        </div>
-      </div>
+    <div className="exercise-library-view">
+      <AppPageHeader
+        action={
+          isTrainerTargetSelf ? (
+            <button
+              className="app-primary-action exercise-library-view__new-action"
+              onClick={() => {
+                setShowAddExercise((current) => !current);
+                setOpenExerciseMenuId(null);
+              }}
+              type="button"
+            >
+              {showAddExercise ? <X size={17} /> : <Plus size={17} />}
+              {showAddExercise ? "Close" : "New Exercise"}
+            </button>
+          ) : null
+        }
+        icon={
+          <ExerciseArmIcon
+            color="var(--accent)"
+            emphasized
+            monochrome
+            size={36}
+          />
+        }
+        subtitle={`${displayedExerciseLibrary.length} exercises · ${customExerciseCount} custom`}
+        title="Exercises"
+      />
 
       {trainerUsers.length > 1 && (
         <label
@@ -1613,37 +1661,26 @@ export default function ExerciseView({
         </div>
       )}
 
-      {isTrainerTargetSelf && (
-        <section
-          ref={addExerciseSectionRef}
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            marginBottom: "14px",
-            padding: "12px",
-          }}
-        >
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: "8px",
-              justifyContent: "space-between",
-              marginBottom: "10px",
-            }}
+      {isTrainerTargetSelf && showAddExercise && (
+        <div ref={addExerciseSectionRef}>
+          <AppSectionCard
+            className="exercise-library-view__create-card"
+            tone="accent"
           >
-            <h2
-              style={{
-                fontSize: "1rem",
-                margin: 0,
-              }}
-            >
-              Add Custom Exercise
-            </h2>
-            <button onClick={() => setDraft(emptyDraft)} type="button">
-              Clear
-            </button>
-          </div>
+          <AppSectionHeading
+            action={
+              <button
+                className="app-secondary-action"
+                onClick={() => setDraft(emptyDraft)}
+                type="button"
+              >
+                Clear
+              </button>
+            }
+            eyebrow="Exercise library"
+            subtitle="Create a reusable exercise with its equipment and muscle metadata."
+            title="New custom exercise"
+          />
 
           {renderExerciseForm(draft, setDraft, {
             draftImagePicker: true,
@@ -1659,113 +1696,199 @@ export default function ExerciseView({
               marginTop: "10px",
             }}
           >
-            <button onClick={addExercise}>+ Add Exercise</button>
+            <button
+              className="app-secondary-action"
+              onClick={() => {
+                setDraft(emptyDraft);
+                setShowAddExercise(false);
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button className="app-primary-action" onClick={addExercise}>
+              <Plus size={17} /> Add Exercise
+            </button>
           </div>
-        </section>
+          </AppSectionCard>
+        </div>
       )}
 
-      <section
-        style={{
-          display: "grid",
-          gap: "8px",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          marginBottom: "12px",
-        }}
-      >
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search exercises"
-          style={{
-            minWidth: 0,
-          }}
+      <AppSectionCard className="exercise-library-view__browse-card">
+        <div className="exercise-library-view__search-row">
+          <label className="exercise-library-view__search">
+            <Search aria-hidden="true" size={18} />
+            <input
+              aria-label="Search exercises"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search exercises"
+              type="search"
+              value={search}
+            />
+          </label>
+          <button
+            aria-expanded={showFilters}
+            className="app-secondary-action exercise-library-view__filter-toggle"
+            onClick={() => setShowFilters((current) => !current)}
+            type="button"
+          >
+            <SlidersHorizontal size={17} />
+            Filters
+            {[
+              selectedMuscle,
+              selectedEquipment,
+              exerciseType,
+              exerciseStatus,
+              exerciseBenchmark,
+            ].filter(Boolean).length > 0
+              ? ` (${
+                  [
+                    selectedMuscle,
+                    selectedEquipment,
+                    exerciseType,
+                    exerciseStatus,
+                    exerciseBenchmark,
+                  ].filter(Boolean).length
+                })`
+              : ""}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="exercise-library-view__filters">
+            <label>
+              <span>Muscle</span>
+              <select
+                value={selectedMuscle}
+                onChange={(event) => setSelectedMuscle(event.target.value)}
+              >
+                <option value="">All muscles</option>
+                {muscleGroups.map((muscle) => (
+                  <option key={muscle} value={muscle}>
+                    {muscle}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Equipment</span>
+              <select
+                value={selectedEquipment}
+                onChange={(event) => setSelectedEquipment(event.target.value)}
+              >
+                <option value="">All equipment</option>
+                {equipmentOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Type</span>
+              <select
+                value={exerciseType}
+                onChange={(event) => setExerciseType(event.target.value)}
+              >
+                <option value="">All types</option>
+                <option value="builtin">Built-in</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Status</span>
+              <select
+                value={exerciseStatus}
+                onChange={(event) => setExerciseStatus(event.target.value)}
+              >
+                <option value="">All status</option>
+                <option value={EXERCISE_STATUS.active}>Active</option>
+                <option value={EXERCISE_STATUS.inactive}>Inactive</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Benchmark</span>
+              <select
+                value={exerciseBenchmark}
+                onChange={(event) => setExerciseBenchmark(event.target.value)}
+              >
+                <option value="">All exercises</option>
+                <option value="benchmark">Benchmarks</option>
+                <option value="standard">Non-benchmarks</option>
+              </select>
+            </label>
+
+            <button
+              className="app-secondary-action exercise-library-view__clear-filters"
+              disabled={
+                !selectedMuscle &&
+                !selectedEquipment &&
+                !exerciseType &&
+                !exerciseStatus &&
+                !exerciseBenchmark
+              }
+              onClick={() => {
+                setSelectedMuscle("");
+                setSelectedEquipment("");
+                setExerciseType("");
+                setExerciseStatus("");
+                setExerciseBenchmark("");
+              }}
+              type="button"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        <div className="exercise-library-view__result-count">
+          {filteredExercises.length === displayedExerciseLibrary.length
+            ? `${filteredExercises.length} exercises`
+            : `${filteredExercises.length} of ${displayedExerciseLibrary.length} exercises`}
+        </div>
+      </AppSectionCard>
+
+      {openExerciseMenuId != null && (
+        <button
+          aria-label="Close exercise options"
+          className="exercise-library-view__menu-backdrop"
+          onClick={() => setOpenExerciseMenuId(null)}
+          type="button"
         />
+      )}
 
-        <select
-          value={selectedMuscle}
-          onChange={(event) => setSelectedMuscle(event.target.value)}
-        >
-          <option value="">All muscles</option>
-          {muscleGroups.map((muscle) => (
-            <option key={muscle} value={muscle}>
-              {muscle}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={selectedEquipment}
-          onChange={(event) => setSelectedEquipment(event.target.value)}
-        >
-          <option value="">All equipment</option>
-          {equipmentOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={exerciseType}
-          onChange={(event) => setExerciseType(event.target.value)}
-        >
-          <option value="">All types</option>
-          <option value="builtin">Built-in</option>
-          <option value="custom">Custom</option>
-        </select>
-
-        <select
-          value={exerciseStatus}
-          onChange={(event) => setExerciseStatus(event.target.value)}
-        >
-          <option value="">All status</option>
-          <option value={EXERCISE_STATUS.active}>Active</option>
-          <option value={EXERCISE_STATUS.inactive}>Inactive</option>
-        </select>
-      </section>
-
-      <div
-        style={{
-          display: "grid",
-          gap: "8px",
-        }}
-      >
+      <div className="exercise-library-view__results">
         {filteredExercises.map((exercise) => {
           const primaryMuscle = exercise.muscles?.[0] || "Other";
           const secondaryMuscles = exercise.muscles?.slice(1) || [];
           const active = isExerciseActive(exercise);
+          const recentPerformance = recentPerformanceByExerciseId.get(
+            String(exercise.id)
+          );
 
           return (
             <div
+              className={`exercise-library-card${active ? "" : " exercise-library-card--inactive"}`}
               key={exercise.id}
               role="button"
               tabIndex={0}
               onClick={() => setDetailExercise(exercise)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) {
+                  return;
+                }
+
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   setDetailExercise(exercise);
                 }
               }}
-              style={{
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "6px",
-                color: "var(--text)",
-                cursor: "pointer",
-                padding: "10px",
-                textAlign: "left",
-                width: "100%",
-              }}
             >
-              <div
-                style={{
-                  alignItems: "flex-start",
-                  display: "flex",
-                  gap: "8px",
-                  justifyContent: "space-between",
-                }}
-              >
+              <div className="exercise-library-card__main">
                 {canManageSelectedUserPreferences ||
                 (exercise.builtin && !trainerCanAddBuiltIns) ? (
                   <ExerciseThumbnail
@@ -1812,66 +1935,71 @@ export default function ExerciseView({
                   </button>
                 )}
 
-                <div
-                  style={{
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      alignItems: "center",
-                      display: "flex",
-                      fontWeight: "bold",
-                      gap: "5px",
-                    }}
-                  >
+                <div className="exercise-library-card__copy">
+                  <div className="exercise-library-card__title">
                     {isExerciseBenchmark(exercise) ? (
                       <BenchmarkTrophy size={15} />
                     ) : null}
                     {exercise.name}
                   </div>
-                  <div
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginTop: "2px",
-                    }}
-                  >
-                    {exercise.equipment?.[0] || "No equipment"} ·{" "}
-                    {exercise.builtin ? "Built-in" : "Custom"}
+                  <div className="exercise-library-card__metadata">
+                    {exercise.equipment?.[0] || "No equipment"}
+                  </div>
+                  <div className="exercise-library-card__pills">
+                    <AppStatusPill tone={active ? "success" : "neutral"}>
+                      {active ? "Active" : "Inactive"}
+                    </AppStatusPill>
+                    {!exercise.builtin && (
+                      <AppStatusPill tone="accent">Custom</AppStatusPill>
+                    )}
+                    {isExerciseBenchmark(exercise) && (
+                      <AppStatusPill tone="accent">Benchmark</AppStatusPill>
+                    )}
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    flexWrap: "wrap",
-                    gap: "6px",
-                    justifyContent: "flex-end",
-                  }}
-                >
+                <div className="exercise-library-card__menu-wrap">
                   <button
-                    disabled={savingPreferenceExerciseId === exercise.id}
+                    aria-expanded={openExerciseMenuId === exercise.id}
+                    aria-label={`Options for ${exercise.name}`}
+                    className="exercise-library-card__menu-button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      toggleExerciseStatus(exercise);
+                      setOpenExerciseMenuId((currentId) =>
+                        currentId === exercise.id ? null : exercise.id
+                      );
                     }}
-                    style={getExerciseStatusButtonStyle(active)}
+                    type="button"
                   >
-                    {savingPreferenceExerciseId === exercise.id
-                      ? "Saving..."
-                      : active
-                        ? "Active"
-                        : "Inactive"}
+                    <MoreHorizontal size={21} />
                   </button>
 
-                  {exercise.builtin && !canManageSelectedUserPreferences && (
-                    <>
-                      {trainerCanAddBuiltIns && (
+                  {openExerciseMenuId === exercise.id && (
+                    <div
+                      className="exercise-library-card__menu"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        disabled={savingPreferenceExerciseId === exercise.id}
+                        onClick={() => {
+                          setOpenExerciseMenuId(null);
+                          toggleExerciseStatus(exercise);
+                        }}
+                        type="button"
+                      >
+                        {savingPreferenceExerciseId === exercise.id
+                          ? "Saving…"
+                          : active
+                            ? "Make inactive"
+                            : "Make active"}
+                      </button>
+
+                      {exercise.builtin &&
+                        !canManageSelectedUserPreferences &&
+                        trainerCanAddBuiltIns && (
                         <button
-                          onClick={(event) => {
-                            event.stopPropagation();
+                          onClick={() => {
+                            setOpenExerciseMenuId(null);
                             startEdit(exercise);
                           }}
                           type="button"
@@ -1879,28 +2007,31 @@ export default function ExerciseView({
                           Edit
                         </button>
                       )}
+
+                      {exercise.builtin && !canManageSelectedUserPreferences && (
                       <button
                         onClick={(event) => duplicateExercise(event, exercise)}
                         type="button"
                       >
                         Duplicate
                       </button>
-                    </>
-                  )}
+                      )}
 
-                  {!exercise.builtin && isTrainerTargetSelf && (
-                    <>
+                      {!exercise.builtin && isTrainerTargetSelf && (
+                        <>
                       <button
-                        onClick={(event) => {
-                          event.stopPropagation();
+                        onClick={() => {
+                          setOpenExerciseMenuId(null);
                           startEdit(exercise);
                         }}
+                        type="button"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={(event) => {
-                          event.stopPropagation();
+                        className="exercise-library-card__menu-danger"
+                        onClick={() => {
+                          setOpenExerciseMenuId(null);
                           setExerciseLibrary(
                             exerciseLibrary.filter(
                               (item) => item.id !== exercise.id
@@ -1916,60 +2047,78 @@ export default function ExerciseView({
                       >
                         Duplicate
                       </button>
-                    </>
+                        </>
+                  )}
+
+                      {!exercise.builtin && trainerCanAddBuiltIns && (
+                        <button
+                          disabled={promotingExerciseId === exercise.id}
+                          onClick={(event) => {
+                            setOpenExerciseMenuId(null);
+                            addCustomExerciseAsBuiltIn(event, exercise);
+                          }}
+                          type="button"
+                        >
+                          {promotingExerciseId === exercise.id
+                            ? "Adding…"
+                            : "Add as built-in"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div
-                style={{
-                  color: "var(--text)",
-                  fontSize: "13px",
-                  marginTop: "8px",
-                }}
-              >
+              <div className="exercise-library-card__muscles">
                 <strong>{primaryMuscle}</strong>
                 {secondaryMuscles.length > 0
                   ? ` · ${secondaryMuscles.join(", ")}`
                   : ""}
               </div>
 
-              {(exercise.description || exercise.note) && (
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {exercise.description || exercise.note}
+              {recentPerformance && (
+                <div className="exercise-library-card__recent">
+                  Last trained {new Date(recentPerformance.completedAt).toLocaleDateString(
+                    undefined,
+                    { day: "numeric", month: "short" }
+                  )}
+                  {recentPerformance.setCount > 0
+                    ? ` · ${recentPerformance.setCount} ${
+                        recentPerformance.setCount === 1 ? "set" : "sets"
+                      }`
+                    : ""}
                 </div>
               )}
 
-              {!exercise.builtin && trainerCanAddBuiltIns && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    marginTop: "8px",
-                  }}
-                >
-                  <button
-                    disabled={promotingExerciseId === exercise.id}
-                    onClick={(event) =>
-                      addCustomExerciseAsBuiltIn(event, exercise)
-                    }
-                    type="button"
-                  >
-                    {promotingExerciseId === exercise.id
-                      ? "Adding..."
-                      : "Add as Built-in"}
-                  </button>
+              {(exercise.description || exercise.note) && (
+                <div className="exercise-library-card__description">
+                  {exercise.description || exercise.note}
                 </div>
               )}
             </div>
           );
         })}
+
+        {filteredExercises.length === 0 && (
+          <AppSectionCard className="exercise-library-view__empty-state">
+            <strong>No matching exercises</strong>
+            <span>Try another search or clear the active filters.</span>
+            <button
+              className="app-secondary-action"
+              onClick={() => {
+                setSearch("");
+                setSelectedMuscle("");
+                setSelectedEquipment("");
+                setExerciseType("");
+                setExerciseStatus("");
+                setExerciseBenchmark("");
+              }}
+              type="button"
+            >
+              Clear search and filters
+            </button>
+          </AppSectionCard>
+        )}
       </div>
 
       {promoteExerciseStatus && (
