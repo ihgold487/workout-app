@@ -4,8 +4,10 @@ import {
   ChevronDown,
   ChevronUp,
   Coffee,
+  Copy,
   Dumbbell,
   Pencil,
+  Play,
   Scale,
   Sun,
   Sunrise,
@@ -475,6 +477,8 @@ export function CompletedWorkoutSheet({
   history = [],
   onClose,
   onDelete,
+  onSaveAsWorkout,
+  onStartAgain,
   onUpdateSet,
   plans = [],
   workout,
@@ -488,10 +492,17 @@ export function CompletedWorkoutSheet({
   const [rirPickerData, setRirPickerData] = useState(null);
   const [draftWorkout, setDraftWorkout] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [reuseOpen, setReuseOpen] = useState(false);
+  const [reuseSaved, setReuseSaved] = useState(false);
+  const [saveWorkoutName, setSaveWorkoutName] = useState(
+    `${workout?.templateName || workout?.workout_name || "Workout"} copy`
+  );
 
   useEffect(() => {
     setDraftWorkout(null);
     setConfirmDelete(false);
+    setReuseOpen(false);
+    setReuseSaved(false);
   }, [workout?.id]);
 
   if (!workout) {
@@ -514,6 +525,7 @@ export function CompletedWorkoutSheet({
     setRirPickerData(null);
     setDraftWorkout(null);
     setConfirmDelete(false);
+    setReuseOpen(false);
     onClose?.();
   };
 
@@ -747,9 +759,82 @@ export function CompletedWorkoutSheet({
                 ) : (
                   <span />
                 )}
+                {(onStartAgain || onSaveAsWorkout) && (
+                  <button
+                    onClick={() => {
+                      setReuseOpen((open) => !open);
+                      setReuseSaved(false);
+                      setSaveWorkoutName(
+                        `${workout.templateName || workout.workout_name || "Workout"} copy`
+                      );
+                    }}
+                    style={{
+                      gridColumn: "1 / -1",
+                      minHeight: "44px",
+                    }}
+                    type="button"
+                  >
+                    <Copy size={16} /> Use workout
+                  </button>
+                )}
               </>
             )}
           </div>
+
+          {!isEditing && reuseOpen && (
+            <div className="completed-workout-reuse">
+              <div>
+                <strong>Use this workout again</strong>
+                <span>
+                  Prescriptions and exercise order are copied. Completed values
+                  and plan progress are not.
+                </span>
+              </div>
+              {onStartAgain && (
+                <button
+                  className="app-primary-action"
+                  onClick={() => {
+                    onStartAgain(workout);
+                    closeSheet();
+                  }}
+                  type="button"
+                >
+                  <Play size={16} /> Start Again
+                </button>
+              )}
+              {onSaveAsWorkout && (
+                <div className="completed-workout-reuse__save">
+                  <label htmlFor={`save-workout-name-${workout.id}`}>
+                    Workout name
+                  </label>
+                  <input
+                    id={`save-workout-name-${workout.id}`}
+                    onChange={(event) => {
+                      setSaveWorkoutName(event.target.value);
+                      setReuseSaved(false);
+                    }}
+                    value={saveWorkoutName}
+                  />
+                  <button
+                    className="app-secondary-action"
+                    disabled={!saveWorkoutName.trim() || reuseSaved}
+                    onClick={() => {
+                      onSaveAsWorkout(workout, saveWorkoutName.trim());
+                      setReuseSaved(true);
+                    }}
+                    type="button"
+                  >
+                    <Copy size={16} /> {reuseSaved ? "Saved" : "Save to Workouts"}
+                  </button>
+                </div>
+              )}
+              {reuseSaved && (
+                <div aria-live="polite" className="completed-workout-reuse__saved" role="status">
+                  Saved to Workouts.
+                </div>
+              )}
+            </div>
+          )}
 
           {(displayedWorkout.exercises || []).map((exercise, exerciseIndex) => {
             const exerciseContext = findExerciseForHistoryExercise(
@@ -1433,6 +1518,8 @@ export default function WorkoutCalendar({
   history,
   nutritionEntries = [],
   onDeleteWorkout,
+  onSaveWorkout,
+  onStartWorkoutAgain,
   onUpdateWorkoutSet,
   plans = [],
   session = null,
@@ -2578,6 +2665,8 @@ export default function WorkoutCalendar({
             onDeleteWorkout?.(workoutToDelete);
             setSelectedWorkout(null);
           }}
+          onSaveAsWorkout={onSaveWorkout}
+          onStartAgain={onStartWorkoutAgain}
           onUpdateSet={(payload) => {
             updateSelectedWorkoutSet(payload);
             onUpdateWorkoutSet?.(payload);

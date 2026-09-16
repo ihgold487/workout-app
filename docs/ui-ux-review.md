@@ -233,6 +233,18 @@ Initial presentation-only Nutrition checkpoint implemented for native and PWA va
 
 ### History and workout details
 
+#### Progress
+
+Initial History presentation checkpoint implemented for native and PWA validation.
+
+- [x] Add a clearly labeled **View history** route beside the Home calendar while preserving calendar-based access.
+- [x] Replace the plain history rows with raised summary cards showing date, duration, exercise/set count, and plan/week context when available.
+- [x] Add search plus compact date-range, plan, workout, and exercise filters without changing completed-workout storage.
+- [x] Reuse the existing completed-workout sheet and its explicit edit, save/cancel, and guarded delete workflows.
+- [x] Keep deletion out of the browsing cards so opening a workout remains the clear primary action.
+- [x] Let a completed workout be started again as a one-off standalone session or saved as a separately named standalone workout without carrying over actuals, completion state, or plan linkage.
+- [ ] Validate long workout and exercise names, large histories, all filters, standalone and plan workouts, historical correction/deletion, and native/PWA phone layouts.
+
 - Provide a unified History destination or a clearly labeled route from Home. History currently appears contextually through the calendar or individual workout/template flows.
 - Add filters for date range, plan, workout, and exercise.
 - Replace plain chronological rows with summary cards showing duration, exercise/set count, notable PRs, and plan/week.

@@ -46,6 +46,7 @@ import PlansView from "./components/PlansView";
 import NutritionView from "./components/NutritionView";
 import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
+import WorkoutHistoryView from "./components/WorkoutHistoryView";
 import {
   AppPageHeader,
   AppSectionCard,
@@ -85,6 +86,7 @@ import {
   isExerciseBenchmark,
 } from "./utils/exerciseBenchmark";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
+import { buildStandaloneTemplateFromHistory } from "./utils/historyWorkoutReuse";
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
@@ -4823,6 +4825,7 @@ export default function App() {
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [temporaryTemplate, setTemporaryTemplate] = useState(null);
   const [selectedTemplatePlanWeek, setSelectedTemplatePlanWeek] = useState(null);
   const [autoStartTemplateId, setAutoStartTemplateId] = useState(null);
   const [templatePreviewEditActive, setTemplatePreviewEditActive] =
@@ -7816,7 +7819,11 @@ export default function App() {
     return () => window.clearTimeout(checkpointTimer);
   }, [indexedDbReady, selectedSessionId, sessions]);
 
-  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+  const selectedTemplate =
+    templates.find((t) => t.id === selectedTemplateId) ||
+    (String(temporaryTemplate?.id) === String(selectedTemplateId)
+      ? temporaryTemplate
+      : null);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
   const localBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
@@ -7897,6 +7904,33 @@ export default function App() {
       },
     ]);
     requestSyncCheckpoint(["workouts"], "workout save");
+  }
+
+  function saveHistoryAsStandaloneWorkout(workout, name) {
+    const templateId = getCurrentTimeMs();
+    const template = buildStandaloneTemplateFromHistory(workout, {
+      id: templateId,
+      name: name.trim(),
+    });
+
+    setTemplates((currentTemplates) => [...currentTemplates, template]);
+    requestSyncCheckpoint(["workouts"], "workout save");
+    return template;
+  }
+
+  function startHistoryAsStandaloneWorkout(workout) {
+    const templateId = getCurrentTimeMs();
+    const template = buildStandaloneTemplateFromHistory(workout, {
+      id: templateId,
+      name: getWorkoutName(workout),
+    });
+
+    setTemporaryTemplate(template);
+    setSelectedHistory(null);
+    setSelectedHistoryList(null);
+    setSelectedTemplatePlanWeek(null);
+    setAutoStartTemplateId(template.id);
+    setSelectedTemplateId(template.id);
   }
 
   function activatePlan(planId) {
@@ -12919,74 +12953,13 @@ export default function App() {
 
   if (selectedHistoryList) {
     return renderAppShell(
-      <div
-        style={{
-          padding: "20px",
-        }}
-      >
-        <h2>History</h2>
-
-        <div
-          style={{
-            display: "grid",
-            gap: "4px",
-          }}
-        >
-          {selectedHistoryList.map((workout) => (
-            <div
-              key={workout.id}
-              style={{
-                alignItems: "center",
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                color: "var(--text-h)",
-                display: "grid",
-                gap: "8px",
-                gridTemplateColumns: "minmax(0, 1fr) auto",
-              }}
-            >
-              <button
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--text-h)",
-                  display: "block",
-                  font: "inherit",
-                  fontSize: "13px",
-                  minWidth: 0,
-                  padding: "8px",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-                onClick={() => setSelectedHistory(workout)}
-                type="button"
-              >
-                {workout.templateName || workout.workout_name || "Workout"}
-                {` (${formatHistoryTimestamp(workout)})`}
-              </button>
-              <button
-                aria-label={`Delete ${
-                  workout.templateName || workout.workout_name || "workout"
-                } history entry`}
-                onClick={() => setConfirmDeleteHistory(workout)}
-                style={{
-                  alignItems: "center",
-                  color: "var(--danger-text)",
-                  display: "inline-flex",
-                  justifyContent: "center",
-                  marginRight: "6px",
-                  minHeight: "34px",
-                  minWidth: "34px",
-                  padding: "5px",
-                }}
-                type="button"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
+      <>
+        <WorkoutHistoryView
+          history={selectedHistoryList}
+          onBack={() => setSelectedHistoryList(null)}
+          onOpenWorkout={setSelectedHistory}
+          plans={plans}
+        />
         {selectedHistory && (
           <CompletedWorkoutSheet
             bodyWeightEntries={localBodyWeightEntries}
@@ -12994,6 +12967,8 @@ export default function App() {
             history={history}
             onClose={() => setSelectedHistory(null)}
             onDelete={deleteHistoryWorkout}
+            onSaveAsWorkout={saveHistoryAsStandaloneWorkout}
+            onStartAgain={startHistoryAsStandaloneWorkout}
             onUpdateSet={updateHistoryWorkoutSet}
             plans={plans}
             workout={selectedHistory}
@@ -13084,7 +13059,7 @@ export default function App() {
             </div>
           </div>
         )}
-      </div>,
+      </>,
       "home"
     );
   }
@@ -13400,7 +13375,14 @@ export default function App() {
 
       <div className="home-section-label">
         <span>Calendar</span>
-        <span>Tap to expand</span>
+        <button
+          className="home-section-label__action"
+          onClick={() => setSelectedHistoryList(history)}
+          type="button"
+        >
+          <History size={15} />
+          View history
+        </button>
       </div>
 
       <WorkoutCalendar
@@ -13409,6 +13391,8 @@ export default function App() {
         history={history}
         nutritionEntries={calendarNutritionEntries}
         onDeleteWorkout={deleteHistoryWorkout}
+        onSaveWorkout={saveHistoryAsStandaloneWorkout}
+        onStartWorkoutAgain={startHistoryAsStandaloneWorkout}
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
         plans={plans}
         session={authSession}
@@ -13805,6 +13789,8 @@ export default function App() {
           history={history}
           onClose={() => setSelectedHistory(null)}
           onDelete={deleteHistoryWorkout}
+          onSaveAsWorkout={saveHistoryAsStandaloneWorkout}
+          onStartAgain={startHistoryAsStandaloneWorkout}
           onUpdateSet={updateHistoryWorkoutSet}
           plans={plans}
           workout={selectedHistory}
