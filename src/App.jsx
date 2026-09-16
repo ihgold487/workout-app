@@ -12995,6 +12995,7 @@ export default function App() {
             onClose={() => setSelectedHistory(null)}
             onDelete={deleteHistoryWorkout}
             onUpdateSet={updateHistoryWorkoutSet}
+            plans={plans}
             workout={selectedHistory}
           />
         )}
@@ -13409,6 +13410,7 @@ export default function App() {
         nutritionEntries={calendarNutritionEntries}
         onDeleteWorkout={deleteHistoryWorkout}
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
+        plans={plans}
         session={authSession}
       />
 
@@ -13804,6 +13806,7 @@ export default function App() {
           onClose={() => setSelectedHistory(null)}
           onDelete={deleteHistoryWorkout}
           onUpdateSet={updateHistoryWorkoutSet}
+          plans={plans}
           workout={selectedHistory}
         />
       )}

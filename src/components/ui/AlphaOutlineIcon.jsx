@@ -1,6 +1,4 @@
 /* global __IS_NATIVE_BUILD__ */
-import { useEffect, useId, useState } from "react";
-
 export default function AlphaOutlineIcon({
   className,
   color = "currentColor",
@@ -8,74 +6,62 @@ export default function AlphaOutlineIcon({
   src,
   strokeExpansion = 0,
 }) {
-  const filterId = `alpha-outline-${useId().replaceAll(":", "")}`;
   const resolvedSrc = __IS_NATIVE_BUILD__
     ? src
     : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, "")}`;
-  const [assetVersion, setAssetVersion] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    let frameId = null;
-    const image = new Image();
-    const refreshFilteredImage = () => {
-      if (!active) {
-        return;
-      }
-      setAssetVersion((current) => current + 1);
-    };
-
-    image.addEventListener("load", refreshFilteredImage, { once: true });
-    image.addEventListener("error", refreshFilteredImage, { once: true });
-    image.src = resolvedSrc;
-
-    if (image.complete) {
-      frameId = window.requestAnimationFrame(refreshFilteredImage);
-    }
-
-    return () => {
-      active = false;
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-    };
-  }, [resolvedSrc]);
+  const expansion = (strokeExpansion / 512) * size;
+  const expansionOffsets =
+    expansion > 0
+      ? [
+          [-expansion, 0],
+          [expansion, 0],
+          [0, -expansion],
+          [0, expansion],
+          [-expansion * 0.7, -expansion * 0.7],
+          [expansion * 0.7, -expansion * 0.7],
+          [-expansion * 0.7, expansion * 0.7],
+          [expansion * 0.7, expansion * 0.7],
+        ]
+      : [];
+  const maskStyle = {
+    backgroundColor: color,
+    inset: 0,
+    maskImage: `url("${resolvedSrc}")`,
+    maskPosition: "center",
+    maskRepeat: "no-repeat",
+    maskSize: "contain",
+    position: "absolute",
+    WebkitMaskImage: `url("${resolvedSrc}")`,
+    WebkitMaskPosition: "center",
+    WebkitMaskRepeat: "no-repeat",
+    WebkitMaskSize: "contain",
+  };
 
   return (
-    <svg
+    <span
       aria-hidden="true"
       className={className}
-      height={size}
-      viewBox="0 0 512 512"
-      width={size}
+      style={{
+        display: "inline-block",
+        flexShrink: 0,
+        height: size,
+        lineHeight: 0,
+        position: "relative",
+        width: size,
+      }}
     >
-      <defs>
-        <filter
-          colorInterpolationFilters="sRGB"
-          height="120%"
-          id={filterId}
-          width="120%"
-          x="-10%"
-          y="-10%"
-        >
-          <feMorphology
-            in="SourceAlpha"
-            operator="dilate"
-            radius={strokeExpansion}
-            result="expanded"
-          />
-          <feFlood floodColor={color} result="color" />
-          <feComposite in="color" in2="expanded" operator="in" />
-        </filter>
-      </defs>
-      <image
-        key={`${resolvedSrc}-${assetVersion}`}
-        filter={`url(#${filterId})`}
-        height="512"
-        href={resolvedSrc}
-        preserveAspectRatio="xMidYMid meet"
-        width="512"
+      {expansionOffsets.map(([x, y]) => (
+        <span
+          key={`${x}:${y}`}
+          style={{
+            ...maskStyle,
+            transform: `translate(${x}px, ${y}px)`,
+          }}
+        />
+      ))}
+      <span
+        style={maskStyle}
       />
-    </svg>
+    </span>
   );
 }

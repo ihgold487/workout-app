@@ -1953,7 +1953,7 @@ export default function ExerciseView({
                       <AppStatusPill tone="accent">Custom</AppStatusPill>
                     )}
                     {isExerciseBenchmark(exercise) && (
-                      <AppStatusPill tone="accent">Benchmark</AppStatusPill>
+                      <AppStatusPill tone="benchmark">Benchmark</AppStatusPill>
                     )}
                   </div>
                 </div>

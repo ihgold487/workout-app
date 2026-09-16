@@ -235,6 +235,12 @@ h2 {
   color: var(--success-text);
 }
 
+.app-status-pill--benchmark {
+  background: #fef3c7;
+  border-color: #ca8a04;
+  color: #92400e;
+}
+
 .app-primary-action {
   align-items: center;
   background: var(--accent);

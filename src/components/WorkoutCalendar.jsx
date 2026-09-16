@@ -26,6 +26,7 @@ import {
 import { isSupabaseConfigured } from "../sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "../utils/e1rm";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
+import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 
 const BODY_WEIGHT_LOG_KEY = "bodyWeightLogEntries";
 const BASE_MEAL_OPTIONS = [
@@ -311,6 +312,7 @@ function buildExerciseComparisons({
   exercise,
   exerciseLibrary = [],
   history,
+  plans = [],
   selectedWorkout,
 }) {
   const matchKey = getExerciseMatchKey(exercise);
@@ -344,7 +346,40 @@ function buildExerciseComparisons({
     })
     .sort((a, b) => b.completedTime - a.completedTime);
 
-  const previousSummary = priorSummaries[0]?.summary || null;
+  const selectedPlan = plans.find(
+    (plan) =>
+      String(plan.id) ===
+      String(selectedWorkout?.planId || selectedWorkout?.plan_id)
+  );
+  const correspondingPerformance = findLatestExercisePerformance({
+    currentSessionId: selectedId,
+    exercise,
+    history: (history || []).filter(
+      (workout) =>
+        workout.id !== selectedId && getWorkoutTime(workout) < selectedTime
+    ),
+    plan: selectedPlan,
+    planWeek: selectedWorkout?.planWeek || selectedWorkout?.plan_week,
+    planWorkoutId:
+      selectedWorkout?.planWorkoutId || selectedWorkout?.plan_workout_id,
+    plans,
+    templateId: selectedWorkout?.templateId || selectedWorkout?.template_id,
+  });
+  const previousSummary = correspondingPerformance
+    ? calculateExerciseSummary(
+        correspondingPerformance.exercise,
+        findExerciseForHistoryExercise(
+          correspondingPerformance.exercise,
+          exerciseLibrary
+        ),
+        getLatestBodyWeightForDate(
+          bodyWeightEntries,
+          correspondingPerformance.workout.completedAtIso ||
+            correspondingPerformance.workout.completed_at ||
+            correspondingPerformance.workout.completedAt
+        )
+      )
+    : null;
   const allTimeHighs = priorSummaries.reduce((highs, entry) => {
     Object.entries(entry.summary).forEach(([key, value]) => {
       if (!Number.isFinite(value)) {
@@ -370,6 +405,7 @@ function getExerciseIncreaseFlags({
   exerciseContext,
   exerciseLibrary = [],
   history,
+  plans = [],
   selectedWorkout,
 }) {
   const summary = calculateExerciseSummary(exercise, exerciseContext, bodyWeight);
@@ -378,6 +414,7 @@ function getExerciseIncreaseFlags({
     exercise,
     exerciseLibrary,
     history,
+    plans,
     selectedWorkout,
   });
 
@@ -439,6 +476,7 @@ export function CompletedWorkoutSheet({
   onClose,
   onDelete,
   onUpdateSet,
+  plans = [],
   workout,
   zIndex = 2200,
 }) {
@@ -725,6 +763,7 @@ export function CompletedWorkoutSheet({
               exerciseContext,
               exerciseLibrary,
               history,
+              plans,
               selectedWorkout: workout,
             });
 
@@ -793,7 +832,7 @@ export function CompletedWorkoutSheet({
                       <IncreaseBadge
                         color="#c62828"
                         count={increaseFlags.previousCount}
-                        label="improvements from previous workout"
+                        label="improvements from corresponding workout"
                       />
                       <IncreaseBadge
                         color="#1565c0"
@@ -1395,6 +1434,7 @@ export default function WorkoutCalendar({
   nutritionEntries = [],
   onDeleteWorkout,
   onUpdateWorkoutSet,
+  plans = [],
   session = null,
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -2542,6 +2582,7 @@ export default function WorkoutCalendar({
             updateSelectedWorkoutSet(payload);
             onUpdateWorkoutSet?.(payload);
           }}
+          plans={plans}
           workout={selectedWorkout}
         />
       )}
