@@ -13396,6 +13396,7 @@ export default function App() {
         onUpdateWorkoutSet={updateHistoryWorkoutSet}
         plans={plans}
         session={authSession}
+        templates={templates}
       />
 
       <button

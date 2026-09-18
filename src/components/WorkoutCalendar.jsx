@@ -316,6 +316,7 @@ function buildExerciseComparisons({
   history,
   plans = [],
   selectedWorkout,
+  templates = [],
 }) {
   const matchKey = getExerciseMatchKey(exercise);
   const selectedTime = getWorkoutTime(selectedWorkout);
@@ -366,6 +367,7 @@ function buildExerciseComparisons({
       selectedWorkout?.planWorkoutId || selectedWorkout?.plan_workout_id,
     plans,
     templateId: selectedWorkout?.templateId || selectedWorkout?.template_id,
+    templates,
   });
   const previousSummary = correspondingPerformance
     ? calculateExerciseSummary(
@@ -409,6 +411,7 @@ function getExerciseIncreaseFlags({
   history,
   plans = [],
   selectedWorkout,
+  templates = [],
 }) {
   const summary = calculateExerciseSummary(exercise, exerciseContext, bodyWeight);
   const comparisons = buildExerciseComparisons({
@@ -418,6 +421,7 @@ function getExerciseIncreaseFlags({
     history,
     plans,
     selectedWorkout,
+    templates,
   });
 
   return Object.keys(summary).reduce(
@@ -850,6 +854,7 @@ export function CompletedWorkoutSheet({
               history,
               plans,
               selectedWorkout: workout,
+              templates,
             });
 
             return (
@@ -1198,7 +1203,9 @@ export function CompletedWorkoutSheet({
           exercise: selectedWorkoutExercise,
           exerciseLibrary,
           history,
+          plans,
           selectedWorkout: workout,
+          templates,
         });
         const metrics = [
           ["volume", "Volume", "Total weight x reps across all sets", 0],
@@ -1523,6 +1530,7 @@ export default function WorkoutCalendar({
   onUpdateWorkoutSet,
   plans = [],
   session = null,
+  templates = [],
 }) {
   const [expanded, setExpanded] = useState(false);
 

@@ -22,6 +22,24 @@ const plans = [
     config: { deload: true },
     durationWeeks: 4,
     id: "new-plan",
+    workouts: [
+      { planWorkoutId: "day-one", templateId: "day-one-template" },
+      { planWorkoutId: "day-two", templateId: "day-two-template" },
+    ],
+  },
+];
+const repeatedExerciseTemplates = [
+  {
+    exercises: [exercise],
+    id: "day-one-template",
+    planId: "new-plan",
+    planWorkoutId: "day-one",
+  },
+  {
+    exercises: [exercise],
+    id: "day-two-template",
+    planId: "new-plan",
+    planWorkoutId: "day-two",
   },
 ];
 const history = [
@@ -96,7 +114,7 @@ test("normal training falls back to deload history when no normal result exists"
   assert.equal(performance?.workout.id, "deload-workout");
 });
 
-test("uses the latest same-plan performance from another day for matching reps", () => {
+test("uses the corresponding plan workout when an exercise repeats in a week", () => {
   const currentExercise = {
     ...exercise,
     sets: [{ reps: "10", rir: "2" }],
@@ -115,6 +133,7 @@ test("uses the latest same-plan performance from another day for matching reps",
         ],
         id: "other-day-most-recent",
         planId: "new-plan",
+        planWeek: 1,
         planWorkoutId: "day-two",
       },
       {
@@ -127,6 +146,7 @@ test("uses the latest same-plan performance from another day for matching reps",
         ],
         id: "same-day-older",
         planId: "new-plan",
+        planWeek: 1,
         planWorkoutId: "day-one",
       },
     ],
@@ -134,9 +154,10 @@ test("uses the latest same-plan performance from another day for matching reps",
     planWeek: 2,
     planWorkoutId: "day-one",
     plans,
+    templates: repeatedExerciseTemplates,
   });
 
-  assert.equal(performance?.workout.id, "other-day-most-recent");
+  assert.equal(performance?.workout.id, "same-day-older");
 });
 
 test("keeps plan-day history when the other day's reps differ materially", () => {

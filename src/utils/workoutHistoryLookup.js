@@ -414,6 +414,7 @@ export function findLatestExercisePerformance({
   planWorkoutId,
   plans = [],
   templateId,
+  templates = [],
 }) {
   const matchingExerciseCache = new WeakMap();
   const deloadStatusCache = new WeakMap();
@@ -468,6 +469,11 @@ export function findLatestExercisePerformance({
   };
   const hasPlanWorkoutScope = plan?.id != null && planWorkoutId != null;
   const hasTemplateScope = templateId != null;
+  const isRepeatedPlanExercise = exerciseAppearsOnMultiplePlanDays({
+    exercise,
+    plan,
+    templates,
+  });
   const currentPrescriptionSignature = getExercisePrescriptionSignature(exercise);
   const canMatchPrescription =
     hasUsefulPrescriptionSignature(currentPrescriptionSignature);
@@ -487,10 +493,36 @@ export function findLatestExercisePerformance({
       return isDeload === expectedDeload;
     };
 
-    // When the same exercise appears on multiple days of this plan, an
-    // equivalent rep prescription is more useful than the older occurrence of
-    // the current day. This keeps repeated accessory work current without
-    // mixing distinct prescriptions such as heavy and moderate bench press.
+    // Repeated exercises have distinct session contexts. Their previous sets
+    // must come from the same plan workout, even when another occurrence was
+    // completed more recently.
+    if (hasPlanWorkoutScope && isRepeatedPlanExercise) {
+      const previousWeekNumber =
+        planWeek != null && Number(planWeek) > 1 ? Number(planWeek) - 1 : null;
+      const previousPlanWorkout = findPlanWorkoutHistory({
+        currentSessionId,
+        history,
+        plan,
+        planWorkoutId,
+        weekNumber: previousWeekNumber,
+        workoutFilter: matchesDeloadStatus,
+      });
+
+      if (previousPlanWorkout) {
+        const historyExercise = getMatchingHistoryExercise(previousPlanWorkout);
+
+        if (historyExercise) {
+          return {
+            exercise: historyExercise,
+            isPlanWorkoutScoped: true,
+            workout: previousPlanWorkout,
+          };
+        }
+      }
+    }
+
+    // For exercises that occur on only one plan day, a same-plan performance
+    // with a similar prescription remains the most useful recent reference.
     if (plan?.id != null && canMatchPrescription) {
       const comparablePlanPerformance = findMatchingPerformance(
         (historyWorkout) =>
