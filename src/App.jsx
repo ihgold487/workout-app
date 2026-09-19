@@ -12971,6 +12971,7 @@ export default function App() {
             onStartAgain={startHistoryAsStandaloneWorkout}
             onUpdateSet={updateHistoryWorkoutSet}
             plans={plans}
+            templates={templates}
             workout={selectedHistory}
           />
         )}
@@ -13794,6 +13795,7 @@ export default function App() {
           onStartAgain={startHistoryAsStandaloneWorkout}
           onUpdateSet={updateHistoryWorkoutSet}
           plans={plans}
+          templates={templates}
           workout={selectedHistory}
         />
       )}

@@ -485,6 +485,7 @@ export function CompletedWorkoutSheet({
   onStartAgain,
   onUpdateSet,
   plans = [],
+  templates = [],
   workout,
   zIndex = 2200,
 }) {
@@ -2680,6 +2681,7 @@ export default function WorkoutCalendar({
             onUpdateWorkoutSet?.(payload);
           }}
           plans={plans}
+          templates={templates}
           workout={selectedWorkout}
         />
       )}
