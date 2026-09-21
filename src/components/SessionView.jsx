@@ -125,6 +125,109 @@ const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = RIR_PICKER_VALUES;
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
+
+function formatSpotifyPlaybackTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(milliseconds) / 1000) || 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getSpotifyTrackProgress(spotifyState, now = Date.now()) {
+  const duration = Number(spotifyState?.trackDurationMs);
+  const position = Number(spotifyState?.playbackPositionMs);
+
+  if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(position)) {
+    return null;
+  }
+
+  const receivedAt = Number(spotifyState?.playbackStateReceivedAtMs) || now;
+  const elapsedSinceUpdate =
+    spotifyState?.connected && spotifyState?.isPaused === false
+      ? Math.max(0, now - receivedAt)
+      : 0;
+  const elapsed = Math.min(duration, Math.max(0, position + elapsedSinceUpdate));
+
+  return {
+    duration,
+    elapsed,
+    percent: Math.min(100, (elapsed / duration) * 100),
+  };
+}
+
+function SpotifyTrackProgress({ compact = false, progress }) {
+  if (!progress) {
+    return null;
+  }
+
+  const label = `${formatSpotifyPlaybackTime(progress.elapsed)} of ${formatSpotifyPlaybackTime(
+    progress.duration
+  )}`;
+
+  return (
+    <div
+      aria-label={`Spotify track progress: ${label}`}
+      aria-valuemax={Math.round(progress.duration)}
+      aria-valuemin={0}
+      aria-valuenow={Math.round(progress.elapsed)}
+      role="progressbar"
+      style={{
+        alignItems: "center",
+        display: "flex",
+        gap: compact ? 0 : "7px",
+        minWidth: 0,
+        width: "100%",
+      }}
+    >
+      {!compact && (
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "10px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatSpotifyPlaybackTime(progress.elapsed)}
+        </span>
+      )}
+      <span
+        aria-hidden="true"
+        style={{
+          background: "color-mix(in srgb, #1db954 22%, var(--surface-muted))",
+          borderRadius: "999px",
+          display: "block",
+          height: compact ? "2px" : "4px",
+          minWidth: 0,
+          overflow: "hidden",
+          width: "100%",
+        }}
+      >
+        <span
+          style={{
+            background: "#1db954",
+            borderRadius: "inherit",
+            display: "block",
+            height: "100%",
+            transition: "width 900ms linear",
+            width: `${progress.percent}%`,
+          }}
+        />
+      </span>
+      {!compact && (
+        <span
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "10px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatSpotifyPlaybackTime(progress.duration)}
+        </span>
+      )}
+    </div>
+  );
+}
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
@@ -2931,6 +3034,7 @@ export default function SessionView({
     authorized: false,
     connected: false,
   });
+  const [spotifyPlaybackNow, setSpotifyPlaybackNow] = useState(() => Date.now());
   const [spotifyBusy, setSpotifyBusy] = useState(false);
   const [expandedSessionUtility, setExpandedSessionUtility] = useState(null);
 
@@ -2951,6 +3055,50 @@ export default function SessionView({
   const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
   const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
 
+  const updateSpotifyState = useCallback((nextState) => {
+    setSpotifyState((current) => {
+      const next = {
+        ...current,
+        ...nextState,
+        playbackStateReceivedAtMs: Date.now(),
+      };
+
+      // The native bridge omits `error` when it has recovered. Remove a
+      // previous connection error rather than retaining it beside live track
+      // metadata in the expanded Spotify panel.
+      if (nextState.connected && !nextState.error) {
+        delete next.error;
+      }
+
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const trackDuration = Number(spotifyState.trackDurationMs);
+    const playbackPosition = Number(spotifyState.playbackPositionMs);
+
+    if (
+      !spotifyState.connected ||
+      spotifyState.isPaused !== false ||
+      !Number.isFinite(trackDuration) ||
+      trackDuration <= 0 ||
+      !Number.isFinite(playbackPosition)
+    ) {
+      return undefined;
+    }
+
+    setSpotifyPlaybackNow(Date.now());
+    const interval = window.setInterval(() => setSpotifyPlaybackNow(Date.now()), 1000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    spotifyState.connected,
+    spotifyState.isPaused,
+    spotifyState.playbackPositionMs,
+    spotifyState.trackDurationMs,
+  ]);
+
   useEffect(() => {
     if (!canUseNativeSpotifyPlayback()) {
       return undefined;
@@ -2961,7 +3109,7 @@ export default function SessionView({
 
     void getSpotifyPlaybackState()
       .then((state) => {
-        if (!disposed) setSpotifyState(state);
+        if (!disposed) updateSpotifyState(state);
       })
       .catch((error) => {
         if (!disposed) {
@@ -2975,7 +3123,7 @@ export default function SessionView({
 
     void addSpotifyPlaybackListener((state) => {
       if (!disposed) {
-        setSpotifyState(state);
+        updateSpotifyState(state);
         setSpotifyBusy(false);
       }
     }).then((handle) => {
@@ -2987,7 +3135,7 @@ export default function SessionView({
       disposed = true;
       if (listenerHandle) void listenerHandle.remove();
     };
-  }, []);
+  }, [updateSpotifyState]);
 
   async function handleSpotifyPlayback() {
     if (spotifyBusy) return;
@@ -2997,7 +3145,7 @@ export default function SessionView({
       const state = spotifyState.connected
         ? await toggleSpotifyPlayback()
         : await connectSpotifyPlayback();
-      setSpotifyState((current) => ({ ...current, ...state }));
+      updateSpotifyState(state);
     } catch (error) {
       setSpotifyState((state) => ({
         ...state,
@@ -3017,7 +3165,7 @@ export default function SessionView({
         direction === "next"
           ? await skipSpotifyNext()
           : await skipSpotifyPrevious();
-      setSpotifyState((current) => ({ ...current, ...state }));
+      updateSpotifyState(state);
     } catch (error) {
       setSpotifyState((state) => ({
         ...state,
@@ -6076,6 +6224,10 @@ export default function SessionView({
       : spotifyState.connected && spotifyState.isPaused === false
         ? "#1db954"
         : "var(--text-muted)";
+  const spotifyTrackProgress = getSpotifyTrackProgress(
+    spotifyState,
+    spotifyPlaybackNow
+  );
 
   return (
     <div
@@ -6636,7 +6788,9 @@ export default function SessionView({
                   color: "var(--text)",
                   display: "inline-flex",
                   minHeight: "38px",
+                  overflow: "hidden",
                   padding: "2px",
+                  position: "relative",
                 }}
               >
                 <button
@@ -6666,7 +6820,29 @@ export default function SessionView({
                   title={spotifyCompactLabel}
                   type="button"
                 >
-                  <SpotifyIcon size={21} />
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      height: "21px",
+                      position: "relative",
+                      width: "21px",
+                    }}
+                  >
+                    <SpotifyIcon size={21} />
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        background: spotifyStatusColor,
+                        border: "2px solid var(--surface-raised)",
+                        borderRadius: "999px",
+                        bottom: "-3px",
+                        height: "8px",
+                        position: "absolute",
+                        right: "-3px",
+                        width: "8px",
+                      }}
+                    />
+                  </span>
                   {expandedSessionUtility === "spotify" && (
                     <span
                       style={{
@@ -6681,19 +6857,6 @@ export default function SessionView({
                       {spotifyState.trackName || "Spotify"}
                     </span>
                   )}
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      background: spotifyStatusColor,
-                      border: "2px solid var(--surface-raised)",
-                      borderRadius: "999px",
-                      bottom: "1px",
-                      height: "8px",
-                      position: "absolute",
-                      right: "1px",
-                      width: "8px",
-                    }}
-                  />
                 </button>
                 {expandedSessionUtility !== "spotify" && (
                   <div
@@ -6793,6 +6956,19 @@ export default function SessionView({
                     >
                       <SkipForward size={15} />
                     </button>
+                  </div>
+                )}
+                {expandedSessionUtility !== "spotify" && spotifyTrackProgress && (
+                  <div
+                    style={{
+                      bottom: "3px",
+                      left: "12px",
+                      pointerEvents: "none",
+                      position: "absolute",
+                      right: "12px",
+                    }}
+                  >
+                    <SpotifyTrackProgress compact progress={spotifyTrackProgress} />
                   </div>
                 )}
               </div>
@@ -7035,7 +7211,14 @@ export default function SessionView({
                 }
               />
             </button>
-            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+            <div
+              style={{
+                display: "grid",
+                flex: "1 1 auto",
+                gap: "4px",
+                minWidth: 0,
+              }}
+            >
               <div
                 style={{
                   fontSize: "13px",
@@ -7069,6 +7252,7 @@ export default function SessionView({
                   spotifyState.artistName ||
                   "Control playback without leaving your workout"}
               </div>
+              <SpotifyTrackProgress progress={spotifyTrackProgress} />
             </div>
             <div
               style={{

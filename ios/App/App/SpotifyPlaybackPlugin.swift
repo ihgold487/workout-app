@@ -35,8 +35,10 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
     private var isPaused: Bool?
     private var trackName: String?
     private var artistName: String?
+    private var playbackPositionMs: Int?
     private var playlistContextURI: String?
     private var playlistImageDataURL: String?
+    private var trackDurationMs: Int?
     private var canSkipNext = false
     private var canSkipPrevious = false
     private var lastError: String?
@@ -183,8 +185,10 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         isPaused = nil
         trackName = nil
         artistName = nil
+        playbackPositionMs = nil
         playlistContextURI = nil
         playlistImageDataURL = nil
+        trackDurationMs = nil
         lastError = error?.localizedDescription ?? "Unable to connect to Spotify."
         emitState()
     }
@@ -193,8 +197,10 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         isPaused = nil
         trackName = nil
         artistName = nil
+        playbackPositionMs = nil
         playlistContextURI = nil
         playlistImageDataURL = nil
+        trackDurationMs = nil
         if let error {
             lastError = error.localizedDescription
         }
@@ -205,6 +211,8 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         isPaused = playerState.isPaused
         trackName = playerState.track.name
         artistName = playerState.track.artist.name
+        playbackPositionMs = playerState.playbackPosition
+        trackDurationMs = Int(playerState.track.duration)
         canSkipNext = playerState.playbackRestrictions.canSkipNext
         canSkipPrevious = playerState.playbackRestrictions.canSkipPrevious
         lastError = nil
@@ -223,7 +231,9 @@ public class SpotifyPlaybackPlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDel
         if let isPaused { payload["isPaused"] = isPaused }
         if let trackName { payload["trackName"] = trackName }
         if let artistName { payload["artistName"] = artistName }
+        if let playbackPositionMs { payload["playbackPositionMs"] = playbackPositionMs }
         if let playlistImageDataURL { payload["playlistImageDataURL"] = playlistImageDataURL }
+        if let trackDurationMs { payload["trackDurationMs"] = trackDurationMs }
         if let lastError { payload["error"] = lastError }
         return payload
     }
