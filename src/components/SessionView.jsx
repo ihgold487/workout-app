@@ -228,6 +228,38 @@ function SpotifyTrackProgress({ compact = false, progress }) {
     </div>
   );
 }
+
+function SpotifyTrackProgressDisplay({ compact = false, spotifyState }) {
+  const [now, setNow] = useState(() => Date.now());
+  const progress = getSpotifyTrackProgress(spotifyState, now);
+
+  useEffect(() => {
+    const trackDuration = Number(spotifyState?.trackDurationMs);
+    const playbackPosition = Number(spotifyState?.playbackPositionMs);
+
+    if (
+      !spotifyState?.connected ||
+      spotifyState?.isPaused !== false ||
+      !Number.isFinite(trackDuration) ||
+      trackDuration <= 0 ||
+      !Number.isFinite(playbackPosition)
+    ) {
+      return undefined;
+    }
+
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    spotifyState?.connected,
+    spotifyState?.isPaused,
+    spotifyState?.playbackPositionMs,
+    spotifyState?.trackDurationMs,
+  ]);
+
+  return <SpotifyTrackProgress compact={compact} progress={progress} />;
+}
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
@@ -481,6 +513,30 @@ function formatWorkoutDuration(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(
     remainingSeconds
   ).padStart(2, "0")}`;
+}
+
+function WorkoutDurationDisplay({ session }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setNow(Date.now());
+
+    if (session.workoutTimerPaused) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    session.workoutStartedAtIso,
+    session.workoutTimerBaseSeconds,
+    session.workoutTimerPaused,
+    session.workoutTimerResumedAtIso,
+    session.startedAtIso,
+  ]);
+
+  return <>{formatWorkoutDuration(getWorkoutDurationSeconds(session, now))}</>;
 }
 
 function SpotifyIcon({ size = 28 }) {
@@ -3034,7 +3090,6 @@ export default function SessionView({
     authorized: false,
     connected: false,
   });
-  const [spotifyPlaybackNow, setSpotifyPlaybackNow] = useState(() => Date.now());
   const [spotifyBusy, setSpotifyBusy] = useState(false);
   const [expandedSessionUtility, setExpandedSessionUtility] = useState(null);
 
@@ -3052,9 +3107,6 @@ export default function SessionView({
   useEffect(() => {
     restTimerProgressTotalRef.current = restTimerProgressTotal;
   }, [restTimerProgressTotal]);
-  const [workoutTimerNow, setWorkoutTimerNow] = useState(() => Date.now());
-  const workoutElapsedSeconds = getWorkoutDurationSeconds(session, workoutTimerNow);
-
   const updateSpotifyState = useCallback((nextState) => {
     setSpotifyState((current) => {
       const next = {
@@ -3073,31 +3125,6 @@ export default function SessionView({
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    const trackDuration = Number(spotifyState.trackDurationMs);
-    const playbackPosition = Number(spotifyState.playbackPositionMs);
-
-    if (
-      !spotifyState.connected ||
-      spotifyState.isPaused !== false ||
-      !Number.isFinite(trackDuration) ||
-      trackDuration <= 0 ||
-      !Number.isFinite(playbackPosition)
-    ) {
-      return undefined;
-    }
-
-    setSpotifyPlaybackNow(Date.now());
-    const interval = window.setInterval(() => setSpotifyPlaybackNow(Date.now()), 1000);
-
-    return () => window.clearInterval(interval);
-  }, [
-    spotifyState.connected,
-    spotifyState.isPaused,
-    spotifyState.playbackPositionMs,
-    spotifyState.trackDurationMs,
-  ]);
 
   useEffect(() => {
     if (!canUseNativeSpotifyPlayback()) {
@@ -3226,24 +3253,8 @@ export default function SessionView({
     }
   }
 
-  useEffect(() => {
-    if (session.workoutTimerPaused) {
-      return;
-    }
-
-    const id = setInterval(() => {
-      setWorkoutTimerNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(id);
-  }, [
-    session.workoutTimerPaused,
-  ]);
-
   function toggleWorkoutTimerPaused() {
     const nowIso = new Date().toISOString();
-
-    setWorkoutTimerNow(Date.now());
 
     updateSession((s) => {
       if (s.workoutTimerPaused) {
@@ -3258,8 +3269,6 @@ export default function SessionView({
       }
 
       const durationSeconds = getWorkoutDurationSeconds(s);
-
-      setWorkoutTimerNow(Date.now());
 
       return {
         ...s,
@@ -3468,18 +3477,17 @@ export default function SessionView({
       setTimerStartedAt(Date.now());
     }
 
+    // The JavaScript countdown drives the visible timer while this view is
+    // open. The native Live Activity owns its own timing in the background,
+    // so reconciling at lifecycle and timer-state boundaries preserves
+    // recovery without crossing the native bridge every second.
     void reconcileNativeRestTimer();
     document.addEventListener("visibilitychange", reconcileNativeRestTimer);
-    const reconciliationInterval = window.setInterval(
-      reconcileNativeRestTimer,
-      1000
-    );
 
     return () => {
       document.removeEventListener("visibilitychange", reconcileNativeRestTimer);
-      window.clearInterval(reconciliationInterval);
     };
-  }, [restMinutes, restRemainder]);
+  }, [timerPaused, timerRunning]);
 
   useEffect(() => {
     if (!timerRunning || !timerStartedAt) return;
@@ -6193,7 +6201,9 @@ export default function SessionView({
   const warmupRecommendations = warmupExercise
     ? getWarmupRecommendations(warmupExercise)
     : null;
-  const workoutUpdateOptions = getWorkoutUpdateOptions();
+  const workoutUpdateOptions = showApplyChangesPrompt
+    ? getWorkoutUpdateOptions()
+    : [];
   const displayedRestSeconds =
     timerRunning || timerPaused || timerFinished
       ? restSeconds
@@ -6224,11 +6234,6 @@ export default function SessionView({
       : spotifyState.connected && spotifyState.isPaused === false
         ? "#1db954"
         : "var(--text-muted)";
-  const spotifyTrackProgress = getSpotifyTrackProgress(
-    spotifyState,
-    spotifyPlaybackNow
-  );
-
   return (
     <div
       style={{
@@ -6958,7 +6963,7 @@ export default function SessionView({
                     </button>
                   </div>
                 )}
-                {expandedSessionUtility !== "spotify" && spotifyTrackProgress && (
+                {expandedSessionUtility !== "spotify" && (
                   <div
                     style={{
                       bottom: "3px",
@@ -6968,7 +6973,10 @@ export default function SessionView({
                       right: "12px",
                     }}
                   >
-                    <SpotifyTrackProgress compact progress={spotifyTrackProgress} />
+                    <SpotifyTrackProgressDisplay
+                      compact
+                      spotifyState={spotifyState}
+                    />
                   </div>
                 )}
               </div>
@@ -7252,7 +7260,7 @@ export default function SessionView({
                   spotifyState.artistName ||
                   "Control playback without leaving your workout"}
               </div>
-              <SpotifyTrackProgress progress={spotifyTrackProgress} />
+              <SpotifyTrackProgressDisplay spotifyState={spotifyState} />
             </div>
             <div
               style={{
@@ -10096,7 +10104,7 @@ export default function SessionView({
                           lineHeight: 1.1,
                         }}
                       >
-                        {formatWorkoutDuration(workoutElapsedSeconds)}
+                        <WorkoutDurationDisplay session={session} />
                       </div>
                     </div>
                   </div>
