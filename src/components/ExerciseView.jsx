@@ -21,7 +21,7 @@ import {
 } from "../sync/exerciseCloudSync";
 import { isSupabaseConfigured, supabase } from "../sync/supabaseClient";
 import { assertRemoteWriteAllowed } from "../sync/remoteWritePolicy";
-import { exercisesMatch } from "../utils/workoutHistoryLookup";
+import { buildRecentPerformanceByExerciseId } from "../utils/exerciseRecentPerformance";
 import {
   BENCHMARK_FAMILY_OPTIONS,
   getBenchmarkFamilyKeyForExercise,
@@ -487,48 +487,14 @@ export default function ExerciseView({
   ]);
 
   const recentPerformanceByExerciseId = useMemo(() => {
-    const recentPerformance = new Map();
-
     if (!isTrainerTargetSelf) {
-      return recentPerformance;
+      return new Map();
     }
 
-    displayedExerciseLibrary.forEach((exercise) => {
-      let latest = null;
-
-      history.forEach((workout) => {
-        const historyExercise = workout.exercises?.find((candidate) =>
-          exercisesMatch(exercise, candidate)
-        );
-
-        if (!historyExercise) {
-          return;
-        }
-
-        const completedAt =
-          workout.completedAtIso ||
-          workout.completed_at ||
-          workout.completedAt ||
-          workout.created_at;
-        const completedTime = Date.parse(completedAt);
-
-        if (!Number.isFinite(completedTime) || completedTime <= (latest?.time || 0)) {
-          return;
-        }
-
-        latest = {
-          completedAt,
-          setCount: historyExercise.sets?.length || 0,
-          time: completedTime,
-        };
-      });
-
-      if (latest) {
-        recentPerformance.set(String(exercise.id), latest);
-      }
+    return buildRecentPerformanceByExerciseId({
+      exerciseLibrary: displayedExerciseLibrary,
+      history,
     });
-
-    return recentPerformance;
   }, [displayedExerciseLibrary, history, isTrainerTargetSelf]);
 
   const copyImageExercises = useMemo(() => {

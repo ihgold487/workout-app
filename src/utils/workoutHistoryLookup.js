@@ -71,6 +71,10 @@ function getComparableExerciseKey(exercise) {
   )}||${normalizeComparableLookupValue(formatList(exercise?.equipment))}`;
 }
 
+export function getExerciseHistoryMatchKeys(exercise) {
+  return [...new Set([getExerciseKey(exercise), getComparableExerciseKey(exercise)])];
+}
+
 export function exercisesMatch(leftExercise, rightExercise) {
   const leftId = getExerciseId(leftExercise);
   const rightId = getExerciseId(rightExercise);

@@ -121,7 +121,9 @@ h2 {
 }
 
 .home-view .app-page-header__icon,
-.nutrition-view .app-page-header__icon {
+.nutrition-view .app-page-header__icon,
+.exercise-library-view .app-page-header__icon,
+.plans-library-view .app-page-header__icon {
   background: transparent;
   border-color: transparent;
 }
