@@ -472,10 +472,16 @@ function getExerciseKey(exercise) {
   )}`;
 }
 
-function shouldDefaultPlateLoadingToTricepBar(exercise) {
+function getDefaultPlateLoadingEquipmentId(exercise) {
   const name = normalizeLookupValue(exercise?.name);
 
-  return /\b(crunch|crunches|sit up|sit ups|situp|situps)\b/.test(name);
+  if (name === "kneeling crunches" || name === "kneeling side crunches") {
+    return "cable";
+  }
+
+  return /\b(crunch|crunches|sit up|sit ups|situp|situps)\b/.test(name)
+    ? "tricepBar"
+    : null;
 }
 
 function getWorkoutDurationSeconds(session, now = Date.now()) {
@@ -707,11 +713,12 @@ export default function SessionView({
   }
 
   function getExercisePlateCalculatorEquipmentId(exercise, fallback = "barbell") {
-    if (shouldDefaultPlateLoadingToTricepBar(exercise)) {
-      return "tricepBar";
-    }
+    const defaultEquipmentId = getDefaultPlateLoadingEquipmentId(exercise);
 
-    return getPlateCalculatorEquipmentId(exercise?.equipment, fallback);
+    return (
+      defaultEquipmentId ||
+      getPlateCalculatorEquipmentId(exercise?.equipment, fallback)
+    );
   }
 
   function createCompletedWorkoutId(sessionId) {
