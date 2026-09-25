@@ -2429,6 +2429,7 @@ export default function ExerciseDetailDialog({
   const [rirPickerData, setRirPickerData] = useState(null);
   const [selectedHistoryKey, setSelectedHistoryKey] = useState(null);
   const historyChartRef = useRef(null);
+  const historyEntryRefs = useRef(new Map());
   const exerciseHistory = useMemo(
     () => buildExerciseHistory(exercise, history, bodyWeightEntries),
     [bodyWeightEntries, exercise, history]
@@ -2512,6 +2513,10 @@ export default function ExerciseDetailDialog({
       return;
     }
 
+    const entryKey = getHistoryEntryKey(entry);
+    const isRepeatSelection =
+      chartMetric === metric && selectedHistoryKey === entryKey;
+
     const latestDateKey = exerciseHistory.at(-1)?.completedDateKey;
     const shouldShowAllHistory =
       rangeDays &&
@@ -2523,7 +2528,19 @@ export default function ExerciseDetailDialog({
       metric,
       ...(shouldShowAllHistory ? { rangeDays: null } : {}),
     });
-    setSelectedHistoryKey(getHistoryEntryKey(entry));
+    setSelectedHistoryKey(entryKey);
+
+    if (isRepeatSelection) {
+      window.requestAnimationFrame(() => {
+        const historyEntry = historyEntryRefs.current.get(entryKey);
+
+        historyEntry?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+        historyEntry?.focus({ preventScroll: true });
+      });
+    }
   }
 
   function closeExerciseDetail() {
@@ -2689,15 +2706,21 @@ export default function ExerciseDetailDialog({
           background: "var(--surface-raised)",
           borderRadius: "18px 18px 0 0",
           boxShadow: "0 -8px 28px rgba(0,0,0,.2)",
+          display: "flex",
+          flexDirection: "column",
           maxHeight: "88vh",
           maxWidth: "620px",
-          overflow: "auto",
           padding: "14px",
           paddingBottom: "calc(14px + env(safe-area-inset-bottom))",
+          overflow: "hidden",
           width: "100%",
         }}
       >
         <div
+          className="exercise-detail-sheet__header"
+          style={{ flexShrink: 0 }}
+        >
+          <div
           style={{
             alignItems: "center",
             display: "flex",
@@ -2786,80 +2809,88 @@ export default function ExerciseDetailDialog({
               <X size={18} />
             </button>
           </div>
-        </div>
-
-        {activeDetailTab === "history" && (
-          <div
-            aria-label="Exercise history summary"
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              display: "grid",
-              gap: "10px",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              marginTop: "12px",
-              padding: "10px",
-            }}
-          >
-            <HistorySummaryItem
-              icon={CalendarCheck}
-              label="Workouts"
-              value={historySummary.workouts}
-            />
-            <HistorySummaryItem
-              icon={Trophy}
-              label="Max weight"
-              onClick={() => selectMetricHistoryEntry("maxWeight")}
-              value={
-                historySummary.maxWeight == null
-                  ? "—"
-                  : `${historySummary.maxWeight} lb`
-              }
-            />
-            <HistorySummaryItem
-              icon={Dumbbell}
-              label="e1RM"
-              onClick={() => selectMetricHistoryEntry("e1rm")}
-              value={formatE1RM(historySummary.maxE1RM)}
-            />
           </div>
-        )}
 
-        <div
-          role="tablist"
-          aria-label="Exercise detail tabs"
-          style={{
-            display: "grid",
-            gap: "6px",
-            gridTemplateColumns: `repeat(${detailTabs.length}, minmax(0, 1fr))`,
-            marginTop: "12px",
-          }}
-        >
-          {detailTabs.map(([value, label, Icon]) => (
-            <button
-              key={value}
-              aria-selected={activeDetailTab === value}
-              onClick={() => setActiveTab(value)}
-              role="tab"
+          {activeDetailTab === "history" && (
+            <div
+              aria-label="Exercise history summary"
               style={{
-                alignItems: "center",
-                background:
-                  activeDetailTab === value ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--button-bg)",
-                borderColor:
-                  activeDetailTab === value ? "var(--accent)" : "var(--border)",
-                color: activeDetailTab === value ? "var(--accent)" : "var(--button-text)",
-                display: "inline-flex",
-                gap: "6px",
-                justifyContent: "center",
-                minHeight: "40px",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                display: "grid",
+                gap: "10px",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                marginTop: "12px",
+                padding: "10px",
               }}
             >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
+              <HistorySummaryItem
+                icon={CalendarCheck}
+                label="Workouts"
+                value={historySummary.workouts}
+              />
+              <HistorySummaryItem
+                icon={Trophy}
+                label="Max weight"
+                onClick={() => selectMetricHistoryEntry("maxWeight")}
+                value={
+                  historySummary.maxWeight == null
+                    ? "—"
+                    : `${historySummary.maxWeight} lb`
+                }
+              />
+              <HistorySummaryItem
+                icon={Dumbbell}
+                label="e1RM"
+                onClick={() => selectMetricHistoryEntry("e1rm")}
+                value={formatE1RM(historySummary.maxE1RM)}
+              />
+            </div>
+          )}
+
+          <div
+            role="tablist"
+            aria-label="Exercise detail tabs"
+            style={{
+              display: "grid",
+              gap: "6px",
+              gridTemplateColumns: `repeat(${detailTabs.length}, minmax(0, 1fr))`,
+              marginTop: "12px",
+            }}
+          >
+            {detailTabs.map(([value, label, Icon]) => (
+              <button
+                key={value}
+                aria-selected={activeDetailTab === value}
+                onClick={() => setActiveTab(value)}
+                role="tab"
+                style={{
+                  alignItems: "center",
+                  background:
+                    activeDetailTab === value ? "color-mix(in srgb, var(--accent) 14%, var(--surface))" : "var(--button-bg)",
+                  borderColor:
+                    activeDetailTab === value ? "var(--accent)" : "var(--border)",
+                  color: activeDetailTab === value ? "var(--accent)" : "var(--button-text)",
+                  display: "inline-flex",
+                  gap: "6px",
+                  justifyContent: "center",
+                  minHeight: "40px",
+                }}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
+        <div
+          style={{
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflowY: "auto",
+          }}
+        >
         {activeDetailTab === "info" ? (
           <div
             style={{
@@ -3187,6 +3218,13 @@ export default function ExerciseDetailDialog({
                           <button
                             aria-pressed={isSelectedEntry}
                             onClick={() => selectHistoryEntry(entry)}
+                            ref={(element) => {
+                              if (element) {
+                                historyEntryRefs.current.set(entryKey, element);
+                              } else {
+                                historyEntryRefs.current.delete(entryKey);
+                              }
+                            }}
                             type="button"
                             style={{
                               background: "transparent",
@@ -3417,6 +3455,7 @@ export default function ExerciseDetailDialog({
             )}
           </div>
         )}
+      </div>
       </div>
       {rangeSheetOpen && (
         <SelectionSheet
