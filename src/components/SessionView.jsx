@@ -6273,6 +6273,49 @@ export default function SessionView({
             display: none;
           }
 
+          .session-utilities__timer-summary-button {
+            flex: 1 1 auto;
+          }
+
+          .session-utilities__timer-pill--active {
+            box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent),
+              0 5px 14px rgba(0, 0, 0, 0.06);
+          }
+
+          .session-utilities__spotify-pill--secondary {
+            background: var(--surface-muted) !important;
+            border-color: color-mix(in srgb, var(--border) 82%, transparent) !important;
+          }
+
+          .session-utilities__compact-action,
+          .session-utilities__expanded-action,
+          .session-utilities__spotify-summary-button,
+          .session-utilities__spotify-artwork-button {
+            touch-action: manipulation;
+          }
+
+          .session-utilities__expanded {
+            box-shadow: 0 7px 18px rgba(0, 0, 0, 0.065);
+          }
+
+          .session-utilities__expanded--timer {
+            position: relative;
+          }
+
+          .session-utilities__expanded--spotify {
+            border-left: 3px solid color-mix(in srgb, #1db954 60%, var(--border)) !important;
+          }
+
+          @media (max-width: 390px) {
+            .session-utilities__summary {
+              grid-template-columns: minmax(0, 1fr);
+            }
+
+            .session-utilities__spotify-pill {
+              justify-self: end;
+            }
+          }
+
           .session-current-exercise-panel {
             animation-duration: 260ms;
             animation-fill-mode: both;
@@ -6599,6 +6642,7 @@ export default function SessionView({
         )}
         <div
           aria-label="Workout utilities"
+          className="session-utilities"
           style={{
             background: "color-mix(in srgb, var(--surface-raised) 88%, transparent)",
             border: "1px solid var(--border)",
@@ -6609,14 +6653,20 @@ export default function SessionView({
           }}
         >
           <div
+            className="session-utilities__summary"
             style={{
               alignItems: "center",
-              display: "flex",
+              display: "grid",
               gap: "6px",
-              justifyContent: "center",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
             }}
           >
             <div
+              className={`session-utilities__timer-pill${
+                timerRunning || timerPaused || timerFinished
+                  ? " session-utilities__timer-pill--active"
+                  : ""
+              }`}
               style={{
                 alignItems: "center",
                 background: timerFinished
@@ -6641,11 +6691,13 @@ export default function SessionView({
                 fontSize: "13px",
                 fontWeight: 700,
                 gap: "3px",
-                minHeight: "36px",
-                padding: "4px 6px",
+                minHeight: "44px",
+                minWidth: 0,
+                padding: "0 3px",
               }}
             >
               <button
+                className="session-utilities__timer-summary-button"
                 aria-expanded={expandedSessionUtility === "timer"}
                 aria-label={
                   `${restTimerStateLabel}, ${
@@ -6670,18 +6722,30 @@ export default function SessionView({
                   fontSize: "13px",
                   fontWeight: 700,
                   gap: "6px",
-                  minHeight: "26px",
-                  padding: "2px 4px",
+                  minHeight: "42px",
+                  minWidth: 0,
+                  padding: "3px 5px",
                 }}
                 type="button"
               >
-                <Timer size={21} />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-flex",
+                    flex: "0 0 21px",
+                    height: "21px",
+                    width: "21px",
+                  }}
+                >
+                  <Timer size={21} strokeWidth={2.25} />
+                </span>
                 <span
                   aria-hidden="true"
                   style={{
                     display: "grid",
+                    flex: "1 1 auto",
                     lineHeight: 1.05,
-                    minWidth: "62px",
+                    minWidth: "54px",
                     textAlign: "left",
                   }}
                 >
@@ -6741,6 +6805,7 @@ export default function SessionView({
                 <>
                   {!timerFinished && (
                     <button
+                      className="session-utilities__compact-action"
                       aria-label={timerRunning ? "Pause rest timer" : "Start rest timer"}
                       disabled={
                         !timerRunning &&
@@ -6754,10 +6819,10 @@ export default function SessionView({
                         border: 0,
                         color: "inherit",
                         display: "inline-flex",
-                        height: "28px",
+                        height: "40px",
                         justifyContent: "center",
                         padding: "4px",
-                        width: "28px",
+                        width: "40px",
                       }}
                       type="button"
                     >
@@ -6765,6 +6830,7 @@ export default function SessionView({
                     </button>
                   )}
                   <button
+                    className="session-utilities__compact-action"
                     aria-label="Reset rest timer"
                     disabled={!timerRunning && !timerPaused && !timerFinished}
                     onClick={resetRestTimer}
@@ -6774,10 +6840,10 @@ export default function SessionView({
                       border: 0,
                       color: "inherit",
                       display: "inline-flex",
-                      height: "28px",
+                      height: "40px",
                       justifyContent: "center",
                       padding: "4px",
-                      width: "28px",
+                      width: "40px",
                     }}
                     type="button"
                   >
@@ -6789,6 +6855,11 @@ export default function SessionView({
 
             {canUseNativeSpotifyPlayback() && (
               <div
+                className={`session-utilities__spotify-pill${
+                  timerRunning || timerPaused || timerFinished
+                    ? " session-utilities__spotify-pill--secondary"
+                    : ""
+                }`}
                 style={{
                   alignItems: "center",
                   background:
@@ -6799,13 +6870,14 @@ export default function SessionView({
                   borderRadius: "999px",
                   color: "var(--text)",
                   display: "inline-flex",
-                  minHeight: "38px",
+                  minHeight: "44px",
                   overflow: "hidden",
                   padding: "2px",
                   position: "relative",
                 }}
               >
                 <button
+                  className="session-utilities__spotify-summary-button"
                   aria-expanded={expandedSessionUtility === "spotify"}
                   aria-label={`${spotifyCompactLabel}. ${
                     expandedSessionUtility === "spotify"
@@ -6823,11 +6895,11 @@ export default function SessionView({
                     border: 0,
                     color: "inherit",
                     display: "inline-flex",
-                    height: "34px",
+                    height: "40px",
                     justifyContent: "center",
                     padding: "4px",
                     position: "relative",
-                    width: expandedSessionUtility === "spotify" ? "auto" : "34px",
+                    width: "40px",
                   }}
                   title={spotifyCompactLabel}
                   type="button"
@@ -6855,20 +6927,6 @@ export default function SessionView({
                       }}
                     />
                   </span>
-                  {expandedSessionUtility === "spotify" && (
-                    <span
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 700,
-                        maxWidth: "min(34vw, 150px)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {spotifyState.trackName || "Spotify"}
-                    </span>
-                  )}
                 </button>
                 {expandedSessionUtility !== "spotify" && (
                   <div
@@ -6880,6 +6938,7 @@ export default function SessionView({
                     }}
                   >
                     <button
+                      className="session-utilities__compact-action"
                       aria-label="Previous Spotify track"
                       disabled={
                         spotifyBusy ||
@@ -6893,7 +6952,7 @@ export default function SessionView({
                         border: 0,
                         color: "inherit",
                         display: "inline-flex",
-                        height: "26px",
+                        height: "40px",
                         justifyContent: "center",
                         opacity:
                           spotifyBusy ||
@@ -6902,13 +6961,14 @@ export default function SessionView({
                             ? 0.38
                             : 1,
                         padding: "4px",
-                        width: "26px",
+                        width: "40px",
                       }}
                       type="button"
                     >
                       <SkipBack size={15} />
                     </button>
                     <button
+                      className="session-utilities__compact-action"
                       aria-label={
                         spotifyState.connected
                           ? spotifyState.isPaused
@@ -6924,11 +6984,11 @@ export default function SessionView({
                         border: 0,
                         color: "inherit",
                         display: "inline-flex",
-                        height: "28px",
+                        height: "40px",
                         justifyContent: "center",
                         opacity: spotifyBusy ? 0.38 : 1,
                         padding: "4px",
-                        width: "28px",
+                        width: "40px",
                       }}
                       type="button"
                     >
@@ -6940,6 +7000,7 @@ export default function SessionView({
                       )}
                     </button>
                     <button
+                      className="session-utilities__compact-action"
                       aria-label="Next Spotify track"
                       disabled={
                         spotifyBusy ||
@@ -6953,7 +7014,7 @@ export default function SessionView({
                         border: 0,
                         color: "inherit",
                         display: "inline-flex",
-                        height: "26px",
+                        height: "40px",
                         justifyContent: "center",
                         opacity:
                           spotifyBusy ||
@@ -6962,7 +7023,7 @@ export default function SessionView({
                             ? 0.38
                             : 1,
                         padding: "4px",
-                        width: "26px",
+                        width: "40px",
                       }}
                       type="button"
                     >
@@ -6992,6 +7053,8 @@ export default function SessionView({
 
           {expandedSessionUtility === "timer" && (
         <div
+          aria-label={`${restTimerStateLabel} rest timer controls`}
+          className="session-utilities__expanded session-utilities__expanded--timer"
           style={{
             background: timerFinished
               ? "var(--danger-bg)"
@@ -7009,27 +7072,27 @@ export default function SessionView({
               ? "2px solid #d6a100"
               : "1px solid var(--border)",
 
-            padding: "6px",
+            borderRadius: "12px",
+            padding: "8px",
             marginTop: "6px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: "8px",
+            gap: "6px",
             flexWrap: "nowrap",
           }}
         >
-          <Timer size={28} />
-
           <button
+            className="session-utilities__expanded-action"
             aria-label="Subtract 15 seconds from rest timer"
             onClick={() => adjustRestTimer(-15)}
             style={{
               alignItems: "center",
               borderRadius: "999px",
               display: "inline-flex",
-              height: "34px",
+              height: "44px",
               justifyContent: "center",
-              minWidth: "34px",
+              minWidth: "44px",
               padding: "6px",
             }}
             type="button"
@@ -7044,21 +7107,9 @@ export default function SessionView({
               flexDirection: "column",
               justifyContent: "center",
               minWidth:
-                timerRunning || timerPaused || timerFinished ? "72px" : "112px",
+                timerRunning || timerPaused || timerFinished ? "72px" : "100px",
             }}
           >
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 800,
-                letterSpacing: ".02em",
-                lineHeight: 1,
-                marginBottom: "2px",
-                textTransform: "uppercase",
-              }}
-            >
-              {restTimerStateLabel}
-            </span>
             {timerRunning || timerPaused || timerFinished ? (
               <strong
                 aria-live={timerFinished ? "polite" : "off"}
@@ -7083,8 +7134,10 @@ export default function SessionView({
                 <select
                   aria-label="Rest timer minutes"
                   style={{
-                    fontSize: "16px",
-                    padding: "4px",
+                    fontSize: "18px",
+                    minHeight: "44px",
+                    minWidth: "44px",
+                    padding: "5px",
                   }}
                   value={restMinutes}
                   onChange={(e) => setRestMinutes(Number(e.target.value))}
@@ -7101,8 +7154,10 @@ export default function SessionView({
                 <select
                   aria-label="Rest timer seconds"
                   style={{
-                    fontSize: "16px",
-                    padding: "4px",
+                    fontSize: "18px",
+                    minHeight: "44px",
+                    minWidth: "44px",
+                    padding: "5px",
                   }}
                   value={restRemainder}
                   onChange={(e) => setRestRemainder(Number(e.target.value))}
@@ -7122,15 +7177,16 @@ export default function SessionView({
           </div>
 
           <button
+            className="session-utilities__expanded-action"
             aria-label="Add 15 seconds to rest timer"
             onClick={() => adjustRestTimer(15)}
             style={{
               alignItems: "center",
               borderRadius: "999px",
               display: "inline-flex",
-              height: "34px",
+              height: "44px",
               justifyContent: "center",
-              minWidth: "34px",
+              minWidth: "44px",
               padding: "6px",
             }}
             type="button"
@@ -7139,6 +7195,7 @@ export default function SessionView({
           </button>
 
           <button
+            className="session-utilities__expanded-action"
             aria-hidden={timerFinished ? "true" : undefined}
             aria-label={
               timerFinished
@@ -7158,8 +7215,8 @@ export default function SessionView({
               display: "inline-flex",
               justifyContent: "center",
               lineHeight: "1",
-              minHeight: "38px",
-              minWidth: "38px",
+              minHeight: "44px",
+              minWidth: "44px",
               padding: "8px 6px",
               visibility: timerFinished ? "hidden" : "visible",
             }}
@@ -7170,14 +7227,15 @@ export default function SessionView({
           </button>
 
           <button
+            className="session-utilities__expanded-action"
             aria-label="Reset rest timer"
             disabled={!timerRunning && !timerPaused && !timerFinished}
             style={{
               alignItems: "center",
               display: "inline-flex",
               justifyContent: "center",
-              minHeight: "38px",
-              minWidth: "38px",
+              minHeight: "44px",
+              minWidth: "44px",
               padding: "8px 6px",
             }}
             onClick={() => {
@@ -7193,47 +7251,55 @@ export default function SessionView({
         {canUseNativeSpotifyPlayback() &&
           expandedSessionUtility === "spotify" && (
           <div
+            className="session-utilities__expanded session-utilities__expanded--spotify"
             style={{
               alignItems: "center",
               background: "var(--surface-raised)",
               border: "1px solid var(--border)",
               borderRadius: "10px",
-              display: "flex",
-              gap: "10px",
+              display: "grid",
+              gap: "8px",
               marginTop: "6px",
               padding: "8px 10px",
             }}
           >
-            <button
-              aria-label="Open Spotify"
-              onClick={() => void openSpotifyApp()}
-              style={{
-                alignItems: "center",
-                background: "transparent",
-                border: 0,
-                display: "inline-flex",
-                flexShrink: 0,
-                justifyContent: "center",
-                padding: "6px",
-              }}
-              type="button"
-            >
-              <SpotifyArtwork
-                imageDataURL={
-                  spotifyState.connected && spotifyState.isPaused === false
-                    ? spotifyState.playlistImageDataURL
-                    : null
-                }
-              />
-            </button>
             <div
               style={{
+                alignItems: "center",
                 display: "grid",
-                flex: "1 1 auto",
-                gap: "4px",
+                gap: "8px",
+                gridTemplateColumns: "44px minmax(0, 1fr) auto",
                 minWidth: 0,
               }}
             >
+              <button
+                className="session-utilities__spotify-artwork-button"
+                aria-label="Open Spotify"
+                onClick={() => void openSpotifyApp()}
+                style={{
+                  alignItems: "center",
+                  background: "transparent",
+                  border: 0,
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  minHeight: "44px",
+                  minWidth: "44px",
+                  padding: "6px",
+                }}
+                type="button"
+              >
+                <SpotifyArtwork
+                  imageDataURL={spotifyState.playlistImageDataURL}
+                />
+              </button>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 0,
+                  lineHeight: 1.15,
+                  minWidth: 0,
+                }}
+              >
               <div
                 style={{
                   fontSize: "13px",
@@ -7267,17 +7333,17 @@ export default function SessionView({
                   spotifyState.artistName ||
                   "Control playback without leaving your workout"}
               </div>
-              <SpotifyTrackProgressDisplay spotifyState={spotifyState} />
-            </div>
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                flexShrink: 0,
-                gap: "4px",
-              }}
-            >
+              </div>
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexShrink: 0,
+                  gap: "2px",
+                }}
+              >
               <button
+                className="session-utilities__expanded-action"
                 aria-label="Previous Spotify track"
                 disabled={
                   spotifyBusy ||
@@ -7285,13 +7351,14 @@ export default function SessionView({
                   !spotifyState.canSkipPrevious
                 }
                 onClick={() => void handleSpotifySkip("previous")}
-                style={{ padding: "8px" }}
+                style={{ minHeight: "40px", minWidth: "40px", padding: "8px" }}
                 title="Previous"
                 type="button"
               >
                 <SkipBack size={18} />
               </button>
               <button
+                className="session-utilities__expanded-action"
                 aria-label={
                   spotifyState.connected
                     ? spotifyState.isPaused
@@ -7301,7 +7368,7 @@ export default function SessionView({
                 }
                 disabled={spotifyBusy}
                 onClick={() => void handleSpotifyPlayback()}
-                style={{ padding: "8px" }}
+                style={{ minHeight: "40px", minWidth: "40px", padding: "8px" }}
                 title={spotifyState.connected ? "Play or pause" : "Connect Spotify"}
                 type="button"
               >
@@ -7312,6 +7379,7 @@ export default function SessionView({
                 )}
               </button>
               <button
+                className="session-utilities__expanded-action"
                 aria-label="Next Spotify track"
                 disabled={
                   spotifyBusy ||
@@ -7319,13 +7387,15 @@ export default function SessionView({
                   !spotifyState.canSkipNext
                 }
                 onClick={() => void handleSpotifySkip("next")}
-                style={{ padding: "8px" }}
+                style={{ minHeight: "40px", minWidth: "40px", padding: "8px" }}
                 title="Next"
                 type="button"
               >
                 <SkipForward size={18} />
               </button>
+              </div>
             </div>
+            <SpotifyTrackProgressDisplay spotifyState={spotifyState} />
           </div>
         )}
         </div>
