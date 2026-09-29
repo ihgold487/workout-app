@@ -6277,6 +6277,12 @@ export default function SessionView({
             flex: 1 1 auto;
           }
 
+          .session-utilities__timer-summary-button--icon-only {
+            box-sizing: border-box;
+            flex: 0 0 40px;
+            width: 40px;
+          }
+
           .session-utilities__timer-pill--active {
             box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent),
               0 5px 14px rgba(0, 0, 0, 0.06);
@@ -6658,7 +6664,14 @@ export default function SessionView({
               alignItems: "center",
               display: "grid",
               gap: "6px",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gridTemplateColumns:
+                expandedSessionUtility === "timer"
+                  ? "auto minmax(0, 1fr)"
+                  : expandedSessionUtility === "spotify"
+                  ? "auto auto"
+                  : "minmax(0, 1fr) auto",
+              justifyContent:
+                expandedSessionUtility === "spotify" ? "space-between" : undefined,
             }}
           >
             <div
@@ -6686,6 +6699,7 @@ export default function SessionView({
                   ? "1px solid #d6a100"
                   : "1px solid var(--border)",
                 borderRadius: "999px",
+                boxSizing: "border-box",
                 color: "var(--text)",
                 display: "inline-flex",
                 fontSize: "13px",
@@ -6693,11 +6707,16 @@ export default function SessionView({
                 gap: "3px",
                 minHeight: "44px",
                 minWidth: 0,
-                padding: "0 3px",
+                padding: expandedSessionUtility === "timer" ? "2px" : "0 3px",
+                width: expandedSessionUtility === "timer" ? "44px" : undefined,
               }}
             >
               <button
-                className="session-utilities__timer-summary-button"
+                className={`session-utilities__timer-summary-button${
+                  expandedSessionUtility === "timer"
+                    ? " session-utilities__timer-summary-button--icon-only"
+                    : ""
+                }`}
                 aria-expanded={expandedSessionUtility === "timer"}
                 aria-label={
                   `${restTimerStateLabel}, ${
@@ -6722,9 +6741,11 @@ export default function SessionView({
                   fontSize: "13px",
                   fontWeight: 700,
                   gap: "6px",
+                  justifyContent:
+                    expandedSessionUtility === "timer" ? "center" : undefined,
                   minHeight: "42px",
                   minWidth: 0,
-                  padding: "3px 5px",
+                  padding: expandedSessionUtility === "timer" ? 0 : "3px 5px",
                 }}
                 type="button"
               >
@@ -6739,66 +6760,68 @@ export default function SessionView({
                 >
                   <Timer size={21} strokeWidth={2.25} />
                 </span>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    display: "grid",
-                    flex: "1 1 auto",
-                    lineHeight: 1.05,
-                    minWidth: "54px",
-                    textAlign: "left",
-                  }}
-                >
+                {expandedSessionUtility !== "timer" && (
                   <span
+                    aria-hidden="true"
                     style={{
-                      fontSize: "10px",
-                      fontWeight: 800,
-                      letterSpacing: ".02em",
-                      textTransform: "uppercase",
+                      display: "grid",
+                      flex: "1 1 auto",
+                      lineHeight: 1.05,
+                      minWidth: "54px",
+                      textAlign: "left",
                     }}
                   >
-                    {restTimerStateLabel}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "13px",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {timerFinished ? `Over ${restTimerTimeLabel}` : restTimerTimeLabel}
-                  </span>
-                  {(timerRunning || timerPaused) && (
                     <span
                       style={{
-                        background: "color-mix(in srgb, currentColor 20%, transparent)",
-                        borderRadius: "inherit",
-                        display: "block",
-                        height: "3px",
-                        marginTop: "3px",
-                        overflow: "hidden",
-                        width: "100%",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: ".02em",
+                        textTransform: "uppercase",
                       }}
                     >
+                      {restTimerStateLabel}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {timerFinished ? `Over ${restTimerTimeLabel}` : restTimerTimeLabel}
+                    </span>
+                    {(timerRunning || timerPaused) && (
                       <span
                         style={{
-                          background: "currentColor",
+                          background: "color-mix(in srgb, currentColor 20%, transparent)",
                           borderRadius: "inherit",
                           display: "block",
-                          height: "100%",
-                          transition: timerPaused ? "none" : "width 1s linear",
-                          width: `${Math.max(
-                            0,
-                            Math.min(
-                              100,
-                              (restSeconds / Math.max(1, restTimerProgressTotal)) *
-                                100
-                            )
-                          )}%`,
+                          height: "3px",
+                          marginTop: "3px",
+                          overflow: "hidden",
+                          width: "100%",
                         }}
-                      />
-                    </span>
-                  )}
-                </span>
+                      >
+                        <span
+                          style={{
+                            background: "currentColor",
+                            borderRadius: "inherit",
+                            display: "block",
+                            height: "100%",
+                            transition: timerPaused ? "none" : "width 1s linear",
+                            width: `${Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                (restSeconds / Math.max(1, restTimerProgressTotal)) *
+                                  100
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
 
               {expandedSessionUtility !== "timer" && (
@@ -7075,13 +7098,19 @@ export default function SessionView({
             borderRadius: "12px",
             padding: "8px",
             marginTop: "6px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            display: "grid",
             gap: "6px",
-            flexWrap: "nowrap",
           }}
         >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "6px",
+              justifyContent: "center",
+              minWidth: 0,
+            }}
+          >
           <button
             className="session-utilities__expanded-action"
             aria-label="Subtract 15 seconds from rest timer"
@@ -7104,7 +7133,7 @@ export default function SessionView({
             style={{
               alignItems: "center",
               display: "flex",
-              flexDirection: "column",
+              flexDirection: "row",
               justifyContent: "center",
               minWidth:
                 timerRunning || timerPaused || timerFinished ? "72px" : "100px",
@@ -7116,6 +7145,7 @@ export default function SessionView({
                 style={{
                   fontSize: "20px",
                   fontVariantNumeric: "tabular-nums",
+                  lineHeight: 1,
                   textAlign: "center",
                 }}
               >
@@ -7123,14 +7153,7 @@ export default function SessionView({
                 {restTimerTimeLabel}
               </strong>
             ) : (
-              <div
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  flexDirection: "row",
-                  justifyContent: "center",
-                }}
-              >
+              <>
                 <select
                   aria-label="Rest timer minutes"
                   style={{
@@ -7172,7 +7195,7 @@ export default function SessionView({
                     </option>
                     ))}
                 </select>
-              </div>
+              </>
             )}
           </div>
 
@@ -7245,6 +7268,54 @@ export default function SessionView({
           >
             <RefreshCw size={19} />
           </button>
+          </div>
+
+          {(timerRunning || timerPaused || timerFinished) && (
+            <div
+              style={{
+                width: "100%",
+              }}
+            >
+              <div
+                aria-label={`Rest timer countdown: ${
+                  timerFinished ? `over ${restTimerTimeLabel}` : restTimerTimeLabel
+                }`}
+                aria-valuemax={restTimerProgressTotal}
+                aria-valuemin={0}
+                aria-valuenow={timerFinished ? 0 : restSeconds}
+                role="progressbar"
+                style={{
+                  background: "color-mix(in srgb, currentColor 18%, transparent)",
+                  borderRadius: "999px",
+                  height: "5px",
+                  overflow: "hidden",
+                  width: "100%",
+                }}
+              >
+                <span
+                  style={{
+                    background: "currentColor",
+                    borderRadius: "inherit",
+                    display: "block",
+                    height: "100%",
+                    transition:
+                      timerPaused || timerFinished ? "none" : "width 1s linear",
+                    width: `${
+                      timerFinished
+                        ? 0
+                        : Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (restSeconds / Math.max(1, restTimerProgressTotal)) * 100
+                            )
+                          )
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
         )}
 

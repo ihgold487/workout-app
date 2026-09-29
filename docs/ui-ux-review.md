@@ -117,8 +117,9 @@ Initial session-header increment implemented and build-validated; longer real-wo
 - [x] Clarify rest-timer states and improve compact and expanded Spotify status presentation while preserving collapsed playback controls.
 - [x] Add a contextual return-to-current-set action while previewing another exercise.
 - [ ] Continue real-world validation of the updated header, exercise preview behavior, timer cleanup, supersets, and workout completion.
-- [ ] Review remaining active-session tap targets and set-entry ergonomics.
-- [ ] Refine the expanded rest-timer experience and reduce competition among workout utilities.
+- [x] Enlarge compact timer and Spotify controls and all expanded utility actions while retaining compact icon sizing; continue separate validation of the densely tuned set-entry row.
+- [x] Give active, paused, and expired rest states stronger hierarchy; keep Spotify available but visually secondary during rest, and make expanded utility cards the clear detail surface.
+- [x] Keep the collapsed timer pill unchanged; use a centered icon-only pill while expanded, retain the numeric countdown between the time-adjustment controls, place the timeline alone beneath all controls, and prevent either compact utility from stretching when its companion is expanded.
 - [ ] Improve incomplete-set guidance before finishing a workout.
 
 - Make the active exercise and next incomplete set visually dominant.
