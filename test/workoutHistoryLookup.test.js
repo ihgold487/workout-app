@@ -99,6 +99,49 @@ test("a deload prefers deload history before normal training history", () => {
   assert.equal(performance?.workout.id, "deload-workout");
 });
 
+test("a deload uses the preceding corresponding plan workout before older deload history", () => {
+  const currentExercise = {
+    ...exercise,
+    sets: [{ reps: "9", rir: "5" }],
+  };
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: true,
+    exercise: currentExercise,
+    history: [
+      history[0],
+      {
+        completedAtIso: "2026-09-19T12:00:00.000Z",
+        exercises: [
+          {
+            ...exercise,
+            sets: [
+              {
+                actualReps: "9",
+                actualRir: "2",
+                actualWeight: "135",
+                reps: "9",
+                rir: "2",
+              },
+            ],
+          },
+        ],
+        id: "previous-corresponding-training-workout",
+        planId: "new-plan",
+        planWeek: 4,
+        planWorkoutId: "day-one",
+      },
+    ],
+    plan: plans[1],
+    planWeek: 5,
+    planWorkoutId: "day-one",
+    plans,
+    templateId: "day-one-template",
+    templates: repeatedExerciseTemplates,
+  });
+
+  assert.equal(performance?.workout.id, "previous-corresponding-training-workout");
+});
+
 test("normal training falls back to deload history when no normal result exists", () => {
   const performance = findLatestExercisePerformance({
     currentIsDeload: false,

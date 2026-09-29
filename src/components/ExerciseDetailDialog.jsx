@@ -19,6 +19,11 @@ import {
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
+import {
+  getPrescriptionZone,
+  parsePrescribedRepRange,
+  setMeetsBenchmarkZone,
+} from "../utils/benchmarkPlot";
 import { getExerciseWeightIncrement } from "../utils/weightIncrement";
 import { exercisesMatch } from "../utils/workoutHistoryLookup";
 import MuscleMap from "./MuscleMap";
@@ -126,7 +131,9 @@ function getInstructionSteps(exercise) {
 }
 
 function getSetValue(set, actualField) {
-  return set[actualField] || "";
+  const value = set?.[actualField];
+
+  return value == null ? "" : value;
 }
 
 function getDateKey(value) {
@@ -457,37 +464,6 @@ function parseHistoryNumber(value) {
   const parsed = Number.parseFloat(String(value ?? "").replace(/^\+/, ""));
 
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parsePrescribedRepRange(value) {
-  const values = String(value ?? "")
-    .match(/\d+(?:\.\d+)?/g)
-    ?.map(Number)
-    .filter(Number.isFinite);
-
-  if (!values?.length) return null;
-
-  return {
-    label: String(value).trim(),
-    max: Math.max(...values),
-    min: Math.min(...values),
-  };
-}
-
-function getPrescriptionZone(prescription) {
-  if (!prescription) return null;
-  if (prescription.min >= 3 && prescription.max <= 7) return "heavy";
-  if (prescription.min >= 8 && prescription.max <= 12) return "moderate";
-  return null;
-}
-
-function setMeetsPrescription(set) {
-  return (
-    set.prescribedRepRange &&
-    Number.isFinite(set.reps) &&
-    set.reps >= set.prescribedRepRange.min &&
-    set.reps <= set.prescribedRepRange.max
-  );
 }
 
 function isBarbellBenchPress(exercise) {
@@ -822,7 +798,7 @@ function buildBenchPressExperiment(exerciseHistory) {
         sets.filter(
           (set) =>
             set.prescriptionZone === "heavy" &&
-            setMeetsPrescription(set) &&
+            setMeetsBenchmarkZone(set) &&
             Number.isFinite(set.e1rm) &&
             Number.isFinite(set.rir) &&
             set.rir >= 0 &&
@@ -833,7 +809,7 @@ function buildBenchPressExperiment(exerciseHistory) {
         sets.filter(
           (set) =>
             set.prescriptionZone === "moderate" &&
-            setMeetsPrescription(set) &&
+            setMeetsBenchmarkZone(set) &&
             Number.isFinite(set.e1rm) &&
             Number.isFinite(set.rir) &&
             set.rir >= 0 &&
@@ -844,7 +820,7 @@ function buildBenchPressExperiment(exerciseHistory) {
         sets.filter(
           (set) =>
             set.prescriptionZone &&
-            setMeetsPrescription(set) &&
+            setMeetsBenchmarkZone(set) &&
             Number.isFinite(set.e1rm) &&
             Number.isFinite(set.rir) &&
             set.rir >= 3

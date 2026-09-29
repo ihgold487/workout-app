@@ -482,6 +482,31 @@ export function findLatestExercisePerformance({
   const canMatchPrescription =
     hasUsefulPrescriptionSignature(currentPrescriptionSignature);
 
+  // A deload changes RIR and often the set prescription, but its last-completed
+  // reference should still be the immediately preceding occurrence of this plan
+  // workout. Looking for an older deload first skips the relevant training-week
+  // performance and can surface a stale, unrelated deload instead.
+  if (resolvedCurrentIsDeload && hasPlanWorkoutScope) {
+    const previousWeekNumber =
+      planWeek != null && Number(planWeek) > 1 ? Number(planWeek) - 1 : null;
+    const previousPlanWorkout = findPlanWorkoutHistory({
+      currentSessionId,
+      history,
+      plan,
+      planWorkoutId,
+      weekNumber: previousWeekNumber,
+    });
+    const historyExercise = getMatchingHistoryExercise(previousPlanWorkout);
+
+    if (historyExercise) {
+      return {
+        exercise: historyExercise,
+        isPlanWorkoutScoped: true,
+        workout: previousPlanWorkout,
+      };
+    }
+  }
+
   const findForDeloadStatus = (expectedDeload) => {
     const matchesDeloadStatus = (historyWorkout) => {
       if (deloadStatusCache.has(historyWorkout)) {
