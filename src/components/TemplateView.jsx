@@ -48,6 +48,8 @@ import {
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import {
+  getHistoricalFatigueRatioForSet,
+  recommendDeloadTargetPrescription,
   recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
@@ -67,7 +69,8 @@ import {
 } from "../native/pickerHaptics";
 
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
-const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
+const DELOAD_TARGET_REDUCTION_PERCENT = 0.01;
+const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 
 function IconButton({
   children,
@@ -1260,29 +1263,58 @@ export default function TemplateView({
       );
 
       if (latestMaxE1RM > 0) {
-        const result = recommendTargetPrescription({
-          allowedRepWindow: 2,
-          bodyWeight: templateBodyWeight,
-          exercise: recommendationExercise,
-          goalMode: getGoalMode(plan),
-          preferredRepWindow: 2,
-          previousE1RM: latestMaxE1RM,
-          progressionPercent: isDeload
-            ? -DELOAD_TARGET_REDUCTION_PERCENT
-            : MAIN_TARGET_PROGRESSION_PERCENT,
-          targetReps,
-          targetRir,
-          weightIncrement: (weight) =>
-            getExerciseWeightIncrement(recommendationExercise, undefined, weight),
-        });
+        const latestE1RMs = (latestHistoryExercise?.sets || []).map((set) =>
+          calculateE1RM(
+            firstPresentValue(set.actualWeight),
+            firstPresentValue(set.actualReps),
+            firstPresentValue(set.actualRir),
+            null,
+            null,
+            null,
+            {
+              bodyWeight: historicalBodyWeight,
+              exercise: recommendationExercise,
+            }
+          )
+        );
+        const result = isDeload
+          ? recommendDeloadTargetPrescription({
+              allowedRepWindow: 2,
+              baselineE1RM: latestMaxE1RM,
+              bodyWeight: templateBodyWeight,
+              deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
+              exercise: recommendationExercise,
+              fatigueRatio: getHistoricalFatigueRatioForSet({
+                blendTowardFlat: FATIGUE_RATIO_BLEND_TOWARD_FLAT,
+                e1rms: latestE1RMs,
+                setIndex,
+              }),
+              preferredRepWindow: 2,
+              setIndex,
+              targetReps,
+              targetRir,
+              weightIncrement: (weight) =>
+                getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+            })
+          : recommendTargetPrescription({
+              allowedRepWindow: 2,
+              bodyWeight: templateBodyWeight,
+              exercise: recommendationExercise,
+              goalMode: getGoalMode(plan),
+              preferredRepWindow: 2,
+              previousE1RM: latestMaxE1RM,
+              progressionPercent: MAIN_TARGET_PROGRESSION_PERCENT,
+              targetReps,
+              targetRir,
+              weightIncrement: (weight) =>
+                getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+            });
 
         if (!isDeload) {
           return result?.recommendation || null;
         }
 
-        return [result?.recommendation, ...(result?.alternatives || [])].find(
-          (candidate) => candidate?.e1rm < latestMaxE1RM
-        ) || null;
+        return result?.recommendation || null;
       }
     }
 

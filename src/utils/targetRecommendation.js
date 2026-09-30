@@ -397,6 +397,7 @@ export function recommendTargetPrescription({
   bodyWeight,
   exercise,
   goalMode = "maintenance",
+  maximumE1RM,
   minWeight = 0,
   normalizeWeight,
   preferredRepWindow = 2,
@@ -407,6 +408,7 @@ export function recommendTargetPrescription({
   weightIncrement = 2.5,
 }) {
   const baselineE1RM = toNumber(previousE1RM);
+  const maximum = toNumber(maximumE1RM);
   const reps = toNumber(targetReps);
   const rir = toNumber(targetRir) ?? 0;
 
@@ -463,7 +465,10 @@ export function recommendTargetPrescription({
         exercise,
       });
 
-      if (e1rm == null) {
+      if (
+        e1rm == null ||
+        (maximum != null && e1rm > maximum + 0.0001)
+      ) {
         return;
       }
 
@@ -520,6 +525,69 @@ export function recommendTargetPrescription({
     recommendation,
     targetE1RM,
   };
+}
+
+export function getHistoricalFatigueRatioForSet({
+  e1rms,
+  setIndex,
+  blendTowardFlat = 0.5,
+}) {
+  const latestE1RMs = Array.isArray(e1rms) ? e1rms : [];
+  const resolvedSetIndex = Math.max(0, Math.floor(Number(setIndex) || 0));
+  const latestMaxE1RM = Math.max(
+    0,
+    ...latestE1RMs.filter(Number.isFinite)
+  );
+
+  if (!latestMaxE1RM || resolvedSetIndex < 1) {
+    return 1;
+  }
+
+  let previousCurveE1RM = latestMaxE1RM;
+
+  for (let index = 1; index <= resolvedSetIndex; index += 1) {
+    const rawSetE1RM = Number.isFinite(latestE1RMs[index])
+      ? latestE1RMs[index]
+      : previousCurveE1RM;
+
+    previousCurveE1RM = Math.min(previousCurveE1RM, rawSetE1RM);
+  }
+
+  const rawRatio = Math.min(1, Math.max(0, previousCurveE1RM / latestMaxE1RM));
+  const blend = Math.min(1, Math.max(0, Number(blendTowardFlat) || 0));
+
+  return 1 - (1 - rawRatio) * blend;
+}
+
+export function recommendDeloadTargetPrescription({
+  baselineE1RM,
+  deloadReductionPercent = 0.01,
+  fatigueRatio = 1,
+  setIndex = 0,
+  ...options
+}) {
+  const baseline = toNumber(baselineE1RM);
+
+  if (baseline == null) {
+    return null;
+  }
+
+  const reduction = Math.max(0, toNumber(deloadReductionPercent) ?? 0);
+  const historicalRatio = toNumber(fatigueRatio);
+  const appliesFatigue = Number(setIndex) > 0;
+  const resolvedFatigueRatio =
+    appliesFatigue && historicalRatio != null && historicalRatio > 0
+      ? Math.min(1, historicalRatio)
+      : 1;
+  const targetE1RM = baseline * (1 - reduction) * resolvedFatigueRatio;
+
+  return recommendTargetPrescription({
+    ...options,
+    goalMode: "maintenance",
+    maximumE1RM: targetE1RM,
+    previousE1RM: targetE1RM,
+    progressionPercent: 0,
+  });
 }
 
 export function recommendNextSetTargetAfterPerformance({

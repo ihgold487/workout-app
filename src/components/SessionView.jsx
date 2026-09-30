@@ -69,6 +69,8 @@ import {
 } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import {
+  getHistoricalFatigueRatioForSet,
+  recommendDeloadTargetPrescription,
   recommendNextSetTargetAfterPerformance,
   recommendSetTarget,
   recommendTargetPrescription,
@@ -124,7 +126,7 @@ import {
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = RIR_PICKER_VALUES;
 const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
-const DELOAD_TARGET_REDUCTION_PERCENT = 0.005;
+const DELOAD_TARGET_REDUCTION_PERCENT = 0.01;
 
 function formatSpotifyPlaybackTime(milliseconds) {
   const totalSeconds = Math.max(0, Math.floor(Number(milliseconds) / 1000) || 0);
@@ -969,18 +971,27 @@ export default function SessionView({
         : null;
 
     if (latestMaxE1RM) {
-      const recommendation = getRecommendationFromE1RM(
-        calculationExercise,
-        latestMaxE1RM,
-        reps,
-        rir,
-        isDeload
-          ? {
-              maxE1RM: latestMaxE1RM,
-              progressionPercent: -DELOAD_TARGET_REDUCTION_PERCENT,
-            }
-          : undefined
-      );
+      const recommendation = isDeload
+        ? recommendDeloadTargetPrescription({
+            baselineE1RM: latestMaxE1RM,
+            bodyWeight: sessionBodyWeight,
+            deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
+            exercise: calculationExercise,
+            fatigueRatio: getNormalizedLatestFatigueRatio(exercise, setIndex),
+            normalizeWeight: (weight) =>
+              getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+            setIndex,
+            targetReps: reps,
+            targetRir: rir,
+            weightIncrement: (weight) =>
+              getExerciseWeightIncrement(calculationExercise, undefined, weight),
+          })?.recommendation
+        : getRecommendationFromE1RM(
+            calculationExercise,
+            latestMaxE1RM,
+            reps,
+            rir
+          );
       const weight = recommendation?.weight;
 
       return weight != null ? String(weight) : "";
@@ -1105,28 +1116,11 @@ export default function SessionView({
     const latestSets =
       getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
     const latestE1RMs = latestSets.map((set) => getHistorySetE1RM(exercise, set));
-    const latestMaxE1RM = Math.max(
-      0,
-      ...latestE1RMs.filter(Number.isFinite)
-    );
-
-    if (!latestMaxE1RM || setIndex < 1) {
-      return 1;
-    }
-
-    let previousCurveE1RM = latestMaxE1RM;
-
-    for (let index = 1; index <= setIndex; index += 1) {
-      const rawSetE1RM = Number.isFinite(latestE1RMs[index])
-        ? latestE1RMs[index]
-        : previousCurveE1RM;
-
-      previousCurveE1RM = Math.min(previousCurveE1RM, rawSetE1RM);
-    }
-
-    const rawRatio = Math.min(1, Math.max(0, previousCurveE1RM / latestMaxE1RM));
-
-    return 1 - (1 - rawRatio) * FATIGUE_RATIO_BLEND_TOWARD_FLAT;
+    return getHistoricalFatigueRatioForSet({
+      blendTowardFlat: FATIGUE_RATIO_BLEND_TOWARD_FLAT,
+      e1rms: latestE1RMs,
+      setIndex,
+    });
   }
 
   function getLatestAdjacentFatigueRatio(exercise, setIndex) {
@@ -4605,6 +4599,55 @@ export default function SessionView({
       weightIncrement: (weight) =>
         getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
+
+    const shouldPrioritizeLiveFatigueAdjustment =
+      performanceAdjustment?.reason === "live-fatigue-rep-adjustment" ||
+      performanceAdjustment?.reason === "projected-fatigue-weight-adjustment";
+
+    if (
+      performanceAdjustment &&
+      (!isDeloadPlanWorkout() || shouldPrioritizeLiveFatigueAdjustment)
+    ) {
+      return {
+        targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
+        targetReps: String(performanceAdjustment.reps),
+        targetRir: String(performanceAdjustment.rir),
+        targetWeight: String(performanceAdjustment.weight),
+      };
+    }
+
+    if (isDeloadPlanWorkout() && actualE1RM != null && prescribedReps != null) {
+      const adjacentFatigueRatio = getLatestAdjacentFatigueRatio(
+        exercise,
+        nextSetIndex
+      );
+      const deloadTarget =
+        adjacentFatigueRatio == null
+          ? null
+          : recommendDeloadTargetPrescription({
+              baselineE1RM: actualE1RM,
+              bodyWeight: sessionBodyWeight,
+              deloadReductionPercent: 0,
+              exercise: calculationExercise,
+              fatigueRatio: adjacentFatigueRatio,
+              normalizeWeight: (weight) =>
+                getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+              setIndex: nextSetIndex,
+              targetReps: prescribedReps,
+              targetRir: targetRirNumber,
+              weightIncrement: (weight) =>
+                getExerciseWeightIncrement(calculationExercise, undefined, weight),
+            })?.recommendation;
+
+      if (deloadTarget?.weight != null) {
+        return {
+          targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
+          targetReps: String(deloadTarget.reps ?? prescribedReps),
+          targetRir: String(deloadTarget.rir ?? targetRir),
+          targetWeight: String(deloadTarget.weight),
+        };
+      }
+    }
 
     if (performanceAdjustment) {
       return {

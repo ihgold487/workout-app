@@ -2,9 +2,45 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  getHistoricalFatigueRatioForSet,
+  recommendDeloadTargetPrescription,
   recommendNextSetTargetAfterPerformance,
   resolvePlanGoalMode,
 } from "../src/utils/targetRecommendation.js";
+
+test("deload targets reduce the first-set e1RM and apply historical fatigue later", () => {
+  const firstSet = recommendDeloadTargetPrescription({
+    baselineE1RM: 210,
+    deloadReductionPercent: 0.01,
+    exercise: {},
+    setIndex: 0,
+    targetReps: 8,
+    targetRir: 5,
+    weightIncrement: 0.5,
+  });
+  const fatigueRatio = getHistoricalFatigueRatioForSet({
+    blendTowardFlat: 0.5,
+    e1rms: [210, 189],
+    setIndex: 1,
+  });
+  const secondSet = recommendDeloadTargetPrescription({
+    baselineE1RM: 210,
+    deloadReductionPercent: 0.01,
+    exercise: {},
+    fatigueRatio,
+    setIndex: 1,
+    targetReps: 8,
+    targetRir: 5,
+    weightIncrement: 0.5,
+  });
+
+  assert.equal(firstSet.targetE1RM, 207.9);
+  assert.equal(fatigueRatio, 0.95);
+  assert.equal(secondSet.targetE1RM, 197.505);
+  assert.ok(firstSet.recommendation.e1rm <= firstSet.targetE1RM);
+  assert.ok(secondSet.recommendation.e1rm <= secondSet.targetE1RM);
+  assert.ok(secondSet.recommendation.e1rm < firstSet.recommendation.e1rm);
+});
 
 test("AI-style descriptive goals use progression unless explicitly maintenance", () => {
   assert.equal(resolvePlanGoalMode("Hybrid strength and hypertrophy"), "progress");
