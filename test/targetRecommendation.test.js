@@ -42,6 +42,31 @@ test("deload targets reduce the first-set e1RM and apply historical fatigue late
   assert.ok(secondSet.recommendation.e1rm < firstSet.recommendation.e1rm);
 });
 
+test("deload fatigue prioritizes fewer reps at the completed weight", () => {
+  const target = recommendDeloadTargetPrescription({
+    baselineE1RM: 150,
+    deloadReductionPercent: 0,
+    exercise: {},
+    fatigueRatio: 0.95,
+    minimumReps: 8,
+    preferredWeight: 100,
+    setIndex: 1,
+    targetReps: 10,
+    targetRir: 5,
+    weightIncrement: 5,
+  });
+
+  assert.equal(target.recommendation.reps, 8);
+  assert.equal(target.recommendation.rir, 5);
+  assert.equal(target.recommendation.weight, 100);
+  assert.ok(Math.abs(target.recommendation.e1rm - 143.3333) < 0.001);
+  assert.ok(
+    target.alternatives.some(
+      (candidate) => candidate.weight < target.recommendation.weight
+    )
+  );
+});
+
 test("AI-style descriptive goals use progression unless explicitly maintenance", () => {
   assert.equal(resolvePlanGoalMode("Hybrid strength and hypertrophy"), "progress");
   assert.equal(resolvePlanGoalMode("progress"), "progress");

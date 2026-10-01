@@ -563,6 +563,8 @@ export function recommendDeloadTargetPrescription({
   baselineE1RM,
   deloadReductionPercent = 0.01,
   fatigueRatio = 1,
+  minimumReps,
+  preferredWeight,
   setIndex = 0,
   ...options
 }) {
@@ -580,14 +582,79 @@ export function recommendDeloadTargetPrescription({
       ? Math.min(1, historicalRatio)
       : 1;
   const targetE1RM = baseline * (1 - reduction) * resolvedFatigueRatio;
-
-  return recommendTargetPrescription({
+  const result = recommendTargetPrescription({
     ...options,
     goalMode: "maintenance",
     maximumE1RM: targetE1RM,
     previousE1RM: targetE1RM,
     progressionPercent: 0,
   });
+  const currentWeight = toNumber(preferredWeight);
+  const targetReps = toNumber(options.targetReps);
+  const targetRir = toNumber(options.targetRir) ?? 0;
+
+  if (
+    !result?.recommendation ||
+    !appliesFatigue ||
+    resolvedFatigueRatio >= 1 ||
+    currentWeight == null ||
+    targetReps == null
+  ) {
+    return result;
+  }
+
+  const minimum = Math.max(
+    1,
+    Math.round(toNumber(minimumReps) ?? targetReps - 2)
+  );
+  const maximum = Math.round(targetReps - 1);
+  const sameWeightCandidates = [];
+
+  for (
+    let candidateReps = minimum;
+    candidateReps <= maximum;
+    candidateReps += 1
+  ) {
+    const e1rm = calculateE1RM(
+      currentWeight,
+      candidateReps,
+      targetRir,
+      null,
+      null,
+      null,
+      { bodyWeight: options.bodyWeight, exercise: options.exercise }
+    );
+
+    if (e1rm != null && e1rm < baseline - 0.0001) {
+      sameWeightCandidates.push({
+        e1rm,
+        reps: candidateReps,
+        rir: targetRir,
+        weight: currentWeight,
+      });
+    }
+  }
+
+  const sameWeightRecommendation = sameWeightCandidates.sort(
+    (a, b) =>
+      Math.abs(a.e1rm - targetE1RM) - Math.abs(b.e1rm - targetE1RM) ||
+      b.reps - a.reps
+  )[0];
+
+  if (!sameWeightRecommendation) {
+    return result;
+  }
+
+  const alternatives = [result.recommendation, ...(result.alternatives || [])]
+    .filter(
+      (candidate) => getCandidateKey(candidate) !== getCandidateKey(sameWeightRecommendation)
+    );
+
+  return {
+    ...result,
+    alternatives,
+    recommendation: sameWeightRecommendation,
+  };
 }
 
 export function recommendNextSetTargetAfterPerformance({

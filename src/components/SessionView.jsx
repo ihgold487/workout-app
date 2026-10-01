@@ -1444,6 +1444,49 @@ export default function SessionView({
 
   function getTargetRecommendation(exercise, set, setIndex) {
     const calculationExercise = getExerciseForCalculation(exercise);
+    const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
+    const previousActualWeight = firstPresentValue(previousSet?.actualWeight);
+    const previousActualReps = parseSessionNumber(previousSet?.actualReps);
+    const previousActualRir = firstPresentValue(previousSet?.actualRir);
+    const previousActualE1RM = previousSet
+      ? calculateSessionE1RM(
+          exercise,
+          previousActualWeight,
+          previousActualReps,
+          previousActualRir
+        )
+      : null;
+    const targetReps = getSetTargetReps(set);
+    const targetRir = getSetTargetRir(set);
+    const adjacentFatigueRatio = getLatestAdjacentFatigueRatio(exercise, setIndex);
+
+    if (
+      isDeloadPlanWorkout() &&
+      setIndex > 0 &&
+      previousActualE1RM != null &&
+      adjacentFatigueRatio != null
+    ) {
+      return {
+        result: recommendDeloadTargetPrescription({
+          allowedRepWindow: 2,
+          baselineE1RM: previousActualE1RM,
+          bodyWeight: sessionBodyWeight,
+          deloadReductionPercent: 0,
+          exercise: calculationExercise,
+          fatigueRatio: adjacentFatigueRatio,
+          minimumReps: getSetMinimumReps(set),
+          normalizeWeight: (weight) =>
+            getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+          preferredRepWindow: 2,
+          preferredWeight: previousActualWeight,
+          setIndex,
+          targetReps,
+          targetRir,
+          weightIncrement: (weight) =>
+            getExerciseWeightIncrement(calculationExercise, undefined, weight),
+        }),
+      };
+    }
 
     return recommendSetTarget({
       allowedRepWindow: 2,
@@ -1455,8 +1498,8 @@ export default function SessionView({
         getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
       preferredRepWindow: 2,
       setIndex,
-      targetReps: getSetTargetReps(set),
-      targetRir: getSetTargetRir(set),
+      targetReps,
+      targetRir,
       weightIncrement: (weight) =>
         getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
@@ -4630,8 +4673,10 @@ export default function SessionView({
               deloadReductionPercent: 0,
               exercise: calculationExercise,
               fatigueRatio: adjacentFatigueRatio,
+              minimumReps: minimumAcceptableReps,
               normalizeWeight: (weight) =>
                 getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+              preferredWeight: actualWeight,
               setIndex: nextSetIndex,
               targetReps: prescribedReps,
               targetRir: targetRirNumber,
