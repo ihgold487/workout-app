@@ -10936,66 +10936,40 @@ export default function App() {
         : activePlanExportCount;
 
     return (
-      <div
-        style={{
-          padding: "20px",
-        }}
-      >
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            gap: "10px",
-            marginBottom: "16px",
-          }}
-        >
-          <Settings color="var(--accent)" size={26} />
-          <h2
-            style={{
-              margin: 0,
-            }}
-          >
-            Settings
-          </h2>
-        </div>
+      <div className="settings-view">
+        <AppPageHeader
+          icon={<Settings size={20} />}
+          subtitle="Account, app preferences, equipment, and data controls"
+          title="Settings"
+        />
 
-        <section
-          style={{
-            margin: "18px auto",
-            maxWidth: "420px",
-          }}
+        <AppSectionCard
+          className="settings-view__section settings-view__app-card"
+          tone="accent"
         >
-          <h3>App</h3>
-          <div
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "12px",
-              marginBottom: "10px",
-            }}
-          >
-            v{APP_VERSION}
-            {" • built "}
-            {BUILD_TIME}
-          </div>
+          <AppSectionHeading
+            eyebrow="App"
+            subtitle={`v${APP_VERSION} • built ${BUILD_TIME}`}
+            title="App experience"
+          />
           {!__IS_NATIVE_BUILD__ && (
             <>
-              <button
-                onClick={checkForUpdate}
-                disabled={
-                  updateStatus === "checking" || updateStatus === "found"
-                }
-              >
-                {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
-              </button>
+              <div className="settings-view__action-row">
+                <button
+                  className="app-secondary-action"
+                  onClick={checkForUpdate}
+                  disabled={
+                    updateStatus === "checking" || updateStatus === "found"
+                  }
+                >
+                  {updateStatus === "checking" ? "Checking..." : "🔄 Update"}
+                </button>
+              </div>
               {(updateStatus || buildNotice) && (
                 <div
+                  className="settings-view__status"
                   role="status"
                   aria-live="polite"
-                  style={{
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
                 >
                   {updateStatus && (
                     <div>
@@ -11015,18 +10989,14 @@ export default function App() {
               )}
             </>
           )}
-        </section>
+        </AppSectionCard>
 
-        <section
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            margin: "18px auto",
-            maxWidth: "420px",
-            padding: "10px",
-          }}
-        >
-          <h3>Profile & Sync</h3>
+        <AppSectionCard className="settings-view__section">
+          <AppSectionHeading
+            eyebrow="Account & data"
+            subtitle="Manage sign-in, cloud status, and recovery tools."
+            title="Profile & sync"
+          />
           {authSession && (
             <div
               style={{
@@ -11879,47 +11849,23 @@ export default function App() {
               </div>
             </>
           )}
-        </section>
+        </AppSectionCard>
 
-        <section
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            margin: "18px auto",
-            maxWidth: "520px",
-            padding: "10px",
-          }}
-        >
-          <div
-            style={{
-              alignItems: "start",
-              display: "grid",
-              gap: "8px",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-            }}
-          >
-            <div>
-              <h3
-                style={{
-                  margin: "0 0 4px",
-                }}
+        <AppSectionCard className="settings-view__section">
+          <AppSectionHeading
+            action={
+              <button
+                className="app-secondary-action"
+                onClick={resetPlateInventory}
+                type="button"
               >
-                Plate Inventory
-              </h3>
-              <div
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                }}
-              >
-                Track available plates by sleeve size. Equipment matching will
-                use these categories later.
-              </div>
-            </div>
-            <button onClick={resetPlateInventory} type="button">
-              Reset
-            </button>
-          </div>
+                Reset
+              </button>
+            }
+            eyebrow="Equipment"
+            subtitle="Track available plates by sleeve size. Equipment matching will use these categories later."
+            title="Plate inventory"
+          />
 
           <div
             style={{
@@ -11940,21 +11886,14 @@ export default function App() {
             )}
             {renderEquipmentInventory()}
           </div>
-        </section>
+        </AppSectionCard>
 
         {renderPlateLoadCalculator()}
 
-        <section
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            margin: "18px auto",
-            maxWidth: "520px",
-            padding: "10px",
-          }}
-        >
+        <AppSectionCard className="settings-view__section settings-view__export-card">
           <button
             aria-expanded={exportExpanded}
+            className="settings-view__disclosure"
             onClick={() => setExportExpanded((expanded) => !expanded)}
             style={{
               alignItems: "center",
@@ -12436,7 +12375,7 @@ export default function App() {
               </div>
             </div>
           )}
-        </section>
+        </AppSectionCard>
 
         <WeightPickerModal
           isOpen={Boolean(plateCountPicker)}

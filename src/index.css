@@ -273,6 +273,90 @@ h2 {
   padding: 8px 12px;
 }
 
+.settings-view {
+  box-sizing: border-box;
+  display: grid;
+  gap: 14px;
+  margin: 0 auto;
+  max-width: 760px;
+  padding: 18px 16px 28px;
+  text-align: left;
+  width: 100%;
+}
+
+.settings-view > .app-page-header {
+  margin-bottom: 2px;
+}
+
+.settings-view__section {
+  margin: 0;
+  min-width: 0;
+}
+
+.settings-view__section > .app-section-heading {
+  margin-bottom: 14px;
+}
+
+.settings-view__app-card {
+  gap: 10px;
+}
+
+.settings-view__action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-view__status {
+  background: color-mix(in srgb, var(--surface-muted) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 10px;
+  padding: 8px 10px;
+}
+
+.settings-view__section > [role="status"]:not(.settings-view__status),
+.settings-view__section [role="status"]:not(.settings-view__status) {
+  line-height: 1.4;
+}
+
+.settings-view__section button:not(.app-secondary-action) {
+  min-height: 44px;
+}
+
+.settings-view__section button[aria-expanded] {
+  min-height: 44px;
+}
+
+.settings-view__disclosure {
+  border-radius: 12px !important;
+  padding: 8px 10px !important;
+}
+
+.settings-view__section [style*="grid-template-columns: 1fr 1fr"] {
+  align-items: stretch;
+}
+
+@media (max-width: 520px) {
+  .settings-view {
+    gap: 12px;
+    padding: 16px 12px 24px;
+  }
+
+  .settings-view .app-section-card {
+    border-radius: 14px;
+    padding: 13px;
+  }
+
+  .settings-view__action-row .app-secondary-action {
+    width: 100%;
+  }
+}
+
 .exercise-library-view {
   margin: 0 auto;
   max-width: 760px;
