@@ -75,6 +75,7 @@ import {
   recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
+  PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
 } from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
@@ -125,7 +126,6 @@ import {
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = RIR_PICKER_VALUES;
-const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.01;
 
 function formatSpotifyPlaybackTime(milliseconds) {
@@ -1028,7 +1028,7 @@ export default function SessionView({
       preferredRepWindow: options.preferredRepWindow ?? 2,
       previousE1RM,
       progressionPercent:
-        options.progressionPercent ?? MAIN_TARGET_PROGRESSION_PERCENT,
+        options.progressionPercent ?? PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
       targetReps: reps,
       targetRir: rir,
       weightIncrement: (weight) =>
@@ -1783,7 +1783,7 @@ export default function SessionView({
     const progressTargetE1RM =
       latestMatchingSetE1RM == null
         ? null
-        : latestMatchingSetE1RM * (1 + MAIN_TARGET_PROGRESSION_PERCENT);
+        : latestMatchingSetE1RM * (1 + PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
     const fatigueTargetE1RM =
       actualE1RM != null && adjacentFatigueRatio != null
         ? actualE1RM * adjacentFatigueRatio
@@ -4783,7 +4783,7 @@ export default function SessionView({
       const progressTargetE1RM =
         latestMatchingSetE1RM == null
           ? null
-          : latestMatchingSetE1RM * (1 + MAIN_TARGET_PROGRESSION_PERCENT);
+          : latestMatchingSetE1RM * (1 + PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
       const fatigueTargetE1RM =
         actualE1RM != null && adjacentFatigueRatio != null
           ? actualE1RM * adjacentFatigueRatio

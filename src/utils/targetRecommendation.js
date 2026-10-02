@@ -1,10 +1,14 @@
 import { calculateE1RM, estimateWeightForE1RM } from "./e1rm.js";
 import { roundWeightToIncrement } from "./weightIncrement.js";
 
+// This is the app-wide progression increment for a plan whose goal is
+// "progress". Keep every target-generation path on this value so AI-imported
+// and manually created progressive plans behave the same way.
+export const PLAN_PROGRESS_E1RM_INCREASE_PERCENT = 0.005;
+
 export const GOAL_MODE_PROGRESSIONS = {
-  aggressive: 0.02,
   maintenance: 0,
-  progress: 0.02,
+  progress: PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
 };
 
 export function resolvePlanGoalMode(goal) {

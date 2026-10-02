@@ -53,6 +53,7 @@ import {
   recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
+  PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
 } from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
@@ -68,7 +69,6 @@ import {
   triggerNativeWarningHaptic,
 } from "../native/pickerHaptics";
 
-const MAIN_TARGET_PROGRESSION_PERCENT = 0.005;
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.01;
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 
@@ -1303,7 +1303,7 @@ export default function TemplateView({
               goalMode: getGoalMode(plan),
               preferredRepWindow: 2,
               previousE1RM: latestMaxE1RM,
-              progressionPercent: MAIN_TARGET_PROGRESSION_PERCENT,
+              progressionPercent: PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
               targetReps,
               targetRir,
               weightIncrement: (weight) =>

@@ -80,6 +80,7 @@ import {
 } from "./sync/auth";
 import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
+import { PLAN_PROGRESS_E1RM_INCREASE_PERCENT } from "./utils/targetRecommendation";
 import {
   BENCHMARK_FAMILY_OPTIONS,
   getBenchmarkFamilyForExercise,
@@ -3624,6 +3625,89 @@ function buildNutritionTrendContext({
   };
 }
 
+function buildTargetGenerationProfile() {
+  const progressIncreasePercent = Number(
+    (PLAN_PROGRESS_E1RM_INCREASE_PERCENT * 100).toFixed(2)
+  );
+
+  return {
+    available: true,
+    purpose:
+      "The app dynamically generates working-set weight, reps, and RIR suggestions from the plan prescription, comparable prior performance, and—after a set is completed—current-workout performance.",
+    progressionMetric: "e1RM",
+    planGoalModes: {
+      progress: {
+        automaticE1RMIncreasePercent: progressIncreasePercent,
+        description:
+          "For history-backed normal-training targets, progress mode attempts a 0.5% e1RM increase. This is target-level progression in addition to any plan-level changes to reps, RIR, sets, rest, or exercise selection.",
+      },
+      maintenance: {
+        automaticE1RMIncreasePercent: 0,
+        description:
+          "Maintenance mode targets the established e1RM rather than adding an automatic progression increment.",
+      },
+    },
+    automaticProgression: {
+      enabled: true,
+      normalE1RMIncreasePercent: progressIncreasePercent,
+      scope:
+        "Applies only to normal-training, progress-goal targets with usable comparable performance. A session's first working set starts from the highest e1RM in the latest matching workout; later initial targets normally start from the matching set position in that workout, falling back to its best usable set. Later in-workout targets may instead be constrained or reduced by actual performance and fatigue evidence.",
+      unavailableWithoutComparablePerformance:
+        "When no usable comparable completed set exists, the app cannot derive an e1RM-based automatic target; it preserves or awaits a manually supplied target.",
+    },
+    rirInteraction: {
+      description:
+        "RIR is part of the e1RM equation used to solve a feasible weight/reps/RIR combination. Changing prescribed RIR does not add a separate fixed e1RM percentage, but lowering RIR generally requires more load for the same e1RM target. Therefore a lower-RIR prescription can compound practical training stress with automatic progress-mode targeting.",
+      sameRirDoesNotMeanSameLoad: true,
+      rirReductionMayCompoundProgression: true,
+    },
+    withinWorkoutAdjustment: {
+      enabled: true,
+      trigger: "A working set is marked complete and the next working-set target is recalculated.",
+      inputs: [
+        "current-set actual weight, reps, and RIR",
+        "prescribed target reps, explicit minimum reps when present, and prescribed RIR",
+        "live rep drop across comparable earlier sets in the same workout",
+        "same-set and adjacent-set e1RM/fatigue patterns from the latest matching workout",
+        "exercise-specific loading increments and loadability constraints",
+      ],
+      behavior:
+        "The app may retain an achieved in-range result, lower reps at the same weight, lower load, or select a fatigue-constrained progressive target. Dynamic later-set suggestions are not fixed before the workout begins.",
+    },
+    priorPerformanceInputs: {
+      description:
+        "Comparable history is matched primarily by exercise identity, with normalized name/equipment matching as fallback. The most recent matching workout is used before older history. The exact set position is preferred; if it is unavailable, the best usable set in that workout is used. e1RM incorporates the body weight recorded at the relevant workout for bodyweight-loaded exercises.",
+    },
+    targetOutput: {
+      description:
+        "The generator solves for feasible weight/reps/RIR combinations around the e1RM target. Initial normal-training recommendations search roughly two reps below through two reps above the prescribed rep target, evaluate nearby supported loads, and round to the exercise's available loading increment. Dynamic subsequent sets honor the prescribed upper rep target and explicit minimum reps when present.",
+    },
+    alternativeTargets: {
+      available: true,
+      description:
+        "The target-options sheet presents the primary suggestion plus ranked feasible alternatives. Alternatives can be below or above the primary suggestion's e1RM and may trade weight for reps while retaining the prescribed RIR. After earlier working sets, alternatives may also reflect live fatigue constraints.",
+      mayBeBelowSuggestedE1RM: true,
+      mayBeAboveSuggestedE1RM: true,
+    },
+    athleteChoice: {
+      description:
+        "The athlete may apply the primary suggestion, explicitly select an alternative, or enter actual performance manually. When an explicit option is selected, the app stores a snapshot of both the displayed suggestion and the selected option. Actual performance is recorded separately and may differ from the selected target. Missing target-selection data means no explicit choice was recorded; it does not mean the primary suggestion was accepted.",
+    },
+    specialCases: {
+      deload:
+        "Deload targets do not use the progress increment. The first target is normally approximately 1% below the latest matching-workout maximum e1RM; later targets also use historical fatigue shaping and may preserve weight while reducing reps.",
+      dropSets:
+        "Drop-set segments are not ordinary e1RM targets. They begin at approximately 80% of the preceding segment's actual weight, rounded to the supported increment, and are AMRAP at RIR 0.",
+    },
+    analysisGuidance: {
+      targetWeightIsNotAStaticPlanPrescription: true,
+      actualPerformanceRemainsOutcomeEvidence: true,
+      useThreeProgressionLayers:
+        "Analyze programmed progression (the plan), app-generated progression (dynamic targets), and realized progression (actual performance) separately. A higher first-set or peak e1RM is not sufficient evidence of successful progression when later-set performance, RIR, adherence, or fatigue deteriorate.",
+    },
+  };
+}
+
 function buildAiPlanContext({
   athleteProfile = null,
   bodyWeightEntries = [],
@@ -3685,6 +3769,7 @@ function buildAiPlanContext({
     history,
     plans,
   });
+  const targetGenerationProfile = buildTargetGenerationProfile();
   const prescriptionAdherenceSummaries = buildPrescriptionAdherenceSummaries({
     bodyWeightEntries,
     exerciseLibrary,
@@ -3720,11 +3805,11 @@ function buildAiPlanContext({
   return {
     app: "workout-app",
     appVersion: APP_VERSION,
-    contextSchema: "workout-app.ai-plan-context.v2",
+    contextSchema: "workout-app.ai-plan-context.v3",
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, targetSelectionSummaries, blockOutcomeSummaries, and workoutDurationSummary as primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows. Assess benchmark peak e1RM and within-exercise performance together: do not call progress merely because best e1RM rises when later-set performance, RIR, adherence, or target-selection behavior indicates greater fatigue. Interpret target-selection direction, magnitude, week-to-week changes, and set position alongside actual performance, RIR, adherence, and performance drop-off; do not assume lower selections are failure or higher selections are success. When target-selection data is available, distinguish the athlete's pre-set decision from the actual result: use suggested target to selected target to evaluate target choice or autoregulation, and selected target to actual result to evaluate execution or performance. Do not infer the athlete's intended choice from actual performance. Target selection rows exist only for explicit choices, so missing selection data must not be treated as acceptance of the suggestion. Analyze workout durations according to draftInstructions.workoutDurationAnalysisConvention, and use them with planningRequest.workoutDuration to estimate each proposed workout independently and keep it within the requested range. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, targetSelectionSummaries, blockOutcomeSummaries, and workoutDurationSummary as primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows. Use targetGenerationProfile to distinguish plan-level progression from the app's dynamic target-level progression and realized performance. An unchanged RIR prescription does not imply an unchanged workload: progress-goal targets may still pursue automatic e1RM progression. Avoid accidentally compounding that built-in progression with large concurrent increases in effort or volume, especially when lowering RIR. Prescribe the training intent—sets, rep targets or ranges, RIR, rest, and weekly progression—and allow the app to generate dynamic target weights unless a specific reason requires an override. Assess benchmark peak e1RM and within-exercise performance together: do not call progress merely because best e1RM rises when later-set performance, RIR, adherence, or target-selection behavior indicates greater fatigue. Interpret target-selection direction, magnitude, week-to-week changes, and set position alongside actual performance, RIR, adherence, and performance drop-off; do not assume lower selections are failure or higher selections are success. When target-selection data is available, distinguish the athlete's pre-set decision from the actual result: use suggested target to selected target to evaluate target choice or autoregulation, and selected target to actual result to evaluate execution or performance. Do not infer the athlete's intended choice from actual performance. Target selection rows exist only for explicit choices, so missing selection data must not be treated as acceptance of the suggestion. Analyze workout durations according to draftInstructions.workoutDurationAnalysisConvention, and use them with planningRequest.workoutDuration to estimate each proposed workout independently and keep it within the requested range. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3758,6 +3843,7 @@ function buildAiPlanContext({
     weeklyMuscleVolumeSummary,
     benchmarkRepRangeTrends,
     performanceDropOffSummaries,
+    targetGenerationProfile,
     targetSelectionSummaries,
     prescriptionAdherenceSummaries,
     blockOutcomeSummaries,
@@ -3793,11 +3879,13 @@ function getAiPlanPrompt(context) {
     "Prescribe exercises only from activeExercises, matching both name and equipment, as described in draftInstructions.exerciseSelectionConvention. Exercises found only in history or previous plans are evidence, not available exercise choices.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
     "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, targetSelectionSummaries, blockOutcomeSummaries, and workoutDurationSummary as the primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows.",
+    "Use targetGenerationProfile to distinguish programmed progression, dynamic app-generated target progression, and realized performance. An unchanged RIR prescription does not mean the workload or stimulus is unchanged, because progress-goal targets can pursue automatic e1RM progression. Consider this built-in progression before simultaneously raising volume, reducing RIR, or otherwise increasing effort. Prescribe sets, rep targets or ranges, RIR, rest, and weekly intent; do not precompute exact weights that the app must dynamically recalculate from live performance unless a specific override is warranted.",
     "Analyze actual durations according to draftInstructions.workoutDurationAnalysisConvention. When planningRequest.workoutDuration is present, estimate each proposed workout independently and adjust exercise count, working sets, rest intervals, supersets, and suitable drop sets to keep it within the requested range.",
     "Within benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current strength progress.",
     "Assess benchmark peak e1RM and within-exercise performance together. Do not call progress merely because best e1RM rises when later-set performance, RIR, adherence, or target-selection behavior indicates greater fatigue.",
     "Interpret target-selection direction, magnitude, week-to-week changes, and set position alongside actual performance, RIR, adherence, and performance drop-off. Do not assume lower selections are failure or higher selections are success. Selection rows exist only when the athlete explicitly chose a suggested target or alternative; missing selection data does not mean the suggestion was accepted.",
     "When target-selection data is available, distinguish the athlete's pre-set decision from the actual result: use suggested target to selected target to evaluate target choice or autoregulation, and selected target to actual result to evaluate execution or performance. Do not infer the athlete's intended choice from actual performance.",
+    "Interpret targetSelectionSummaries together with targetGenerationProfile, actual performance, RIR, prescription adherence, and performance drop-off. An explicitly selected easier or harder alternative can reflect realistic autoregulation, convenience, or perceived capacity; it is not automatically failure or superior progress.",
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",

@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   getHistoricalFatigueRatioForSet,
+  PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
   recommendDeloadTargetPrescription,
   recommendNextSetTargetAfterPerformance,
+  recommendTargetPrescription,
   resolvePlanGoalMode,
 } from "../src/utils/targetRecommendation.js";
 
@@ -72,6 +74,21 @@ test("AI-style descriptive goals use progression unless explicitly maintenance",
   assert.equal(resolvePlanGoalMode("progress"), "progress");
   assert.equal(resolvePlanGoalMode("maintenance"), "maintenance");
   assert.equal(resolvePlanGoalMode("Maintain strength"), "maintenance");
+});
+
+test("every progressive plan target uses the AI-plan 0.5% e1RM increment", () => {
+  const target = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    previousE1RM: 200,
+    targetReps: 8,
+    targetRir: 3,
+    weightIncrement: 0.5,
+  });
+
+  assert.equal(PLAN_PROGRESS_E1RM_INCREASE_PERCENT, 0.005);
+  assert.equal(target.progressionPercent, PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
+  assert.ok(Math.abs(target.targetE1RM - 201) < 0.0001);
 });
 
 test("a small RIR miss prefers one fewer rep at the same weight", () => {
