@@ -51,3 +51,4 @@ Repeatability examines the latest workout with comparable data, primarily the e1
 - **Watch:** between those values
 
 It is a fatigue and within-session consistency signal, not a direct measure of long-term progress.
+

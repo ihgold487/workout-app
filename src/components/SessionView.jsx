@@ -2597,11 +2597,11 @@ export default function SessionView({
       return;
     }
 
-    applyPrescriptionToActual(exerciseId, setId, {
+    applyTargetSelection(exerciseId, setId, {
       reps: set.isDropSet ? "" : getSetTargetReps(set),
       rir: set.isDropSet ? "" : getSetTargetRir(set),
       weight: set.targetWeight,
-    });
+    }, "suggested");
   }
 
   function applyDropSetTargetWeight(exerciseId, setId) {
@@ -2619,7 +2619,57 @@ export default function SessionView({
     });
   }
 
-  function applyPrescriptionToActual(exerciseId, setId, prescription) {
+  function buildTargetSnapshot(exercise, prescription) {
+    const weight = formatSetupDefault(prescription.weight);
+    const reps = formatSetupDefault(prescription.reps);
+    const rir = formatSetupDefault(prescription.rir);
+    const e1rm = calculateSessionE1RM(exercise, weight, reps, rir);
+
+    return {
+      e1rm: Number.isFinite(e1rm) ? e1rm : null,
+      reps,
+      rir,
+      weight,
+    };
+  }
+
+  function applyTargetSelection(exerciseId, setId, prescription, source) {
+    const exercise = session.exercises.find((item) => item.id === exerciseId);
+    const set = exercise?.sets.find((item) => item.id === setId);
+
+    if (!exercise || !set) {
+      return;
+    }
+
+    // Take both snapshots here, at the explicit choice. Later target
+    // recalculation must never change the recommendation being compared.
+    const suggested = buildTargetSnapshot(exercise, {
+      reps: set.isDropSet ? "" : getSetTargetReps(set),
+      rir: set.isDropSet ? "" : getSetTargetRir(set),
+      weight: set.targetWeight,
+    });
+    const selected = buildTargetSnapshot(exercise, prescription);
+    const selectedVsSuggestedE1RMPct =
+      suggested.e1rm != null && suggested.e1rm !== 0 && selected.e1rm != null
+        ? Number(
+            (((selected.e1rm - suggested.e1rm) / suggested.e1rm) * 100).toFixed(2)
+          )
+        : null;
+
+    applyPrescriptionToActual(exerciseId, setId, prescription, {
+      selected,
+      selectedVsSuggestedE1RMPct,
+      source,
+      suggested,
+    });
+  }
+
+  function applyPrescriptionToActual(
+    exerciseId,
+    setId,
+    prescription,
+    targetSelection = null
+  ) {
     appliedHistoryDefaultsRef.current.delete(`${session.id}:${exerciseId}:${setId}`);
 
     updateSession((s) => ({
@@ -2635,6 +2685,21 @@ export default function SessionView({
                       actualReps: formatSetupDefault(prescription.reps),
                       actualRir: formatSetupDefault(prescription.rir),
                       actualWeight: formatSetupDefault(prescription.weight),
+                      ...(targetSelection
+                        ? {
+                            selectedTargetE1RM: targetSelection.selected.e1rm,
+                            selectedTargetReps: targetSelection.selected.reps,
+                            selectedTargetRir: targetSelection.selected.rir,
+                            selectedTargetWeight: targetSelection.selected.weight,
+                            selectedVsSuggestedE1RMPct:
+                              targetSelection.selectedVsSuggestedE1RMPct,
+                            suggestedTargetE1RM: targetSelection.suggested.e1rm,
+                            suggestedTargetReps: targetSelection.suggested.reps,
+                            suggestedTargetRir: targetSelection.suggested.rir,
+                            suggestedTargetWeight: targetSelection.suggested.weight,
+                            targetSelectionSource: targetSelection.source,
+                          }
+                        : {}),
                     })
                   : set
               ),
@@ -4802,6 +4867,14 @@ export default function SessionView({
     const currentIndex = exercise.sets.findIndex((s) => s.id === setId);
 
     const undo = currentSet.completed;
+    const actualE1RM = currentSet.isDropSet
+      ? null
+      : calculateSessionE1RM(
+          exercise,
+          currentSet.actualWeight,
+          currentSet.actualReps,
+          currentSet.actualRir
+        );
 
     if (
       !undo &&
@@ -4842,6 +4915,11 @@ export default function SessionView({
                     actualWeight: undo ? "" : set.actualWeight,
                     actualReps: undo ? "" : set.actualReps,
                     actualRir: undo ? "" : set.actualRir,
+                    actualE1RM: undo
+                      ? null
+                      : Number.isFinite(actualE1RM)
+                        ? actualE1RM
+                        : null,
                   };
                 }
 
@@ -10907,10 +10985,11 @@ export default function SessionView({
                       <button
                         key={`${option.isSuggested ? "suggested" : "alternative"}-${option.weight}-${option.reps}-${option.rir}`}
                         onClick={() => {
-                          applyPrescriptionToActual(
+                          applyTargetSelection(
                             targetAlternativesData.exerciseId,
                             targetAlternativesData.setId,
-                            option
+                            option,
+                            option.isSuggested ? "suggested" : "alternative"
                           );
                           closeTargetAlternatives({ immediate: true });
                         }}

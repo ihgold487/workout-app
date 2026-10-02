@@ -1661,6 +1661,20 @@ create table if not exists public.session_sets (
   actual_rir_value integer not null default 0,
   actual_rir_label text,
   estimated_1rm numeric,
+  suggested_target_weight_value numeric,
+  suggested_target_weight_label text,
+  suggested_target_reps integer,
+  suggested_target_rir integer,
+  suggested_target_rir_label text,
+  suggested_target_e1rm numeric,
+  selected_target_weight_value numeric,
+  selected_target_weight_label text,
+  selected_target_reps integer,
+  selected_target_rir integer,
+  selected_target_rir_label text,
+  selected_target_e1rm numeric,
+  target_selection_source text,
+  selected_vs_suggested_e1rm_pct numeric,
   is_drop_set boolean not null default false,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
@@ -1678,6 +1692,25 @@ comment on column public.session_sets.actual_rir_label is
 
 create index if not exists session_sets_session_exercise_id_idx
 on public.session_sets (session_exercise_id);
+
+-- An explicit target choice preserves the recommendation shown at that instant,
+-- the option selected, and the later actual result (estimated_1rm). Do not
+-- infer a selection for sets entered manually without choosing an option.
+alter table public.session_sets
+add column if not exists suggested_target_weight_value numeric,
+add column if not exists suggested_target_weight_label text,
+add column if not exists suggested_target_reps integer,
+add column if not exists suggested_target_rir integer,
+add column if not exists suggested_target_rir_label text,
+add column if not exists suggested_target_e1rm numeric,
+add column if not exists selected_target_weight_value numeric,
+add column if not exists selected_target_weight_label text,
+add column if not exists selected_target_reps integer,
+add column if not exists selected_target_rir integer,
+add column if not exists selected_target_rir_label text,
+add column if not exists selected_target_e1rm numeric,
+add column if not exists target_selection_source text,
+add column if not exists selected_vs_suggested_e1rm_pct numeric;
 
 update public.session_sets
 set target_rir_value = 0

@@ -190,6 +190,7 @@ function cloudSetToLocal(set) {
   const minimumReps = set.target_reps_min;
 
   return {
+    actualE1RM: set.estimated_1rm ?? null,
     actualReps: formatCloudValue(null, set.actual_reps),
     actualRir: formatCloudValue(set.actual_rir_label, set.actual_rir_value),
     actualWeight: formatCloudValue(
@@ -203,6 +204,33 @@ function cloudSetToLocal(set) {
       set.target_weight_label,
       set.target_weight_value
     ),
+    ...(set.target_selection_source
+      ? {
+          selectedTargetE1RM: set.selected_target_e1rm ?? null,
+          selectedTargetReps: formatCloudValue(null, set.selected_target_reps),
+          selectedTargetRir: formatCloudValue(
+            set.selected_target_rir_label,
+            set.selected_target_rir
+          ),
+          selectedTargetWeight: formatCloudValue(
+            set.selected_target_weight_label,
+            set.selected_target_weight_value
+          ),
+          selectedVsSuggestedE1RMPct:
+            set.selected_vs_suggested_e1rm_pct ?? null,
+          suggestedTargetE1RM: set.suggested_target_e1rm ?? null,
+          suggestedTargetReps: formatCloudValue(null, set.suggested_target_reps),
+          suggestedTargetRir: formatCloudValue(
+            set.suggested_target_rir_label,
+            set.suggested_target_rir
+          ),
+          suggestedTargetWeight: formatCloudValue(
+            set.suggested_target_weight_label,
+            set.suggested_target_weight_value
+          ),
+          targetSelectionSource: set.target_selection_source,
+        }
+      : {}),
     ...(minimumReps != null && Number(minimumReps) !== Number(prescribedReps)
       ? {
           minimumReps: String(minimumReps),
@@ -319,7 +347,7 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
   const isDropSet = Boolean(set.isDropSet || set.is_drop_set);
   const e1RM = isDropSet
     ? null
-    : calculateE1RM(set.actualWeight, set.actualReps, actualRir);
+    : set.actualE1RM ?? calculateE1RM(set.actualWeight, set.actualReps, actualRir);
 
   return {
     actual_reps: parseInteger(set.actualReps),
@@ -329,8 +357,21 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     actual_weight_value: parseNumber(set.actualWeight),
     completed_at: set.completed ? new Date().toISOString() : null,
     deleted_at: null,
-    estimated_1rm: e1RM,
+    estimated_1rm: parseNumber(e1RM),
     is_drop_set: isDropSet,
+    selected_target_e1rm: parseNumber(set.selectedTargetE1RM),
+    selected_target_reps: parseInteger(set.selectedTargetReps),
+    selected_target_rir_label: set.selectedTargetRir
+      ? String(set.selectedTargetRir)
+      : null,
+    selected_target_rir: parseInteger(set.selectedTargetRir),
+    selected_target_weight_label: set.selectedTargetWeight
+      ? String(set.selectedTargetWeight)
+      : null,
+    selected_target_weight_value: parseNumber(set.selectedTargetWeight),
+    selected_vs_suggested_e1rm_pct: parseNumber(
+      set.selectedVsSuggestedE1RMPct
+    ),
     session_exercise_id: sessionExerciseId,
     set_number: setNumber,
     target_reps_label: prescribedReps
@@ -342,8 +383,19 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     target_reps_min: parseInteger(minimumReps),
     target_rir_label: prescribedRir !== "" ? String(prescribedRir) : null,
     target_rir_value: parseRir(prescribedRir),
+    target_selection_source: set.targetSelectionSource || null,
     target_weight_label: set.targetWeight ? String(set.targetWeight) : null,
     target_weight_value: parseNumber(set.targetWeight),
+    suggested_target_e1rm: parseNumber(set.suggestedTargetE1RM),
+    suggested_target_reps: parseInteger(set.suggestedTargetReps),
+    suggested_target_rir_label: set.suggestedTargetRir
+      ? String(set.suggestedTargetRir)
+      : null,
+    suggested_target_rir: parseInteger(set.suggestedTargetRir),
+    suggested_target_weight_label: set.suggestedTargetWeight
+      ? String(set.suggestedTargetWeight)
+      : null,
+    suggested_target_weight_value: parseNumber(set.suggestedTargetWeight),
     updated_at: new Date().toISOString(),
     user_id: userId,
   };
@@ -700,7 +752,7 @@ export async function downloadWorkoutHistory(
       ids: exerciseIds,
       orderColumn: "set_number",
       select:
-        "id,session_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,actual_weight_value,actual_weight_label,actual_reps,actual_rir_value,actual_rir_label,estimated_1rm,is_drop_set,completed_at",
+        "id,session_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,actual_weight_value,actual_weight_label,actual_reps,actual_rir_value,actual_rir_label,estimated_1rm,is_drop_set,completed_at,suggested_target_weight_value,suggested_target_weight_label,suggested_target_reps,suggested_target_rir,suggested_target_rir_label,suggested_target_e1rm,selected_target_weight_value,selected_target_weight_label,selected_target_reps,selected_target_rir,selected_target_rir_label,selected_target_e1rm,target_selection_source,selected_vs_suggested_e1rm_pct",
       table: "session_sets",
     });
   }

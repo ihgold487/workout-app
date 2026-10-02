@@ -867,6 +867,14 @@ function getHistorySetE1RM(set, exercise, bodyWeight) {
     return null;
   }
 
+  const recordedE1RM = parseHistoryMetricValue(
+    set.actualE1RM ?? set.actual_e1rm
+  );
+
+  if (Number.isFinite(recordedE1RM)) {
+    return recordedE1RM;
+  }
+
   const e1rm = calculateE1RM(
     parseHistoryMetricValue(set.actualWeight ?? set.actual_weight),
     parseHistoryMetricValue(set.actualReps ?? set.actual_reps),
@@ -1052,6 +1060,33 @@ function buildExerciseHistoryExportRows({
             ),
             e1rm: formatExportNumber(e1rm, 1),
             e1rm_unit: "lb",
+            suggested_target_weight: set.suggestedTargetWeight ?? "",
+            suggested_target_reps: set.suggestedTargetReps ?? "",
+            suggested_target_rir: set.suggestedTargetRir ?? "",
+            suggested_target_e1rm: formatExportNumber(
+              parseHistoryMetricValue(
+                set.suggestedTargetE1RM ?? set.suggested_target_e1rm
+              ),
+              1
+            ),
+            selected_target_weight: set.selectedTargetWeight ?? "",
+            selected_target_reps: set.selectedTargetReps ?? "",
+            selected_target_rir: set.selectedTargetRir ?? "",
+            selected_target_e1rm: formatExportNumber(
+              parseHistoryMetricValue(
+                set.selectedTargetE1RM ?? set.selected_target_e1rm
+              ),
+              1
+            ),
+            target_selection_source:
+              set.targetSelectionSource ?? set.target_selection_source ?? "",
+            selected_vs_suggested_e1rm_pct: formatExportNumber(
+              parseHistoryMetricValue(
+                set.selectedVsSuggestedE1RMPct ??
+                  set.selected_vs_suggested_e1rm_pct
+              ),
+              2
+            ),
             completed: set.completed ?? "",
           });
         });
@@ -2437,6 +2472,7 @@ function buildHistoryPerformanceRows({
   bodyWeightEntries = [],
   exerciseLibrary = [],
   history = [],
+  plans = [],
 }) {
   const rows = [];
 
@@ -2475,6 +2511,11 @@ function buildHistoryPerformanceRows({
             planId: workout.planId || workout.plan_id || "",
             planWeek: Number(workout.planWeek || workout.plan_week) || null,
             planWorkoutId: workout.planWorkoutId || workout.plan_workout_id || "",
+            isDeload: isCompletedWorkoutDeload(workout, plans),
+            prescribedReps:
+              set.prescribedReps ?? set.reps ?? set.targetReps ?? "",
+            prescribedRir:
+              set.prescribedRir ?? set.rir ?? set.targetRir ?? "",
             reps,
             rir,
             set,
@@ -2570,16 +2611,75 @@ function buildBenchmarkRepRangeTrends({
     );
 }
 
+function getPerformanceComparisonContext(row) {
+  const workoutIdentity = row.planWorkoutId
+    ? `plan-workout:${row.planWorkoutId}`
+    : `workout:${normalizeExportText(row.workoutName)}`;
+
+  return {
+    isDeload: Boolean(row.isDeload),
+    prescribedReps: row.prescribedReps || null,
+    prescribedRir: row.prescribedRir || null,
+    workoutIdentity,
+    workoutName: row.workoutName,
+  };
+}
+
+function getPerformanceComparisonContextKey(row) {
+  const context = getPerformanceComparisonContext(row);
+
+  return [
+    context.workoutIdentity,
+    context.isDeload ? "deload" : "training",
+    context.prescribedReps || "unspecified-reps",
+    context.prescribedRir || "unspecified-rir",
+  ].join("|");
+}
+
+function buildActivePlanExerciseKeySet({
+  exerciseLibrary = [],
+  plans = [],
+  templates = [],
+}) {
+  const keys = new Set();
+
+  plans
+    .filter((plan) => plan.status === "active")
+    .forEach((plan) => {
+      (plan.workouts || []).forEach((planWorkout) => {
+        const template = getPlanExportWorkoutTemplate(plan, planWorkout, templates);
+
+        (template?.exercises || planWorkout.exercises || []).forEach((exercise) => {
+          keys.add(
+            getHistoryExerciseKey(
+              findExerciseForHistoryExercise(exercise, exerciseLibrary)
+            )
+          );
+        });
+      });
+    });
+
+  return keys;
+}
+
 function buildPerformanceDropOffSummaries({
   bodyWeightEntries = [],
   exerciseLibrary = [],
   history = [],
+  plans = [],
+  templates = [],
 }) {
-  const sessionsByExercise = new Map();
+  const sessionsByContext = new Map();
+  const activePlanExerciseKeys = buildActivePlanExerciseKeySet({
+    exerciseLibrary,
+    plans,
+    templates,
+  });
   const rows = buildHistoryPerformanceRows({
     bodyWeightEntries,
     exerciseLibrary,
     history,
+    plans,
   });
   const groupedBySessionExercise = new Map();
 
@@ -2588,14 +2688,16 @@ function buildPerformanceDropOffSummaries({
       return;
     }
 
-    const key = `${row.workoutId}|${row.exerciseKey}`;
+    const contextKey = getPerformanceComparisonContextKey(row);
+    const key = `${row.workoutId}|${row.exerciseKey}|${contextKey}`;
     const current = groupedBySessionExercise.get(key) || {
-      equipment: row.equipment,
+      comparisonContext: getPerformanceComparisonContext(row),
+      exercise: row.exercise,
       exerciseId: row.exerciseId,
       exerciseKey: row.exerciseKey,
+      equipment: row.equipment,
       exerciseName: row.exerciseName,
       rows: [],
-      workoutName: row.workoutName,
     };
 
     current.rows.push(row);
@@ -2614,59 +2716,214 @@ function buildPerformanceDropOffSummaries({
     const best = setRows.reduce((currentBest, row) =>
       row.e1rm > currentBest.e1rm ? row : currentBest
     );
-    const dropPercent =
+    const average =
+      setRows.reduce((sum, row) => sum + row.e1rm, 0) / setRows.length;
+    const firstToLastDropPercent =
       first.e1rm > 0 ? ((first.e1rm - latest.e1rm) / first.e1rm) * 100 : null;
-    const current = sessionsByExercise.get(session.exerciseKey) || {
+    const bestToLastDropPercent =
+      best.e1rm > 0 ? ((best.e1rm - latest.e1rm) / best.e1rm) * 100 : null;
+    const contextKey = `${session.exerciseKey}|${getPerformanceComparisonContextKey(
+      first
+    )}`;
+    const current = sessionsByContext.get(contextKey) || {
+      comparisonContext: session.comparisonContext,
+      configuredBenchmark: isExerciseBenchmark(session.exercise),
       equipment: session.equipment,
       exerciseId: session.exerciseId,
+      exerciseKey: session.exerciseKey,
       exerciseName: session.exerciseName,
+      isCurrentPlanExercise: activePlanExerciseKeys.has(session.exerciseKey),
       sessions: [],
     };
 
     current.sessions.push({
+      averageSetE1RM: roundAiMetric(average),
       bestSetE1RM: roundAiMetric(best.e1rm),
+      bestToLastDropPercent: roundAiMetric(bestToLastDropPercent, 1),
       date: first.date,
-      dropPercent: roundAiMetric(dropPercent, 1),
       firstSetE1RM: roundAiMetric(first.e1rm),
+      firstToLastDropPercent: roundAiMetric(firstToLastDropPercent, 1),
       lastSetE1RM: roundAiMetric(latest.e1rm),
       setCount: setRows.length,
-      workoutName: session.workoutName,
     });
-    sessionsByExercise.set(session.exerciseKey, current);
+    sessionsByContext.set(contextKey, current);
   });
 
-  return [...sessionsByExercise.values()]
-    .map((exercise) => {
-      const recentSessions = exercise.sessions
-        .sort((left, right) => String(right.date).localeCompare(String(left.date)))
-        .slice(0, 6);
-      const drops = recentSessions
-        .map((session) => session.dropPercent)
+  const summaries = [...sessionsByContext.values()].map((exercise) => {
+    const recentSessions = exercise.sessions
+      .sort((left, right) => String(right.date).localeCompare(String(left.date)))
+      .slice(0, 6);
+    const average = (field) => {
+      const values = recentSessions
+        .map((session) => session[field])
         .filter((value) => value != null);
 
+      return values.length > 0
+        ? roundAiMetric(values.reduce((sum, value) => sum + value, 0) / values.length, 1)
+        : null;
+    };
+
+    return {
+      ...exercise,
+      averageRecentBestToLastDropPercent: average("bestToLastDropPercent"),
+      averageRecentFirstToLastDropPercent: average("firstToLastDropPercent"),
+      recentSessions,
+      sessionCount: exercise.sessions.length,
+    };
+  });
+  const sortByImportance = (left, right) =>
+    Number(right.configuredBenchmark || right.isCurrentPlanExercise) -
+      Number(left.configuredBenchmark || left.isCurrentPlanExercise) ||
+    (right.averageRecentFirstToLastDropPercent || 0) -
+      (left.averageRecentFirstToLastDropPercent || 0) ||
+    right.sessionCount - left.sessionCount;
+
+  return summaries.sort(sortByImportance).slice(0, 48);
+}
+
+function getTargetSelectionDirection(selectedVsSuggestedE1RMPct) {
+  if (!Number.isFinite(selectedVsSuggestedE1RMPct)) {
+    return null;
+  }
+
+  if (selectedVsSuggestedE1RMPct > 1) {
+    return "higher";
+  }
+
+  if (selectedVsSuggestedE1RMPct < -1) {
+    return "lower";
+  }
+
+  return "approx_equal";
+}
+
+function buildTargetSelectionSummaries({
+  bodyWeightEntries = [],
+  exerciseLibrary = [],
+  history = [],
+  plans = [],
+}) {
+  const rows = buildHistoryPerformanceRows({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+    plans,
+  })
+    .map((row) => {
+      const suggestedTargetE1RM = parseHistoryMetricValue(
+        row.set.suggestedTargetE1RM ?? row.set.suggested_target_e1rm
+      );
+      const selectedTargetE1RM = parseHistoryMetricValue(
+        row.set.selectedTargetE1RM ?? row.set.selected_target_e1rm
+      );
+      const storedPercent = parseHistoryMetricValue(
+        row.set.selectedVsSuggestedE1RMPct ??
+          row.set.selected_vs_suggested_e1rm_pct
+      );
+      const selectedVsSuggestedE1RMPct = Number.isFinite(storedPercent)
+        ? storedPercent
+        : Number.isFinite(suggestedTargetE1RM) &&
+            suggestedTargetE1RM !== 0 &&
+            Number.isFinite(selectedTargetE1RM)
+          ? ((selectedTargetE1RM - suggestedTargetE1RM) / suggestedTargetE1RM) *
+            100
+          : null;
+
+      if (!row.set.targetSelectionSource) {
+        return null;
+      }
+
       return {
-        averageRecentDropPercent:
-          drops.length > 0
-            ? roundAiMetric(
-                drops.reduce((sum, value) => sum + value, 0) / drops.length,
-                1
-              )
-            : null,
-        equipment: exercise.equipment,
-        exerciseId: exercise.exerciseId,
-        exerciseName: exercise.exerciseName,
-        recentSessions,
-        sessionCount: exercise.sessions.length,
+        actualE1RM: roundAiMetric(row.e1rm),
+        actualReps: row.reps,
+        actualRir: row.rir,
+        actualWeight: row.weight,
+        comparisonContext: getPerformanceComparisonContext(row),
+        date: row.date,
+        equipment: row.equipment,
+        exerciseId: row.exerciseId,
+        exerciseName: row.exerciseName,
+        selectedTargetE1RM: roundAiMetric(selectedTargetE1RM),
+        selectedTargetReps: row.set.selectedTargetReps ?? null,
+        selectedTargetRir: row.set.selectedTargetRir ?? null,
+        selectedTargetWeight: row.set.selectedTargetWeight ?? null,
+        selectedVsSuggestedE1RMPct: roundAiMetric(selectedVsSuggestedE1RMPct, 2),
+        selectionDirection: getTargetSelectionDirection(selectedVsSuggestedE1RMPct),
+        setNumber: row.setIndex + 1,
+        suggestedTargetE1RM: roundAiMetric(suggestedTargetE1RM),
+        suggestedTargetReps: row.set.suggestedTargetReps ?? null,
+        suggestedTargetRir: row.set.suggestedTargetRir ?? null,
+        suggestedTargetWeight: row.set.suggestedTargetWeight ?? null,
+        targetSelectionSource: row.set.targetSelectionSource,
       };
     })
-    .filter((exercise) => exercise.sessionCount >= 2)
-    .sort(
-      (left, right) =>
-        (right.averageRecentDropPercent || 0) -
-          (left.averageRecentDropPercent || 0) ||
-        right.sessionCount - left.sessionCount
-    )
-    .slice(0, 20);
+    .filter(Boolean);
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const key = `${row.exerciseId || row.exerciseName}|${row.comparisonContext.workoutIdentity}|${row.comparisonContext.isDeload}|${row.setNumber}`;
+    const current = grouped.get(key) || {
+      comparisonContext: row.comparisonContext,
+      equipment: row.equipment,
+      exerciseId: row.exerciseId,
+      exerciseName: row.exerciseName,
+      rows: [],
+      setNumber: row.setNumber,
+    };
+    current.rows.push(row);
+    grouped.set(key, current);
+  });
+
+  const summaries = [...grouped.values()].map((group) => {
+    const { rows: groupRows, ...summary } = group;
+    const withDelta = groupRows.filter((row) =>
+      Number.isFinite(row.selectedVsSuggestedE1RMPct)
+    );
+    const directionCounts = groupRows.reduce(
+      (counts, row) => ({
+        ...counts,
+        [row.selectionDirection]: (counts[row.selectionDirection] || 0) + 1,
+      }),
+      { approx_equal: 0, higher: 0, lower: 0 }
+    );
+    const sourceCounts = groupRows.reduce(
+      (counts, row) => ({
+        ...counts,
+        [row.targetSelectionSource]:
+          (counts[row.targetSelectionSource] || 0) + 1,
+      }),
+      {}
+    );
+
+    return {
+      ...summary,
+      directionCounts,
+      firstDate: groupRows[0]?.date || null,
+      latestDate: groupRows.at(-1)?.date || null,
+      meanSelectedVsSuggestedE1RMPct:
+        withDelta.length > 0
+          ? roundAiMetric(
+              withDelta.reduce(
+                (sum, row) => sum + row.selectedVsSuggestedE1RMPct,
+                0
+              ) / withDelta.length,
+              2
+            )
+          : null,
+      selectionCount: groupRows.length,
+      sourceCounts,
+    };
+  });
+
+  return {
+    available: rows.length > 0,
+    note:
+      "Rows exist only after an athlete explicitly selects a suggested target or alternative. Missing selection data means no explicit choice was recorded; it does not mean the suggested target was accepted.",
+    rows: rows.slice(-120),
+    summaries: summaries
+      .sort((left, right) => right.selectionCount - left.selectionCount)
+      .slice(0, 48),
+  };
 }
 
 function buildPrescriptionAdherenceSummaries({
@@ -3419,6 +3676,14 @@ function buildAiPlanContext({
     bodyWeightEntries,
     exerciseLibrary,
     history,
+    plans,
+    templates,
+  });
+  const targetSelectionSummaries = buildTargetSelectionSummaries({
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+    plans,
   });
   const prescriptionAdherenceSummaries = buildPrescriptionAdherenceSummaries({
     bodyWeightEntries,
@@ -3455,11 +3720,11 @@ function buildAiPlanContext({
   return {
     app: "workout-app",
     appVersion: APP_VERSION,
-    contextSchema: "workout-app.ai-plan-context.v1",
+    contextSchema: "workout-app.ai-plan-context.v2",
     draftInstructions: buildAiPlanDraftInstructions(),
     exportedAt: new Date().toISOString(),
     prompt:
-      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, blockOutcomeSummaries, and workoutDurationSummary as primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows. Analyze workout durations according to draftInstructions.workoutDurationAnalysisConvention, and use them with planningRequest.workoutDuration to estimate each proposed workout independently and keep it within the requested range. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
+      "Use this attached workout-app AI context to evaluate my recent progress and design my next training plan. Preserve the selected athleteProfile.longTermGoals while using planningRequest and the evidence to choose the appropriate emphasis for only the next block; do not create a speculative multi-block roadmap. Use explicit priorities to determine which adaptations deserve emphasis, then use performance, volume, adherence, fatigue, recovery, exercise exposure, body-weight, and nutrition evidence to choose the training dose and method. A high priority does not automatically require more volume, and an empty currentPriorities array does not erase long-term goals or available history. Apply planningRequest.benchmarkFamilyGuidance: family emphasis describes the desired adaptation, while benchmark exercises are measurement instruments rather than automatic programming priorities. Respect fixed benchmark preferences and use judgment within a family when the preference is AI decides. Keep trends for different exercises separate even when they share a family. First discuss your proposed plan with me in normal conversational form and revise it based on our discussion. Do not create the final importable JSON until I explicitly tell you to finalize the plan. Use previousPlanAIContext to evaluate prior AI plan hypotheses, rationale, and watchNext items against the observed training data. Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, targetSelectionSummaries, blockOutcomeSummaries, and workoutDurationSummary as primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows. Assess benchmark peak e1RM and within-exercise performance together: do not call progress merely because best e1RM rises when later-set performance, RIR, adherence, or target-selection behavior indicates greater fatigue. Interpret target-selection direction, magnitude, week-to-week changes, and set position alongside actual performance, RIR, adherence, and performance drop-off; do not assume lower selections are failure or higher selections are success. When target-selection data is available, distinguish the athlete's pre-set decision from the actual result: use suggested target to selected target to evaluate target choice or autoregulation, and selected target to actual result to evaluate execution or performance. Do not infer the athlete's intended choice from actual performance. Target selection rows exist only for explicit choices, so missing selection data must not be treated as acceptance of the suggestion. Analyze workout durations according to draftInstructions.workoutDurationAnalysisConvention, and use them with planningRequest.workoutDuration to estimate each proposed workout independently and keep it within the requested range. In benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current progress. Use recentPlanExposure to identify exercises with long continuous programming exposure that may be candidates for rotation. Prescribe exercises only from activeExercises exactly as described in draftInstructions.exerciseSelectionConvention. The app requires numeric upper-bound reps and supports optional numeric minimumReps on both sets and weeklyPrescriptions as described in draftInstructions.repPrescriptionConvention. Respect planningRequest.supersets and encode any selected supersets using exercise.supersetGroup exactly as described in draftInstructions.supersetConvention. Respect planningRequest.dropSets and encode default or weekly drop-set counts exactly as described in draftInstructions.dropSetConvention. Analyze completed drop sets according to draftInstructions.dropSetAnalysisConvention. You may prescribe restSeconds at the exercise, set, or weekly-prescription level when rest interval changes would benefit strength, hypertrophy, fatigue management, or workout duration. Weekly prescriptions may use distinct dropSets and restSeconds values for a deload week, and the app will preserve them. When I explicitly approve finalization, create the draft as a .json file named workout-ai-plan-draft.json when possible. The file must contain only valid JSON using draftInstructions.importSchema so it can be imported into the app. Put explanation in the optional analysis object.",
     summary: {
       activeExerciseCount: activeExercises.length,
       activePlanCount: activePlanIds.length,
@@ -3475,6 +3740,8 @@ function buildAiPlanContext({
       previousPlanAIContextRows: previousPlanAIContext.length,
       recentPlanExposureRows: recentPlanExposure.length,
       trackedExerciseCount: activeExercises.length,
+      targetSelectionRows: targetSelectionSummaries.rows.length,
+      targetSelectionSummaryRows: targetSelectionSummaries.summaries.length,
       workoutCount: history.length,
     },
     bodyWeightTrend,
@@ -3491,6 +3758,7 @@ function buildAiPlanContext({
     weeklyMuscleVolumeSummary,
     benchmarkRepRangeTrends,
     performanceDropOffSummaries,
+    targetSelectionSummaries,
     prescriptionAdherenceSummaries,
     blockOutcomeSummaries,
     workoutDurationSummary,
@@ -3524,9 +3792,12 @@ function getAiPlanPrompt(context) {
     "Follow planningGuidancePrecedence when fields conflict. Treat explicit user constraints as requirements and AI-decides fields as permission to use your judgment.",
     "Prescribe exercises only from activeExercises, matching both name and equipment, as described in draftInstructions.exerciseSelectionConvention. Exercises found only in history or previous plans are evidence, not available exercise choices.",
     "Use previousPlanAIContext to evaluate the prior AI plan's summary, rationale, and watchNext items against the completed training data before designing the next block.",
-    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, blockOutcomeSummaries, and workoutDurationSummary as the primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows.",
+    "Use weeklyMuscleVolumeSummary, benchmarkRepRangeTrends, performanceDropOffSummaries, prescriptionAdherenceSummaries.rows when prescriptionAdherenceSummaries.available is true, targetSelectionSummaries, blockOutcomeSummaries, and workoutDurationSummary as the primary derived metrics before falling back to raw completedSetRows or completedWorkoutRows.",
     "Analyze actual durations according to draftInstructions.workoutDurationAnalysisConvention. When planningRequest.workoutDuration is present, estimate each proposed workout independently and adjust exercise count, working sets, rest intervals, supersets, and suitable drop sets to keep it within the requested range.",
     "Within benchmarkRepRangeTrends, prefer recentWindow and recentRirFilteredWindow over lifetime first-to-latest changes when judging current strength progress.",
+    "Assess benchmark peak e1RM and within-exercise performance together. Do not call progress merely because best e1RM rises when later-set performance, RIR, adherence, or target-selection behavior indicates greater fatigue.",
+    "Interpret target-selection direction, magnitude, week-to-week changes, and set position alongside actual performance, RIR, adherence, and performance drop-off. Do not assume lower selections are failure or higher selections are success. Selection rows exist only when the athlete explicitly chose a suggested target or alternative; missing selection data does not mean the suggestion was accepted.",
+    "When target-selection data is available, distinguish the athlete's pre-set decision from the actual result: use suggested target to selected target to evaluate target choice or autoregulation, and selected target to actual result to evaluate execution or performance. Do not infer the athlete's intended choice from actual performance.",
     "Use recentPlanExposure to identify exercises that have been programmed for many consecutive plans or training weeks. Non-benchmark exercises with long continuous exposure and no clear performance or hypertrophy rationale are good candidates for intelligent rotation.",
     "Use trainingProfile.hardRules as requirements. Use trainingProfile.softPreferences as defaults that may be changed when the history supports a better plan.",
     "You may change split, workout order, exercise selection, sets, rep ranges, RIR targets, rest intervals, progression, deload timing, and weekly volume by muscle if there is a clear benefit.",
