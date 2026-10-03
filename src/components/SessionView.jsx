@@ -83,6 +83,7 @@ import {
 } from "../utils/weightIncrement";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
+import { isPlanCompleteFromCompletions } from "../utils/planLifecycle";
 import {
   canUseNativeRestNotifications,
   cancelNativeRestTimerNotification,
@@ -5244,15 +5245,13 @@ export default function SessionView({
       ).length;
       const weekComplete =
         plan.workouts?.length > 0 && completedThisWeek >= plan.workouts.length;
-      const finalPlanWeek =
-        (Number(plan.durationWeeks) || 1) + (plan.config?.deload ? 1 : 0);
-      const finalWeek = weekNumber >= finalPlanWeek;
-      const planCompleted = weekComplete && finalWeek;
+      const planCompleted =
+        weekComplete && isPlanCompleteFromCompletions(plan, completions);
       const nextPlan = {
         ...plan,
         completions,
         currentWeek:
-          weekComplete && !finalWeek
+          weekComplete && !planCompleted
             ? weekNumber + 1
             : plan.currentWeek || weekNumber,
         status: planCompleted ? "completed" : plan.status,

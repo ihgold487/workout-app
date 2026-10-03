@@ -36,6 +36,11 @@ import {
 import { seedExercises } from "./data/seedExercises";
 import { getRirForPlanWeek } from "./utils/rirPeriodization";
 import {
+  getPlanTotalWeeks,
+  isPlanCompleteFromCompletions,
+  markPlanCompleted,
+} from "./utils/planLifecycle";
+import {
   buildPrimaryMuscleSections,
   getPrimaryMuscleSectionTotal,
 } from "./utils/primaryMuscleGroups";
@@ -4693,12 +4698,14 @@ function reconcilePlanCompletionsWithHistory(plans = [], history = []) {
       ...plan,
       completions,
       currentWeek: getReconciledPlanCurrentWeek(plan, completions),
+      // Older local/cloud state can have every final-week completion while
+      // retaining an active status. Completion records are authoritative for
+      // this terminal lifecycle transition.
+      status: isPlanCompleteFromCompletions(plan, completions)
+        ? "completed"
+        : plan.status,
     };
   });
-}
-
-function getPlanTotalWeeks(plan) {
-  return (Number(plan?.durationWeeks) || 1) + (plan?.config?.deload ? 1 : 0);
 }
 
 function getActiveModalDialogs() {
@@ -6304,6 +6311,19 @@ export default function App() {
   }
 
   function completePlanCompletionPrompt() {
+    const prompt = planCompletionPrompt;
+
+    if (prompt) {
+      const data = currentWorkoutDataRef.current || getCurrentWorkoutData();
+      const nextPlans = markPlanCompleted(data.plans, prompt.planId);
+
+      // Saving the final workout normally performs this transition already.
+      // Repeat it here so the user's explicit choice is durable even if an
+      // earlier state update was interrupted or a stale plan was restored.
+      setPlans(nextPlans);
+      commitCompletedWorkoutData({ plans: nextPlans });
+    }
+
     setPlanCompletionPrompt(null);
   }
 
