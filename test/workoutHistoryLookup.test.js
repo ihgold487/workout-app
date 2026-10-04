@@ -84,6 +84,67 @@ test("normal training prefers older normal performance over a newer deload", () 
   assert.equal(performance?.workout.id, "training-workout");
 });
 
+test("the first week of a new plan uses the latest non-deload exercise performance", () => {
+  const currentExercise = {
+    ...exercise,
+    sets: [{ reps: "7", rir: "2" }],
+  };
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: false,
+    exercise: currentExercise,
+    history: [
+      {
+        completedAtIso: "2026-09-05T12:00:00.000Z",
+        exercises: [
+          {
+            ...exercise,
+            sets: [
+              {
+                actualReps: "7",
+                actualRir: "2",
+                actualWeight: "120",
+                reps: "7",
+                rir: "2",
+              },
+            ],
+          },
+        ],
+        id: "older-prescription-match",
+        planId: "previous-plan",
+        planWeek: 4,
+      },
+      {
+        completedAtIso: "2026-09-19T12:00:00.000Z",
+        exercises: [
+          {
+            ...exercise,
+            sets: [
+              {
+                actualReps: "10",
+                actualRir: "2",
+                actualWeight: "135",
+                reps: "10",
+                rir: "2",
+              },
+            ],
+          },
+        ],
+        id: "latest-non-deload-performance",
+        planId: "previous-plan",
+        planWeek: 4,
+      },
+    ],
+    plan: plans[1],
+    planWeek: 1,
+    planWorkoutId: "day-one",
+    plans,
+    templateId: "day-one-template",
+    templates: repeatedExerciseTemplates,
+  });
+
+  assert.equal(performance?.workout.id, "latest-non-deload-performance");
+});
+
 test("a deload prefers deload history before normal training history", () => {
   const performance = findLatestExercisePerformance({
     currentIsDeload: true,

@@ -522,6 +522,19 @@ export function findLatestExercisePerformance({
       return isDeload === expectedDeload;
     };
 
+    // The first week of a new plan has no same-plan reference yet. Use the
+    // most recent non-deload performance for this exercise rather than
+    // skipping it for an older prescription match; the recent performance is
+    // the best available e1RM baseline for the new target. Week 2 onward
+    // continues through the same-plan, same-workout lookup below.
+    if (
+      !expectedDeload &&
+      hasPlanWorkoutScope &&
+      Number(planWeek) === 1
+    ) {
+      return findMatchingPerformance(matchesDeloadStatus);
+    }
+
     // Repeated exercises have distinct session contexts. Their previous sets
     // must come from the same plan workout, even when another occurrence was
     // completed more recently.

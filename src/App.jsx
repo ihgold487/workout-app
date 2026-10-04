@@ -40,6 +40,7 @@ import {
   isPlanCompleteFromCompletions,
   markPlanCompleted,
 } from "./utils/planLifecycle";
+import { getPlanWorkingSetCount } from "./utils/planSetCount";
 import {
   buildPrimaryMuscleSections,
   getPrimaryMuscleSectionTotal,
@@ -1563,7 +1564,7 @@ function getPlanPrimaryMuscleSetSummary(
       );
       const muscle =
         currentExercise.muscles?.[0] || exercise.planMuscle || "Unknown";
-      const setCount = (exercise.sets || []).length;
+      const setCount = getPlanWorkingSetCount(exercise);
 
       muscleSets[muscle] = (muscleSets[muscle] || 0) + setCount;
     });
