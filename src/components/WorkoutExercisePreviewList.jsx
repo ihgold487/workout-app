@@ -62,6 +62,9 @@ export function WorkoutExercisePreviewRow({
 }) {
   const isTemplateCompact = layout === "templateCompact";
   const equipmentLabel = exercise.equipment?.[0] || "";
+  const exerciseNote = String(
+    note ?? exercise.sessionNote ?? exercise.note ?? exercise.notes ?? ""
+  ).trim();
   const benchmark = isExerciseBenchmark(exerciseDetail || exercise);
   const prescriptionParts = String(prescriptionSummary || "")
     .split(/\s*(?:\||\n)\s*/)
@@ -179,7 +182,7 @@ export function WorkoutExercisePreviewRow({
     })
   );
   const noteContent =
-    showNote && note && note.trim().length > 0 ? (
+    showNote && exerciseNote ? (
       <div
         style={{
           color: "var(--text-muted)",
@@ -198,7 +201,7 @@ export function WorkoutExercisePreviewRow({
               verticalAlign: "-2px",
             }}
           />
-          {note}
+          {exerciseNote}
         </span>
 
         {onClearNote && (

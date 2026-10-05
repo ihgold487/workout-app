@@ -2345,8 +2345,12 @@ export default function TemplateView({
                           exercise={exercise}
                           exerciseDetail={exerciseDetail}
                           layout="templateCompact"
+                          note={
+                            exerciseMetadata?.[
+                              templateExercise.exerciseId || templateExercise.id
+                            ]?.note
+                          }
                           onExerciseClick={() => setDetailExercise(exerciseDetail)}
-                          showNote={false}
                           onSetClick={
                             isEditMode
                               ? () => {

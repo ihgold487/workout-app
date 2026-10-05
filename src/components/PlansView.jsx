@@ -1226,6 +1226,7 @@ function hasPlanUpdateChanges(editingPlan, nextPlan, previousWorkouts, nextWorko
 function PlanWorkoutPreview({
   enableWeeklyPrescriptions = false,
   exerciseLibrary,
+  exerciseMetadata,
   onAddExercise,
   onDeleteExercise,
   onEditSuperset,
@@ -1312,6 +1313,10 @@ function PlanWorkoutPreview({
                       <WorkoutExercisePreviewRow
                         exercise={exercise}
                         exerciseDetail={exerciseDetail}
+                        note={
+                          exerciseMetadata?.[exercise.exerciseId || exercise.id]
+                            ?.note
+                        }
                         onExerciseClick={() => onShowExerciseDetail(exerciseDetail)}
                         onPrescriptionClick={
                           enableWeeklyPrescriptions
@@ -5405,6 +5410,7 @@ export default function PlansView({
               key={displayedWorkout.previewWorkoutKey}
               enableWeeklyPrescriptions={generationMode === "plan"}
               exerciseLibrary={exerciseLibrary}
+              exerciseMetadata={exerciseMetadata}
               workout={displayedWorkout}
               onAddExercise={(workout) => {
                 setAddExerciseTarget(workout);

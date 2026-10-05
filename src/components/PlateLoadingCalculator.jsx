@@ -434,6 +434,7 @@ export default function PlateLoadingCalculator({
   });
   const [optionIndexes, setOptionIndexes] = useState({});
   const [manualSelections, setManualSelections] = useState({});
+  const [manualSuggestionStates, setManualSuggestionStates] = useState({});
   const [manualWarmupReps, setManualWarmupReps] = useState("");
   const [plateSelectorOpen, setPlateSelectorOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
@@ -468,6 +469,14 @@ export default function PlateLoadingCalculator({
     const key = getManualSelectionKey();
     const nextCount = Math.max(0, Number.parseInt(count, 10) || 0);
 
+    setManualSuggestionStates((current) => {
+      if (!current[key]) return current;
+
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+
     setManualSelections((current) => {
       const currentSelection = current[key] || {};
       const nextSelection = {
@@ -488,6 +497,14 @@ export default function PlateLoadingCalculator({
 
   function resetManualPlateSelection() {
     const key = getManualSelectionKey();
+
+    setManualSuggestionStates((current) => {
+      if (!current[key]) return current;
+
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
 
     setManualSelections((current) => {
       const next = { ...current };
@@ -912,10 +929,8 @@ export default function PlateLoadingCalculator({
       .sort((a, b) => Number(b.weight) - Number(a.weight));
   }
 
-  function getManualLoading() {
-    const equipment = getLoadCalculatorEquipment(draft.equipmentId, inventory);
-    const selection = getManualSelection();
-    const selectedPlates = Object.entries(selection)
+  function getManualPlates(selection) {
+    return Object.entries(selection)
       .flatMap(([weight, count]) =>
         Array.from({ length: Math.max(0, Number(count) || 0) }, () =>
           Number(weight)
@@ -923,8 +938,29 @@ export default function PlateLoadingCalculator({
       )
       .filter((weight) => Number.isFinite(weight) && weight > 0)
       .sort((a, b) => b - a);
+  }
+
+  function getManualSelectionFromPlates(plates) {
+    return plates.reduce((selection, plate) => {
+      const key = formatPlateNumber(plate);
+
+      return {
+        ...selection,
+        [key]: (selection[key] || 0) + 1,
+      };
+    }, {});
+  }
+
+  function getManualLoading(selection = getManualSelection()) {
+    const equipment = getLoadCalculatorEquipment(draft.equipmentId, inventory);
+    const selectedPlates = getManualPlates(selection);
     const plateTotal = selectedPlates.reduce((total, plate) => total + plate, 0);
     const cableLoadMultiplier = Number(draft.cablePulleyCount) === 2 ? 1 : 2;
+    const enteredWeight = Number(draft.weight);
+    const requestedWeight =
+      equipment.id === "dumbbell" && Number(draft.dumbbellCount) === 2
+        ? enteredWeight / 2
+        : enteredWeight;
     const achievedTotal =
       equipment.loadMode === "balanced"
         ? equipment.weight + plateTotal * 2
@@ -934,6 +970,7 @@ export default function PlateLoadingCalculator({
 
     return {
       achievedTotal,
+      enteredWeight,
       equipment,
       leftPlates:
         equipment.loadMode === "balanced" || equipment.loadMode === "cable"
@@ -947,14 +984,148 @@ export default function PlateLoadingCalculator({
         equipment.loadMode === "cable"
           ? selectedPlates
           : [],
+      requestedWeight,
       status: "ready",
     };
+  }
+
+  function getRemainingInventory(fixedSelection, equipment) {
+    const requiresPairedPlates =
+      equipment.loadMode === "balanced" || equipment.loadMode === "cable";
+    const plateCountMultiplier = requiresPairedPlates ? 2 : 1;
+    const fixedCounts = getManualSelectionFromPlates(
+      getManualPlates(fixedSelection)
+    );
+
+    return {
+      ...inventory,
+      [equipment.categoryKey]: (inventory?.[equipment.categoryKey] || []).map(
+        (plate) => ({
+          ...plate,
+          count: Math.max(
+            0,
+            Number(plate.count) -
+              (fixedCounts[formatPlateNumber(plate.weight)] || 0) *
+                plateCountMultiplier
+          ),
+        })
+      ),
+    };
+  }
+
+  function getManualSuggestedLoading(fixedSelection, selectedOptionIndex = 0) {
+    const fixedLoading = getManualLoading(fixedSelection);
+    const { equipment, requestedWeight } = fixedLoading;
+
+    if (!Number.isFinite(requestedWeight) || requestedWeight <= 0) {
+      return { status: "empty" };
+    }
+
+    if (fixedLoading.achievedTotal > requestedWeight) {
+      return { fixedLoading, status: "fixedOverTarget" };
+    }
+
+    const fixedPlateContribution = fixedLoading.achievedTotal - equipment.weight;
+    const remainingRequestedWeight = requestedWeight - fixedPlateContribution;
+    const dumbbellCount = Number(draft.dumbbellCount) === 2 ? 2 : 1;
+    const remainingEnteredWeight =
+      equipment.id === "dumbbell"
+        ? remainingRequestedWeight * dumbbellCount
+        : remainingRequestedWeight;
+    const calculatedLoading = calculatePlateLoading(
+      remainingEnteredWeight,
+      draft.equipmentId,
+      getRemainingInventory(fixedSelection, equipment),
+      draft.cablePulleyCount,
+      draft.dumbbellCount
+    );
+
+    if (calculatedLoading.status !== "ready") {
+      return { fixedLoading, status: calculatedLoading.status };
+    }
+
+    const optionCount = calculatedLoading.loadingOptions?.length || 1;
+    const optionIndex = selectedOptionIndex % optionCount;
+    const suggestedPlates = calculatedLoading.loadingOptions[optionIndex] || [];
+    const combinedPlates = [
+      ...fixedLoading.platesPerSide,
+      ...suggestedPlates,
+    ].sort((a, b) => b - a);
+    const achievedTotal =
+      calculatedLoading.achievedTotal + fixedPlateContribution;
+    const isPairedLoad =
+      equipment.loadMode === "balanced" || equipment.loadMode === "cable";
+
+    return {
+      loading: {
+        ...calculatedLoading,
+        achievedTotal,
+        difference: requestedWeight - achievedTotal,
+        exact: Math.abs(requestedWeight - achievedTotal) < 0.001,
+        leftPlates: isPairedLoad ? combinedPlates : [],
+        machinePlates: equipment.loadMode === "stack" ? combinedPlates : [],
+        platesPerSide: combinedPlates,
+        rightPlates:
+          isPairedLoad || equipment.loadMode === "singleEnd"
+            ? combinedPlates
+            : [],
+      },
+      optionCount,
+      status: "ready",
+    };
+  }
+
+  function suggestRemainingManualPlates() {
+    const key = getManualSelectionKey();
+    const previousState = manualSuggestionStates[key];
+    const fixedSelection = previousState?.fixedSelection || getManualSelection();
+    const initialSuggestion = getManualSuggestedLoading(fixedSelection);
+
+    if (initialSuggestion.status === "fixedOverTarget") {
+      setManualSuggestionStates((current) => ({
+        ...current,
+        [key]: {
+          fixedOverTarget: true,
+          fixedSelection,
+          optionIndex: 0,
+        },
+      }));
+      return;
+    }
+
+    if (initialSuggestion.status !== "ready") {
+      return;
+    }
+
+    const optionIndex = previousState
+      ? (previousState.optionIndex + 1) % initialSuggestion.optionCount
+      : 0;
+    const suggestion = getManualSuggestedLoading(fixedSelection, optionIndex);
+
+    setManualSelections((current) => ({
+      ...current,
+      [key]: getManualSelectionFromPlates(suggestion.loading.platesPerSide),
+    }));
+    setManualSuggestionStates((current) => ({
+      ...current,
+      [key]: {
+        fixedOverTarget: false,
+        fixedSelection,
+        optionIndex,
+      },
+    }));
   }
 
   function renderManualLoadingTool() {
     const manualLoading = getManualLoading();
     const availablePlates = getManualAvailablePlates(manualLoading.equipment);
     const selectedCount = manualLoading.platesPerSide.length;
+    const hasWorkingWeight =
+      Number.isFinite(manualLoading.requestedWeight) &&
+      manualLoading.requestedWeight > 0;
+    const manualLoadingExceedsWorkingWeight =
+      hasWorkingWeight &&
+      manualLoading.achievedTotal > manualLoading.requestedWeight;
     const showWarmupRepsControl = warmupLoadContexts.length > 0;
     const manualWarmupContext = {
       ...(warmupLoadContexts.at(-1) || warmupLoadContexts[0] || {}),
@@ -1005,7 +1176,13 @@ export default function PlateLoadingCalculator({
                 }}
               >
                 <strong>Manual loading</strong>
-                <strong>
+                <strong
+                  style={{
+                    color: manualLoadingExceedsWorkingWeight
+                      ? "#b42318"
+                      : "var(--text)",
+                  }}
+                >
                   {formatPlateNumber(manualLoading.achievedTotal)} lb
                 </strong>
               </div>
@@ -1092,17 +1269,36 @@ export default function PlateLoadingCalculator({
                 )}
               </div>
             </div>
-            <button
-              disabled={availablePlates.length === 0}
-              onClick={() => setPlateSelectorOpen(true)}
+            <div
               style={{
-                minHeight: "34px",
-                padding: "6px 10px",
+                display: "grid",
+                gap: "6px",
               }}
-              type="button"
             >
-              Plates
-            </button>
+              <button
+                disabled={availablePlates.length === 0}
+                onClick={() => setPlateSelectorOpen(true)}
+                style={{
+                  minHeight: "34px",
+                  padding: "6px 10px",
+                }}
+                type="button"
+              >
+                Plates
+              </button>
+              <button
+                aria-label="Suggest remaining plates"
+                disabled={!hasWorkingWeight}
+                onClick={suggestRemainingManualPlates}
+                style={{
+                  minHeight: "30px",
+                  padding: "5px 10px",
+                }}
+                type="button"
+              >
+                Suggest remaining
+              </button>
+            </div>
           </div>
 
           {renderLoadedEquipmentDiagram({
