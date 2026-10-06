@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   loadWorkoutData,
+  mergeExerciseLibraryWithSeed,
   saveCompletedWorkoutRecovery,
   saveWorkoutData,
 } from "../src/storage/workoutStorage.js";
@@ -52,4 +53,36 @@ test("completed workouts retain a compact synchronous recovery journal", () => {
   } finally {
     globalThis.localStorage = originalStorage;
   }
+});
+
+test("saved built-in exercise notes survive seed-library merging", () => {
+  const seedExercise = {
+    active: "active",
+    builtin: true,
+    description: "Seed description",
+    id: "builtin-row",
+    name: "Incline Press",
+    note: "Seed note",
+  };
+  const savedExercise = {
+    ...seedExercise,
+    description: "Keep wrists stacked over elbows.",
+    note: "Keep wrists stacked over elbows.",
+  };
+
+  const [restoredExercise] = mergeExerciseLibraryWithSeed(
+    [savedExercise],
+    [seedExercise]
+  );
+
+  assert.equal(restoredExercise.description, savedExercise.description);
+  assert.equal(restoredExercise.note, savedExercise.note);
+
+  const [clearedExercise] = mergeExerciseLibraryWithSeed(
+    [{ ...savedExercise, description: "", note: "" }],
+    [seedExercise]
+  );
+
+  assert.equal(clearedExercise.description, "");
+  assert.equal(clearedExercise.note, "");
 });

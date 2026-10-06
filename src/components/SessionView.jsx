@@ -3100,15 +3100,31 @@ export default function SessionView({
   function acceptExerciseNoteEdit(exercise) {
     const noteKey = String(exercise.id);
     const exerciseMetadataId = getExerciseMetadataId(exercise);
+    const note = getExerciseNote(exercise);
 
     if (exerciseMetadataId) {
       setExerciseMetadata((currentMetadata) => ({
         ...currentMetadata,
         [exerciseMetadataId]: {
           ...(currentMetadata?.[exerciseMetadataId] || {}),
-          note: getExerciseNote(exercise),
+          note,
         },
       }));
+
+      setExerciseLibrary((currentLibrary) =>
+        currentLibrary.map((libraryExercise) => {
+          const libraryExerciseId =
+            libraryExercise.exerciseId ?? libraryExercise.id;
+
+          return String(libraryExerciseId) === exerciseMetadataId
+            ? {
+                ...libraryExercise,
+                description: note,
+                note,
+              }
+            : libraryExercise;
+        })
+      );
     }
 
     setNoteEditSnapshots((snapshots) => {
@@ -4970,8 +4986,16 @@ export default function SessionView({
     if (!nextActiveSet) {
       resetRestTimer();
       setActiveWorkoutFocus(null);
+      setTargetSuggestionPreview(null);
       return;
     }
+
+    const nextExercise = session.exercises.find(
+      (item) => item.id === nextActiveSet.exerciseId
+    );
+    const nextSet = nextExercise?.sets.find(
+      (item) => item.id === nextActiveSet.setId
+    );
 
     setRestTimerForNextSet(
       nextActiveSet,
@@ -4984,6 +5008,14 @@ export default function SessionView({
     );
 
     setActiveWorkoutFocus(nextActiveSet);
+    setTargetSuggestionPreview(
+      nextSet?.isDropSet
+        ? null
+        : {
+            exerciseId: nextActiveSet.exerciseId,
+            setId: nextActiveSet.setId,
+          }
+    );
   }
   function deleteExercise(exerciseId) {
     const deletingActiveExercise = activeExerciseId === exerciseId;

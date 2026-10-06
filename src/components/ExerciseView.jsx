@@ -207,6 +207,7 @@ export default function ExerciseView({
   onUpdateHistoryWorkoutSet,
   session = null,
   setExerciseLibrary,
+  setExerciseMetadata,
 }) {
   const addExerciseSectionRef = useRef(null);
   const cropDragRef = useRef(null);
@@ -539,16 +540,37 @@ export default function ExerciseView({
       return;
     }
 
+    const exercise = exerciseFromDraft(draft, {
+      builtin: false,
+      active: EXERCISE_STATUS.active,
+      id: Date.now(),
+    });
+
     setExerciseLibrary([
       ...exerciseLibrary,
-      exerciseFromDraft(draft, {
-        builtin: false,
-        active: EXERCISE_STATUS.active,
-        id: Date.now(),
-      }),
+      exercise,
     ]);
+    saveExerciseNoteToMetadata(exercise);
     setDraft(emptyDraft);
     setShowAddExercise(false);
+  }
+
+  function saveExerciseNoteToMetadata(exercise) {
+    const exerciseId = exercise?.exerciseId ?? exercise?.id;
+
+    if (exerciseId == null || !setExerciseMetadata) {
+      return;
+    }
+
+    const note = String(exercise.description || exercise.note || "").trim();
+
+    setExerciseMetadata((currentMetadata) => ({
+      ...currentMetadata,
+      [exerciseId]: {
+        ...(currentMetadata?.[exerciseId] || {}),
+        note,
+      },
+    }));
   }
 
   function startEdit(exercise) {
@@ -596,6 +618,7 @@ export default function ExerciseView({
               : exercise
           )
         );
+        saveExerciseNoteToMetadata(savedExercise);
         setDetailExercise((currentExercise) =>
           currentExercise?.id === editingExercise.id
             ? savedExercise
@@ -617,6 +640,7 @@ export default function ExerciseView({
         exercise.id === editingExercise.id ? updatedExercise : exercise
       )
     );
+    saveExerciseNoteToMetadata(updatedExercise);
     setDetailExercise((currentExercise) =>
       currentExercise?.id === editingExercise.id
         ? updatedExercise

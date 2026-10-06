@@ -97,6 +97,14 @@ function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
     mergedExercise.bodyweightLoadPercent = savedExercise.bodyweightLoadPercent;
   }
 
+  if (Object.prototype.hasOwnProperty.call(savedExercise, "description")) {
+    mergedExercise.description = savedExercise.description;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(savedExercise, "note")) {
+    mergedExercise.note = savedExercise.note;
+  }
+
   return mergedExercise;
 }
 
