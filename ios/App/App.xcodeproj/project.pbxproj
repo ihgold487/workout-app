@@ -25,6 +25,7 @@
 		50A10A7D28B16A3000010001 /* RestTimerLiveActivityIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A10A7B28B16A3000010001 /* RestTimerLiveActivityIntent.swift */; };
 		50A10A7F28B16A3000010001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 50A10A7E28B16A3000010001 /* Assets.xcassets */; };
 		50A10A8128B16A3000010001 /* SpotifyPlaybackPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A10A8028B16A3000010001 /* SpotifyPlaybackPlugin.swift */; };
+		50F1A10228B16A3000010001 /* ProvisioningExpiryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F1A10128B16A3000010001 /* ProvisioningExpiryPlugin.swift */; };
 		50A10A8328B16A3000010001 /* SpotifyiOS in Frameworks */ = {isa = PBXBuildFile; productRef = 50A10A8228B16A3000010001 /* SpotifyiOS */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		50C0A00128B16A3000010001 /* coach-whistle.wav in Resources */ = {isa = PBXBuildFile; fileRef = 50C0A00328B16A3000010001 /* coach-whistle.wav */; };
@@ -76,6 +77,7 @@
 		50A10A7B28B16A3000010001 /* RestTimerLiveActivityIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerLiveActivityIntent.swift; sourceTree = "<group>"; };
 		50A10A7E28B16A3000010001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		50A10A8028B16A3000010001 /* SpotifyPlaybackPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyPlaybackPlugin.swift; sourceTree = "<group>"; };
+		50F1A10128B16A3000010001 /* ProvisioningExpiryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningExpiryPlugin.swift; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		50C0A00328B16A3000010001 /* coach-whistle.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "coach-whistle.wav"; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -139,6 +141,7 @@
 				50A10A5E28B16A3000010001 /* MainViewController.swift */,
 				50A10A6028B16A3000010001 /* WorkoutIdleTimerPlugin.swift */,
 				50A10A6228B16A3000010001 /* PickerHapticsPlugin.swift */,
+				50F1A10128B16A3000010001 /* ProvisioningExpiryPlugin.swift */,
 				50A10A8028B16A3000010001 /* SpotifyPlaybackPlugin.swift */,
 				50A10A6428B16A3000010001 /* RestTimerActivityAttributes.swift */,
 				50A10A6728B16A3000010001 /* RestTimerLiveActivityPlugin.swift */,
@@ -330,6 +333,7 @@
 				50A10A5F28B16A3000010001 /* MainViewController.swift in Sources */,
 				50A10A6128B16A3000010001 /* WorkoutIdleTimerPlugin.swift in Sources */,
 				50A10A6328B16A3000010001 /* PickerHapticsPlugin.swift in Sources */,
+				50F1A10228B16A3000010001 /* ProvisioningExpiryPlugin.swift in Sources */,
 				50A10A8128B16A3000010001 /* SpotifyPlaybackPlugin.swift in Sources */,
 				50A10A6528B16A3000010001 /* RestTimerActivityAttributes.swift in Sources */,
 				50A10A6828B16A3000010001 /* RestTimerLiveActivityPlugin.swift in Sources */,

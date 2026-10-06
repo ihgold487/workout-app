@@ -6,6 +6,10 @@ import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { writeTextToClipboard } from "./native/clipboard";
 import {
+  getNativeProvisioningExpiration,
+  scheduleNativeProvisioningExpiryReminders,
+} from "./native/provisioningExpiryReminder";
+import {
   AlertTriangle,
   BarChart3,
   Brain,
@@ -4571,6 +4575,44 @@ function formatLastNormalizedSyncAt(value) {
   });
 }
 
+function formatProvisioningExpiry(value) {
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "Unknown";
+  }
+
+  return parsed.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getProvisioningExpiryCountdown(value) {
+  const expiration = new Date(value).getTime();
+  const remainingMs = expiration - Date.now();
+
+  if (!Number.isFinite(remainingMs)) {
+    return "";
+  }
+
+  if (remainingMs <= 0) {
+    return "Expired";
+  }
+
+  const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+
+  if (remainingHours < 24) {
+    return `in ${remainingHours} hour${remainingHours === 1 ? "" : "s"}`;
+  }
+
+  const remainingDays = Math.ceil(remainingHours / 24);
+  return `in ${remainingDays} day${remainingDays === 1 ? "" : "s"}`;
+}
+
 function getCurrentTimeMs() {
   return new Date().getTime();
 }
@@ -5261,6 +5303,12 @@ export default function App() {
 
   const [lastUpdateCheck, setLastUpdateCheck] = useState(null);
 
+  const [provisioningExpiry, setProvisioningExpiry] = useState("");
+  const [provisioningReminderStatus, setProvisioningReminderStatus] =
+    useState("");
+  const [provisioningReminderLoading, setProvisioningReminderLoading] =
+    useState(false);
+
   const [indexedDbReady, setIndexedDbReady] = useState(false);
 
   const [authSession, setAuthSession] = useState(null);
@@ -5434,6 +5482,31 @@ export default function App() {
     return () => {
       cancelled = true;
       unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function configureProvisioningExpiryReminders() {
+      const expiration = await getNativeProvisioningExpiration();
+
+      if (cancelled || !expiration) {
+        return;
+      }
+
+      setProvisioningExpiry(expiration.toISOString());
+      const result = await scheduleNativeProvisioningExpiryReminders(expiration);
+
+      if (!cancelled) {
+        setProvisioningReminderStatus(result.status);
+      }
+    }
+
+    void configureProvisioningExpiryReminders();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -10056,6 +10129,24 @@ export default function App() {
     setSelectedTemplatePlanWeek(null);
   }
 
+  async function enableProvisioningExpiryReminders() {
+    const expiration = new Date(provisioningExpiry);
+
+    if (!Number.isFinite(expiration.getTime())) {
+      return;
+    }
+
+    setProvisioningReminderLoading(true);
+    setProvisioningReminderStatus("");
+
+    const result = await scheduleNativeProvisioningExpiryReminders(expiration, {
+      requestPermission: true,
+    });
+
+    setProvisioningReminderStatus(result.status);
+    setProvisioningReminderLoading(false);
+  }
+
   function openPlanEditor(plan) {
     if (templatePreviewEditActive) {
       return;
@@ -10192,11 +10283,57 @@ export default function App() {
           paddingBottom: "calc(70px + env(safe-area-inset-bottom))",
         }}
       >
+        {renderProvisioningExpiryNotice()}
         {content}
         {renderPlanCompletionPrompt()}
         {renderPlanComparisonDialog()}
         {renderAiPlanNotesDialog()}
         {renderBottomNav(activeView)}
+      </div>
+    );
+  }
+
+  function renderProvisioningExpiryNotice() {
+    const expiration = new Date(provisioningExpiry);
+    const remainingMs = expiration.getTime() - Date.now();
+
+    if (
+      !Number.isFinite(expiration.getTime()) ||
+      remainingMs <= 0 ||
+      remainingMs > 12 * 60 * 60 * 1000
+    ) {
+      return null;
+    }
+
+    return (
+      <div
+        role="status"
+        style={{
+          alignItems: "center",
+          background: "var(--danger-bg)",
+          borderBottom: "1px solid var(--danger-text)",
+          color: "var(--danger-text)",
+          display: "flex",
+          fontSize: "13px",
+          gap: "10px",
+          justifyContent: "space-between",
+          padding: "9px 14px",
+        }}
+      >
+        <span>
+          Development build expires {getProvisioningExpiryCountdown(provisioningExpiry)}.
+        </span>
+        <button
+          onClick={goSettings}
+          style={{
+            flexShrink: 0,
+            fontSize: "12px",
+            minHeight: "32px",
+          }}
+          type="button"
+        >
+          Details
+        </button>
       </div>
     );
   }
@@ -11314,6 +11451,16 @@ export default function App() {
       planExportMode === "selected"
         ? selectedPlanExportIds.length
         : activePlanExportCount;
+    const hasProvisioningExpiry = Number.isFinite(
+      new Date(provisioningExpiry).getTime()
+    );
+    const provisioningReminderMessage = {
+      denied: "Notifications are disabled for this app in iOS Settings.",
+      error: "The reminders could not be scheduled. Try again.",
+      expired: "This development build has expired. Rebuild and reinstall it from Xcode.",
+      "permission-required": "Enable notifications to receive advance reminders.",
+      scheduled: "Advance reminders are scheduled for this development build.",
+    }[provisioningReminderStatus];
 
     return (
       <div className="settings-view">
@@ -11370,6 +11517,55 @@ export default function App() {
             </>
           )}
         </AppSectionCard>
+
+        {hasProvisioningExpiry && (
+          <AppSectionCard className="settings-view__section">
+            <AppSectionHeading
+              eyebrow="Development install"
+              subtitle="This seven-day Personal Team install expires based on its embedded provisioning profile."
+              title="Build expiration"
+            />
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <div style={{ fontSize: "14px" }}>
+                Expires <strong>{formatProvisioningExpiry(provisioningExpiry)}</strong>{" "}
+                ({getProvisioningExpiryCountdown(provisioningExpiry)})
+              </div>
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  color:
+                    provisioningReminderStatus === "error" ||
+                    provisioningReminderStatus === "expired"
+                      ? "var(--danger-text)"
+                      : "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                {provisioningReminderMessage ||
+                  "Checking whether expiration reminders are available..."}
+              </div>
+              {provisioningReminderStatus !== "scheduled" &&
+                provisioningReminderStatus !== "expired" && (
+                  <button
+                    disabled={provisioningReminderLoading}
+                    onClick={enableProvisioningExpiryReminders}
+                    style={{ justifySelf: "start" }}
+                    type="button"
+                  >
+                    {provisioningReminderLoading
+                      ? "Enabling..."
+                      : "Enable expiration reminders"}
+                  </button>
+                )}
+            </div>
+          </AppSectionCard>
+        )}
 
         <AppSectionCard className="settings-view__section">
           <AppSectionHeading
@@ -13386,40 +13582,43 @@ export default function App() {
 
   if (selectedSession) {
     return (
-      <SessionView
-        authSession={authSession}
-        canEditBuiltInExercises={isIraSettingsUser}
-        session={selectedSession}
-        sessions={sessions}
-        setSessions={setSessions}
-        history={history}
-        setHistory={setHistory}
-        plans={plans}
-        setPlans={setPlans}
-        templates={templates}
-        setTemplates={setTemplates}
-        exerciseLibrary={exerciseLibrary}
-        setExerciseLibrary={(nextExerciseLibrary) => {
-          setExerciseLibrary(nextExerciseLibrary);
-          requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
-        }}
-        exerciseMetadata={exerciseMetadata}
-        setExerciseMetadata={(updater) => {
-          setExerciseMetadata(updater);
-          requestSyncCheckpoint(["exercisePreferences"], "exercise notes");
-        }}
-        setSelectedSessionId={setSelectedSessionId}
-        setSelectedTemplateId={setSelectedTemplateId}
-        plateInventory={plateInventory}
-        bodyWeightEntries={localBodyWeightEntries}
-        onEditModeChange={setTemplatePreviewEditActive}
-        onWorkoutCompleted={(completedWorkout) => {
-          setSelectedHistory(completedWorkout);
-          setSelectedHistoryList(null);
-        }}
-        onWorkoutDataCommitted={commitCompletedWorkoutData}
-        onPlanCompletionNeeded={setPlanCompletionPrompt}
-      />
+      <>
+        {renderProvisioningExpiryNotice()}
+        <SessionView
+          authSession={authSession}
+          canEditBuiltInExercises={isIraSettingsUser}
+          session={selectedSession}
+          sessions={sessions}
+          setSessions={setSessions}
+          history={history}
+          setHistory={setHistory}
+          plans={plans}
+          setPlans={setPlans}
+          templates={templates}
+          setTemplates={setTemplates}
+          exerciseLibrary={exerciseLibrary}
+          setExerciseLibrary={(nextExerciseLibrary) => {
+            setExerciseLibrary(nextExerciseLibrary);
+            requestSyncCheckpoint(["exercisePreferences"], "exercise preferences");
+          }}
+          exerciseMetadata={exerciseMetadata}
+          setExerciseMetadata={(updater) => {
+            setExerciseMetadata(updater);
+            requestSyncCheckpoint(["exercisePreferences"], "exercise notes");
+          }}
+          setSelectedSessionId={setSelectedSessionId}
+          setSelectedTemplateId={setSelectedTemplateId}
+          plateInventory={plateInventory}
+          bodyWeightEntries={localBodyWeightEntries}
+          onEditModeChange={setTemplatePreviewEditActive}
+          onWorkoutCompleted={(completedWorkout) => {
+            setSelectedHistory(completedWorkout);
+            setSelectedHistoryList(null);
+          }}
+          onWorkoutDataCommitted={commitCompletedWorkoutData}
+          onPlanCompletionNeeded={setPlanCompletionPrompt}
+        />
+      </>
     );
   }
 
