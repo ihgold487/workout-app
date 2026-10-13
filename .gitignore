@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Blender automatic recovery backups (the source .blend files are versioned).
+*.blend1
