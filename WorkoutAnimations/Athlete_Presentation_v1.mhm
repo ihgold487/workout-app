@@ -1,0 +1,52 @@
+# Written by MakeHuman UNKNOWN:UNKNOWN
+version v1.2.0
+camera 1.5 356.0 -0.5331826247339346 0.451428659458875 -0.3051677594028327 1.1999999999999544
+modifier nose/nose-scale-vert-decr|incr 0.114000
+modifier nose/nose-scale-horiz-decr|incr 0.104000
+modifier torso/torso-scale-depth-decr|incr 0.310000
+modifier torso/torso-scale-horiz-decr|incr 0.230000
+modifier torso/torso-scale-vert-decr|incr 0.448000
+modifier torso/torso-vshape-decr|incr 0.598000
+modifier torso/torso-muscle-dorsi-decr|incr 0.644000
+modifier torso/torso-muscle-pectoral-decr|incr 0.356000
+modifier armslegs/r-lowerarm-scale-depth-decr|incr 0.092000
+modifier armslegs/r-lowerarm-scale-vert-decr|incr 0.150000
+modifier armslegs/r-lowerarm-muscle-decr|incr 0.092000
+modifier armslegs/r-upperarm-scale-depth-decr|incr 0.206000
+modifier armslegs/r-upperarm-scale-vert-decr|incr 0.150000
+modifier armslegs/r-upperarm-shoulder-muscle-decr|incr 0.114000
+modifier armslegs/r-upperarm-muscle-decr|incr 0.252000
+modifier armslegs/l-lowerarm-scale-depth-decr|incr 0.104000
+modifier armslegs/l-lowerarm-scale-vert-decr|incr 0.114000
+modifier armslegs/l-lowerarm-muscle-decr|incr 0.092000
+modifier armslegs/l-upperarm-scale-depth-decr|incr 0.206000
+modifier armslegs/l-upperarm-scale-vert-decr|incr 0.172000
+modifier armslegs/l-upperarm-shoulder-muscle-decr|incr 0.104000
+modifier armslegs/l-upperarm-muscle-decr|incr 0.288000
+modifier armslegs/r-lowerleg-scale-horiz-decr|incr 0.068000
+modifier armslegs/r-lowerleg-muscle-decr|incr 0.080000
+modifier armslegs/r-upperleg-scale-depth-decr|incr 0.126000
+modifier armslegs/r-upperleg-scale-horiz-decr|incr 0.160000
+modifier armslegs/r-upperleg-muscle-decr|incr 0.172000
+modifier armslegs/l-lowerleg-scale-horiz-decr|incr 0.092000
+modifier armslegs/l-lowerleg-muscle-decr|incr 0.058000
+modifier armslegs/l-upperleg-scale-depth-decr|incr 0.058000
+modifier armslegs/l-upperleg-scale-horiz-decr|incr 0.126000
+modifier armslegs/l-upperleg-muscle-decr|incr 0.172000
+modifier breast/BreastSize 0.500000
+modifier breast/BreastFirmness 0.500000
+modifier macrodetails/Gender 1.000000
+modifier macrodetails/Age 0.575000
+modifier macrodetails/African 0.333333
+modifier macrodetails/Asian 0.333333
+modifier macrodetails/Caucasian 0.333333
+modifier macrodetails-universal/Muscle 0.644000
+modifier macrodetails-universal/Weight 0.460000
+modifier macrodetails-height/Height 0.523000
+modifier macrodetails-proportions/BodyProportions 0.506000
+skeleton game_engine.mhskel
+eyes HighPolyEyes 2c12f43b-1303-432c-b7ce-d78346baf2e6
+clothesHideFaces True
+skinMaterial skins/default.mhmat
+material HighPolyEyes 2c12f43b-1303-432c-b7ce-d78346baf2e6 eyes/materials/brown.mhmat
+subdivide False
