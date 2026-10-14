@@ -127,6 +127,7 @@ import {
 
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
 const TARGET_RIR_PICKER_VALUES = RIR_PICKER_VALUES;
+const REPS_PICKER_VALUES = Array.from({ length: 20 }, (_, index) => index + 1);
 const DELOAD_TARGET_REDUCTION_PERCENT = 0.01;
 
 function formatSpotifyPlaybackTime(milliseconds) {
@@ -477,6 +478,10 @@ function getExerciseKey(exercise) {
 
 function getDefaultPlateLoadingEquipmentId(exercise) {
   const name = normalizeLookupValue(exercise?.name);
+
+  if (name.includes("belt squat")) {
+    return "landmine";
+  }
 
   if (name === "kneeling crunches" || name === "kneeling side crunches") {
     return "cable";
@@ -2919,6 +2924,7 @@ export default function SessionView({
       setId: targetSet?.id || null,
       subtitle: option?.label || "Warmup sets",
       warmupLoadContexts,
+      weight: String(weights.at(-1)),
     });
   }
 
@@ -11143,7 +11149,7 @@ export default function SessionView({
             value={repsPickerData?.value}
             increment={1}
             title="Select Reps"
-            values={Array.from({ length: 20 }, (_, i) => i + 1)}
+            values={REPS_PICKER_VALUES}
             onSelect={(value) => {
               if (!repsPickerData) {
                 return;

@@ -74,6 +74,7 @@ import {
   markStorageVersion,
   saveWorkoutData,
   saveWorkoutDataToIndexedDb,
+  saveActiveWorkoutSessionRecovery,
   saveCompletedWorkoutRecovery,
   saveWorkoutSessionJournal,
 } from "./storage/workoutStorage";
@@ -8213,6 +8214,18 @@ export default function App() {
       return;
     }
 
+    saveActiveWorkoutSessionRecovery({
+      ownerUserId: localOwnerUserId,
+      selectedSessionId,
+      sessions,
+    });
+  }, [localOwnerUserId, selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
     saveWorkoutSessionJournal({
       ownerUserId: localOwnerUserId,
       selectedSessionId,
@@ -8226,6 +8239,35 @@ export default function App() {
     selectedSessionId,
     sessions,
   ]);
+
+  useEffect(() => {
+    function checkpointActiveWorkout() {
+      const data = currentWorkoutDataRef.current;
+
+      if (!data) {
+        return;
+      }
+
+      saveActiveWorkoutSessionRecovery(data);
+      void saveWorkoutSessionJournal(data).catch((error) => {
+        console.error("Failed to checkpoint active workout session:", error);
+      });
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        checkpointActiveWorkout();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", checkpointActiveWorkout);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", checkpointActiveWorkout);
+    };
+  }, []);
 
   useEffect(() => {
     if (!indexedDbReady) {
@@ -8249,6 +8291,8 @@ export default function App() {
     exerciseMetadata,
     localOwnerUserId,
     indexedDbReady,
+    selectedSessionId,
+    sessions,
   ]);
 
   useEffect(() => {

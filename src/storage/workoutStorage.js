@@ -9,6 +9,7 @@ export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
 const STORAGE_VERSION_KEY = "storageVersion";
 const COMPLETED_WORKOUT_RECOVERY_KEY = "completedWorkoutRecovery";
+const ACTIVE_WORKOUT_SESSION_RECOVERY_KEY = "activeWorkoutSessionRecovery";
 const LEGACY_FULL_BACKUP_UPDATED_AT_KEY = "workoutDataUpdatedAt";
 const WORKOUT_DATA_RECORD_ID = "current";
 const WORKOUT_SESSION_JOURNAL_ID = "active";
@@ -155,6 +156,37 @@ function readLegacyFullWorkoutBackup() {
   };
 }
 
+function getActiveWorkoutSessionRecovery() {
+  const recovery = readJson(ACTIVE_WORKOUT_SESSION_RECOVERY_KEY, null);
+
+  if (
+    !recovery ||
+    recovery.selectedSessionId == null ||
+    recovery.session?.id == null
+  ) {
+    return null;
+  }
+
+  return recovery;
+}
+
+function ownersMatch(firstOwnerUserId, secondOwnerUserId) {
+  return (
+    !firstOwnerUserId ||
+    !secondOwnerUserId ||
+    String(firstOwnerUserId) === String(secondOwnerUserId)
+  );
+}
+
+function mergeRecoveredActiveSession(sessions, recovery) {
+  return [
+    ...arrayOrEmpty(sessions).filter(
+      (session) => String(session.id) !== String(recovery.session.id)
+    ),
+    recovery.session,
+  ];
+}
+
 function clearLegacyFullWorkoutBackup() {
   localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseLibrary);
   localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseMetadata);
@@ -222,17 +254,25 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
 }
 
 export function loadWorkoutData({ seedExercises }) {
+  const data = {
+    exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
+    exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
+    history: readJson(WORKOUT_DATA_KEYS.history, []),
+    ownerUserId: readJson(WORKOUT_DATA_KEYS.ownerUserId, null),
+    plans: readJson(WORKOUT_DATA_KEYS.plans, []),
+    selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
+    sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
+    templates: readJson(WORKOUT_DATA_KEYS.templates, []),
+  };
+  const activeRecovery = getActiveWorkoutSessionRecovery();
+
+  if (activeRecovery && ownersMatch(activeRecovery.ownerUserId, data.ownerUserId)) {
+    data.selectedSessionId = activeRecovery.selectedSessionId;
+    data.sessions = mergeRecoveredActiveSession(data.sessions, activeRecovery);
+  }
+
   return normalizeWorkoutData(
-    {
-      exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
-      exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
-      history: readJson(WORKOUT_DATA_KEYS.history, []),
-      ownerUserId: readJson(WORKOUT_DATA_KEYS.ownerUserId, null),
-      plans: readJson(WORKOUT_DATA_KEYS.plans, []),
-      selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
-      sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
-      templates: readJson(WORKOUT_DATA_KEYS.templates, []),
-    },
+    data,
     {
       seedExercises,
     }
@@ -318,7 +358,29 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
           }
         : recoveredData;
 
-  return normalizeWorkoutData(preferredData, {
+  const activeRecovery = getActiveWorkoutSessionRecovery();
+  const activeRecoveryUpdatedAt = Date.parse(activeRecovery?.updatedAt || "");
+  const persistedUpdatedAt = Math.max(
+    Date.parse(record?.updatedAt || "") || 0,
+    Date.parse(journal?.updatedAt || "") || 0
+  );
+  const shouldRecoverActiveSession =
+    activeRecovery &&
+    ownersMatch(activeRecovery.ownerUserId, preferredData.ownerUserId) &&
+    (!Number.isFinite(persistedUpdatedAt) ||
+      activeRecoveryUpdatedAt >= persistedUpdatedAt);
+  const dataWithActiveRecovery = shouldRecoverActiveSession
+    ? {
+        ...preferredData,
+        selectedSessionId: activeRecovery.selectedSessionId,
+        sessions: mergeRecoveredActiveSession(
+          preferredData.sessions,
+          activeRecovery
+        ),
+      }
+    : preferredData;
+
+  return normalizeWorkoutData(dataWithActiveRecovery, {
     seedExercises,
   });
 }
@@ -371,6 +433,28 @@ export async function saveWorkoutSessionJournal({
     ownerUserId: ownerUserId || null,
     selectedSessionId: selectedSessionId ?? null,
     sessions: arrayOrEmpty(sessions),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export function saveActiveWorkoutSessionRecovery({
+  ownerUserId,
+  selectedSessionId,
+  sessions,
+}) {
+  const activeSession = arrayOrEmpty(sessions).find(
+    (session) => String(session.id) === String(selectedSessionId)
+  );
+
+  if (selectedSessionId == null || !activeSession) {
+    localStorage.removeItem(ACTIVE_WORKOUT_SESSION_RECOVERY_KEY);
+    return;
+  }
+
+  writeJson(ACTIVE_WORKOUT_SESSION_RECOVERY_KEY, {
+    ownerUserId: ownerUserId || null,
+    selectedSessionId,
+    session: activeSession,
     updatedAt: new Date().toISOString(),
   });
 }

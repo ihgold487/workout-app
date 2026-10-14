@@ -7432,6 +7432,7 @@ export default function NutritionView({ session = null }) {
           entries={bodyWeightEntries}
           entryDate={selectedDate}
           initialAdding={weightSheetInitialAdding}
+          onAddEntry={() => setWeightPickerOpen(true)}
           onClose={() => {
             setWeightSheetOpen(false);
             setWeightSheetInitialAdding(false);
@@ -7449,6 +7450,7 @@ export default function NutritionView({ session = null }) {
         range={50}
         title="Select body weight"
         value={latestBodyWeight?.weight || ""}
+        zIndex={2350}
       />
 
 	      <WeightPickerModal

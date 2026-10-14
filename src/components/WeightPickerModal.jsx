@@ -45,6 +45,12 @@ function WeightPickerModalContent({
       hapticIndexRef.current = closestIndex;
       void triggerNativePickerSelectionHaptic();
     }
+
+    const selectedOption = options[closestIndex];
+
+    if (selectedOption != null) {
+      setManualValue(String(selectedOption));
+    }
   }
 
   useEffect(() => {
@@ -75,9 +81,9 @@ function WeightPickerModalContent({
       return;
     }
 
-    setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       const selectedIndex = options.findIndex(
-        (option) => option === Number(manualValue),
+        (option) => option === current,
       );
 
       if (selectedIndex < 0) {
@@ -90,7 +96,9 @@ function WeightPickerModalContent({
         block: "center",
       });
     }, 0);
-  }, [manualValue, options]);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [current, options]);
 
   return (
     <div
@@ -105,7 +113,7 @@ function WeightPickerModalContent({
         padding: "12px",
         boxSizing: "border-box",
         overscrollBehavior: "contain",
-        touchAction: "none",
+        touchAction: "pan-y",
         zIndex,
       }}
     >
@@ -120,9 +128,12 @@ function WeightPickerModalContent({
           display: "grid",
           gap: "10px",
           gridTemplateRows: "auto auto auto minmax(0, 1fr)",
+          height:
+            "min(560px, calc(100dvh - 24px - env(safe-area-inset-bottom)))",
           maxHeight:
             "min(560px, calc(100dvh - 24px - env(safe-area-inset-bottom)))",
           minWidth: "220px",
+          overflow: "hidden",
           width: "min(100%, 300px)",
         }}
       >

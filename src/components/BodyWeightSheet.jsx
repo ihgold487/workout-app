@@ -8,7 +8,6 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import WeightPickerModal from "./WeightPickerModal";
 
 const RANGE_OPTIONS = [
   { label: "1 week", value: 7 },
@@ -532,12 +531,12 @@ export default function BodyWeightSheet({
   entries,
   entryDate = getTodayKey(),
   initialAdding = false,
+  onAddEntry,
   onClose,
   onDelete,
   onSave,
 }) {
   const [adding, setAdding] = useState(initialAdding);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
@@ -694,7 +693,7 @@ export default function BodyWeightSheet({
         <button
           onClick={() => {
             if (latestWeight) {
-              setPickerOpen(true);
+              onAddEntry?.();
               setAdding(false);
               return;
             }
@@ -817,16 +816,6 @@ export default function BodyWeightSheet({
           )}
         </div>
       </div>
-      <WeightPickerModal
-        increment={0.1}
-        isOpen={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(value) => onSave(entryDate, value)}
-        range={50}
-        title="Select body weight"
-        value={latestWeight || ""}
-        zIndex={2350}
-      />
       {rangeSheetOpen && (
         <SelectionSheet
           onClose={() => setRangeSheetOpen(false)}
