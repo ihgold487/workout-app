@@ -617,6 +617,76 @@ function RestTimerTick({ children, ...timer }) {
   });
 }
 
+function ExerciseNoteEditor({ disabled, initialNote, onCancel, onSave }) {
+  const [draft, setDraft] = useState(initialNote);
+
+  return (
+    <div
+      style={{
+        alignItems: "flex-start",
+        display: "grid",
+        gap: "4px",
+        gridTemplateColumns: "minmax(0, 1fr) auto auto",
+        marginTop: "8px",
+        textAlign: "left",
+        width: "100%",
+      }}
+    >
+      <textarea
+        disabled={disabled}
+        placeholder="Notes"
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          boxSizing: "border-box",
+          fontSize: "0.85rem",
+          lineHeight: 1.35,
+          minHeight: "42px",
+          minWidth: 0,
+          padding: "6px",
+          resize: "vertical",
+          textAlign: "left",
+          width: "100%",
+        }}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+
+      <button
+        disabled={disabled}
+        type="button"
+        onClick={() => onSave(draft)}
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          minHeight: "32px",
+          minWidth: "32px",
+          padding: "2px 7px",
+        }}
+      >
+        <Check size={15} />
+      </button>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          minHeight: "32px",
+          minWidth: "28px",
+          padding: "2px 7px",
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function SpotifyIcon({ size = 28 }) {
   return (
     <svg
@@ -719,6 +789,7 @@ export default function SessionView({
   const targetPressTimerRef = useRef(null);
   const targetLongPressRef = useRef(false);
   const appliedHistoryDefaultsRef = useRef(new Map());
+  const historyDefaultSetupRef = useRef(null);
   const restNotificationSentKeyRef = useRef(null);
   const nativeRestCompletionHandledRef = useRef(null);
   const wakeLockRef = useRef(null);
@@ -2447,12 +2518,38 @@ export default function SessionView({
   }
 
   useEffect(() => {
+    const previousSetup = historyDefaultSetupRef.current;
+    const defaultsSourceChanged =
+      !previousSetup ||
+      previousSetup.sessionId !== session.id ||
+      previousSetup.getHistoryDefaultsForSet !== getHistoryDefaultsForSet;
+    const previousExercisesById = new Map(
+      (previousSetup?.sessionId === session.id
+        ? previousSetup.exercises
+        : []
+      ).map((exercise) => [String(exercise.id), exercise])
+    );
     let hasUpdates = false;
     const nextAppliedDefaults = new Map(appliedHistoryDefaultsRef.current);
+    const updatedSetsByExerciseId = new Map();
 
-    const exercises = session.exercises.map((exercise) => {
+    session.exercises.forEach((exercise) => {
+      const previousExercise = previousExercisesById.get(String(exercise.id));
+      const exerciseHistoryChanged =
+        !previousExercise ||
+        (previousExercise !== exercise &&
+          getHistoryPerformanceCacheKey(previousExercise) !==
+            getHistoryPerformanceCacheKey(exercise));
       let exerciseChanged = false;
       const sets = exercise.sets.map((set, setIndex) => {
+        if (
+          !defaultsSourceChanged &&
+          !exerciseHistoryChanged &&
+          set === previousExercise.sets?.[setIndex]
+        ) {
+          return set;
+        }
+
         if (set.isDropSet) {
           return set;
         }
@@ -2491,15 +2588,17 @@ export default function SessionView({
         };
       });
 
-      return exerciseChanged
-        ? {
-            ...exercise,
-            sets,
-          }
-        : exercise;
+      if (exerciseChanged) {
+        updatedSetsByExerciseId.set(String(exercise.id), sets);
+      }
     });
 
     appliedHistoryDefaultsRef.current = nextAppliedDefaults;
+    historyDefaultSetupRef.current = {
+      exercises: session.exercises,
+      getHistoryDefaultsForSet,
+      sessionId: session.id,
+    };
 
     if (!hasUpdates) {
       return;
@@ -2507,7 +2606,11 @@ export default function SessionView({
 
     updateSession((s) => ({
       ...s,
-      exercises,
+      exercises: s.exercises.map((exercise) => {
+        const sets = updatedSetsByExerciseId.get(String(exercise.id));
+
+        return sets ? { ...exercise, sets } : exercise;
+      }),
     }));
   }, [
     getHistoryDefaultsForSet,
@@ -3209,7 +3312,6 @@ export default function SessionView({
   ]);
 
   const [expandedNotes, setExpandedNotes] = useState({});
-  const [noteEditSnapshots, setNoteEditSnapshots] = useState({});
 
   const [replacingExerciseId, setReplacingExerciseId] = useState(null);
 
@@ -3221,27 +3323,25 @@ export default function SessionView({
       return;
     }
 
-    const noteKey = String(exercise.id);
-    setNoteEditSnapshots((snapshots) =>
-      snapshots[noteKey]
-        ? snapshots
-        : {
-            ...snapshots,
-            [noteKey]: {
-              note: getExerciseNote(exercise),
-            },
-          }
-    );
     setExpandedNotes((notes) => ({
       ...notes,
       [exercise.id]: true,
     }));
   }
 
-  function acceptExerciseNoteEdit(exercise) {
-    const noteKey = String(exercise.id);
+  function acceptExerciseNoteEdit(exercise, note) {
     const exerciseMetadataId = getExerciseMetadataId(exercise);
-    const note = getExerciseNote(exercise);
+
+    if (note !== getExerciseNote(exercise)) {
+      updateSession((currentSession) => ({
+        ...currentSession,
+        exercises: currentSession.exercises.map((currentExercise) =>
+          idsMatch(currentExercise.id, exercise.id)
+            ? { ...currentExercise, sessionNote: note }
+            : currentExercise
+        ),
+      }));
+    }
 
     if (exerciseMetadataId) {
       setExerciseMetadata((currentMetadata) => ({
@@ -3268,13 +3368,6 @@ export default function SessionView({
       );
     }
 
-    setNoteEditSnapshots((snapshots) => {
-      const next = { ...snapshots };
-
-      delete next[noteKey];
-
-      return next;
-    });
     setExpandedNotes((notes) => ({
       ...notes,
       [exercise.id]: false,
@@ -3282,27 +3375,6 @@ export default function SessionView({
   }
 
   function cancelExerciseNoteEdit(exercise) {
-    const noteKey = String(exercise.id);
-    const snapshot = noteEditSnapshots[noteKey];
-
-    if (snapshot) {
-      updateSession((currentSession) => ({
-        ...currentSession,
-        exercises: currentSession.exercises.map((currentExercise) =>
-          idsMatch(currentExercise.id, exercise.id)
-            ? { ...currentExercise, sessionNote: snapshot.note }
-            : currentExercise
-        ),
-      }));
-    }
-
-    setNoteEditSnapshots((snapshots) => {
-      const next = { ...snapshots };
-
-      delete next[noteKey];
-
-      return next;
-    });
     setExpandedNotes((notes) => ({
       ...notes,
       [exercise.id]: false,
@@ -8686,86 +8758,12 @@ export default function SessionView({
                     ) : null}
 
                     {editingNote ? (
-                      <div
-                        style={{
-                          alignItems: "flex-start",
-                          display: "grid",
-                          gap: "4px",
-                          gridTemplateColumns: "minmax(0, 1fr) auto auto",
-                          marginTop: "8px",
-                          textAlign: "left",
-                          width: "100%",
-                        }}
-                      >
-                        <textarea
-                          disabled={session.workoutTimerPaused}
-                          placeholder="Notes"
-                          style={{
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "6px",
-                            boxSizing: "border-box",
-                            fontSize: "0.85rem",
-                            lineHeight: 1.35,
-                            minHeight: "42px",
-                            minWidth: 0,
-                            padding: "6px",
-                            resize: "vertical",
-                            textAlign: "left",
-                            width: "100%",
-                          }}
-                          value={exerciseNote}
-                          onChange={(e) => {
-                            if (session.workoutTimerPaused) {
-                              return;
-                            }
-
-                            updateSession((currentSession) => ({
-                              ...currentSession,
-                              exercises: currentSession.exercises.map(
-                                (currentExercise) =>
-                                  idsMatch(currentExercise.id, exercise.id)
-                                    ? {
-                                        ...currentExercise,
-                                        sessionNote: e.target.value,
-                                      }
-                                    : currentExercise
-                              ),
-                            }));
-                          }}
-                        />
-
-                        <button
-                          disabled={session.workoutTimerPaused}
-                          type="button"
-                          onClick={() => acceptExerciseNoteEdit(exercise)}
-                          style={{
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "6px",
-                            minHeight: "32px",
-                            minWidth: "32px",
-                            padding: "2px 7px",
-                          }}
-                        >
-                          <Check size={15} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => cancelExerciseNoteEdit(exercise)}
-                          style={{
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "6px",
-                            minHeight: "32px",
-                            minWidth: "28px",
-                            padding: "2px 7px",
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      <ExerciseNoteEditor
+                        disabled={session.workoutTimerPaused}
+                        initialNote={exerciseNote}
+                        onCancel={() => cancelExerciseNoteEdit(exercise)}
+                        onSave={(note) => acceptExerciseNoteEdit(exercise, note)}
+                      />
                     ) : exerciseNoteText ? (
                       <button
                         disabled={session.workoutTimerPaused}
