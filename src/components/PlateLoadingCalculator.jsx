@@ -81,6 +81,10 @@ export const LOAD_CALCULATOR_EQUIPMENT = [
 
 const PLATE_WEIGHT_UNIT = 4;
 const MAX_PLATE_LOADING_OPTIONS_PER_SUM = 4;
+const MANUAL_WARMUP_REPS_PICKER_VALUES = Array.from(
+  { length: 30 },
+  (_, index) => index + 1
+);
 const TWO_INCH_PLATE_STYLES = {
   "55": { background: "#d32f2f", border: "#9a1b1b", color: "#fff" },
   "45": { background: "#1565c0", border: "#0d47a1", color: "#fff" },
@@ -436,6 +440,8 @@ export default function PlateLoadingCalculator({
   const [manualSelections, setManualSelections] = useState({});
   const [manualSuggestionStates, setManualSuggestionStates] = useState({});
   const [manualWarmupReps, setManualWarmupReps] = useState("");
+  const [manualWarmupRepsPickerOpen, setManualWarmupRepsPickerOpen] =
+    useState(false);
   const [plateSelectorOpen, setPlateSelectorOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   const deferredDraft = useDeferredValue(draft);
@@ -456,6 +462,17 @@ export default function PlateLoadingCalculator({
       defaultReps == null || defaultReps === "" ? "" : String(defaultReps)
     );
   }, [warmupLoadContexts]);
+
+  function updateManualWarmupReps(nextValue) {
+    const parsed = Number.parseInt(nextValue, 10);
+
+    if (!Number.isFinite(parsed)) {
+      setManualWarmupReps("");
+      return;
+    }
+
+    setManualWarmupReps(String(Math.max(1, Math.min(30, parsed))));
+  }
 
   function getManualSelectionKey() {
     return draft.equipmentId;
@@ -1135,16 +1152,6 @@ export default function PlateLoadingCalculator({
       manualLoading.achievedTotal,
       manualWarmupContext
     );
-    const updateManualWarmupReps = (nextValue) => {
-      const parsed = Number.parseInt(nextValue, 10);
-
-      if (!Number.isFinite(parsed)) {
-        setManualWarmupReps("");
-        return;
-      }
-
-      setManualWarmupReps(String(Math.max(1, Math.min(30, parsed))));
-    };
 
     return (
       <>
@@ -1204,63 +1211,67 @@ export default function PlateLoadingCalculator({
                     {showWarmupRepsControl ? (
                       <>
                         <span>@</span>
-                        <button
-                          aria-label="Decrease manual warmup reps"
-                          onClick={() =>
-                            updateManualWarmupReps(
-                              Number(manualWarmupReps || 1) - 1
-                            )
-                          }
+                        <div
                           style={{
-                            minHeight: "22px",
-                            minWidth: "22px",
-                            padding: "1px 5px",
+                            alignItems: "center",
+                            display: "flex",
+                            flexBasis: "100%",
+                            gap: "4px",
                           }}
-                          type="button"
                         >
-                          -
-                        </button>
-                        <input
-                          aria-label="Manual warmup reps for percentage"
-                          inputMode="numeric"
-                          max="30"
-                          min="1"
-                          onChange={(event) =>
-                            updateManualWarmupReps(event.target.value)
-                          }
-                          step="1"
-                          style={{
-                            background: "var(--surface-raised)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "5px",
-                            boxSizing: "border-box",
-                            color: "var(--text)",
-                            font: "inherit",
-                            minHeight: "22px",
-                            padding: "1px 2px",
-                            textAlign: "center",
-                            width: "34px",
-                          }}
-                          type="number"
-                          value={manualWarmupReps}
-                        />
-                        <button
-                          aria-label="Increase manual warmup reps"
-                          onClick={() =>
-                            updateManualWarmupReps(
-                              Number(manualWarmupReps || 0) + 1
-                            )
-                          }
-                          style={{
-                            minHeight: "22px",
-                            minWidth: "22px",
-                            padding: "1px 5px",
-                          }}
-                          type="button"
-                        >
-                          +
-                        </button>
-                        <span>reps</span>
+                          <button
+                            aria-label="Decrease manual warmup reps"
+                            onClick={() =>
+                              updateManualWarmupReps(
+                                Number(manualWarmupReps || 1) - 1
+                              )
+                            }
+                            style={{
+                              minHeight: "22px",
+                              minWidth: "22px",
+                              padding: "1px 5px",
+                            }}
+                            type="button"
+                          >
+                            -
+                          </button>
+                          <button
+                            aria-label="Manual warmup reps for percentage"
+                            onClick={() => setManualWarmupRepsPickerOpen(true)}
+                            style={{
+                              background: "var(--surface-raised)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "5px",
+                              boxSizing: "border-box",
+                              color: "var(--text)",
+                              font: "inherit",
+                              minHeight: "22px",
+                              padding: "1px 2px",
+                              textAlign: "center",
+                              width: "34px",
+                            }}
+                            type="button"
+                          >
+                            {manualWarmupReps || "—"}
+                          </button>
+                          <button
+                            aria-label="Increase manual warmup reps"
+                            onClick={() =>
+                              updateManualWarmupReps(
+                                Number(manualWarmupReps || 0) + 1
+                              )
+                            }
+                            style={{
+                              minHeight: "22px",
+                              minWidth: "22px",
+                              padding: "1px 5px",
+                            }}
+                            type="button"
+                          >
+                            +
+                          </button>
+                          <span>reps</span>
+                        </div>
                       </>
                     ) : null}
                   </>
@@ -1726,6 +1737,16 @@ export default function PlateLoadingCalculator({
         title="Select weight"
         value={draft.weight}
         zIndex={11000}
+      />
+
+      <WeightPickerModal
+        isOpen={manualWarmupRepsPickerOpen}
+        onClose={() => setManualWarmupRepsPickerOpen(false)}
+        onSelect={updateManualWarmupReps}
+        title="Select reps"
+        value={manualWarmupReps}
+        values={MANUAL_WARMUP_REPS_PICKER_VALUES}
+        zIndex={12000}
       />
     </section>
   );
