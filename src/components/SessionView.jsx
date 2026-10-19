@@ -553,6 +553,70 @@ function WorkoutDurationDisplay({ session }) {
   return <>{formatWorkoutDuration(getWorkoutDurationSeconds(session, now))}</>;
 }
 
+function getRestTimerDisplayedSeconds({
+  now = Date.now(),
+  restSeconds,
+  restTimerRunDuration,
+  timerExpiredAt,
+  timerFinished,
+  timerRunning,
+  timerStartedAt,
+}) {
+  if (timerRunning && timerStartedAt) {
+    const elapsedSeconds = Math.floor((now - timerStartedAt) / 1000);
+
+    return Math.max(restTimerRunDuration - elapsedSeconds, 0);
+  }
+
+  if (timerFinished && timerExpiredAt) {
+    return Math.max(0, Math.floor((now - timerExpiredAt) / 1000));
+  }
+
+  return Math.max(0, Number(restSeconds) || 0);
+}
+
+function RestTimerTick({ children, ...timer }) {
+  const [now, setNow] = useState(() => Date.now());
+  const shouldTick = Boolean(timer.timerRunning || timer.timerFinished);
+
+  useEffect(() => {
+    if (!shouldTick) {
+      return undefined;
+    }
+
+    const kickoff = window.setTimeout(() => setNow(Date.now()), 0);
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+
+    return () => {
+      window.clearTimeout(kickoff);
+      window.clearInterval(interval);
+    };
+  }, [
+    shouldTick,
+    timer.restTimerRunDuration,
+    timer.timerExpiredAt,
+    timer.timerStartedAt,
+  ]);
+
+  const displayedRestSeconds = getRestTimerDisplayedSeconds({ ...timer, now });
+  const restTimerStateLabel = timer.timerFinished
+    ? "Rest complete"
+    : timer.timerPaused
+      ? "Paused"
+      : timer.timerRunning
+        ? "Resting"
+        : "Ready";
+  const restTimerTimeLabel = `${String(
+    Math.floor(displayedRestSeconds / 60)
+  ).padStart(2, "0")}:${String(displayedRestSeconds % 60).padStart(2, "0")}`;
+
+  return children({
+    displayedRestSeconds,
+    restTimerStateLabel,
+    restTimerTimeLabel,
+  });
+}
+
 function SpotifyIcon({ size = 28 }) {
   return (
     <svg
@@ -3622,30 +3686,6 @@ export default function SessionView({
   }, [timerPaused, timerRunning]);
 
   useEffect(() => {
-    if (!timerRunning || !timerStartedAt) return;
-
-    const id = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000);
-
-      const remaining = Math.max(restTimerRunDuration - elapsed, 0);
-
-      setRestSeconds(remaining);
-    }, 1000);
-
-    return () => clearInterval(id);
-  }, [timerRunning, timerStartedAt, restTimerRunDuration]);
-
-  useEffect(() => {
-    if (!timerFinished || !timerExpiredAt) return;
-
-    const id = setInterval(() => {
-      setRestSeconds(Math.floor((Date.now() - timerExpiredAt) / 1000));
-    }, 1000);
-
-    return () => clearInterval(id);
-  }, [timerExpiredAt, timerFinished]);
-
-  useEffect(() => {
     if (!timerRunning && !timerPaused && !timerFinished) {
       setTimeout(() => {
         const configuredSeconds = restMinutes * 60 + restRemainder;
@@ -3659,8 +3699,17 @@ export default function SessionView({
   }, [restMinutes, restRemainder, timerRunning, timerPaused, timerFinished]);
 
   useEffect(() => {
-    if (restSeconds === 0 && timerRunning) {
+    if (!timerRunning || !timerStartedAt) {
+      return undefined;
+    }
+
+    const endsAt = timerStartedAt + restTimerRunDuration * 1000;
+    const remainingMilliseconds = Math.max(0, endsAt - Date.now());
+    const timeoutId = window.setTimeout(() => {
       const notificationKey = `${timerStartedAt || ""}:${restTimerRunDuration}`;
+
+      restSecondsRef.current = 0;
+      setRestSeconds(0);
 
       if (!canUseNativeRestNotifications()) {
         navigator.vibrate?.([200, 100, 200]);
@@ -3687,24 +3736,20 @@ export default function SessionView({
         void showRestCompleteNotification();
       }
 
-      setTimeout(() => {
-        void endNativeRestTimerLiveActivity();
-        setRestComplete(true);
+      void endNativeRestTimerLiveActivity();
+      setRestComplete(true);
+      window.setTimeout(() => setRestComplete(false), 1200);
 
-        setTimeout(() => setRestComplete(false), 1200);
+      // Preserve the scheduled end time so the overdue count reflects the
+      // full time since the alert, including after backgrounding the app.
+      setTimerExpiredAt(endsAt);
+      setTimerFinished(true);
+      setTimerRunning(false);
+      setTimerPaused(false);
+    }, remainingMilliseconds);
 
-        // The interval may resume after the app has been backgrounded. Keep
-        // the scheduled end time so the count-up immediately reflects the
-        // full time since the alert, rather than restarting at zero.
-        setTimerExpiredAt(
-          (timerStartedAt || Date.now()) + restTimerRunDuration * 1000
-        );
-        setTimerFinished(true);
-        setTimerRunning(false);
-        setTimerPaused(false);
-      }, 0);
-    }
-  }, [restSeconds, timerRunning, timerStartedAt, restTimerRunDuration]);
+    return () => window.clearTimeout(timeoutId);
+  }, [timerRunning, timerStartedAt, restTimerRunDuration]);
 
   useEffect(() => {
     if (!activeSet?.setId) {
@@ -4475,6 +4520,17 @@ export default function SessionView({
     };
   }
 
+  function getLiveRestTimerSeconds() {
+    return getRestTimerDisplayedSeconds({
+      restSeconds: restSecondsRef.current,
+      restTimerRunDuration,
+      timerExpiredAt,
+      timerFinished,
+      timerRunning,
+      timerStartedAt,
+    });
+  }
+
   function setConfiguredRestDuration(seconds) {
     const normalizedSeconds = Math.max(0, Math.min(10 * 60, seconds));
     setRestMinutes(Math.floor(normalizedSeconds / 60));
@@ -4488,15 +4544,21 @@ export default function SessionView({
     }
 
     if (timerRunning) {
+      const liveRestTimerSeconds = getLiveRestTimerSeconds();
+
+      restSecondsRef.current = liveRestTimerSeconds;
+      setRestSeconds(liveRestTimerSeconds);
       setTimerPaused(true);
       setTimerRunning(false);
       void cancelNativeRestTimerNotification();
-      void pauseNativeRestTimerLiveActivity(restSeconds);
+      void pauseNativeRestTimerLiveActivity(liveRestTimerSeconds);
       return;
     }
 
     const configuredSeconds = restMinutes * 60 + restRemainder;
-    const liveActivitySeconds = timerPaused ? restSeconds : configuredSeconds;
+    const liveActivitySeconds = timerPaused
+      ? restSecondsRef.current
+      : configuredSeconds;
 
     if (liveActivitySeconds <= 0) {
       return;
@@ -4534,7 +4596,7 @@ export default function SessionView({
     localRestTimerAdjustmentUntilRef.current = Date.now() + 1500;
 
     if (timerFinished) {
-      const signedRemaining = -restSecondsRef.current + deltaSeconds;
+      const signedRemaining = -getLiveRestTimerSeconds() + deltaSeconds;
 
       if (signedRemaining > 0) {
         const adjustedSeconds = Math.max(0, Math.min(10 * 60, signedRemaining));
@@ -4565,9 +4627,10 @@ export default function SessionView({
     }
 
     if (timerRunning || timerPaused) {
+      const currentRestSeconds = getLiveRestTimerSeconds();
       const adjustedSeconds = Math.max(
         0,
-        Math.min(10 * 60, restSecondsRef.current + deltaSeconds)
+        Math.min(10 * 60, currentRestSeconds + deltaSeconds)
       );
       restSecondsRef.current = adjustedSeconds;
       setRestSeconds(adjustedSeconds);
@@ -6414,20 +6477,6 @@ export default function SessionView({
   const workoutUpdateOptions = showApplyChangesPrompt
     ? getWorkoutUpdateOptions()
     : [];
-  const displayedRestSeconds =
-    timerRunning || timerPaused || timerFinished
-      ? restSeconds
-      : restMinutes * 60 + restRemainder;
-  const restTimerStateLabel = timerFinished
-    ? "Rest complete"
-    : timerPaused
-      ? "Paused"
-      : timerRunning
-        ? "Resting"
-        : "Ready";
-  const restTimerTimeLabel = `${String(
-    Math.floor(displayedRestSeconds / 60)
-  ).padStart(2, "0")}:${String(displayedRestSeconds % 60).padStart(2, "0")}`;
   const spotifyCompactLabel = spotifyBusy
     ? "Spotify connecting"
     : spotifyState.error
@@ -6849,6 +6898,20 @@ export default function SessionView({
             </div>
           </div>
         )}
+        <RestTimerTick
+          restSeconds={restSeconds}
+          restTimerRunDuration={restTimerRunDuration}
+          timerExpiredAt={timerExpiredAt}
+          timerFinished={timerFinished}
+          timerPaused={timerPaused}
+          timerRunning={timerRunning}
+          timerStartedAt={timerStartedAt}
+        >
+          {({
+            displayedRestSeconds,
+            restTimerStateLabel,
+            restTimerTimeLabel,
+          }) => (
         <div
           aria-label="Workout utilities"
           className="session-utilities"
@@ -7015,7 +7078,8 @@ export default function SessionView({
                               0,
                               Math.min(
                                 100,
-                                (restSeconds / Math.max(1, restTimerProgressTotal)) *
+                                (displayedRestSeconds /
+                                  Math.max(1, restTimerProgressTotal)) *
                                   100
                               )
                             )}%`,
@@ -7485,7 +7549,7 @@ export default function SessionView({
                 }`}
                 aria-valuemax={restTimerProgressTotal}
                 aria-valuemin={0}
-                aria-valuenow={timerFinished ? 0 : restSeconds}
+                aria-valuenow={timerFinished ? 0 : displayedRestSeconds}
                 role="progressbar"
                 style={{
                   background: "color-mix(in srgb, currentColor 18%, transparent)",
@@ -7510,7 +7574,9 @@ export default function SessionView({
                             0,
                             Math.min(
                               100,
-                              (restSeconds / Math.max(1, restTimerProgressTotal)) * 100
+                              (displayedRestSeconds /
+                                Math.max(1, restTimerProgressTotal)) *
+                                100
                             )
                           )
                     }%`,
@@ -7673,6 +7739,8 @@ export default function SessionView({
           </div>
         )}
         </div>
+          )}
+        </RestTimerTick>
 
         <div
           style={{
