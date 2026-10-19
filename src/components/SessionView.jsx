@@ -844,7 +844,6 @@ export default function SessionView({
   const latestHistoryPerformanceCache = useMemo(() => new Map(), [
     history,
     plans,
-    session.exercises,
     session.id,
     session.planId,
     session.planWeek,
@@ -853,9 +852,24 @@ export default function SessionView({
     templates,
   ]);
 
+  function getHistoryPerformanceCacheKey(exercise) {
+    return JSON.stringify({
+      equipment: exercise?.equipment || [],
+      exerciseId: exercise?.exerciseId ?? exercise?.id ?? null,
+      name: exercise?.name || "",
+      prescription: (exercise?.sets || []).map((set) => ({
+        minimumReps: getSetMinimumReps(set),
+        reps: getSetPrescribedReps(set),
+        rir: getSetPrescribedRir(set),
+      })),
+    });
+  }
+
   const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
-    if (latestHistoryPerformanceCache.has(sessionExercise)) {
-      return latestHistoryPerformanceCache.get(sessionExercise);
+    const cacheKey = getHistoryPerformanceCacheKey(sessionExercise);
+
+    if (latestHistoryPerformanceCache.has(cacheKey)) {
+      return latestHistoryPerformanceCache.get(cacheKey);
     }
 
     const performance = findLatestExercisePerformance({
@@ -871,7 +885,7 @@ export default function SessionView({
       templates,
     });
 
-    latestHistoryPerformanceCache.set(sessionExercise, performance);
+    latestHistoryPerformanceCache.set(cacheKey, performance);
     return performance;
   }, [
     history,
@@ -1015,6 +1029,28 @@ export default function SessionView({
     return linkedPlan
       ? resolvePlanGoalMode(linkedPlan.goal)
       : "maintenance";
+  }
+
+  // Target recommendations are pure for this input set. Keep their results
+  // across ordinary session edits so a note or actual-value change does not
+  // repeat history scans for unaffected sets.
+  const targetCalculationCache = useMemo(() => new Map(), [
+    bodyWeightEntries,
+    exerciseLibrary,
+    history,
+    plateInventory,
+    plans,
+    session.id,
+    session.planId,
+    session.planWeek,
+    session.planWorkoutId,
+    session.templateId,
+    sessionBodyWeight,
+    templates,
+  ]);
+
+  function getTargetCalculationCacheKey(exercise, set, setIndex) {
+    return `${setIndex}:${JSON.stringify({ exercise, set })}`;
   }
 
   function getPlanTargetValues() {
@@ -1513,6 +1549,16 @@ export default function SessionView({
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
+    const cacheKey = `recommendation:${getTargetCalculationCacheKey(
+      exercise,
+      set,
+      setIndex
+    )}`;
+
+    if (targetCalculationCache.has(cacheKey)) {
+      return targetCalculationCache.get(cacheKey);
+    }
+
     const calculationExercise = getExerciseForCalculation(exercise);
     const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
     const previousActualWeight = firstPresentValue(previousSet?.actualWeight);
@@ -1536,7 +1582,7 @@ export default function SessionView({
       previousActualE1RM != null &&
       adjacentFatigueRatio != null
     ) {
-      return {
+      const recommendation = {
         result: recommendDeloadTargetPrescription({
           allowedRepWindow: 2,
           baselineE1RM: previousActualE1RM,
@@ -1556,9 +1602,12 @@ export default function SessionView({
             getExerciseWeightIncrement(calculationExercise, undefined, weight),
         }),
       };
+
+      targetCalculationCache.set(cacheKey, recommendation);
+      return recommendation;
     }
 
-    return recommendSetTarget({
+    const recommendation = recommendSetTarget({
       allowedRepWindow: 2,
       bodyWeight: sessionBodyWeight,
       exercise: calculationExercise,
@@ -1573,6 +1622,9 @@ export default function SessionView({
       weightIncrement: (weight) =>
         getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
+
+    targetCalculationCache.set(cacheKey, recommendation);
+    return recommendation;
   }
 
   function firstPresentValue(...values) {
@@ -1810,10 +1862,23 @@ export default function SessionView({
   }
 
   function getRankedProgressionAlternativesForSet(exercise, set, setIndex) {
+    const cacheKey = `progression:${getTargetCalculationCacheKey(
+      exercise,
+      set,
+      setIndex
+    )}`;
+
+    if (targetCalculationCache.has(cacheKey)) {
+      return targetCalculationCache.get(cacheKey);
+    }
+
     const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
 
     if (getGoalMode() !== "progress" || !previousSet) {
-      return [];
+      const alternatives = [];
+
+      targetCalculationCache.set(cacheKey, alternatives);
+      return alternatives;
     }
 
     const prescribedReps = parseSessionNumber(
@@ -1824,7 +1889,10 @@ export default function SessionView({
     );
 
     if (prescribedReps == null) {
-      return [];
+      const alternatives = [];
+
+      targetCalculationCache.set(cacheKey, alternatives);
+      return alternatives;
     }
 
     const targetRir = getSetPrescribedRir(set, getSetPrescribedRir(previousSet));
@@ -1883,7 +1951,7 @@ export default function SessionView({
       displayedTarget.rir
     );
 
-    return getRankedProgressionCandidates({
+    const alternatives = getRankedProgressionCandidates({
       balanceAroundE1RM: displayedTargetE1RM,
       baselineE1RM,
       currentWeight: currentTargetWeight,
@@ -1897,6 +1965,9 @@ export default function SessionView({
       prescribedReps,
       targetRir,
     });
+
+    targetCalculationCache.set(cacheKey, alternatives);
+    return alternatives;
   }
 
   function getActualTargetMatchStatus(exercise, set, setIndex) {
