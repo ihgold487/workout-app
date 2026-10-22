@@ -8829,6 +8829,39 @@ export default function App() {
     ).length;
   }
 
+  function getStandaloneTemplateHistory(template) {
+    const templateId = String(template?.id ?? "");
+    const directMatches = history.filter(
+      (workout) =>
+        String(workout.templateId ?? workout.template_id ?? "") === templateId
+    );
+
+    if (directMatches.length > 0) {
+      return directMatches;
+    }
+
+    const templateName = normalizeExportText(template?.name);
+
+    if (!templateName) {
+      return [];
+    }
+
+    return history.filter((workout) => {
+      const hasTemplateOrPlanLink =
+        workout.templateId != null ||
+        workout.template_id != null ||
+        workout.planId != null ||
+        workout.plan_id != null ||
+        workout.planWorkoutId != null ||
+        workout.plan_workout_id != null;
+
+      return (
+        !hasTemplateOrPlanLink &&
+        normalizeExportText(getWorkoutName(workout)) === templateName
+      );
+    });
+  }
+
   function getSortedPlansForComparison() {
     return [...plans].sort((a, b) => {
       if (a.status === "active" && b.status !== "active") return -1;
@@ -14235,13 +14268,7 @@ export default function App() {
                 <button
                   aria-label={`${template.name} history`}
                   onClick={() => {
-                    const matches = history.filter(
-                      (h) => String(h.templateId) === String(template.id)
-                    );
-
-                    if (matches.length) {
-                      setSelectedHistoryList(matches);
-                    }
+                    setSelectedHistoryList(getStandaloneTemplateHistory(template));
                   }}
                   style={{
                     alignItems: "center",
@@ -14263,7 +14290,7 @@ export default function App() {
                         background: "transparent",
                         inset: 0,
                         position: "fixed",
-                        zIndex: 39,
+                        zIndex: 1000,
                       }}
                     />
                     <div
@@ -14279,7 +14306,7 @@ export default function App() {
                         position: "absolute",
                         right: 0,
                         top: "48px",
-                        zIndex: 40,
+                        zIndex: 1001,
                       }}
                     >
                     <button
