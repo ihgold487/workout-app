@@ -6285,6 +6285,59 @@ export default function App() {
     }
   }
 
+  function persistCommittedWorkoutTemplate(committedTemplate) {
+    const currentData = currentWorkoutDataRef.current || getCurrentWorkoutData();
+    const templates = currentData.templates.map((template) =>
+      String(template.id) === String(committedTemplate.id)
+        ? committedTemplate
+        : template
+    );
+    const plans = committedTemplate.planId
+      ? currentData.plans.map((plan) => {
+          if (String(plan.id) !== String(committedTemplate.planId)) {
+            return plan;
+          }
+
+          return {
+            ...plan,
+            updatedAt: new Date().toISOString(),
+            workouts: (plan.workouts || []).map((planWorkout) =>
+              String(planWorkout.templateId) === String(committedTemplate.id) ||
+              String(planWorkout.planWorkoutId) ===
+                String(committedTemplate.planWorkoutId)
+                ? {
+                    ...planWorkout,
+                    exercises: structuredClone(committedTemplate.exercises || []),
+                    name: committedTemplate.name || planWorkout.name,
+                    workoutType:
+                      committedTemplate.workoutType ||
+                      planWorkout.workoutType ||
+                      null,
+                    workoutTypeLabel:
+                      committedTemplate.workoutTypeLabel ||
+                      planWorkout.workoutTypeLabel ||
+                      null,
+                  }
+                : planWorkout
+            ),
+          };
+        })
+      : currentData.plans;
+    const data = {
+      ...currentData,
+      plans,
+      templates,
+    };
+
+    // This is intentionally synchronous from the UI's point of view: an iOS
+    // web view can be suspended immediately after the user taps OK.
+    currentWorkoutDataRef.current = data;
+    localDataRevisionRef.current += 1;
+    saveLocalWorkoutDataImmediately(data).catch((error) => {
+      console.error("Failed to save edited workout immediately:", error);
+    });
+  }
+
   function commitCompletedWorkoutData(updates) {
     const mergedData = {
       ...(currentWorkoutDataRef.current || getCurrentWorkoutData()),
@@ -8241,6 +8294,10 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    if (!indexedDbReady) {
+      return undefined;
+    }
+
     function checkpointActiveWorkout() {
       const data = currentWorkoutDataRef.current;
 
@@ -8248,6 +8305,10 @@ export default function App() {
         return;
       }
 
+      saveWorkoutData(data, STORAGE_VERSION);
+      void saveWorkoutDataToIndexedDb(data, STORAGE_VERSION).catch((error) => {
+        console.error("Failed to checkpoint workout data:", error);
+      });
       saveActiveWorkoutSessionRecovery(data);
       void saveWorkoutSessionJournal(data).catch((error) => {
         console.error("Failed to checkpoint active workout session:", error);
@@ -8267,7 +8328,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", checkpointActiveWorkout);
     };
-  }, []);
+  }, [indexedDbReady]);
 
   useEffect(() => {
     if (!indexedDbReady) {
@@ -10249,6 +10310,7 @@ export default function App() {
     const navigation = (
       <nav
         aria-label="Primary"
+        className="primary-bottom-nav"
         style={{
           background: "color-mix(in srgb, var(--surface) 96%, transparent)",
           borderTop: "1px solid var(--border)",
@@ -13690,6 +13752,7 @@ export default function App() {
         exerciseMetadata={exerciseMetadata}
         setExerciseMetadata={setExerciseMetadata}
         history={history}
+        onEditCommitted={persistCommittedWorkoutTemplate}
         onAutoStartHandled={() => setAutoStartTemplateId(null)}
         plans={plans}
         setPlans={(nextPlans) => {

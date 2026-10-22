@@ -138,6 +138,19 @@ h2 {
   width: 28px;
 }
 
+/* Keep the primary navigation in its own fixed compositing layer on iOS.
+   Without this, a WKWebView can briefly attach the bar to the document while
+   momentum-scrolling long pages. */
+.primary-bottom-nav {
+  bottom: 0 !important;
+  left: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
 .app-page-header__copy,
 .app-section-heading__copy {
   min-width: 0;

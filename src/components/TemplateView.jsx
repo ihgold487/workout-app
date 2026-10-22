@@ -314,6 +314,7 @@ export default function TemplateView({
   setSessions,
   setSelectedSessionId,
   onEditModeChange,
+  onEditCommitted,
   onAutoStartHandled,
 }) {
   const autoStartHandledRef = useRef(false);
@@ -808,15 +809,18 @@ export default function TemplateView({
       return;
     }
 
-    updateCurrentTemplate(
-      (currentTemplate) => ({
-        ...currentTemplate,
-        exercises: clearSingleExerciseSupersets(currentTemplate.exercises || []),
-      }),
-      {
-        requireEdit: false,
-      }
+    const committedTemplate = {
+      ...template,
+      exercises: clearSingleExerciseSupersets(template.exercises || []),
+    };
+
+    setTemplates((currentTemplates) =>
+      currentTemplates.map((currentTemplate) =>
+        currentTemplate.id === template.id ? committedTemplate : currentTemplate
+      )
     );
+    syncLinkedPlanTemplate(committedTemplate);
+    onEditCommitted?.(committedTemplate);
     setIsEditMode(false);
     setEditSnapshot(null);
     void triggerNativeSuccessHaptic();

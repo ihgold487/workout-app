@@ -84,6 +84,7 @@ import {
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import { isPlanCompleteFromCompletions } from "../utils/planLifecycle";
+import { getPlanWorkingSetCount } from "../utils/planSetCount";
 import {
   canUseNativeRestNotifications,
   cancelNativeRestTimerNotification,
@@ -6083,7 +6084,7 @@ export default function SessionView({
     );
     const getExpectedSetCount = (exercise) => {
       if (!session.planId || !Array.isArray(exercise?.weeklyPrescriptions)) {
-        return exercise?.sets?.length || 0;
+        return getPlanWorkingSetCount(exercise);
       }
 
       const weekPrescription = exercise.weeklyPrescriptions.find(
@@ -6092,7 +6093,7 @@ export default function SessionView({
 
       return Math.max(
         1,
-        Number(weekPrescription?.sets) || exercise?.sets?.length || 0
+        Number(weekPrescription?.sets) || getPlanWorkingSetCount(exercise)
       );
     };
     const getStructuralSignature = (exercises, { usePlanExpectedSets = false } = {}) =>
@@ -6103,7 +6104,7 @@ export default function SessionView({
         name: ex.name,
         setCount: usePlanExpectedSets && originalById.has(String(ex.id))
           ? getExpectedSetCount(originalById.get(String(ex.id)))
-          : ex.sets?.length || 0,
+          : getPlanWorkingSetCount(ex),
         supersetGroup: ex.supersetGroup || null,
       }));
 
@@ -6133,13 +6134,20 @@ export default function SessionView({
     const formatValueChange = (before, after) =>
       `${before || "—"} -> ${after || "—"}`;
     const formatExercisePrescriptionRange = (exercise, getter) => {
-      const values = [...new Set((exercise?.sets || []).map((set) => getter(set)).filter(Boolean))];
+      const values = [
+        ...new Set(
+          (exercise?.sets || [])
+            .filter((set) => !set?.isDropSet && !set?.is_drop_set)
+            .map((set) => getter(set))
+            .filter(Boolean)
+        ),
+      ];
 
       return values.length > 1 ? values.join("-") : values[0] || "—";
     };
     const getExpectedSetCount = (exercise) => {
       if (!session.planId || !Array.isArray(exercise?.weeklyPrescriptions)) {
-        return exercise?.sets?.length || 0;
+        return getPlanWorkingSetCount(exercise);
       }
 
       const weekPrescription = exercise.weeklyPrescriptions.find(
@@ -6148,7 +6156,7 @@ export default function SessionView({
 
       return Math.max(
         1,
-        Number(weekPrescription?.sets) || exercise?.sets?.length || 0
+        Number(weekPrescription?.sets) || getPlanWorkingSetCount(exercise)
       );
     };
     const originalOrder = (original.exercises || []).map((exercise) => String(exercise.id));
@@ -6197,13 +6205,15 @@ export default function SessionView({
 
       const expectedSetCount = getExpectedSetCount(originalExercise);
 
-      if (expectedSetCount !== (exercise.sets?.length || 0)) {
+      const sessionWorkingSetCount = getPlanWorkingSetCount(exercise);
+
+      if (expectedSetCount !== sessionWorkingSetCount) {
         changes.push({
           exerciseId: exercise.id,
           id: `sets:${exercise.id}`,
           label: `${exercise.name || "Exercise"}: sets ${formatValueChange(
             expectedSetCount,
-            exercise.sets?.length || 0
+            sessionWorkingSetCount
           )}`,
           type: "sets",
         });
@@ -6391,15 +6401,24 @@ export default function SessionView({
       const sourceExercise = selectedFields.has("exercise-replace")
         ? sessionExercise || originalExercise
         : originalExercise;
+      const originalWorkingSets = (originalExercise.sets || []).filter(
+        (set) => !set?.isDropSet && !set?.is_drop_set
+      );
+      const sessionWorkingSets = (sessionExercise?.sets || []).filter(
+        (set) => !set?.isDropSet && !set?.is_drop_set
+      );
+      const originalDropSets = (originalExercise.sets || []).filter(
+        (set) => set?.isDropSet || set?.is_drop_set
+      );
       const setCount = selectedFields.has("sets")
-        ? sessionExercise?.sets?.length || originalExercise.sets?.length || 1
-        : originalExercise.sets?.length || 1;
+        ? sessionWorkingSets.length || originalWorkingSets.length || 1
+        : originalWorkingSets.length || 1;
       const sourceSets = Array.from({ length: setCount }, (_, index) => {
         const originalSet =
-          originalExercise.sets?.[index] ||
-          originalExercise.sets?.at(-1) ||
+          originalWorkingSets[index] ||
+          originalWorkingSets.at(-1) ||
           {};
-        const sessionSet = sessionExercise?.sets?.[index];
+        const sessionSet = sessionWorkingSets[index];
 
         return {
           ...mergeSetPrescription(originalSet, sessionSet, selectedFields),
@@ -6418,7 +6437,7 @@ export default function SessionView({
           sessionExercise,
           selectedFields
         ),
-        sets: sourceSets,
+        sets: [...sourceSets, ...originalDropSets],
       };
     };
     const buildAddedExercise = (sessionExercise) =>
