@@ -473,6 +473,8 @@ export function findLatestExercisePerformance({
   };
   const hasPlanWorkoutScope = plan?.id != null && planWorkoutId != null;
   const hasTemplateScope = templateId != null;
+  const isStandaloneTemplateSession =
+    hasTemplateScope && !plan?.id && planWorkoutId == null;
   const isRepeatedPlanExercise = exerciseAppearsOnMultiplePlanDays({
     exercise,
     plan,
@@ -481,6 +483,21 @@ export function findLatestExercisePerformance({
   const currentPrescriptionSignature = getExercisePrescriptionSignature(exercise);
   const canMatchPrescription =
     hasUsefulPrescriptionSignature(currentPrescriptionSignature);
+
+  // Standalone workouts are their own repeatable routine. Their most useful
+  // reference is the last completion of that routine, even if its
+  // prescription changed. If it has never been completed, show the most
+  // recent completion of this exercise from any workout rather than an older
+  // history entry that merely has a matching prescription.
+  if (isStandaloneTemplateSession) {
+    const previousStandalonePerformance = findMatchingPerformance(
+      (historyWorkout) =>
+        String(historyWorkout.templateId || "") === String(templateId),
+      true
+    );
+
+    return previousStandalonePerformance || findMatchingPerformance(() => true);
+  }
 
   // A deload changes RIR and often the set prescription, but its last-completed
   // reference should still be the immediately preceding occurrence of this plan

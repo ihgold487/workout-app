@@ -84,6 +84,63 @@ test("normal training prefers older normal performance over a newer deload", () 
   assert.equal(performance?.workout.id, "training-workout");
 });
 
+test("standalone workouts prefer their previous completion over newer exercise history", () => {
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: false,
+    exercise,
+    history: [
+      {
+        completedAtIso: "2026-10-21T12:00:00.000Z",
+        exercises: [{ ...exercise, sets: [{ actualWeight: "145" }] }],
+        id: "newer-other-workout",
+        templateId: "other-template",
+      },
+      {
+        completedAtIso: "2026-10-14T12:00:00.000Z",
+        exercises: [{ ...exercise, sets: [{ actualWeight: "125" }] }],
+        id: "previous-standalone-workout",
+        templateId: "standalone-template",
+      },
+    ],
+    templateId: "standalone-template",
+  });
+
+  assert.equal(performance?.workout.id, "previous-standalone-workout");
+});
+
+test("standalone workouts fall back to the newest exercise history regardless of prescription", () => {
+  const currentExercise = {
+    ...exercise,
+    sets: [{ reps: "12", rir: "2" }],
+  };
+  const performance = findLatestExercisePerformance({
+    currentIsDeload: false,
+    exercise: currentExercise,
+    history: [
+      {
+        completedAtIso: "2026-10-21T12:00:00.000Z",
+        exercises: [
+          {
+            ...currentExercise,
+            sets: [{ actualWeight: "115", reps: "8", rir: "2" }],
+          },
+        ],
+        id: "newest-different-prescription",
+        templateId: "other-template",
+      },
+      {
+        completedAtIso: "2026-09-14T12:00:00.000Z",
+        exercises: [{ ...exercise, sets: [{ actualWeight: "135" }] }],
+        id: "older-matching-prescription",
+        templateId: "another-template",
+      },
+    ],
+    templateId: "standalone-template",
+  });
+
+  assert.equal(performance?.workout.id, "newest-different-prescription");
+});
+
 test("the first week of a new plan uses the latest non-deload exercise performance", () => {
   const currentExercise = {
     ...exercise,
