@@ -1100,7 +1100,7 @@ export default function SessionView({
 
     return linkedPlan
       ? resolvePlanGoalMode(linkedPlan.goal)
-      : "maintenance";
+      : "progress";
   }
 
   // Target recommendations are pure for this input set. Keep their results

@@ -8862,6 +8862,21 @@ export default function App() {
     });
   }
 
+  function getStandaloneTemplateLastCompletedTime(template) {
+    const latestHistoryTime = getStandaloneTemplateHistory(template).reduce(
+      (latestTime, workout) =>
+        Math.max(latestTime, getHistoryWorkoutTime(workout)),
+      0
+    );
+
+    if (latestHistoryTime > 0) {
+      return latestHistoryTime;
+    }
+
+    const storedTime = new Date(template?.lastCompleted || 0).getTime();
+    return Number.isFinite(storedTime) ? storedTime : 0;
+  }
+
   function getSortedPlansForComparison() {
     return [...plans].sort((a, b) => {
       if (a.status === "active" && b.status !== "active") return -1;
@@ -13803,12 +13818,16 @@ export default function App() {
     .filter(
       (template) => !template.planId && !planTemplateIds.has(String(template.id))
     )
+    .map((template) => ({
+      ...template,
+      homeLastCompletedTime: getStandaloneTemplateLastCompletedTime(template),
+    }))
     .sort((a, b) => {
       if (templateSort === "alpha") {
         return a.name.localeCompare(b.name);
       }
 
-      return new Date(b.lastCompleted || 0) - new Date(a.lastCompleted || 0);
+      return b.homeLastCompletedTime - a.homeLastCompletedTime;
     });
   const activeHomePlan = plans.find((plan) => plan.status === "active") || null;
   const activeHomeWeekStatus = activeHomePlan
@@ -14224,9 +14243,9 @@ export default function App() {
                       marginTop: "3px",
                     }}
                   >
-                    {template.lastCompleted
+                    {template.homeLastCompletedTime
                       ? `Last completed ${new Date(
-                          template.lastCompleted
+                          template.homeLastCompletedTime
                         ).toLocaleDateString([], {
                           month: "numeric",
                           day: "numeric",

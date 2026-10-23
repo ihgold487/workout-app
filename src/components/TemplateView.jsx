@@ -503,7 +503,7 @@ export default function TemplateView({
       return "maintenance";
     }
 
-    return plan ? resolvePlanGoalMode(plan.goal) : "maintenance";
+    return plan ? resolvePlanGoalMode(plan.goal) : "progress";
   }
 
   function isDeloadPlanWorkout(plan) {
@@ -1750,6 +1750,52 @@ export default function TemplateView({
     };
   }
 
+  function getNewExerciseDefaults(exercise) {
+    const performance = getLatestWorkoutPerformance(exercise.id);
+    const performanceSets = performance?.sets || [];
+    const workingSets = performanceSets.filter(
+      (set) => !set.isDropSet && !set.is_drop_set
+    );
+    const performanceBodyWeight = getLatestBodyWeightForDate(
+      bodyWeightEntries,
+      performance?.completedAtIso || performance?.completedAt
+    );
+    const maxE1RMSet = performanceSets.reduce(
+      (best, set) => {
+        const e1rm = calculateE1RM(
+          set.actualWeight ?? set.actual_weight,
+          set.actualReps ?? set.actual_reps,
+          set.actualRir ?? set.actual_rir,
+          null,
+          null,
+          null,
+          {
+            bodyWeight: performanceBodyWeight,
+            exercise,
+          }
+        );
+
+        return Number.isFinite(e1rm) && (!best || e1rm > best.e1rm)
+          ? { e1rm, set }
+          : best;
+      },
+      null
+    );
+    const bestActualSet = maxE1RMSet?.set;
+    const actualReps =
+      bestActualSet?.actualReps ?? bestActualSet?.actual_reps ?? "";
+
+    return {
+      weight: String(
+        bestActualSet?.actualWeight ?? bestActualSet?.actual_weight ?? ""
+      ),
+      minimumReps: String(actualReps),
+      reps: String(actualReps),
+      rir: String(bestActualSet?.actualRir ?? bestActualSet?.actual_rir ?? ""),
+      sets: workingSets.length ? String(workingSets.length) : "",
+    };
+  }
+
   function getPrescriptionPickerValue(field) {
     if (!editingExerciseDraft) {
       return "";
@@ -2117,6 +2163,7 @@ export default function TemplateView({
             setSearch("");
           }}
           onSelect={(exercise) => {
+            setNewExerciseValues(getNewExerciseDefaults(exercise));
             setPendingExercise(exercise);
             setShowAdd(false);
           }}
