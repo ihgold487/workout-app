@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   getHistoricalFatigueRatioForSet,
+  MAX_PROGRESS_E1RM_INCREASE_PERCENT,
   PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
   recommendDeloadTargetPrescription,
   recommendNextSetTargetAfterPerformance,
@@ -89,6 +90,31 @@ test("every progressive plan target uses the AI-plan 0.5% e1RM increment", () =>
   assert.equal(PLAN_PROGRESS_E1RM_INCREASE_PERCENT, 0.005);
   assert.equal(target.progressionPercent, PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
   assert.ok(Math.abs(target.targetE1RM - 201) < 0.0001);
+});
+
+test("progression caps rounded e1RM jumps before prioritizing exact reps", () => {
+  const target = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    previousE1RM: 91.66666666666667,
+    targetReps: 11,
+    targetRir: 5,
+    weightIncrement: 2.5,
+  });
+
+  assert.equal(MAX_PROGRESS_E1RM_INCREASE_PERCENT, 0.01);
+  assert.deepEqual(
+    {
+      reps: target.recommendation.reps,
+      rir: target.recommendation.rir,
+      weight: target.recommendation.weight,
+    },
+    { reps: 11, rir: 5, weight: 60 }
+  );
+  assert.ok(
+    target.recommendation.e1rm <=
+      target.baselineE1RM * (1 + MAX_PROGRESS_E1RM_INCREASE_PERCENT)
+  );
 });
 
 test("a small RIR miss prefers one fewer rep at the same weight", () => {

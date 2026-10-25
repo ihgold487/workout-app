@@ -180,10 +180,17 @@ function localSetToCloud(set, userId, workoutExerciseId, setNumber) {
     set.targetMinimumReps ||
     prescribedReps;
   const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
+  const prescribedRestSeconds = parseInteger(
+    set.prescribedRestSeconds ?? set.restSeconds ?? set.rest_seconds
+  );
 
   return {
     deleted_at: null,
     is_drop_set: Boolean(set.isDropSet || set.is_drop_set),
+    prescribed_rest_seconds:
+      prescribedRestSeconds != null && prescribedRestSeconds >= 0
+        ? prescribedRestSeconds
+        : null,
     set_number: setNumber,
     target_reps_label: prescribedReps
       ? String(minimumReps) !== String(prescribedReps)
@@ -278,6 +285,7 @@ function cloudSetToLocal(set) {
       : formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
   const minimumReps = set.target_reps_min;
   const rir = formatCloudValue(set.target_rir_label, set.target_rir_value);
+  const prescribedRestSeconds = parseInteger(set.prescribed_rest_seconds);
 
   return {
     id: parseLocalSourceKey(set.id),
@@ -288,6 +296,12 @@ function cloudSetToLocal(set) {
     ),
     ...(minimumReps != null && Number(minimumReps) !== Number(reps)
       ? { minimumReps: String(minimumReps) }
+      : {}),
+    ...(prescribedRestSeconds != null && prescribedRestSeconds > 0
+      ? {
+          prescribedRestSeconds,
+          restSeconds: prescribedRestSeconds,
+        }
       : {}),
     reps,
     rir,
@@ -566,7 +580,7 @@ export async function downloadWorkouts(
       ids: exerciseIds,
       orderColumn: "set_number",
       select:
-        "id,workout_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,is_drop_set",
+      "id,workout_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,prescribed_rest_seconds,is_drop_set",
       table: "workout_exercise_sets",
     });
   }

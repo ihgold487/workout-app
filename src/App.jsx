@@ -8469,6 +8469,8 @@ export default function App() {
     const template = buildStandaloneTemplateFromHistory(workout, {
       id: templateId,
       name: name.trim(),
+      plans,
+      templates,
     });
 
     setTemplates((currentTemplates) => [...currentTemplates, template]);
@@ -8481,6 +8483,8 @@ export default function App() {
     const template = buildStandaloneTemplateFromHistory(workout, {
       id: templateId,
       name: getWorkoutName(workout),
+      plans,
+      templates,
     });
 
     setTemporaryTemplate(template);

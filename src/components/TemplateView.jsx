@@ -1709,14 +1709,58 @@ export default function TemplateView({
       planId: null,
       planWeek: null,
       planWorkoutId: null,
-      exercises: template.exercises.map((exercise, exerciseIndex) => ({
-        ...exercise,
-        id: copiedAt + exerciseIndex + 1,
-        sets: exercise.sets.map((set, setIndex) => ({
-          ...set,
-          id: copiedAt + exerciseIndex * 100 + setIndex,
-        })),
-      })),
+      exercises: template.exercises.map((exercise, exerciseIndex) => {
+        const weekPrescription = getExerciseWeekPrescription(
+          exercise,
+          linkedPlan,
+          currentPlanWeek
+        );
+        const {
+          weeklyPrescriptions: _weeklyPrescriptions,
+          weekly_prescriptions: _legacyWeeklyPrescriptions,
+          ...standaloneExercise
+        } = exercise;
+
+        return {
+          ...standaloneExercise,
+          id: copiedAt + exerciseIndex + 1,
+          sets: getExerciseSetsForPlanWeek(exercise, weekPrescription).map(
+            (set, setIndex) => {
+              const prescription = getPlannedSetPrescription({
+                plan: linkedPlan,
+                set,
+                weekPrescription,
+              });
+              const restSeconds =
+                prescription.restSeconds ?? getSetPrescriptionRestSeconds(set);
+
+              return {
+                ...set,
+                id: copiedAt + exerciseIndex * 100 + setIndex,
+                ...(prescription.minimumReps
+                  ? {
+                      minimumReps: prescription.minimumReps,
+                      prescribedMinimumReps: prescription.minimumReps,
+                      targetMinimumReps: prescription.minimumReps,
+                    }
+                  : {}),
+                prescribedReps: prescription.reps,
+                ...(restSeconds == null
+                  ? {}
+                  : {
+                      prescribedRestSeconds: restSeconds,
+                      restSeconds,
+                    }),
+                prescribedRir: prescription.rir,
+                reps: prescription.reps,
+                rir: prescription.rir,
+                targetReps: prescription.reps,
+                targetRir: prescription.rir,
+              };
+            }
+          ),
+        };
+      }),
     };
 
     setTemplates([...templates, copy]);
@@ -1932,7 +1976,13 @@ export default function TemplateView({
     if (field === "rir") {
       updated.sets = (updated.sets || []).map((set) => ({
         ...set,
-        ...(set.isDropSet ? {} : { rir: String(value) }),
+        ...(set.isDropSet
+          ? {}
+          : {
+              prescribedRir: String(value),
+              rir: String(value),
+              targetRir: String(value),
+            }),
       }));
     }
 

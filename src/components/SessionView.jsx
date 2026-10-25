@@ -75,6 +75,7 @@ import {
   recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
+  MAX_PROGRESS_E1RM_INCREASE_PERCENT,
   PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
 } from "../utils/targetRecommendation";
 import {
@@ -1326,6 +1327,7 @@ export default function SessionView({
     excludedPrescription = null,
     fatigueCeilingE1RM = null,
     minimumReps = null,
+    progressionBaselineE1RM = null,
     progressionFloorE1RM = null,
     prescribedReps,
     targetRir,
@@ -1337,6 +1339,9 @@ export default function SessionView({
     const excludedRir = parseSessionNumber(excludedPrescription?.rir);
     const numericPrescribedReps = parseSessionNumber(prescribedReps);
     const numericMinimumReps = parseSessionNumber(minimumReps);
+    const numericProgressionBaselineE1RM = parseSessionNumber(
+      progressionBaselineE1RM
+    );
     const numericRir = parseSessionNumber(targetRir) || 0;
 
     if (
@@ -1395,7 +1400,9 @@ export default function SessionView({
           progressionFloorE1RM == null || e1rm >= progressionFloorE1RM,
         e1rm,
         e1rmDeviation: Math.abs(e1rm - baselineE1RM) / baselineE1RM,
-        isProgressionCandidate: e1rm >= baselineE1RM,
+        isProgressionCandidate:
+          numericProgressionBaselineE1RM == null ||
+          e1rm > numericProgressionBaselineE1RM + 0.0001,
         isSameWeight:
           numericCurrentWeight != null &&
           Math.abs(normalizedWeight - numericCurrentWeight) < 0.001,
@@ -1404,6 +1411,12 @@ export default function SessionView({
         rir: numericRir,
         respectsFatigueCeiling:
           fatigueCeilingE1RM == null || e1rm < fatigueCeilingE1RM,
+        respectsProgressionCeiling:
+          numericProgressionBaselineE1RM == null ||
+          e1rm <=
+            numericProgressionBaselineE1RM *
+              (1 + MAX_PROGRESS_E1RM_INCREASE_PERCENT) +
+              0.0001,
         weight: normalizedWeight,
       });
     }
@@ -1474,18 +1487,40 @@ export default function SessionView({
         Math.abs(candidate.rir - excludedRir) < 0.001
       );
     });
+    const cappedProgressionCandidates =
+      numericProgressionBaselineE1RM != null
+        ? eligibleCandidates.filter(
+            (candidate) => candidate.respectsProgressionCeiling
+          )
+        : eligibleCandidates;
     const progressionCandidates =
       progressionFloorE1RM != null &&
-      eligibleCandidates.some((candidate) => candidate.clearsProgressionFloor)
-        ? eligibleCandidates.filter((candidate) => candidate.clearsProgressionFloor)
-        : eligibleCandidates;
-    const closeProgressionCandidates = progressionCandidates.filter(
+      cappedProgressionCandidates.some(
+        (candidate) => candidate.clearsProgressionFloor
+      )
+        ? cappedProgressionCandidates.filter(
+            (candidate) => candidate.clearsProgressionFloor
+          )
+        : cappedProgressionCandidates;
+    const progressiveCandidates =
+      numericProgressionBaselineE1RM != null
+        ? progressionCandidates.filter(
+            (candidate) => candidate.isProgressionCandidate
+          )
+        : progressionCandidates;
+    if (
+      numericProgressionBaselineE1RM != null &&
+      progressiveCandidates.length === 0
+    ) {
+      return [];
+    }
+    const closeProgressionCandidates = progressiveCandidates.filter(
       (candidate) =>
         candidate.e1rmDeviation <= SAME_WEIGHT_TARGET_E1RM_TOLERANCE
     );
     const candidatePool = closeProgressionCandidates.length
       ? closeProgressionCandidates
-      : progressionCandidates;
+      : progressiveCandidates;
     if (
       fatigueCeilingE1RM != null &&
       candidatePool.length > 0 &&
@@ -1519,8 +1554,10 @@ export default function SessionView({
     const primaryCandidate = sortCandidates(fatigueCandidatePool)[0] || null;
     const broaderCandidatePool =
       fatigueCeilingE1RM != null &&
-      eligibleCandidates.some((candidate) => candidate.respectsFatigueCeiling)
-        ? eligibleCandidates.filter(
+      progressiveCandidates.some(
+        (candidate) => candidate.respectsFatigueCeiling
+      )
+        ? progressiveCandidates.filter(
             (candidate) => candidate.respectsFatigueCeiling
           )
         : eligibleCandidates;
@@ -1984,6 +2021,10 @@ export default function SessionView({
     const latestMatchingSet =
       getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets?.[setIndex];
     const latestMatchingSetE1RM = getHistorySetE1RM(exercise, latestMatchingSet);
+    const progressionBaselineE1RM =
+      setIndex === 0
+        ? getLatestMatchingMaxE1RM(exercise)
+        : latestMatchingSetE1RM;
     const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, {
       setId: previousSet.id,
       value: actualE1RM,
@@ -2031,6 +2072,7 @@ export default function SessionView({
       excludedPrescription: displayedTarget,
       fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
       minimumReps,
+      progressionBaselineE1RM,
       progressionFloorE1RM: hasClearPriorFatigueDrop
         ? latestMatchingSetE1RM
         : null,
@@ -5034,6 +5076,7 @@ export default function SessionView({
         exercise,
         fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
         minimumReps: explicitMinimumReps,
+        progressionBaselineE1RM: latestMatchingSetE1RM,
         progressionFloorE1RM: hasClearPriorFatigueDrop
           ? latestMatchingSetE1RM
           : null,
@@ -5052,7 +5095,7 @@ export default function SessionView({
       }
 
       const progressedTarget =
-        baselineE1RM == null
+        baselineE1RM == null || latestMatchingSetE1RM != null
           ? null
           : getRecommendationFromE1RM(
               calculationExercise,

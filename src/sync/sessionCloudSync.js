@@ -153,6 +153,10 @@ function localSessionToCloud(workout, userId, cloudWorkoutId) {
     deleted_at: null,
     duration_seconds: workout.durationSeconds || null,
     import_batch_id: null,
+    plan_id: workout.planId != null ? String(workout.planId) : null,
+    plan_week: parseInteger(workout.planWeek),
+    plan_workout_id:
+      workout.planWorkoutId != null ? String(workout.planWorkoutId) : null,
     source: LOCAL_APP_SOURCE,
     source_key: String(workout.id),
     started_at:
@@ -188,6 +192,7 @@ function cloudSetToLocal(set) {
       ? "AMRAP"
       : formatCloudValue(null, set.target_reps_max ?? set.target_reps_min);
   const minimumReps = set.target_reps_min;
+  const prescribedRestSeconds = parseInteger(set.prescribed_rest_seconds);
 
   return {
     actualE1RM: set.estimated_1rm ?? null,
@@ -241,6 +246,12 @@ function cloudSetToLocal(set) {
       ? {
           prescribedReps,
           reps: prescribedReps,
+        }
+      : {}),
+    ...(prescribedRestSeconds != null && prescribedRestSeconds > 0
+      ? {
+          prescribedRestSeconds,
+          restSeconds: prescribedRestSeconds,
         }
       : {}),
     ...(prescribedReps &&
@@ -304,9 +315,9 @@ function cloudSessionToLocal(session, exercises, workoutSourceKeyById, templates
     durationSeconds: session.duration_seconds || null,
     exercises,
     id: parseLocalSourceKey(session.source_key),
-    planId: template?.planId || null,
-    planWeek: null,
-    planWorkoutId: template?.planWorkoutId || null,
+    planId: session.plan_id ?? template?.planId ?? null,
+    planWeek: session.plan_week ?? null,
+    planWorkoutId: session.plan_workout_id ?? template?.planWorkoutId ?? null,
     startedAt: formatCloudDate(session.started_at),
     startedAtIso: session.started_at || null,
     templateId,
@@ -344,6 +355,9 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     set.targetMinimumReps ||
     prescribedReps;
   const prescribedRir = set.prescribedRir || set.rir || set.targetRir || "";
+  const prescribedRestSeconds = parseInteger(
+    set.prescribedRestSeconds ?? set.restSeconds ?? set.rest_seconds
+  );
   const isDropSet = Boolean(set.isDropSet || set.is_drop_set);
   const e1RM = isDropSet
     ? null
@@ -359,6 +373,10 @@ function localSetToCloud(set, userId, sessionExerciseId, setNumber) {
     deleted_at: null,
     estimated_1rm: parseNumber(e1RM),
     is_drop_set: isDropSet,
+    prescribed_rest_seconds:
+      prescribedRestSeconds != null && prescribedRestSeconds >= 0
+        ? prescribedRestSeconds
+        : null,
     selected_target_e1rm: parseNumber(set.selectedTargetE1RM),
     selected_target_reps: parseInteger(set.selectedTargetReps),
     selected_target_rir_label: set.selectedTargetRir
@@ -707,7 +725,7 @@ export async function downloadWorkoutHistory(
   const { data: sessionRows, error: sessionError } = await supabase
     .from("workout_sessions")
     .select(
-      "id,workout_id,workout_name,started_at,completed_at,duration_seconds,source_key,updated_at"
+      "id,workout_id,workout_name,started_at,completed_at,duration_seconds,plan_id,plan_week,plan_workout_id,source_key,updated_at"
     )
     .eq("user_id", userId)
     .eq("source", LOCAL_APP_SOURCE)
@@ -752,7 +770,7 @@ export async function downloadWorkoutHistory(
       ids: exerciseIds,
       orderColumn: "set_number",
       select:
-        "id,session_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,actual_weight_value,actual_weight_label,actual_reps,actual_rir_value,actual_rir_label,estimated_1rm,is_drop_set,completed_at,suggested_target_weight_value,suggested_target_weight_label,suggested_target_reps,suggested_target_rir,suggested_target_rir_label,suggested_target_e1rm,selected_target_weight_value,selected_target_weight_label,selected_target_reps,selected_target_rir,selected_target_rir_label,selected_target_e1rm,target_selection_source,selected_vs_suggested_e1rm_pct",
+        "id,session_exercise_id,set_number,target_weight_value,target_weight_label,target_reps_min,target_reps_max,target_reps_label,target_rir_value,target_rir_label,prescribed_rest_seconds,actual_weight_value,actual_weight_label,actual_reps,actual_rir_value,actual_rir_label,estimated_1rm,is_drop_set,completed_at,suggested_target_weight_value,suggested_target_weight_label,suggested_target_reps,suggested_target_rir,suggested_target_rir_label,suggested_target_e1rm,selected_target_weight_value,selected_target_weight_label,selected_target_reps,selected_target_rir,selected_target_rir_label,selected_target_e1rm,target_selection_source,selected_vs_suggested_e1rm_pct",
       table: "session_sets",
     });
   }

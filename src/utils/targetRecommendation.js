@@ -5,6 +5,10 @@ import { roundWeightToIncrement } from "./weightIncrement.js";
 // "progress". Keep every target-generation path on this value so AI-imported
 // and manually created progressive plans behave the same way.
 export const PLAN_PROGRESS_E1RM_INCREASE_PERCENT = 0.005;
+// Plate increments can turn the intended 0.5% progression into a much larger
+// jump. Keep automatic progressive recommendations within this ceiling while
+// still leaving larger options available for manual selection.
+export const MAX_PROGRESS_E1RM_INCREASE_PERCENT = 0.01;
 
 export const GOAL_MODE_PROGRESSIONS = {
   maintenance: 0,
@@ -344,6 +348,14 @@ function compareProgressCandidates(a, b) {
   );
 }
 
+function compareCappedProgressCandidates(a, b) {
+  return (
+    a.score.e1rmDeviation - b.score.e1rmDeviation ||
+    a.score.repDeviation - b.score.repDeviation ||
+    a.weight - b.weight
+  );
+}
+
 function getCandidateKey(candidate) {
   return `${candidate.weight}|${candidate.reps}|${candidate.rir}`;
 }
@@ -502,15 +514,27 @@ export function recommendTargetPrescription({
     resolvedProgressionPercent > 0
       ? rankedCandidates.filter((candidate) => candidate.e1rm >= targetE1RM)
       : rankedCandidates;
-  const baselineProgressCandidates =
+  const cappedProgressCandidates =
     resolvedProgressionPercent > 0
-      ? rankedCandidates.filter((candidate) => candidate.e1rm > baselineE1RM)
+      ? rankedCandidates.filter(
+          (candidate) =>
+            candidate.e1rm <=
+            baselineE1RM *
+              (1 + MAX_PROGRESS_E1RM_INCREASE_PERCENT) +
+              0.0001
+        )
       : rankedCandidates;
-  const selectedCandidates = targetProgressCandidates.length
-    ? targetProgressCandidates
-    : baselineProgressCandidates.length
-      ? baselineProgressCandidates
-      : rankedCandidates;
+  const progressiveCandidates =
+    resolvedProgressionPercent > 0
+      ? cappedProgressCandidates.filter(
+          (candidate) => candidate.e1rm > baselineE1RM + 0.0001
+        )
+      : cappedProgressCandidates;
+  const selectedCandidates = progressiveCandidates.sort(
+    resolvedProgressionPercent > 0
+      ? compareCappedProgressCandidates
+      : compareCandidates
+  );
   const recommendation = selectedCandidates[0] || null;
 
   return {

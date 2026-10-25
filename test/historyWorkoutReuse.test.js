@@ -51,6 +51,7 @@ test("completed workout reuse preserves prescriptions without actuals or plan li
     id: 2000,
     minimumReps: "6",
     reps: "8",
+    prescribedRestSeconds: 150,
     restSeconds: 150,
     rir: "3",
   });
@@ -90,4 +91,61 @@ test("legacy history falls back to actual reps and RIR but never actual weight",
   });
   assert.equal("actualWeight" in result.exercises[0].sets[0], false);
   assert.equal("completed" in result.exercises[0].sets[0], false);
+});
+
+test("plan completion metadata restores a missing historical rest prescription", () => {
+  const result = buildStandaloneTemplateFromHistory(
+    {
+      id: "completed-plan-session",
+      templateId: 12,
+      exercises: [
+        {
+          id: 90,
+          name: "Bench Press",
+          sets: [{ prescribedReps: "8", prescribedRir: "3" }],
+        },
+      ],
+    },
+    {
+      id: 1000,
+      name: "Bench repeat",
+      plans: [
+        {
+          id: 4,
+          completions: [
+            {
+              planWorkoutId: "plan-workout-1",
+              sessionId: "completed-plan-session",
+              weekNumber: 3,
+            },
+          ],
+          workouts: [
+            {
+              planWorkoutId: "plan-workout-1",
+              templateId: 12,
+              weeklyPrescriptionsByPosition: {
+                1: [{ weekNumber: 3, restSeconds: 150 }],
+              },
+            },
+          ],
+        },
+      ],
+      templates: [
+        {
+          id: 12,
+          planId: 4,
+          planWorkoutId: "plan-workout-1",
+          exercises: [
+            {
+              sets: [{ restSeconds: 90 }],
+              weeklyPrescriptions: [{ weekNumber: 3, restSeconds: 150 }],
+            },
+          ],
+        },
+      ],
+    }
+  );
+
+  assert.equal(result.exercises[0].sets[0].prescribedRestSeconds, 150);
+  assert.equal(result.exercises[0].sets[0].restSeconds, 150);
 });
