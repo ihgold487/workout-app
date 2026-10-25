@@ -69,10 +69,10 @@ import {
 } from "../utils/e1rm";
 import { EXERCISE_STATUS } from "../utils/exerciseStatus";
 import {
+  getCompletedPerformanceFallbackTarget,
   getHistoricalFatigueRatioForSet,
   recommendDeloadTargetPrescription,
   recommendNextSetTargetAfterPerformance,
-  recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
   MAX_PROGRESS_E1RM_INCREASE_PERCENT,
@@ -1141,18 +1141,22 @@ export default function SessionView({
     };
   }
 
-  function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
+  function getRecommendedTargetPrescription(
+    exercise,
+    reps,
+    rir,
+    setIndex = 0
+  ) {
     const calculationExercise = getExerciseForCalculation(exercise);
     const isDeload = isDeloadPlanWorkout();
-    const latestMaxE1RM =
-      isDeload || (getGoalMode() === "progress" && setIndex === 0)
-        ? getLatestMatchingMaxE1RM(exercise)
-        : null;
+    const latestBaselineE1RM = isDeload
+      ? getLatestMatchingMaxE1RM(exercise)
+      : getLatestMatchingBaselineE1RM(exercise, setIndex);
 
-    if (latestMaxE1RM) {
+    if (latestBaselineE1RM) {
       const recommendation = isDeload
         ? recommendDeloadTargetPrescription({
-            baselineE1RM: latestMaxE1RM,
+            baselineE1RM: latestBaselineE1RM,
             bodyWeight: sessionBodyWeight,
             deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
             exercise: calculationExercise,
@@ -1167,32 +1171,25 @@ export default function SessionView({
           })?.recommendation
         : getRecommendationFromE1RM(
             calculationExercise,
-            latestMaxE1RM,
+            latestBaselineE1RM,
             reps,
             rir
           );
-      const weight = recommendation?.weight;
-
-      return weight != null ? String(weight) : "";
+      return recommendation || null;
     }
 
-    const recommendation = recommendSetTarget({
-      bodyWeight: sessionBodyWeight,
-      exercise: calculationExercise,
-      goalMode: getGoalMode(),
-      history,
-      normalizeWeight: (weight) =>
-        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
-      setIndex,
-      targetReps: reps,
-      targetRir: rir,
-      weightIncrement: (weight) =>
-        getExerciseWeightIncrement(calculationExercise, undefined, weight),
-    });
+    return null;
+  }
 
-    const weight = recommendation.result?.recommendation?.weight;
+  function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
+    const recommendation = getRecommendedTargetPrescription(
+      exercise,
+      reps,
+      rir,
+      setIndex
+    );
 
-    return weight != null ? String(weight) : "";
+    return recommendation?.weight != null ? String(recommendation.weight) : "";
   }
 
   function getRecommendationFromE1RM(exercise, previousE1RM, reps, rir, options = {}) {
@@ -1207,7 +1204,10 @@ export default function SessionView({
       preferredRepWindow: options.preferredRepWindow ?? 2,
       previousE1RM,
       progressionPercent:
-        options.progressionPercent ?? PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
+        options.progressionPercent ??
+        (getGoalMode() === "progress"
+          ? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+          : 0),
       targetReps: reps,
       targetRir: rir,
       weightIncrement: (weight) =>
@@ -1235,7 +1235,7 @@ export default function SessionView({
             workout.workoutStartedAtIso ||
             workout.startedAtIso ||
             workout.startedAt
-        )
+        ) || sessionBodyWeight
       : sessionBodyWeight;
     const e1rm = calculateE1RM(
       firstPresentValue(set.actualWeight),
@@ -1266,6 +1266,52 @@ export default function SessionView({
     );
 
     return maxE1RM > 0 ? maxE1RM : null;
+  }
+
+  // Keep every target path tied to the same completed workout rendered in
+  // "Last completed sets." The first working set progresses from that
+  // workout's best set; subsequent sets progress from their matching set,
+  // falling back to the best set only when that workout has fewer sets.
+  function getLatestMatchingBaselineE1RM(exercise, setIndex = 0) {
+    const latestPerformance = getLatestMatchingHistoryPerformance(exercise);
+    const latestSets = latestPerformance?.exercise?.sets || [];
+    const bestE1RM = getLatestMatchingMaxE1RM(exercise);
+
+    if (setIndex === 0) {
+      return bestE1RM;
+    }
+
+    return (
+      getHistorySetE1RM(
+        exercise,
+        latestSets[setIndex],
+        latestPerformance?.workout
+      ) || bestE1RM
+    );
+  }
+
+  // The e1RM recommender intentionally declines incomplete legacy data, but
+  // the completed set is still a safe, useful target. This remains runtime
+  // only; it never changes the stored workout or its prescription.
+  function getLatestCompletedTargetFallback(exercise, setIndex = 0) {
+    const latestSets =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const calculationExercise = getExerciseForCalculation(exercise);
+    const candidates = [latestSets[setIndex], ...latestSets].filter(
+      (historySet, index, values) =>
+        historySet && values.indexOf(historySet) === index
+    );
+
+    return (
+      candidates
+        .map((historySet) =>
+          getCompletedPerformanceFallbackTarget({
+            exercise: calculationExercise,
+            set: historySet,
+          })
+        )
+        .find(Boolean) || null
+    );
   }
 
   function getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, currentSetE1RM) {
@@ -1716,21 +1762,39 @@ export default function SessionView({
       return recommendation;
     }
 
-    const recommendation = recommendSetTarget({
-      allowedRepWindow: 2,
-      bodyWeight: sessionBodyWeight,
-      exercise: calculationExercise,
-      goalMode: getGoalMode(),
-      history,
-      normalizeWeight: (weight) =>
-        getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
-      preferredRepWindow: 2,
-      setIndex,
-      targetReps,
-      targetRir,
-      weightIncrement: (weight) =>
-        getExerciseWeightIncrement(calculationExercise, undefined, weight),
-    });
+    const baselineE1RM = getLatestMatchingBaselineE1RM(exercise, setIndex);
+    const recommendation = {
+      baseline:
+        baselineE1RM == null
+          ? null
+          : { e1rm: baselineE1RM, source: "last-completed-sets" },
+      result:
+        baselineE1RM == null
+          ? null
+          : recommendTargetPrescription({
+              allowedRepWindow: 2,
+              bodyWeight: sessionBodyWeight,
+              exercise: calculationExercise,
+              goalMode: getGoalMode(),
+              normalizeWeight: (weight) =>
+                getLoadableWeightForExercise(calculationExercise, weight) ??
+                weight,
+              preferredRepWindow: 2,
+              previousE1RM: baselineE1RM,
+              progressionPercent:
+                getGoalMode() === "progress"
+                  ? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+                  : 0,
+              targetReps,
+              targetRir,
+              weightIncrement: (weight) =>
+                getExerciseWeightIncrement(
+                  calculationExercise,
+                  undefined,
+                  weight
+                ),
+            }),
+    };
 
     targetCalculationCache.set(cacheKey, recommendation);
     return recommendation;
@@ -1970,6 +2034,105 @@ export default function SessionView({
     );
   }
 
+  // Automatic targets are derived from persisted history and the current
+  // workout's actual performance. Stored target fields remain a historical
+  // snapshot for completed-workout analysis and compatibility, but never
+  // override a live automatic recommendation.
+  function getSuggestedTargetPrescription(exercise, set, setIndex) {
+    const cacheKey = `suggested:${getTargetCalculationCacheKey(
+      exercise,
+      set,
+      setIndex
+    )}`;
+
+    if (targetCalculationCache.has(cacheKey)) {
+      return targetCalculationCache.get(cacheKey);
+    }
+
+    if (
+      set.targetSelectionSource === "alternative" &&
+      !isBlankValue(set.selectedTargetWeight) &&
+      !isBlankValue(set.selectedTargetReps) &&
+      !isBlankValue(set.selectedTargetRir)
+    ) {
+      const manualTarget = {
+        reps: set.selectedTargetReps,
+        rir: set.selectedTargetRir,
+        weight: set.selectedTargetWeight,
+      };
+
+      targetCalculationCache.set(cacheKey, manualTarget);
+      return manualTarget;
+    }
+
+    const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
+    const hasPreviousActualPerformance =
+      previousSet?.completed &&
+      !isBlankValue(previousSet?.actualWeight) &&
+      !isBlankValue(previousSet?.actualReps) &&
+      !isBlankValue(previousSet?.actualRir);
+
+    if (previousSet && hasPreviousActualPerformance) {
+      const liveTarget = getNextSetTargetsAfterCompletion(
+        exercise,
+        previousSet,
+        set
+      );
+
+      if (
+        !isBlankValue(liveTarget?.targetWeight) &&
+        !isBlankValue(liveTarget?.targetReps) &&
+        !isBlankValue(liveTarget?.targetRir)
+      ) {
+        const liveRecommendation = {
+          reps: liveTarget.targetReps,
+          rir: liveTarget.targetRir,
+          weight: liveTarget.targetWeight,
+        };
+
+        targetCalculationCache.set(cacheKey, liveRecommendation);
+        return liveRecommendation;
+      }
+    }
+
+    const historicalRecommendation = getTargetRecommendation(
+      exercise,
+      set,
+      setIndex
+    ).result?.recommendation;
+
+    if (historicalRecommendation) {
+      targetCalculationCache.set(cacheKey, historicalRecommendation);
+      return historicalRecommendation;
+    }
+
+    const completedPerformanceFallback = getLatestCompletedTargetFallback(
+      exercise,
+      setIndex
+    );
+
+    if (completedPerformanceFallback) {
+      targetCalculationCache.set(cacheKey, completedPerformanceFallback);
+      return completedPerformanceFallback;
+    }
+
+    // Retain a stored value only as a compatibility fallback when the
+    // calculation genuinely has no usable completed-history baseline.
+    if (hasCompleteTargetPrescription(set)) {
+      const compatibilityTarget = {
+        reps: getSetTargetReps(set),
+        rir: getSetTargetRir(set),
+        weight: set.targetWeight,
+      };
+
+      targetCalculationCache.set(cacheKey, compatibilityTarget);
+      return compatibilityTarget;
+    }
+
+    targetCalculationCache.set(cacheKey, null);
+    return null;
+  }
+
   function getRankedProgressionAlternativesForSet(exercise, set, setIndex) {
     const cacheKey = `progression:${getTargetCalculationCacheKey(
       exercise,
@@ -2085,7 +2248,13 @@ export default function SessionView({
   }
 
   function getActualTargetMatchStatus(exercise, set, setIndex) {
-    if (!hasCompleteTargetPrescription(set)) {
+    const targetPrescription = getSuggestedTargetPrescription(
+      exercise,
+      set,
+      setIndex
+    );
+
+    if (!targetPrescription) {
       return "match";
     }
 
@@ -2096,13 +2265,6 @@ export default function SessionView({
     ) {
       return "match";
     }
-
-    const targetPrescription = {
-      minimumReps: getSetMinimumReps(set),
-      reps: getSetTargetReps(set),
-      rir: getSetTargetRir(set),
-      weight: set.targetWeight,
-    };
 
     if (actualsMatchPrescription(set, targetPrescription)) {
       return "suggested";
@@ -2879,15 +3041,26 @@ export default function SessionView({
   function applyTargetToActual(exerciseId, setId) {
     const exercise = session.exercises.find((ex) => ex.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
+    const setIndex = exercise?.sets.findIndex((item) => item.id === setId);
 
-    if (!set) {
+    if (!set || setIndex == null || setIndex < 0) {
+      return;
+    }
+
+    const suggestedTarget = getSuggestedTargetPrescription(
+      exercise,
+      set,
+      setIndex
+    );
+
+    if (!suggestedTarget) {
       return;
     }
 
     applyTargetSelection(exerciseId, setId, {
-      reps: set.isDropSet ? "" : getSetTargetReps(set),
-      rir: set.isDropSet ? "" : getSetTargetRir(set),
-      weight: set.targetWeight,
+      reps: set.isDropSet ? "" : suggestedTarget.reps,
+      rir: set.isDropSet ? "" : suggestedTarget.rir,
+      weight: suggestedTarget.weight,
     }, "suggested");
   }
 
@@ -3033,7 +3206,6 @@ export default function SessionView({
 
     const nextValue = formatSetupDefault(value);
     const prescriptionField = field === "prescribedRir" ? "rir" : "reps";
-    const targetField = field === "prescribedRir" ? "targetRir" : "targetReps";
 
     updateSession((s) => ({
       ...s,
@@ -3069,24 +3241,33 @@ export default function SessionView({
               return set;
             }
 
-            const targetReps =
-              field === "prescribedReps" ? nextValue : getSetTargetReps(set);
-            const targetRir =
-              field === "prescribedRir" ? nextValue : getSetTargetRir(set);
-            const targetWeight =
-              getRecommendedTargetWeight(
-                exercise,
-                targetReps,
-                targetRir,
-                setIndex
-              ) || set.targetWeight;
+            const prescribedReps =
+              field === "prescribedReps"
+                ? nextValue
+                : getSetPrescribedReps(set);
+            const prescribedRir =
+              field === "prescribedRir" ? nextValue : getSetPrescribedRir(set);
+            const recommendation = getRecommendedTargetPrescription(
+              exercise,
+              prescribedReps,
+              prescribedRir,
+              setIndex
+            );
 
             return {
               ...set,
               [field]: nextValue,
               [prescriptionField]: nextValue,
-              [targetField]: nextValue,
-              targetWeight,
+              targetReps: formatSetupDefault(
+                recommendation?.reps ?? prescribedReps
+              ),
+              targetRir: formatSetupDefault(
+                recommendation?.rir ?? prescribedRir
+              ),
+              targetWeight:
+                recommendation?.weight != null
+                  ? String(recommendation.weight)
+                  : set.targetWeight,
             };
           }),
         };
@@ -3097,19 +3278,24 @@ export default function SessionView({
   function openTargetAlternatives(exercise, set, setIndex) {
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
     const current = getLatestActualForSet(exercise, setIndex);
+    const targetPrescription = getSuggestedTargetPrescription(
+      exercise,
+      set,
+      setIndex
+    );
     const suggested = {
       e1rm: calculateSessionE1RM(
         exercise,
         "",
         "",
         "",
-        set.targetWeight,
-        getSetTargetReps(set),
-        getSetTargetRir(set)
+        targetPrescription?.weight,
+        targetPrescription?.reps,
+        targetPrescription?.rir
       ),
-      reps: getSetTargetReps(set),
-      rir: getSetTargetRir(set),
-      weight: set.targetWeight,
+      reps: targetPrescription?.reps ?? getSetTargetReps(set),
+      rir: targetPrescription?.rir ?? getSetTargetRir(set),
+      weight: targetPrescription?.weight ?? set.targetWeight,
     };
     let alternatives = recommendation.result?.alternatives || [];
     const rankedProgressionAlternatives =
@@ -5197,6 +5383,14 @@ export default function SessionView({
                 }
 
                 if (!undo && index === currentIndex + 1) {
+                  // Working-set targets are recalculated at render time from
+                  // this set's persisted actuals. Do not persist a stale
+                  // automatic suggestion into the next set. Drop sets retain
+                  // their separate loading behavior.
+                  if (!set.isDropSet) {
+                    return set;
+                  }
+
                   const nextTargets = getNextSetTargetsAfterCompletion(
                     exercise,
                     currentSet,
@@ -9266,21 +9460,30 @@ export default function SessionView({
                               targetSuggestionPreview?.exerciseId === exercise.id &&
                               targetSuggestionPreview?.setId === set.id
                           );
+                          const targetPrescription = set.isDropSet
+                            ? null
+                            : getSuggestedTargetPrescription(
+                                exercise,
+                                set,
+                                setIndex
+                              );
                           const suggestedTarget = {
                             e1rm: calculateSessionE1RM(
                               exercise,
                               "",
                               "",
                               "",
-                              set.targetWeight,
-                              getSetTargetReps(set),
-                              getSetTargetRir(set)
+                              targetPrescription?.weight ?? set.targetWeight,
+                              targetPrescription?.reps ?? getSetTargetReps(set),
+                              targetPrescription?.rir ?? getSetTargetRir(set)
                             ),
                             reps: set.isDropSet
                               ? "AMRAP"
-                              : getSetTargetReps(set),
-                            rir: set.isDropSet ? "" : getSetTargetRir(set),
-                            weight: set.targetWeight,
+                              : targetPrescription?.reps ?? getSetTargetReps(set),
+                            rir: set.isDropSet
+                              ? ""
+                              : targetPrescription?.rir ?? getSetTargetRir(set),
+                            weight: targetPrescription?.weight ?? set.targetWeight,
                           };
 
                           return (

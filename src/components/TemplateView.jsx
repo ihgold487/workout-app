@@ -48,9 +48,9 @@ import {
 import { getGroupedPreviewExercises } from "../utils/previewExercises";
 import { getRirForPlanWeek } from "../utils/rirPeriodization";
 import {
+  getCompletedPerformanceFallbackTarget,
   getHistoricalFatigueRatioForSet,
   recommendDeloadTargetPrescription,
-  recommendSetTarget,
   recommendTargetPrescription,
   resolvePlanGoalMode,
   PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
@@ -452,6 +452,43 @@ export default function TemplateView({
     return `${normalizeLookupValue(exercise?.name)}||${normalizeLookupValue(
       formatList(exercise?.equipment)
     )}`;
+  }
+
+  function getLibraryExerciseForCalculation(templateExercise) {
+    return (
+      exerciseLibrary.find(
+        (exercise) =>
+          String(exercise.id) === String(templateExercise?.exerciseId)
+      ) ||
+      exerciseLibrary.find(
+        (exercise) =>
+          getExerciseKey(exercise) === getExerciseKey(templateExercise)
+      ) ||
+      null
+    );
+  }
+
+  function getExerciseForTargetCalculation(templateExercise, libraryExercise) {
+    const resolvedLibraryExercise =
+      libraryExercise || getLibraryExerciseForCalculation(templateExercise);
+
+    return {
+      ...(resolvedLibraryExercise || {}),
+      ...templateExercise,
+      id:
+        templateExercise?.exerciseId ||
+        resolvedLibraryExercise?.id ||
+        templateExercise?.id,
+      exerciseId:
+        templateExercise?.exerciseId ||
+        resolvedLibraryExercise?.id ||
+        templateExercise?.id,
+      bodyweightLoadPercent:
+        templateExercise?.bodyweightLoadPercent ??
+        templateExercise?.bodyweight_load_percent ??
+        resolvedLibraryExercise?.bodyweightLoadPercent ??
+        resolvedLibraryExercise?.bodyweight_load_percent,
+    };
   }
 
   function getExerciseDetailRecord(templateExercise) {
@@ -1228,115 +1265,102 @@ export default function TemplateView({
     targetRir,
     latestPerformance = getLatestHistoryPerformance(exercise),
   }) {
-    const recommendationExercise = {
-      ...(libraryExercise || {}),
-      ...exercise,
-      id: exercise.exerciseId || libraryExercise?.id || exercise.id,
-      exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
-    };
+    const recommendationExercise = getExerciseForTargetCalculation(
+      exercise,
+      libraryExercise
+    );
 
     const isDeload = isDeloadPlanWorkout(plan);
-
-    if (isDeload || (getGoalMode(plan) === "progress" && setIndex === 0)) {
-      const latestHistoryExercise = latestPerformance?.exercise;
-      const historicalBodyWeight = getLatestBodyWeightForDate(
+    const latestHistoryExercise = latestPerformance?.exercise;
+    const historicalBodyWeight =
+      getLatestBodyWeightForDate(
         bodyWeightEntries,
         latestPerformance?.workout?.completedAt ||
           latestPerformance?.workout?.workoutStartedAtIso ||
           latestPerformance?.workout?.startedAtIso ||
           latestPerformance?.workout?.startedAt
-      );
-      const latestMaxE1RM = Math.max(
-        0,
-        ...(latestHistoryExercise?.sets || [])
-          .map((set) =>
-            calculateE1RM(
-              firstPresentValue(set.actualWeight),
-              firstPresentValue(set.actualReps),
-              firstPresentValue(set.actualRir),
-              null,
-              null,
-              null,
-              {
-                bodyWeight: historicalBodyWeight,
-                exercise: recommendationExercise,
-              }
-            )
-          )
-          .filter(Number.isFinite)
-      );
-
-      if (latestMaxE1RM > 0) {
-        const latestE1RMs = (latestHistoryExercise?.sets || []).map((set) =>
-          calculateE1RM(
-            firstPresentValue(set.actualWeight),
-            firstPresentValue(set.actualReps),
-            firstPresentValue(set.actualRir),
-            null,
-            null,
-            null,
-            {
-              bodyWeight: historicalBodyWeight,
-              exercise: recommendationExercise,
-            }
-          )
-        );
-        const result = isDeload
-          ? recommendDeloadTargetPrescription({
-              allowedRepWindow: 2,
-              baselineE1RM: latestMaxE1RM,
-              bodyWeight: templateBodyWeight,
-              deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
-              exercise: recommendationExercise,
-              fatigueRatio: getHistoricalFatigueRatioForSet({
-                blendTowardFlat: FATIGUE_RATIO_BLEND_TOWARD_FLAT,
-                e1rms: latestE1RMs,
-                setIndex,
-              }),
-              preferredRepWindow: 2,
-              setIndex,
-              targetReps,
-              targetRir,
-              weightIncrement: (weight) =>
-                getExerciseWeightIncrement(recommendationExercise, undefined, weight),
-            })
-          : recommendTargetPrescription({
-              allowedRepWindow: 2,
-              bodyWeight: templateBodyWeight,
-              exercise: recommendationExercise,
-              goalMode: getGoalMode(plan),
-              preferredRepWindow: 2,
-              previousE1RM: latestMaxE1RM,
-              progressionPercent: PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
-              targetReps,
-              targetRir,
-              weightIncrement: (weight) =>
-                getExerciseWeightIncrement(recommendationExercise, undefined, weight),
-            });
-
-        if (!isDeload) {
-          return result?.recommendation || null;
+      ) || templateBodyWeight;
+    const latestE1RMs = (latestHistoryExercise?.sets || []).map((set) =>
+      calculateE1RM(
+        firstPresentValue(set.actualWeight),
+        firstPresentValue(set.actualReps),
+        firstPresentValue(set.actualRir),
+        null,
+        null,
+        null,
+        {
+          bodyWeight: historicalBodyWeight,
+          exercise: recommendationExercise,
         }
+      )
+    );
+    const latestMaxE1RM = Math.max(
+      0,
+      ...latestE1RMs.filter(Number.isFinite)
+    );
+    const completedPerformanceFallback = (
+      [latestHistoryExercise?.sets?.[setIndex], ...(latestHistoryExercise?.sets || [])]
+    )
+      .filter(
+        (historySet, index, values) =>
+          historySet && values.indexOf(historySet) === index
+      )
+      .map((historySet) =>
+        getCompletedPerformanceFallbackTarget({
+          exercise: recommendationExercise,
+          set: historySet,
+        })
+      )
+      .find(Boolean);
+    // This is deliberately sourced from the exact performance rendered as
+    // "Last completed sets" once the session opens: best prior set for set 1,
+    // then the matching prior set for every following working set.
+    const latestBaselineE1RM =
+      setIndex === 0
+        ? latestMaxE1RM
+        : latestE1RMs[setIndex] || latestMaxE1RM;
 
-        return result?.recommendation || null;
-      }
+    if (latestBaselineE1RM <= 0) {
+      return completedPerformanceFallback || null;
     }
 
-    const recommendation = recommendSetTarget({
-      allowedRepWindow: 2,
-      bodyWeight: templateBodyWeight,
-      exercise: recommendationExercise,
-      goalMode: getGoalMode(plan),
-      history,
-      preferredRepWindow: 2,
-      setIndex,
-      targetReps,
-      targetRir,
-      weightIncrement: (weight) =>
-        getExerciseWeightIncrement(recommendationExercise, undefined, weight),
-    });
+    const result = isDeload
+      ? recommendDeloadTargetPrescription({
+          allowedRepWindow: 2,
+          baselineE1RM: latestMaxE1RM,
+          bodyWeight: templateBodyWeight,
+          deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
+          exercise: recommendationExercise,
+          fatigueRatio: getHistoricalFatigueRatioForSet({
+            blendTowardFlat: FATIGUE_RATIO_BLEND_TOWARD_FLAT,
+            e1rms: latestE1RMs,
+            setIndex,
+          }),
+          preferredRepWindow: 2,
+          setIndex,
+          targetReps,
+          targetRir,
+          weightIncrement: (weight) =>
+            getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+        })
+      : recommendTargetPrescription({
+          allowedRepWindow: 2,
+          bodyWeight: templateBodyWeight,
+          exercise: recommendationExercise,
+          goalMode: getGoalMode(plan),
+          preferredRepWindow: 2,
+          previousE1RM: latestBaselineE1RM,
+          progressionPercent:
+            getGoalMode(plan) === "progress"
+              ? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+              : 0,
+          targetReps,
+          targetRir,
+          weightIncrement: (weight) =>
+            getExerciseWeightIncrement(recommendationExercise, undefined, weight),
+        });
 
-    return recommendation.result?.recommendation || null;
+    return result?.recommendation || completedPerformanceFallback || null;
   }
 
   function getFirstSetSuggestedTarget(exercise, plan = linkedPlan) {
@@ -1356,15 +1380,11 @@ export default function TemplateView({
       set: firstSet,
       weekPrescription,
     });
-    const libraryExercise = exerciseLibrary.find(
-      (item) => String(item.id) === String(exercise.exerciseId)
+    const libraryExercise = getLibraryExerciseForCalculation(exercise);
+    const recommendationExercise = getExerciseForTargetCalculation(
+      exercise,
+      libraryExercise
     );
-    const recommendationExercise = {
-      ...(libraryExercise || {}),
-      ...exercise,
-      id: exercise.exerciseId || libraryExercise?.id || exercise.id,
-      exerciseId: exercise.exerciseId || libraryExercise?.id || exercise.id,
-    };
     const dynamicTarget = getDynamicTargetPrescription({
       exercise,
       libraryExercise,
@@ -1374,6 +1394,12 @@ export default function TemplateView({
       targetRir: plannedPrescription.rir,
     });
     const weight = formatTargetValue(dynamicTarget?.weight);
+    const reps = formatTargetValue(
+      dynamicTarget?.reps ?? plannedPrescription.reps
+    );
+    const rir = formatTargetValue(
+      dynamicTarget?.rir ?? plannedPrescription.rir
+    );
 
     if (!weight) {
       return null;
@@ -1381,8 +1407,8 @@ export default function TemplateView({
 
     const e1rm = calculateE1RM(
       weight,
-      plannedPrescription.reps,
-      plannedPrescription.rir,
+      reps,
+      rir,
       null,
       null,
       null,
@@ -1395,8 +1421,8 @@ export default function TemplateView({
     return {
       calculationExercise: recommendationExercise,
       e1rm,
-      reps: plannedPrescription.reps,
-      rir: plannedPrescription.rir,
+      reps,
+      rir,
       weight,
     };
   }
@@ -1515,9 +1541,7 @@ export default function TemplateView({
       planWorkoutId: template.planWorkoutId || null,
 
       exercises: template.exercises.map((exercise) => {
-        const libraryExercise = exerciseLibrary.find(
-          (ex) => ex.id === exercise.exerciseId
-        );
+        const libraryExercise = getLibraryExerciseForCalculation(exercise);
         const latestPerformance = getLatestHistoryPerformance(exercise);
         const latestHistoryExercise = latestPerformance?.exercise;
 
@@ -1574,9 +1598,13 @@ export default function TemplateView({
                 rir: plannedPrescription.rir,
                 targetWeight: formatTargetValue(dynamicTarget?.weight),
 
-                targetReps: plannedPrescription.reps,
+                targetReps: formatTargetValue(
+                  dynamicTarget?.reps ?? plannedPrescription.reps
+                ),
 
-                targetRir: plannedPrescription.rir,
+                targetRir: formatTargetValue(
+                  dynamicTarget?.rir ?? plannedPrescription.rir
+                ),
               };
               const actualDefaults = getActualDefaultsForSet(
                 exercise,

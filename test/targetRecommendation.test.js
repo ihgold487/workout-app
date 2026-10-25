@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  getCompletedPerformanceFallbackTarget,
   getHistoricalFatigueRatioForSet,
   MAX_PROGRESS_E1RM_INCREASE_PERCENT,
   PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
@@ -10,6 +11,23 @@ import {
   recommendTargetPrescription,
   resolvePlanGoalMode,
 } from "../src/utils/targetRecommendation.js";
+
+test("completed performance fallback keeps a target available without an e1RM", () => {
+  assert.deepEqual(
+    getCompletedPerformanceFallbackTarget({
+      exercise: { bodyweightLoadPercent: 100 },
+      set: { actualReps: 10, actualRir: 2 },
+    }),
+    { reps: 10, rir: 2, weight: 0 }
+  );
+  assert.deepEqual(
+    getCompletedPerformanceFallbackTarget({
+      exercise: {},
+      set: { targetWeight: 80, targetReps: 12, targetRir: 3 },
+    }),
+    { reps: 12, rir: 3, weight: 80 }
+  );
+});
 
 test("deload targets reduce the first-set e1RM and apply historical fatigue later", () => {
   const firstSet = recommendDeloadTargetPrescription({
@@ -117,6 +135,60 @@ test("progression caps rounded e1RM jumps before prioritizing exact reps", () =>
   );
 });
 
+test("progression recommendations retain their safe rep and RIR candidates", () => {
+  const bench = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    previousE1RM: 185.625,
+    targetReps: 9,
+    targetRir: 3,
+    weightIncrement: 2.5,
+  });
+  const cableFly = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    previousE1RM: 40.6875,
+    targetReps: 15,
+    targetRir: 3,
+    weightIncrement: 2.5,
+  });
+
+  assert.deepEqual(
+    {
+      reps: bench.recommendation.reps,
+      rir: bench.recommendation.rir,
+      weight: bench.recommendation.weight,
+    },
+    { reps: 7, rir: 3, weight: 140 }
+  );
+  assert.ok(bench.recommendation.e1rm < 185.625 * 1.01);
+
+  assert.deepEqual(
+    {
+      reps: cableFly.recommendation.reps,
+      rir: cableFly.recommendation.rir,
+      weight: cableFly.recommendation.weight,
+    },
+    { reps: 16, rir: 3, weight: 25 }
+  );
+  assert.ok(cableFly.recommendation.e1rm > 40.6875);
+});
+
+test("progression provides a maintenance target when load increments cannot clear the cap", () => {
+  const target = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    previousE1RM: 100,
+    targetReps: 10,
+    targetRir: 3,
+    weightIncrement: 20,
+  });
+
+  assert.ok(target.recommendation);
+  assert.ok(target.recommendation.e1rm <= 100 + 0.0001);
+  assert.ok(target.recommendation.e1rm <= 100 * 1.01 + 0.0001);
+});
+
 test("a small RIR miss prefers one fewer rep at the same weight", () => {
   const target = recommendNextSetTargetAfterPerformance({
     actualReps: 9,
@@ -154,6 +226,26 @@ test("an achieved lower rep in range carries forward at the same weight", () => 
     reps: 8,
     rir: 3,
     weight: 127.5,
+  });
+});
+
+test("top-of-range performance leaves one rep of fatigue reserve at the same weight", () => {
+  const target = recommendNextSetTargetAfterPerformance({
+    actualReps: 15,
+    actualRir: 3,
+    actualWeight: 80,
+    exercise: {},
+    minimumReps: 12,
+    prescribedReps: 15,
+    targetRir: 3,
+    weightIncrement: 5,
+  });
+
+  assert.deepEqual(target, {
+    reason: "top-of-range-fatigue-reserve",
+    reps: 14,
+    rir: 3,
+    weight: 80,
   });
 });
 

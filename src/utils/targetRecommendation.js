@@ -300,6 +300,37 @@ function getProgressionPercent(goalMode, progressionPercent) {
   return GOAL_MODE_PROGRESSIONS[goalMode] ?? GOAL_MODE_PROGRESSIONS.maintenance;
 }
 
+// A completed set can be useful even when its e1RM cannot be reconstructed
+// (most commonly older bodyweight entries recorded without a bodyweight
+// measurement). Keep that known, completed performance available as the final
+// display-only fallback rather than hiding a target altogether.
+export function getCompletedPerformanceFallbackTarget({
+  exercise,
+  set,
+}) {
+  const reps = toNumber(set?.actualReps) ?? toNumber(set?.targetReps);
+
+  if (reps == null) {
+    return null;
+  }
+
+  const actualWeight =
+    toNumber(set?.actualWeight) ?? toNumber(set?.targetWeight);
+  const bodyweightLoadPercent = toNumber(
+    exercise?.bodyweightLoadPercent ?? exercise?.bodyweight_load_percent
+  );
+
+  if (actualWeight == null && !(bodyweightLoadPercent > 0)) {
+    return null;
+  }
+
+  return {
+    reps,
+    rir: toNumber(set?.actualRir) ?? toNumber(set?.targetRir) ?? 0,
+    weight: actualWeight ?? 0,
+  };
+}
+
 function uniqueNumbers(values) {
   return [...new Set(values.map((value) => Number(value.toFixed(4))))];
 }
@@ -530,12 +561,29 @@ export function recommendTargetPrescription({
           (candidate) => candidate.e1rm > baselineE1RM + 0.0001
         )
       : cappedProgressCandidates;
+  // Some exercises cannot make a positive e1RM increase inside the cap with
+  // their available load increments (for example, bodyweight work or coarse
+  // cable stacks). Keep a usable target in those cases by selecting the
+  // closest non-increasing candidate rather than returning no target.
+  const maintenanceFallbackCandidates =
+    resolvedProgressionPercent > 0
+      ? cappedProgressCandidates
+          .filter((candidate) => candidate.e1rm <= baselineE1RM + 0.0001)
+          .sort(
+            (a, b) =>
+              Math.abs(a.e1rm - baselineE1RM) -
+                Math.abs(b.e1rm - baselineE1RM) ||
+              a.score.repDeviation - b.score.repDeviation ||
+              a.weight - b.weight
+          )
+      : [];
   const selectedCandidates = progressiveCandidates.sort(
     resolvedProgressionPercent > 0
       ? compareCappedProgressCandidates
       : compareCandidates
   );
-  const recommendation = selectedCandidates[0] || null;
+  const recommendation =
+    selectedCandidates[0] || maintenanceFallbackCandidates[0] || null;
 
   return {
     alternatives: recommendation
@@ -795,6 +843,18 @@ export function recommendNextSetTargetAfterPerformance({
     return {
       reason: "repeat-achieved-range",
       reps,
+      rir: prescribedRir,
+      weight,
+    };
+  }
+
+  // A set completed at the top of a multi-rep range should leave room for
+  // normal within-workout fatigue. Hold the load and move down one rep before
+  // considering a heavier, bottom-of-range target for the following set.
+  if (!rangeMissed && !effortExceeded && reps >= prescribed && minimum < prescribed) {
+    return {
+      reason: "top-of-range-fatigue-reserve",
+      reps: Math.max(minimum, prescribed - 1),
       rir: prescribedRir,
       weight,
     };
