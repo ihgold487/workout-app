@@ -269,7 +269,6 @@ function SpotifyTrackProgressDisplay({ compact = false, spotifyState }) {
 const FATIGUE_RATIO_BLEND_TOWARD_FLAT = 0.5;
 const CLEAR_FATIGUE_DROP_RATIO = 0.995;
 const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
-const SAME_WEIGHT_TARGET_REP_WINDOW = 2;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
 const WORKOUT_PAUSE_REMINDER_SECONDS = 300;
 const WORKOUT_INACTIVITY_REMINDER_SECONDS = 360;
@@ -994,8 +993,8 @@ export default function SessionView({
 
     return {
       completedAt: latestPerformance.workout.completedAt,
-
       sets: latestPerformance.exercise.sets,
+      workout: latestPerformance.workout,
     };
   }
 
@@ -1123,7 +1122,53 @@ export default function SessionView({
   ]);
 
   function getTargetCalculationCacheKey(exercise, set, setIndex) {
-    return `${setIndex}:${JSON.stringify({ exercise, set })}`;
+    return `${setIndex}:${JSON.stringify({
+      exercise,
+      set,
+      targetAttributes: session.targetAttributes || null,
+    })}`;
+  }
+
+  function getTargetAttributesForSet(set) {
+    const prescribedReps = parseSessionNumber(getSetPrescribedReps(set));
+    const prescribedMinimumReps = parseSessionNumber(getSetMinimumReps(set));
+    const hasRepRange =
+      prescribedMinimumReps != null &&
+      prescribedReps != null &&
+      prescribedMinimumReps < prescribedReps;
+    const configured = session.targetAttributes || {};
+    const configuredMinDeviation = parseSessionNumber(
+      configured.minRepDeviation
+    );
+    const configuredMaxDeviation = parseSessionNumber(
+      configured.maxRepDeviation
+    );
+    const configuredProgressionPercent = parseSessionNumber(
+      configured.progressionPercent
+    );
+    const configuredMaxProgressionPercent = parseSessionNumber(
+      configured.maxProgressionPercent
+    );
+    const progressionPercent = Math.max(
+      0,
+      configuredProgressionPercent ?? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+    );
+
+    return {
+      maxProgressionPercent: Math.max(
+        progressionPercent,
+        configuredMaxProgressionPercent ?? MAX_PROGRESS_E1RM_INCREASE_PERCENT
+      ),
+      maxRepDeviation: Math.max(
+        0,
+        configuredMaxDeviation ?? (hasRepRange ? 1 : 2)
+      ),
+      minRepDeviation: Math.max(
+        0,
+        configuredMinDeviation ?? (hasRepRange ? 0 : 2)
+      ),
+      progressionPercent,
+    };
   }
 
   function getPlanTargetValues() {
@@ -1145,7 +1190,9 @@ export default function SessionView({
     exercise,
     reps,
     rir,
-    setIndex = 0
+    setIndex = 0,
+    minimumReps,
+    targetAttributes = getTargetAttributesForSet(null)
   ) {
     const calculationExercise = getExerciseForCalculation(exercise);
     const isDeload = isDeloadPlanWorkout();
@@ -1161,6 +1208,9 @@ export default function SessionView({
             deloadReductionPercent: DELOAD_TARGET_REDUCTION_PERCENT,
             exercise: calculationExercise,
             fatigueRatio: getNormalizedLatestFatigueRatio(exercise, setIndex),
+            maxRepDeviation: targetAttributes.maxRepDeviation,
+            minRepDeviation: targetAttributes.minRepDeviation,
+            minimumReps,
             normalizeWeight: (weight) =>
               getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
             setIndex,
@@ -1173,7 +1223,11 @@ export default function SessionView({
             calculationExercise,
             latestBaselineE1RM,
             reps,
-            rir
+            rir,
+            {
+              ...targetAttributes,
+              minimumReps,
+            }
           );
       return recommendation || null;
     }
@@ -1181,12 +1235,21 @@ export default function SessionView({
     return null;
   }
 
-  function getRecommendedTargetWeight(exercise, reps, rir, setIndex = 0) {
+  function getRecommendedTargetWeight(
+    exercise,
+    reps,
+    rir,
+    setIndex = 0,
+    minimumReps,
+    targetAttributes
+  ) {
     const recommendation = getRecommendedTargetPrescription(
       exercise,
       reps,
       rir,
-      setIndex
+      setIndex,
+      minimumReps,
+      targetAttributes
     );
 
     return recommendation?.weight != null ? String(recommendation.weight) : "";
@@ -1201,6 +1264,10 @@ export default function SessionView({
       goalMode: getGoalMode(),
       normalizeWeight: (weight) =>
         getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
+      maxProgressionPercent: options.maxProgressionPercent,
+      maxRepDeviation: options.maxRepDeviation,
+      minRepDeviation: options.minRepDeviation,
+      minimumReps: options.minimumReps,
       preferredRepWindow: options.preferredRepWindow ?? 2,
       previousE1RM,
       progressionPercent:
@@ -1372,6 +1439,9 @@ export default function SessionView({
     exercise,
     excludedPrescription = null,
     fatigueCeilingE1RM = null,
+    maxProgressionPercent = MAX_PROGRESS_E1RM_INCREASE_PERCENT,
+    maxRepDeviation = 0,
+    minRepDeviation = 0,
     minimumReps = null,
     progressionBaselineE1RM = null,
     progressionFloorE1RM = null,
@@ -1398,15 +1468,15 @@ export default function SessionView({
       return [];
     }
 
-    const maxCandidateReps = Math.max(1, Math.round(numericPrescribedReps));
+    const maxCandidateReps = Math.max(
+      1,
+      Math.round(numericPrescribedReps + Math.max(0, maxRepDeviation))
+    );
     const minReps = Math.max(
       1,
-      Math.min(
-        maxCandidateReps,
-        Math.round(
-          numericMinimumReps ??
-            maxCandidateReps - SAME_WEIGHT_TARGET_REP_WINDOW
-        )
+      Math.round(
+        (numericMinimumReps ?? numericPrescribedReps) -
+          Math.max(0, minRepDeviation)
       )
     );
     const calculationExercise = getExerciseForCalculation(exercise);
@@ -1461,7 +1531,7 @@ export default function SessionView({
           numericProgressionBaselineE1RM == null ||
           e1rm <=
             numericProgressionBaselineE1RM *
-              (1 + MAX_PROGRESS_E1RM_INCREASE_PERCENT) +
+              (1 + maxProgressionPercent) +
               0.0001,
         weight: normalizedWeight,
       });
@@ -1727,8 +1797,12 @@ export default function SessionView({
           previousActualRir
         )
       : null;
-    const targetReps = getSetTargetReps(set);
-    const targetRir = getSetTargetRir(set);
+    // Stored target fields are snapshots, not the live recommendation input.
+    // Always start from the current prescription and its explicit range.
+    const targetReps = getSetPrescribedReps(set);
+    const targetRir = getSetPrescribedRir(set);
+    const minimumReps = getSetMinimumReps(set);
+    const targetAttributes = getTargetAttributesForSet(set);
     const adjacentFatigueRatio = getLatestAdjacentFatigueRatio(exercise, setIndex);
 
     if (
@@ -1745,6 +1819,8 @@ export default function SessionView({
           deloadReductionPercent: 0,
           exercise: calculationExercise,
           fatigueRatio: adjacentFatigueRatio,
+          maxRepDeviation: targetAttributes.maxRepDeviation,
+          minRepDeviation: targetAttributes.minRepDeviation,
           minimumReps: getSetMinimumReps(set),
           normalizeWeight: (weight) =>
             getLoadableWeightForExercise(calculationExercise, weight) ?? weight,
@@ -1776,6 +1852,10 @@ export default function SessionView({
               bodyWeight: sessionBodyWeight,
               exercise: calculationExercise,
               goalMode: getGoalMode(),
+              maxProgressionPercent: targetAttributes.maxProgressionPercent,
+              maxRepDeviation: targetAttributes.maxRepDeviation,
+              minimumReps,
+              minRepDeviation: targetAttributes.minRepDeviation,
               normalizeWeight: (weight) =>
                 getLoadableWeightForExercise(calculationExercise, weight) ??
                 weight,
@@ -1783,7 +1863,7 @@ export default function SessionView({
               previousE1RM: baselineE1RM,
               progressionPercent:
                 getGoalMode() === "progress"
-                  ? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+                  ? targetAttributes.progressionPercent
                   : 0,
               targetReps,
               targetRir,
@@ -2168,6 +2248,7 @@ export default function SessionView({
     }
 
     const targetRir = getSetPrescribedRir(set, getSetPrescribedRir(previousSet));
+    const targetAttributes = getTargetAttributesForSet(set);
     const actualWeight = firstPresentValue(previousSet.actualWeight);
     const actualReps = parseSessionNumber(previousSet.actualReps);
     const actualRir = firstPresentValue(previousSet.actualRir);
@@ -2197,7 +2278,8 @@ export default function SessionView({
     const progressTargetE1RM =
       latestMatchingSetE1RM == null
         ? null
-        : latestMatchingSetE1RM * (1 + PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
+        : latestMatchingSetE1RM *
+          (1 + targetAttributes.progressionPercent);
     const fatigueTargetE1RM =
       actualE1RM != null && adjacentFatigueRatio != null
         ? actualE1RM * adjacentFatigueRatio
@@ -2234,6 +2316,9 @@ export default function SessionView({
       exercise,
       excludedPrescription: displayedTarget,
       fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+      maxProgressionPercent: targetAttributes.maxProgressionPercent,
+      maxRepDeviation: targetAttributes.maxRepDeviation,
+      minRepDeviation: targetAttributes.minRepDeviation,
       minimumReps,
       progressionBaselineE1RM,
       progressionFloorE1RM: hasClearPriorFatigueDrop
@@ -2611,7 +2696,13 @@ export default function SessionView({
       sets: replacedExercise?.sets?.length
         ? String(replacedExercise.sets.length)
         : "",
-      weight: getRecommendedTargetWeight(newExercise, reps, rir),
+      weight: getRecommendedTargetWeight(
+        newExercise,
+        reps,
+        rir,
+        0,
+        getSetMinimumReps(firstSet, reps)
+      ),
     };
   }
 
@@ -2638,7 +2729,7 @@ export default function SessionView({
       reps: formatSetupDefault(reps),
       rir: formatSetupDefault(rir),
       sets: "3",
-      weight: getRecommendedTargetWeight(exercise, reps, rir),
+      weight: getRecommendedTargetWeight(exercise, reps, rir, 0, minimumReps),
     };
   }
 
@@ -3251,7 +3342,9 @@ export default function SessionView({
               exercise,
               prescribedReps,
               prescribedRir,
-              setIndex
+              setIndex,
+              getSetMinimumReps(set, prescribedReps),
+              getTargetAttributesForSet(set)
             );
 
             return {
@@ -3621,6 +3714,8 @@ export default function SessionView({
   const [confirmExitWorkout, setConfirmExitWorkout] = useState(false);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
   const [sessionActionsClosing, setSessionActionsClosing] = useState(false);
+  const [targetAttributesExpanded, setTargetAttributesExpanded] =
+    useState(false);
 
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
@@ -5095,16 +5190,14 @@ export default function SessionView({
     const explicitMinimumReps = parseSessionNumber(
       getSetMinimumReps(nextSet, getSetMinimumReps(currentSet))
     );
+    const targetAttributes = getTargetAttributesForSet(nextSet);
     const minimumAcceptableReps =
       prescribedReps == null
         ? null
         : Math.max(
             1,
-            Math.min(
-              prescribedReps,
-              explicitMinimumReps ??
-                prescribedReps - SAME_WEIGHT_TARGET_REP_WINDOW
-            )
+            (explicitMinimumReps ?? prescribedReps) -
+              targetAttributes.minRepDeviation
           );
     const targetRir = getSetPrescribedRir(nextSet, getSetPrescribedRir(currentSet));
     const actualWeight = firstPresentValue(currentSet.actualWeight);
@@ -5241,7 +5334,8 @@ export default function SessionView({
       const progressTargetE1RM =
         latestMatchingSetE1RM == null
           ? null
-          : latestMatchingSetE1RM * (1 + PLAN_PROGRESS_E1RM_INCREASE_PERCENT);
+          : latestMatchingSetE1RM *
+            (1 + targetAttributes.progressionPercent);
       const fatigueTargetE1RM =
         actualE1RM != null && adjacentFatigueRatio != null
           ? actualE1RM * adjacentFatigueRatio
@@ -5261,6 +5355,9 @@ export default function SessionView({
         currentWeight: currentTargetWeight,
         exercise,
         fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
+        maxProgressionPercent: targetAttributes.maxProgressionPercent,
+        maxRepDeviation: targetAttributes.maxRepDeviation,
+        minRepDeviation: targetAttributes.minRepDeviation,
         minimumReps: explicitMinimumReps,
         progressionBaselineE1RM: latestMatchingSetE1RM,
         progressionFloorE1RM: hasClearPriorFatigueDrop
@@ -5561,6 +5658,52 @@ export default function SessionView({
     }
 
     setSessionActionsClosing(true);
+  }
+
+  function updateTargetAttribute(attribute, value) {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+      return;
+    }
+
+    updateSession((currentSession) => {
+      const currentAttributes = currentSession.targetAttributes || {};
+      const nextAttributes = {
+        ...currentAttributes,
+        [attribute]: Math.max(0, numericValue),
+      };
+
+      if (attribute === "progressionPercent") {
+        nextAttributes.maxProgressionPercent = Math.max(
+          nextAttributes.maxProgressionPercent ??
+            MAX_PROGRESS_E1RM_INCREASE_PERCENT,
+          nextAttributes.progressionPercent
+        );
+      }
+
+      if (attribute === "maxProgressionPercent") {
+        nextAttributes.maxProgressionPercent = Math.max(
+          nextAttributes.maxProgressionPercent,
+          nextAttributes.progressionPercent ??
+            PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+        );
+      }
+
+      return {
+        ...currentSession,
+        targetAttributes: nextAttributes,
+      };
+    });
+  }
+
+  function resetTargetAttributes() {
+    updateSession((currentSession) => {
+      const sessionWithoutTargetAttributes = { ...currentSession };
+      delete sessionWithoutTargetAttributes.targetAttributes;
+
+      return sessionWithoutTargetAttributes;
+    });
   }
 
   function replaceExercise(oldExerciseId, newExercise, replacementValues) {
@@ -6226,7 +6369,7 @@ export default function SessionView({
               const rir = firstPresentValue(set.actualRir);
               const e1rm = isBlankValue(reps)
                 ? null
-                : calculateSessionE1RM(exercise, weight, reps, rir);
+                : getHistorySetE1RM(exercise, set, latestPerformance.workout);
 
               return (
                 <div
@@ -6892,6 +7035,13 @@ export default function SessionView({
       : spotifyState.connected && spotifyState.isPaused === false
         ? "#1db954"
         : "var(--text-muted)";
+  const targetAttributesPreviewSet = session.exercises
+    .flatMap((exercise) => exercise.sets || [])
+    .find((set) => !set.isDropSet) || null;
+  const resolvedTargetAttributes = getTargetAttributesForSet(
+    targetAttributesPreviewSet
+  );
+  const configuredTargetAttributes = session.targetAttributes || {};
   return (
     <div
       style={{
@@ -10753,8 +10903,10 @@ export default function SessionView({
                 left: "env(safe-area-inset-left)",
                 margin: "0 auto",
                 maxWidth: "520px",
+                maxHeight: "calc(100dvh - 12px)",
                 minWidth: 0,
                 overflowX: "hidden",
+                overflowY: "auto",
                 padding: "16px 16px calc(16px + env(safe-area-inset-bottom))",
                 position: "absolute",
                 right: "env(safe-area-inset-right)",
@@ -10887,6 +11039,185 @@ export default function SessionView({
                     )}
                     {session.workoutTimerPaused ? "Resume" : "Pause"}
                   </button>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    aria-expanded={targetAttributesExpanded}
+                    onClick={() => setTargetAttributesExpanded((value) => !value)}
+                    type="button"
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-muted)",
+                      border: 0,
+                      color: "var(--text)",
+                      display: "flex",
+                      fontSize: "15px",
+                      fontWeight: 700,
+                      justifyContent: "space-between",
+                      minHeight: "44px",
+                      padding: "10px 12px",
+                      textAlign: "left",
+                      width: "100%",
+                    }}
+                  >
+                    <span>Target attributes</span>
+                    <span aria-hidden="true">
+                      {targetAttributesExpanded ? "▴" : "▾"}
+                    </span>
+                  </button>
+
+                  {targetAttributesExpanded && (
+                    <div
+                      style={{
+                        borderTop: "1px solid var(--border)",
+                        display: "grid",
+                        gap: "10px",
+                        padding: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "12px",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        Applies only to this in-progress workout. Targets update
+                        immediately; your plan and workout template are unchanged.
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns: "1fr 1fr",
+                        }}
+                      >
+                        <label style={{ display: "grid", gap: "4px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                            Min rep deviation
+                          </span>
+                          <input
+                            aria-label="Minimum rep deviation"
+                            inputMode="numeric"
+                            min="0"
+                            onChange={(event) =>
+                              updateTargetAttribute(
+                                "minRepDeviation",
+                                event.target.value
+                              )
+                            }
+                            step="1"
+                            type="number"
+                            value={
+                              configuredTargetAttributes.minRepDeviation ??
+                              resolvedTargetAttributes.minRepDeviation
+                            }
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: "4px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                            Max rep deviation
+                          </span>
+                          <input
+                            aria-label="Maximum rep deviation"
+                            inputMode="numeric"
+                            min="0"
+                            onChange={(event) =>
+                              updateTargetAttribute(
+                                "maxRepDeviation",
+                                event.target.value
+                              )
+                            }
+                            step="1"
+                            type="number"
+                            value={
+                              configuredTargetAttributes.maxRepDeviation ??
+                              resolvedTargetAttributes.maxRepDeviation
+                            }
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: "4px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                            Progress target (%)
+                          </span>
+                          <input
+                            aria-label="Progression percentage target"
+                            inputMode="decimal"
+                            min="0"
+                            onChange={(event) =>
+                              updateTargetAttribute(
+                                "progressionPercent",
+                                Number(event.target.value) / 100
+                              )
+                            }
+                            step="0.1"
+                            type="number"
+                            value={(
+                              (configuredTargetAttributes.progressionPercent ??
+                                resolvedTargetAttributes.progressionPercent) *
+                              100
+                            ).toFixed(1)}
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: "4px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                            Progress cap (%)
+                          </span>
+                          <input
+                            aria-label="Maximum progression percentage"
+                            inputMode="decimal"
+                            min="0"
+                            onChange={(event) =>
+                              updateTargetAttribute(
+                                "maxProgressionPercent",
+                                Number(event.target.value) / 100
+                              )
+                            }
+                            step="0.1"
+                            type="number"
+                            value={(
+                              (configuredTargetAttributes.maxProgressionPercent ??
+                                resolvedTargetAttributes.maxProgressionPercent) *
+                              100
+                            ).toFixed(1)}
+                          />
+                        </label>
+                      </div>
+
+                      <div
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "11px",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        Defaults are 0 / 1 for rep ranges and 2 / 2 for exact
+                        rep prescriptions. The progression defaults are 0.5% and
+                        1.0%.
+                      </div>
+
+                      <button
+                        onClick={resetTargetAttributes}
+                        type="button"
+                        style={{
+                          background: "transparent",
+                          border: "1px solid var(--border)",
+                          color: "var(--text)",
+                          minHeight: "36px",
+                        }}
+                      >
+                        Restore automatic defaults
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <button

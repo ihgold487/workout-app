@@ -135,6 +135,46 @@ test("progression caps rounded e1RM jumps before prioritizing exact reps", () =>
   );
 });
 
+test("a prescribed rep range never recommends below its lower bound", () => {
+  const target = recommendTargetPrescription({
+    allowedRepWindow: 2,
+    bodyWeight: { weight: 160 },
+    exercise: { bodyweightLoadPercent: 100 },
+    goalMode: "progress",
+    minimumReps: 5,
+    previousE1RM: 73.4,
+    targetReps: 7,
+    targetRir: 2.5,
+    weightIncrement: 2.5,
+  });
+
+  assert.ok(target.recommendation);
+  assert.ok(target.recommendation.reps >= 5);
+  assert.ok(target.recommendation.reps <= 8);
+});
+
+test("target attributes override rep deviations and the progression cap", () => {
+  const target = recommendTargetPrescription({
+    allowedRepWindow: 2,
+    exercise: {},
+    goalMode: "progress",
+    maxProgressionPercent: 0.03,
+    maxRepDeviation: 0,
+    minRepDeviation: 0,
+    minimumReps: 5,
+    previousE1RM: 100,
+    progressionPercent: 0.02,
+    targetReps: 7,
+    targetRir: 3,
+    weightIncrement: 0.5,
+  });
+
+  assert.ok(target.recommendation);
+  assert.ok(target.recommendation.reps >= 5);
+  assert.ok(target.recommendation.reps <= 7);
+  assert.ok(target.recommendation.e1rm <= 103.0001);
+});
+
 test("progression recommendations retain their safe rep and RIR candidates", () => {
   const bench = recommendTargetPrescription({
     exercise: {},

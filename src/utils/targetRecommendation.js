@@ -444,7 +444,11 @@ export function recommendTargetPrescription({
   bodyWeight,
   exercise,
   goalMode = "maintenance",
+  maxProgressionPercent = MAX_PROGRESS_E1RM_INCREASE_PERCENT,
+  maxRepDeviation,
   maximumE1RM,
+  minRepDeviation,
+  minimumReps,
   minWeight = 0,
   normalizeWeight,
   preferredRepWindow = 2,
@@ -469,8 +473,34 @@ export function recommendTargetPrescription({
     goalMode,
     progressionPercent
   );
-  const minReps = Math.max(1, Math.round(reps - allowedRepWindow));
-  const maxReps = Math.max(minReps, Math.round(reps + allowedRepWindow));
+  const prescribedMinimumReps = toNumber(minimumReps);
+  const hasRepRange =
+    prescribedMinimumReps != null && prescribedMinimumReps < reps;
+  const resolvedMinRepDeviation = Math.max(
+    0,
+    toNumber(minRepDeviation) ?? (hasRepRange ? 0 : allowedRepWindow)
+  );
+  const resolvedMaxRepDeviation = Math.max(
+    0,
+    toNumber(maxRepDeviation) ?? (hasRepRange ? 1 : allowedRepWindow)
+  );
+  const resolvedMaxProgressionPercent = Math.max(
+    0,
+    toNumber(maxProgressionPercent) ?? MAX_PROGRESS_E1RM_INCREASE_PERCENT
+  );
+  // Range settings describe deviations from its explicit lower and upper
+  // bounds. Exact-rep prescriptions retain the legacy search window unless
+  // the session supplies an override.
+  const minReps = Math.max(
+    1,
+    Math.round(
+      (hasRepRange ? prescribedMinimumReps : reps) - resolvedMinRepDeviation
+    )
+  );
+  const maxReps = Math.max(
+    minReps,
+    Math.round(reps + resolvedMaxRepDeviation)
+  );
   const candidates = [];
 
   for (let candidateReps = minReps; candidateReps <= maxReps; candidateReps += 1) {
@@ -551,7 +581,7 @@ export function recommendTargetPrescription({
           (candidate) =>
             candidate.e1rm <=
             baselineE1RM *
-              (1 + MAX_PROGRESS_E1RM_INCREASE_PERCENT) +
+              (1 + resolvedMaxProgressionPercent) +
               0.0001
         )
       : rankedCandidates;
@@ -662,6 +692,7 @@ export function recommendDeloadTargetPrescription({
     ...options,
     goalMode: "maintenance",
     maximumE1RM: targetE1RM,
+    minimumReps,
     previousE1RM: targetE1RM,
     progressionPercent: 0,
   });
@@ -940,6 +971,10 @@ export function recommendSetTarget({
   exercise,
   goalMode,
   history,
+  maxProgressionPercent,
+  maxRepDeviation,
+  minRepDeviation,
+  minimumReps,
   normalizeWeight,
   preferredRepWindow,
   progressionPercent,
@@ -969,10 +1004,14 @@ export function recommendSetTarget({
       allowedRepWindow,
       bodyWeight,
       exercise,
+      maxProgressionPercent,
+      maxRepDeviation,
+      minRepDeviation,
       previousE1RM: baseline.e1rm,
       preferredRepWindow,
       progressionPercent,
       normalizeWeight,
+      minimumReps,
       targetReps,
       targetRir,
       weightIncrement,
