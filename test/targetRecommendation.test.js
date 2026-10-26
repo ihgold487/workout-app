@@ -175,6 +175,36 @@ test("target attributes override rep deviations and the progression cap", () => 
   assert.ok(target.recommendation.e1rm <= 103.0001);
 });
 
+test("rep-range targets use both configured boundaries while pursuing progression", () => {
+  const target = recommendTargetPrescription({
+    exercise: {},
+    goalMode: "progress",
+    maxProgressionPercent: 0.02,
+    maxRepDeviation: 1,
+    minRepDeviation: 0,
+    minimumReps: 10,
+    previousE1RM: 75,
+    progressionPercent: 0.005,
+    targetReps: 15,
+    targetRir: 5,
+    weightIncrement: 1.25,
+  });
+
+  assert.deepEqual(
+    {
+      reps: target.recommendation.reps,
+      rir: target.recommendation.rir,
+      weight: target.recommendation.weight,
+    },
+    { reps: 14, rir: 5, weight: 46.25 }
+  );
+  assert.ok(
+    target.alternatives
+      .filter((candidate) => !candidate.exceedsProgressionCap)
+      .every((candidate) => candidate.e1rm <= 75 * 1.02 + 0.0001)
+  );
+});
+
 test("progression recommendations retain their safe rep and RIR candidates", () => {
   const bench = recommendTargetPrescription({
     exercise: {},
@@ -227,6 +257,19 @@ test("progression provides a maintenance target when load increments cannot clea
   assert.ok(target.recommendation);
   assert.ok(target.recommendation.e1rm <= 100 + 0.0001);
   assert.ok(target.recommendation.e1rm <= 100 * 1.01 + 0.0001);
+  const overCapOptions = target.alternatives.filter(
+    (candidate) => candidate.exceedsProgressionCap
+  );
+  assert.equal(overCapOptions.length, 1);
+  assert.ok(overCapOptions[0].e1rm > 100 * 1.01);
+  assert.equal(
+    overCapOptions[0].e1rm,
+    Math.min(
+      ...target.alternatives
+        .filter((candidate) => candidate.e1rm > 100)
+        .map((candidate) => candidate.e1rm)
+    )
+  );
 });
 
 test("a small RIR miss prefers one fewer rep at the same weight", () => {

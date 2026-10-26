@@ -1034,6 +1034,15 @@ export default function SessionView({
     };
   }
 
+  function getPreviousSameSetE1RM(sessionExercise, setIndex) {
+    const latestPerformance = getLatestMatchingHistoryPerformance(sessionExercise);
+    const historySet = latestPerformance?.exercise?.sets?.[setIndex];
+
+    return historySet
+      ? getHistorySetE1RM(sessionExercise, historySet, latestPerformance.workout)
+      : null;
+  }
+
   function getLinkedPlan() {
     return plans.find((plan) => String(plan.id) === String(session.planId));
   }
@@ -1631,19 +1640,42 @@ export default function SessionView({
             (candidate) => candidate.isProgressionCandidate
           )
         : progressionCandidates;
-    if (
-      numericProgressionBaselineE1RM != null &&
-      progressiveCandidates.length === 0
-    ) {
-      return [];
-    }
-    const closeProgressionCandidates = progressiveCandidates.filter(
+    const maintenanceCandidates =
+      numericProgressionBaselineE1RM != null
+        ? progressionCandidates.filter(
+            (candidate) => !candidate.isProgressionCandidate
+          )
+        : progressionCandidates;
+    const hasCapCompliantProgression = progressiveCandidates.length > 0;
+    // A coarse load increment can make every positive increase exceed the
+    // progression cap. In that case keep a maintenance target available and
+    // expose only the smallest over-cap progression as a clearly marked
+    // manual alternative below.
+    const leastOverCapProgression = hasCapCompliantProgression
+      ? null
+      : [...eligibleCandidates]
+          .filter(
+            (candidate) =>
+              candidate.isProgressionCandidate &&
+              !candidate.respectsProgressionCeiling &&
+              (fatigueCeilingE1RM == null || candidate.respectsFatigueCeiling)
+          )
+          .sort(
+            (a, b) =>
+              a.e1rm - b.e1rm ||
+              a.repDeviation - b.repDeviation ||
+              a.weight - b.weight
+          )[0] || null;
+    const capCompliantCandidatePool = hasCapCompliantProgression
+      ? progressiveCandidates
+      : maintenanceCandidates;
+    const closeProgressionCandidates = capCompliantCandidatePool.filter(
       (candidate) =>
         candidate.e1rmDeviation <= SAME_WEIGHT_TARGET_E1RM_TOLERANCE
     );
     const candidatePool = closeProgressionCandidates.length
       ? closeProgressionCandidates
-      : progressiveCandidates;
+      : capCompliantCandidatePool;
     if (
       fatigueCeilingE1RM != null &&
       candidatePool.length > 0 &&
@@ -1677,20 +1709,36 @@ export default function SessionView({
     const primaryCandidate = sortCandidates(fatigueCandidatePool)[0] || null;
     const broaderCandidatePool =
       fatigueCeilingE1RM != null &&
-      progressiveCandidates.some(
+      capCompliantCandidatePool.some(
         (candidate) => candidate.respectsFatigueCeiling
       )
-        ? progressiveCandidates.filter(
+        ? capCompliantCandidatePool.filter(
             (candidate) => candidate.respectsFatigueCeiling
           )
-        : eligibleCandidates;
+        : capCompliantCandidatePool;
     const broaderRankedCandidates = sortCandidates(broaderCandidatePool);
     const selectedCandidates = [];
+    const capCompliantLimit = leastOverCapProgression ? 7 : 8;
 
     function selectCandidate(candidate) {
-      if (candidate && !selectedCandidates.includes(candidate)) {
+      if (
+        candidate &&
+        selectedCandidates.length < capCompliantLimit &&
+        !selectedCandidates.includes(candidate)
+      ) {
         selectedCandidates.push(candidate);
       }
+    }
+
+    function finishCandidates() {
+      if (leastOverCapProgression && selectedCandidates.length < 8) {
+        selectedCandidates.push({
+          ...leastOverCapProgression,
+          exceedsProgressionCap: true,
+        });
+      }
+
+      return selectedCandidates.slice(0, 8);
     }
 
     if (numericBalanceE1RM != null) {
@@ -1733,7 +1781,7 @@ export default function SessionView({
           }
         });
 
-      return selectedCandidates.slice(0, 8);
+      return finishCandidates();
     }
 
     // Keep the established best recommendation first, then deliberately reserve
@@ -1777,7 +1825,7 @@ export default function SessionView({
       }
     });
 
-    return selectedCandidates.slice(0, 8);
+    return finishCandidates();
   }
 
   function getTargetRecommendation(exercise, set, setIndex) {
@@ -2272,10 +2320,11 @@ export default function SessionView({
     const latestMatchingSet =
       getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets?.[setIndex];
     const latestMatchingSetE1RM = getHistorySetE1RM(exercise, latestMatchingSet);
+    // Use the corresponding historical set where it exists. A workout with
+    // fewer recorded sets still needs a bounded target, so fall back to that
+    // workout's best set rather than treating every candidate as progression.
     const progressionBaselineE1RM =
-      setIndex === 0
-        ? getLatestMatchingMaxE1RM(exercise)
-        : latestMatchingSetE1RM;
+      latestMatchingSetE1RM ?? getLatestMatchingMaxE1RM(exercise);
     const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, {
       setId: previousSet.id,
       value: actualE1RM,
@@ -2283,9 +2332,9 @@ export default function SessionView({
     const fatigueRatio = getNormalizedLatestFatigueRatio(exercise, setIndex);
     const adjacentFatigueRatio = getLatestAdjacentFatigueRatio(exercise, setIndex);
     const progressTargetE1RM =
-      latestMatchingSetE1RM == null
+      progressionBaselineE1RM == null
         ? null
-        : latestMatchingSetE1RM *
+        : progressionBaselineE1RM *
           (1 + targetAttributes.progressionPercent);
     const fatigueTargetE1RM =
       actualE1RM != null && adjacentFatigueRatio != null
@@ -2298,7 +2347,7 @@ export default function SessionView({
     const baselineE1RM =
       progressTargetE1RM != null && fatigueTargetE1RM != null
         ? hasClearPriorFatigueDrop
-          ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
+          ? Math.max(progressionBaselineE1RM || 0, fatigueTargetE1RM)
           : Math.max(progressTargetE1RM, fatigueTargetE1RM)
         : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
     const displayedTarget = {
@@ -2329,7 +2378,7 @@ export default function SessionView({
       minimumReps,
       progressionBaselineE1RM,
       progressionFloorE1RM: hasClearPriorFatigueDrop
-        ? latestMatchingSetE1RM
+        ? progressionBaselineE1RM
         : null,
       prescribedReps,
       targetRir,
@@ -2436,6 +2485,24 @@ export default function SessionView({
     return weightUnit === "kg"
       ? lbsToKg(numericValue.toFixed(1))
       : numericValue.toFixed(1);
+  }
+
+  function formatTargetE1RMChangeSuffix(targetE1RM, previousSameSetE1RM) {
+    const current = Number(targetE1RM);
+    const previous = Number(previousSameSetE1RM);
+
+    if (
+      !Number.isFinite(current) ||
+      !Number.isFinite(previous) ||
+      previous <= 0
+    ) {
+      return "";
+    }
+
+    const percent = ((current - previous) / previous) * 100;
+    const formatted = Math.abs(percent).toFixed(1).replace(/\.0$/, "");
+
+    return ` (${percent > 0 ? "+" : percent < 0 ? "-" : ""}${formatted}%)`;
   }
 
   function formatWarmupPercent(value) {
@@ -3378,6 +3445,7 @@ export default function SessionView({
   function openTargetAlternatives(exercise, set, setIndex) {
     const recommendation = getTargetRecommendation(exercise, set, setIndex);
     const current = getLatestActualForSet(exercise, setIndex);
+    const previousSameSetE1RM = getPreviousSameSetE1RM(exercise, setIndex);
     const targetPrescription = getSuggestedTargetPrescription(
       exercise,
       set,
@@ -3406,6 +3474,7 @@ export default function SessionView({
     }
 
     const targetOptions = [
+      { ...suggested, isSuggested: true },
       ...alternatives
         .filter(
           (option) =>
@@ -3416,7 +3485,6 @@ export default function SessionView({
             )
         )
         .map((option) => ({ ...option, isSuggested: false })),
-      { ...suggested, isSuggested: true },
     ].sort((a, b) => (b.e1rm ?? -Infinity) - (a.e1rm ?? -Infinity));
 
     window.getSelection?.()?.removeAllRanges();
@@ -3427,6 +3495,7 @@ export default function SessionView({
       alternatives,
       current,
       exerciseId: exercise.id,
+      previousSameSetE1RM,
       setId: set.id,
       suggested,
       targetOptions,
@@ -5217,6 +5286,8 @@ export default function SessionView({
     const latestMatchingSet =
       getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets?.[nextSetIndex];
     const latestMatchingSetE1RM = getHistorySetE1RM(exercise, latestMatchingSet);
+    const progressionBaselineE1RM =
+      latestMatchingSetE1RM ?? getLatestMatchingMaxE1RM(exercise);
     const actualE1RM = calculateSessionE1RM(
       exercise,
       actualWeight,
@@ -5339,9 +5410,9 @@ export default function SessionView({
       const adjacentFatigueRatio =
         getLatestAdjacentFatigueRatio(exercise, nextSetIndex);
       const progressTargetE1RM =
-        latestMatchingSetE1RM == null
+        progressionBaselineE1RM == null
           ? null
-          : latestMatchingSetE1RM *
+          : progressionBaselineE1RM *
             (1 + targetAttributes.progressionPercent);
       const fatigueTargetE1RM =
         actualE1RM != null && adjacentFatigueRatio != null
@@ -5354,7 +5425,7 @@ export default function SessionView({
       const baselineE1RM =
         progressTargetE1RM != null && fatigueTargetE1RM != null
           ? hasClearPriorFatigueDrop
-            ? Math.max(latestMatchingSetE1RM || 0, fatigueTargetE1RM)
+            ? Math.max(progressionBaselineE1RM || 0, fatigueTargetE1RM)
             : Math.max(progressTargetE1RM, fatigueTargetE1RM)
           : progressTargetE1RM ?? fatigueTargetE1RM ?? actualE1RM;
       const rankedProgressionCandidates = getRankedProgressionCandidates({
@@ -5366,9 +5437,9 @@ export default function SessionView({
         maxRepDeviation: targetAttributes.maxRepDeviation,
         minRepDeviation: targetAttributes.minRepDeviation,
         minimumReps: explicitMinimumReps,
-        progressionBaselineE1RM: latestMatchingSetE1RM,
+        progressionBaselineE1RM,
         progressionFloorE1RM: hasClearPriorFatigueDrop
-          ? latestMatchingSetE1RM
+          ? progressionBaselineE1RM
           : null,
         prescribedReps,
         targetRir,
@@ -9629,6 +9700,10 @@ export default function SessionView({
                               : targetPrescription?.rir ?? getSetTargetRir(set),
                             weight: targetPrescription?.weight ?? set.targetWeight,
                           };
+                          const previousSameSetE1RM = getPreviousSameSetE1RM(
+                            exercise,
+                            setIndex
+                          );
 
                           return (
                             <div
@@ -10149,6 +10224,10 @@ export default function SessionView({
                                       e1RM{" "}
                                       {formatSessionE1RMDisplay(
                                         suggestedTarget.e1rm
+                                      )}
+                                      {formatTargetE1RMChangeSuffix(
+                                        suggestedTarget.e1rm,
+                                        previousSameSetE1RM
                                       )}
                                     </span>
                                   </button>
@@ -11778,6 +11857,21 @@ export default function SessionView({
                               Suggested
                             </span>
                           )}
+                          {option.exceedsProgressionCap && (
+                            <span
+                              style={{
+                                alignItems: "center",
+                                color: "var(--danger-text)",
+                                display: "inline-flex",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                marginRight: "8px",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              Above cap
+                            </span>
+                          )}
                           {formatPrescriptionLabel(option)}
                         </span>
                         <span
@@ -11787,6 +11881,10 @@ export default function SessionView({
                           }}
                         >
                           e1RM {formatSessionE1RMDisplay(option.e1rm)}
+                          {formatTargetE1RMChangeSuffix(
+                            option.e1rm,
+                            targetAlternativesData.previousSameSetE1RM
+                          )}
                         </span>
                       </button>
                     ))

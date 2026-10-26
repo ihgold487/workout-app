@@ -410,10 +410,11 @@ function addUniqueCandidates(target, candidates, limit, seenKeys) {
 
 function buildAlternativeCandidates({
   baselineE1RM,
+  cappedProgressCandidates,
+  progressiveCandidates,
   rankedCandidates,
   recommendation,
   resolvedProgressionPercent,
-  targetProgressCandidates,
 }) {
   const alternatives = [];
   const seenKeys = new Set([getCandidateKey(recommendation)]);
@@ -423,7 +424,10 @@ function buildAlternativeCandidates({
     return alternatives;
   }
 
-  const maintenanceCandidates = rankedCandidates
+  // Once a progression cap is configured, ordinary choices must honor it.
+  // Otherwise a user could choose an option that the recommendation logic
+  // intentionally rejected as too large a jump.
+  const maintenanceCandidates = cappedProgressCandidates
     .filter((candidate) => candidate.e1rm <= baselineE1RM * 1.005)
     .sort(
       (a, b) =>
@@ -432,9 +436,51 @@ function buildAlternativeCandidates({
         a.weight - b.weight
     );
 
-  addUniqueCandidates(alternatives, targetProgressCandidates, 5, seenKeys);
-  addUniqueCandidates(alternatives, maintenanceCandidates, 7, seenKeys);
-  addUniqueCandidates(alternatives, rankedCandidates, 7, seenKeys);
+  const rankedProgressionCandidates = [...progressiveCandidates].sort(
+    compareCappedProgressCandidates
+  );
+  const hasCapCompliantProgression = rankedProgressionCandidates.length > 0;
+  const leastOverCapProgression = hasCapCompliantProgression
+    ? null
+    : [...rankedCandidates]
+        .filter((candidate) => candidate.e1rm > baselineE1RM + 0.0001)
+        .sort(
+          (a, b) =>
+            a.e1rm - b.e1rm ||
+            a.score.repDeviation - b.score.repDeviation ||
+            a.weight - b.weight
+        )[0] || null;
+  // Reserve a visible slot for the explicitly marked over-cap escape hatch
+  // when no positive progression can satisfy the hard cap.
+  const capCompliantLimit = leastOverCapProgression ? 6 : 7;
+
+  addUniqueCandidates(
+    alternatives,
+    rankedProgressionCandidates,
+    capCompliantLimit,
+    seenKeys
+  );
+  addUniqueCandidates(
+    alternatives,
+    maintenanceCandidates,
+    capCompliantLimit,
+    seenKeys
+  );
+  addUniqueCandidates(
+    alternatives,
+    cappedProgressCandidates,
+    capCompliantLimit,
+    seenKeys
+  );
+
+  if (leastOverCapProgression) {
+    addUniqueCandidates(
+      alternatives,
+      [{ ...leastOverCapProgression, exceedsProgressionCap: true }],
+      7,
+      seenKeys
+    );
+  }
 
   return alternatives;
 }
@@ -571,10 +617,6 @@ export function recommendTargetPrescription({
   const comparator =
     resolvedProgressionPercent > 0 ? compareProgressCandidates : compareCandidates;
   const rankedCandidates = candidates.sort(comparator);
-  const targetProgressCandidates =
-    resolvedProgressionPercent > 0
-      ? rankedCandidates.filter((candidate) => candidate.e1rm >= targetE1RM)
-      : rankedCandidates;
   const cappedProgressCandidates =
     resolvedProgressionPercent > 0
       ? rankedCandidates.filter(
@@ -619,10 +661,11 @@ export function recommendTargetPrescription({
     alternatives: recommendation
       ? buildAlternativeCandidates({
           baselineE1RM,
+          cappedProgressCandidates,
+          progressiveCandidates,
           rankedCandidates,
           recommendation,
           resolvedProgressionPercent,
-          targetProgressCandidates,
         })
       : [],
     baselineE1RM,
