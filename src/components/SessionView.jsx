@@ -1243,6 +1243,7 @@ export default function SessionView({
             {
               ...targetAttributes,
               minimumReps,
+              preferHigherRepsForFirstSet: setIndex === 0,
             }
           );
       return recommendation || null;
@@ -1284,6 +1285,7 @@ export default function SessionView({
       maxRepDeviation: options.maxRepDeviation,
       minRepDeviation: options.minRepDeviation,
       minimumReps: options.minimumReps,
+      preferHigherRepsForFirstSet: options.preferHigherRepsForFirstSet,
       preferredRepWindow: options.preferredRepWindow ?? 2,
       previousE1RM,
       progressionPercent:
@@ -1459,6 +1461,7 @@ export default function SessionView({
     maxRepDeviation = 0,
     minRepDeviation = 0,
     minimumReps = null,
+    preferredSameWeightReps = null,
     progressionBaselineE1RM = null,
     progressionFloorE1RM = null,
     prescribedReps,
@@ -1471,6 +1474,9 @@ export default function SessionView({
     const excludedRir = parseSessionNumber(excludedPrescription?.rir);
     const numericPrescribedReps = parseSessionNumber(prescribedReps);
     const numericMinimumReps = parseSessionNumber(minimumReps);
+    const numericPreferredSameWeightReps = parseSessionNumber(
+      preferredSameWeightReps
+    );
     const numericProgressionBaselineE1RM = parseSessionNumber(
       progressionBaselineE1RM
     );
@@ -1538,6 +1544,11 @@ export default function SessionView({
         isSameWeight:
           numericCurrentWeight != null &&
           Math.abs(normalizedWeight - numericCurrentWeight) < 0.001,
+        isSameWeightOneFewerRep:
+          numericCurrentWeight != null &&
+          numericPreferredSameWeightReps != null &&
+          Math.abs(normalizedWeight - numericCurrentWeight) < 0.001 &&
+          reps === Math.round(numericPreferredSameWeightReps),
         repDeviation: Math.abs(reps - maxCandidateReps),
         reps,
         rir: numericRir,
@@ -1696,6 +1707,7 @@ export default function SessionView({
         const candidateScore = (candidate) =>
           candidate.e1rmDeviation +
           (candidate.isSameWeight ? 0 : WEIGHT_CHANGE_TARGET_SCORE_PENALTY) +
+          (candidate.isSameWeightOneFewerRep ? -0.03 : 0) +
           candidate.repDeviation * 0.002;
 
         return (
@@ -1718,7 +1730,13 @@ export default function SessionView({
         : capCompliantCandidatePool;
     const broaderRankedCandidates = sortCandidates(broaderCandidatePool);
     const selectedCandidates = [];
-    const capCompliantLimit = leastOverCapProgression ? 7 : 8;
+    const sameWeightOneFewerRepCandidate = broaderRankedCandidates.find(
+      (candidate) => candidate.isSameWeightOneFewerRep
+    );
+    const capCompliantLimit =
+      8 -
+      Number(Boolean(leastOverCapProgression)) -
+      Number(Boolean(sameWeightOneFewerRepCandidate));
 
     function selectCandidate(candidate) {
       if (
@@ -1731,6 +1749,14 @@ export default function SessionView({
     }
 
     function finishCandidates() {
+      if (
+        sameWeightOneFewerRepCandidate &&
+        !selectedCandidates.includes(sameWeightOneFewerRepCandidate) &&
+        selectedCandidates.length < 8
+      ) {
+        selectedCandidates.push(sameWeightOneFewerRepCandidate);
+      }
+
       if (leastOverCapProgression && selectedCandidates.length < 8) {
         selectedCandidates.push({
           ...leastOverCapProgression,
@@ -1863,6 +1889,7 @@ export default function SessionView({
     if (
       isDeloadPlanWorkout() &&
       setIndex > 0 &&
+      previousSet?.completed &&
       previousActualE1RM != null &&
       adjacentFatigueRatio != null
     ) {
@@ -1914,6 +1941,7 @@ export default function SessionView({
               normalizeWeight: (weight) =>
                 getLoadableWeightForExercise(calculationExercise, weight) ??
                 weight,
+              preferHigherRepsForFirstSet: setIndex === 0,
               preferredRepWindow: 2,
               previousE1RM: baselineE1RM,
               progressionPercent:
@@ -2184,22 +2212,6 @@ export default function SessionView({
       return targetCalculationCache.get(cacheKey);
     }
 
-    if (
-      set.targetSelectionSource === "alternative" &&
-      !isBlankValue(set.selectedTargetWeight) &&
-      !isBlankValue(set.selectedTargetReps) &&
-      !isBlankValue(set.selectedTargetRir)
-    ) {
-      const manualTarget = {
-        reps: set.selectedTargetReps,
-        rir: set.selectedTargetRir,
-        weight: set.selectedTargetWeight,
-      };
-
-      targetCalculationCache.set(cacheKey, manualTarget);
-      return manualTarget;
-    }
-
     const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
     const hasPreviousActualPerformance =
       previousSet?.completed &&
@@ -2281,7 +2293,11 @@ export default function SessionView({
 
     const previousSet = setIndex > 0 ? exercise.sets?.[setIndex - 1] : null;
 
-    if (getGoalMode() !== "progress" || !previousSet) {
+    if (
+      getGoalMode() !== "progress" ||
+      !previousSet ||
+      !previousSet.completed
+    ) {
       const alternatives = [];
 
       targetCalculationCache.set(cacheKey, alternatives);
@@ -2325,6 +2341,21 @@ export default function SessionView({
     // workout's best set rather than treating every candidate as progression.
     const progressionBaselineE1RM =
       latestMatchingSetE1RM ?? getLatestMatchingMaxE1RM(exercise);
+    const progressionCeilingE1RM =
+      progressionBaselineE1RM == null
+        ? null
+        : progressionBaselineE1RM *
+          (1 + targetAttributes.maxProgressionPercent);
+    const actualExceedsProgressionCeiling =
+      actualE1RM != null &&
+      progressionCeilingE1RM != null &&
+      actualE1RM > progressionCeilingE1RM + 0.0001;
+    const effectiveMaxProgressionPercent = actualExceedsProgressionCeiling
+      ? Math.max(
+          targetAttributes.maxProgressionPercent,
+          actualE1RM / progressionBaselineE1RM - 1
+        )
+      : targetAttributes.maxProgressionPercent;
     const todayBestE1RM = getCurrentWorkoutBestE1RMThroughSet(exercise, setIndex, {
       setId: previousSet.id,
       value: actualE1RM,
@@ -2344,6 +2375,11 @@ export default function SessionView({
           : todayBestE1RM * fatigueRatio;
     const hasClearPriorFatigueDrop =
       (adjacentFatigueRatio ?? fatigueRatio) < CLEAR_FATIGUE_DROP_RATIO;
+    const automaticCeilingE1RM = hasClearPriorFatigueDrop
+      ? actualE1RM
+      : actualExceedsProgressionCeiling
+        ? actualE1RM + 0.0001
+        : null;
     const baselineE1RM =
       progressTargetE1RM != null && fatigueTargetE1RM != null
         ? hasClearPriorFatigueDrop
@@ -2371,11 +2407,13 @@ export default function SessionView({
       currentWeight: currentTargetWeight,
       exercise,
       excludedPrescription: displayedTarget,
-      fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
-      maxProgressionPercent: targetAttributes.maxProgressionPercent,
+      fatigueCeilingE1RM: automaticCeilingE1RM,
+      maxProgressionPercent: effectiveMaxProgressionPercent,
       maxRepDeviation: targetAttributes.maxRepDeviation,
       minRepDeviation: targetAttributes.minRepDeviation,
       minimumReps,
+      preferredSameWeightReps:
+        actualReps == null ? null : actualReps - 1,
       progressionBaselineE1RM,
       progressionFloorE1RM: hasClearPriorFatigueDrop
         ? progressionBaselineE1RM
@@ -5294,6 +5332,21 @@ export default function SessionView({
       actualReps,
       actualRir
     );
+    const progressionCeilingE1RM =
+      progressionBaselineE1RM == null
+        ? null
+        : progressionBaselineE1RM *
+          (1 + targetAttributes.maxProgressionPercent);
+    const actualExceedsProgressionCeiling =
+      actualE1RM != null &&
+      progressionCeilingE1RM != null &&
+      actualE1RM > progressionCeilingE1RM + 0.0001;
+    const effectiveMaxProgressionPercent = actualExceedsProgressionCeiling
+      ? Math.max(
+          targetAttributes.maxProgressionPercent,
+          actualE1RM / progressionBaselineE1RM - 1
+        )
+      : targetAttributes.maxProgressionPercent;
     const actualRirNumber = parseSessionNumber(actualRir);
     const targetRirNumber = parseSessionNumber(targetRir);
     const previousCompletedSet = exercise.sets[nextSetIndex - 2];
@@ -5336,6 +5389,21 @@ export default function SessionView({
       weightIncrement: (weight) =>
         getExerciseWeightIncrement(calculationExercise, undefined, weight),
     });
+    const performanceAdjustmentE1RM = performanceAdjustment
+      ? calculateSessionE1RM(
+          exercise,
+          performanceAdjustment.weight,
+          performanceAdjustment.reps,
+          performanceAdjustment.rir
+        )
+      : null;
+    const performanceAdjustmentRespectsProgressionBounds =
+      getGoalMode() !== "progress" ||
+      progressionCeilingE1RM == null ||
+      performanceAdjustmentE1RM == null ||
+      (actualExceedsProgressionCeiling
+        ? performanceAdjustmentE1RM <= actualE1RM + 0.0001
+        : performanceAdjustmentE1RM <= progressionCeilingE1RM + 0.0001);
 
     const shouldPrioritizeLiveFatigueAdjustment =
       performanceAdjustment?.reason === "live-fatigue-rep-adjustment" ||
@@ -5343,6 +5411,7 @@ export default function SessionView({
 
     if (
       performanceAdjustment &&
+      performanceAdjustmentRespectsProgressionBounds &&
       (!isDeloadPlanWorkout() || shouldPrioritizeLiveFatigueAdjustment)
     ) {
       return {
@@ -5388,7 +5457,7 @@ export default function SessionView({
       }
     }
 
-    if (performanceAdjustment) {
+    if (performanceAdjustment && performanceAdjustmentRespectsProgressionBounds) {
       return {
         targetMinimumReps: getSetMinimumReps(nextSet, explicitMinimumReps),
         targetReps: String(performanceAdjustment.reps),
@@ -5422,6 +5491,11 @@ export default function SessionView({
             : todayBestE1RM * fatigueRatio;
       const hasClearPriorFatigueDrop =
         (adjacentFatigueRatio ?? fatigueRatio) < CLEAR_FATIGUE_DROP_RATIO;
+      const automaticCeilingE1RM = hasClearPriorFatigueDrop
+        ? actualE1RM
+        : actualExceedsProgressionCeiling
+          ? actualE1RM + 0.0001
+          : null;
       const baselineE1RM =
         progressTargetE1RM != null && fatigueTargetE1RM != null
           ? hasClearPriorFatigueDrop
@@ -5432,11 +5506,13 @@ export default function SessionView({
         baselineE1RM,
         currentWeight: currentTargetWeight,
         exercise,
-        fatigueCeilingE1RM: hasClearPriorFatigueDrop ? actualE1RM : null,
-        maxProgressionPercent: targetAttributes.maxProgressionPercent,
+        fatigueCeilingE1RM: automaticCeilingE1RM,
+        maxProgressionPercent: effectiveMaxProgressionPercent,
         maxRepDeviation: targetAttributes.maxRepDeviation,
         minRepDeviation: targetAttributes.minRepDeviation,
         minimumReps: explicitMinimumReps,
+        preferredSameWeightReps:
+          actualReps == null ? null : actualReps - 1,
         progressionBaselineE1RM,
         progressionFloorE1RM: hasClearPriorFatigueDrop
           ? progressionBaselineE1RM

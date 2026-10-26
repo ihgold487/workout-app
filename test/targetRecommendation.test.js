@@ -203,6 +203,47 @@ test("rep-range targets use both configured boundaries while pursuing progressio
       .filter((candidate) => !candidate.exceedsProgressionCap)
       .every((candidate) => candidate.e1rm <= 75 * 1.02 + 0.0001)
   );
+  assert.ok(
+    target.alternatives.some(
+      (candidate) =>
+        candidate.weight === target.recommendation.weight &&
+        candidate.reps === target.recommendation.reps - 1 &&
+        candidate.rir === target.recommendation.rir
+    )
+  );
+});
+
+test("the first set can favor the upper half of a rep range when e1RM is comparably close", () => {
+  const baseOptions = {
+    exercise: {},
+    goalMode: "progress",
+    maxProgressionPercent: 0.02,
+    maxRepDeviation: 1,
+    minRepDeviation: 0,
+    minimumReps: 8,
+    previousE1RM: 75,
+    progressionPercent: 0.005,
+    targetReps: 12,
+    targetRir: 3,
+    weightIncrement: 0.5,
+  };
+  const ordinaryTarget = recommendTargetPrescription(baseOptions);
+  const openingSetTarget = recommendTargetPrescription({
+    ...baseOptions,
+    preferHigherRepsForFirstSet: true,
+  });
+
+  assert.equal(ordinaryTarget.recommendation.reps, 10);
+  assert.equal(openingSetTarget.recommendation.reps, 12);
+  assert.ok(
+    Math.abs(openingSetTarget.recommendation.e1rm - openingSetTarget.targetE1RM) <=
+      Math.abs(ordinaryTarget.recommendation.e1rm - ordinaryTarget.targetE1RM) +
+        75 * 0.005 +
+        0.0001
+  );
+  assert.ok(
+    openingSetTarget.recommendation.e1rm <= 75 * 1.02 + 0.0001
+  );
 });
 
 test("progression recommendations retain their safe rep and RIR candidates", () => {
@@ -289,6 +330,27 @@ test("a small RIR miss prefers one fewer rep at the same weight", () => {
     reps: 8,
     rir: 3,
     weight: 127.5,
+  });
+});
+
+test("a comparable historical fatigue drop adjusts the next set before repeating it", () => {
+  const target = recommendNextSetTargetAfterPerformance({
+    actualReps: 10,
+    actualRir: 2.5,
+    actualWeight: 100,
+    exercise: {},
+    historicalFatigueRatio: 0.95,
+    minimumReps: 5,
+    prescribedReps: 10,
+    targetRir: 2.5,
+    weightIncrement: 2.5,
+  });
+
+  assert.deepEqual(target, {
+    reason: "historical-fatigue-adjustment",
+    reps: 8,
+    rir: 2.5,
+    weight: 100,
   });
 });
 

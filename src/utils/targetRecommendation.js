@@ -387,6 +387,12 @@ function compareCappedProgressCandidates(a, b) {
   );
 }
 
+// For the opening set of an explicit rep range, it is useful to start near
+// the range's upper end when that costs very little e1RM precision. This
+// leaves practical room to absorb normal fatigue on later sets without
+// relaxing the progression cap or choosing a materially worse target.
+const FIRST_SET_HIGH_REP_E1RM_TOLERANCE_PERCENT = 0.005;
+
 function getCandidateKey(candidate) {
   return `${candidate.weight}|${candidate.reps}|${candidate.rir}`;
 }
@@ -415,6 +421,7 @@ function buildAlternativeCandidates({
   rankedCandidates,
   recommendation,
   resolvedProgressionPercent,
+  sameWeightOneFewerRepCandidate,
 }) {
   const alternatives = [];
   const seenKeys = new Set([getCandidateKey(recommendation)]);
@@ -453,6 +460,16 @@ function buildAlternativeCandidates({
   // Reserve a visible slot for the explicitly marked over-cap escape hatch
   // when no positive progression can satisfy the hard cap.
   const capCompliantLimit = leastOverCapProgression ? 6 : 7;
+
+  // Preserve the most practical fatigue-management alternative: keep the
+  // recommended load and take one fewer rep when that remains prescribed.
+  // It is intentionally an option rather than an automatic override.
+  addUniqueCandidates(
+    alternatives,
+    sameWeightOneFewerRepCandidate ? [sameWeightOneFewerRepCandidate] : [],
+    capCompliantLimit,
+    seenKeys
+  );
 
   addUniqueCandidates(
     alternatives,
@@ -499,6 +516,7 @@ export function recommendTargetPrescription({
   normalizeWeight,
   preferredRepWindow = 2,
   previousE1RM,
+  preferHigherRepsForFirstSet = false,
   progressionPercent,
   targetReps,
   targetRir,
@@ -614,6 +632,56 @@ export function recommendTargetPrescription({
     });
   }
 
+  // Candidate weights are normally generated around the ideal load for each
+  // rep count. Carry each generated load down one rep as well, so a practical
+  // same-load fatigue option cannot disappear merely because rounding moved
+  // the estimated weight at the lower rep count.
+  const originalCandidates = [...candidates];
+  const candidateKeys = new Set(originalCandidates.map(getCandidateKey));
+
+  originalCandidates.forEach((candidate) => {
+    const lowerReps = candidate.reps - 1;
+
+    if (lowerReps < minReps) {
+      return;
+    }
+
+    const lowerCandidate = {
+      e1rm: calculateE1RM(
+        candidate.weight,
+        lowerReps,
+        rir,
+        null,
+        null,
+        null,
+        { bodyWeight, exercise }
+      ),
+      reps: lowerReps,
+      rir,
+      weight: candidate.weight,
+    };
+    const key = getCandidateKey(lowerCandidate);
+
+    if (
+      candidateKeys.has(key) ||
+      lowerCandidate.e1rm == null ||
+      (maximum != null && lowerCandidate.e1rm > maximum + 0.0001)
+    ) {
+      return;
+    }
+
+    candidateKeys.add(key);
+    candidates.push({
+      ...lowerCandidate,
+      score: scoreCandidate(lowerCandidate, {
+        e1rm: targetE1RM,
+        preferredRepWindow,
+        reps,
+        rir,
+      }),
+    });
+  });
+
   const comparator =
     resolvedProgressionPercent > 0 ? compareProgressCandidates : compareCandidates;
   const rankedCandidates = candidates.sort(comparator);
@@ -654,8 +722,81 @@ export function recommendTargetPrescription({
       ? compareCappedProgressCandidates
       : compareCandidates
   );
-  const recommendation =
+  const defaultRecommendation =
     selectedCandidates[0] || maintenanceFallbackCandidates[0] || null;
+  let recommendation = defaultRecommendation;
+
+  if (
+    preferHigherRepsForFirstSet &&
+    hasRepRange &&
+    defaultRecommendation &&
+    resolvedProgressionPercent > 0
+  ) {
+    // Retain the normal progression-first selection pool. If no positive
+    // candidate fits beneath the cap, use the maintenance pool instead.
+    const preferredPool =
+      selectedCandidates.length > 0
+        ? selectedCandidates
+        : maintenanceFallbackCandidates;
+    const upperHalfStart = Math.ceil((minReps + reps) / 2);
+    const maximumAllowedDeviation =
+      defaultRecommendation.score.e1rmDeviation +
+      baselineE1RM * FIRST_SET_HIGH_REP_E1RM_TOLERANCE_PERCENT;
+    const highRepCandidate = preferredPool
+      .filter(
+        (candidate) =>
+          candidate.reps >= upperHalfStart &&
+          // The configured max-rep deviation remains searchable, but this
+          // first-set preference concerns the actual prescribed range.
+          candidate.reps <= reps &&
+          candidate.score.e1rmDeviation <= maximumAllowedDeviation + 0.0001
+      )
+      .sort(
+        (a, b) =>
+          b.reps - a.reps || compareCappedProgressCandidates(a, b)
+      )[0];
+
+    if (highRepCandidate) {
+      recommendation = highRepCandidate;
+    }
+  }
+  let sameWeightOneFewerRepCandidate = null;
+
+  if (recommendation && recommendation.reps > minReps) {
+    const lowerReps = recommendation.reps - 1;
+    const existingCandidate = rankedCandidates.find(
+      (candidate) =>
+        candidate.weight === recommendation.weight &&
+        candidate.reps === lowerReps &&
+        candidate.rir === recommendation.rir
+    );
+    const lowerCandidate = existingCandidate || {
+      e1rm: calculateE1RM(
+        recommendation.weight,
+        lowerReps,
+        recommendation.rir,
+        null,
+        null,
+        null,
+        { bodyWeight, exercise }
+      ),
+      reps: lowerReps,
+      rir: recommendation.rir,
+      weight: recommendation.weight,
+    };
+    const respectsProgressionCap =
+      resolvedProgressionPercent <= 0 ||
+      lowerCandidate.e1rm <=
+        baselineE1RM * (1 + resolvedMaxProgressionPercent) + 0.0001;
+
+    if (
+      lowerCandidate.e1rm != null &&
+      (maximum == null || lowerCandidate.e1rm <= maximum + 0.0001) &&
+      respectsProgressionCap
+    ) {
+      sameWeightOneFewerRepCandidate = lowerCandidate;
+    }
+  }
 
   return {
     alternatives: recommendation
@@ -666,6 +807,7 @@ export function recommendTargetPrescription({
           rankedCandidates,
           recommendation,
           resolvedProgressionPercent,
+          sameWeightOneFewerRepCandidate,
         })
       : [],
     baselineE1RM,
@@ -906,6 +1048,88 @@ export function recommendNextSetTargetAfterPerformance({
     if (Number.isFinite(resolvedWeight) && resolvedWeight < weight) {
       return {
         reason: "projected-fatigue-weight-adjustment",
+        reps: prescribed,
+        rir: prescribedRir,
+        weight: resolvedWeight,
+      };
+    }
+  }
+
+  // Once a comparable prior workout shows a real set-to-set decline, make
+  // that observed fatigue pattern more authoritative than the generic
+  // repeat-the-last-set fallback. Keep the load where possible and reduce
+  // reps; only reduce load when the prescribed lower bound leaves no room.
+  if (
+    !rangeMissed &&
+    !effortExceeded &&
+    actualE1RM != null &&
+    historicalRatio != null &&
+    historicalRatio > 0 &&
+    historicalRatio < 0.995
+  ) {
+    const fatigueTargetE1RM = actualE1RM * Math.min(1, historicalRatio);
+    const preferredReps = Math.max(minimum, Math.round(reps - 1));
+    const sameWeightFatigueCandidates = [];
+
+    for (
+      let candidateReps = Math.round(minimum);
+      candidateReps <= Math.min(Math.round(prescribed), Math.round(reps));
+      candidateReps += 1
+    ) {
+      const candidateE1RM = calculateE1RM(
+        weight,
+        candidateReps,
+        prescribedRir,
+        null,
+        null,
+        null,
+        { bodyWeight, exercise }
+      );
+
+      if (candidateE1RM != null && candidateE1RM <= actualE1RM + 0.0001) {
+        sameWeightFatigueCandidates.push({
+          e1rm: candidateE1RM,
+          reps: candidateReps,
+        });
+      }
+    }
+
+    const sameWeightFatigueTarget = sameWeightFatigueCandidates.sort(
+      (a, b) =>
+        Math.abs(a.e1rm - fatigueTargetE1RM) -
+          Math.abs(b.e1rm - fatigueTargetE1RM) ||
+        Math.abs(a.reps - preferredReps) - Math.abs(b.reps - preferredReps) ||
+        b.reps - a.reps
+    )[0];
+
+    if (sameWeightFatigueTarget) {
+      return {
+        reason: "historical-fatigue-adjustment",
+        reps: sameWeightFatigueTarget.reps,
+        rir: prescribedRir,
+        weight,
+      };
+    }
+
+    const rawWeight = estimateWeightForE1RM(
+      fatigueTargetE1RM,
+      prescribed,
+      prescribedRir,
+      { bodyWeight, exercise }
+    );
+    const increment = resolveWeightIncrement(weightIncrement, rawWeight);
+    const roundedWeight = roundWeightToIncrement(
+      Math.max(0, rawWeight ?? 0),
+      increment
+    );
+    const resolvedWeight =
+      typeof normalizeWeight === "function"
+        ? normalizeWeight(roundedWeight)
+        : roundedWeight;
+
+    if (Number.isFinite(resolvedWeight) && resolvedWeight < weight) {
+      return {
+        reason: "historical-fatigue-weight-adjustment",
         reps: prescribed,
         rir: prescribedRir,
         weight: resolvedWeight,
