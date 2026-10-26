@@ -93,6 +93,12 @@ import { isSupabaseConfigured, supabase } from "./sync/supabaseClient";
 import { calculateE1RM, getLatestBodyWeightForDate } from "./utils/e1rm";
 import { PLAN_PROGRESS_E1RM_INCREASE_PERCENT } from "./utils/targetRecommendation";
 import {
+  getTargetAttributeDefaults,
+  MAX_REP_DEVIATION_VALUES,
+  MIN_REP_DEVIATION_VALUES,
+  PROGRESSION_PERCENT_VALUES,
+} from "./utils/targetAttributes";
+import {
   BENCHMARK_FAMILY_OPTIONS,
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
@@ -5217,6 +5223,10 @@ export default function App() {
 
   const [sessions, setSessions] = useState(initialWorkoutData.sessions);
 
+  const [targetAttributeDefaults, setTargetAttributeDefaults] = useState(() =>
+    getTargetAttributeDefaults(initialWorkoutData.targetAttributeDefaults)
+  );
+
   const [history, setHistory] = useState(initialWorkoutData.history);
 
   const [localOwnerUserId, setLocalOwnerUserId] = useState(
@@ -5264,6 +5274,8 @@ export default function App() {
   const [showNutrition, setShowNutrition] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [targetAttributesSettingsExpanded, setTargetAttributesSettingsExpanded] =
+    useState(false);
   const [plateInventory, setPlateInventory] = useState(readPlateInventory);
   const [plateInventoryOwnerUserId, setPlateInventoryOwnerUserId] = useState(
     readPlateInventoryOwner
@@ -6244,6 +6256,7 @@ export default function App() {
       plans: normalizedPlanData.plans,
       selectedSessionId,
       sessions,
+      targetAttributeDefaults,
       templates: normalizedPlanData.templates,
     };
   }
@@ -6271,6 +6284,9 @@ export default function App() {
     setPlans(normalizedPlanData.plans);
     setHistory(data.history);
     setSessions(data.sessions);
+    setTargetAttributeDefaults(
+      getTargetAttributeDefaults(data.targetAttributeDefaults)
+    );
     setExerciseLibrary(data.exerciseLibrary);
     setExerciseMetadata(data.exerciseMetadata);
     setLocalOwnerUserId(data.ownerUserId || null);
@@ -6573,6 +6589,7 @@ export default function App() {
       plans,
       selectedSessionId,
       sessions,
+      targetAttributeDefaults,
       templates,
     };
   }, [
@@ -6584,6 +6601,7 @@ export default function App() {
     exerciseMetadata,
     localOwnerUserId,
     selectedSessionId,
+    targetAttributeDefaults,
   ]);
 
   useEffect(() => {
@@ -7417,6 +7435,7 @@ export default function App() {
         plans: [],
         selectedSessionId: null,
         sessions: [],
+        targetAttributeDefaults,
         templates: [],
       };
 
@@ -8073,6 +8092,11 @@ export default function App() {
           setPlans(normalizedIndexedDbData.plans);
           setHistory(normalizedIndexedDbData.history);
           setSessions(normalizedIndexedDbData.sessions);
+          setTargetAttributeDefaults(
+            getTargetAttributeDefaults(
+              normalizedIndexedDbData.targetAttributeDefaults
+            )
+          );
           setExerciseLibrary(normalizedIndexedDbData.exerciseLibrary);
           setExerciseMetadata(normalizedIndexedDbData.exerciseMetadata);
           setLocalOwnerUserId(normalizedIndexedDbData.ownerUserId || null);
@@ -8219,6 +8243,7 @@ export default function App() {
       plans: normalizedPlanData.plans,
       selectedSessionId,
       sessions,
+      targetAttributeDefaults,
       templates: normalizedPlanData.templates,
     };
 
@@ -8234,6 +8259,7 @@ export default function App() {
     exerciseMetadata,
     localOwnerUserId,
     selectedSessionId,
+    targetAttributeDefaults,
   ]);
 
   useEffect(() => {
@@ -8354,6 +8380,7 @@ export default function App() {
     indexedDbReady,
     selectedSessionId,
     sessions,
+    targetAttributeDefaults,
   ]);
 
   useEffect(() => {
@@ -11620,6 +11647,22 @@ export default function App() {
       scheduled: "Advance reminders are scheduled for this development build.",
     }[provisioningReminderStatus];
 
+    function updateTargetAttributeDefault(attribute, value) {
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        return;
+      }
+
+      setTargetAttributeDefaults((current) => ({
+        ...current,
+        [attribute]:
+          attribute === "minRepDeviation"
+            ? Math.min(0, numericValue)
+            : Math.max(0, numericValue),
+      }));
+    }
+
     return (
       <div className="settings-view">
         <AppPageHeader
@@ -11674,6 +11717,152 @@ export default function App() {
               )}
             </>
           )}
+        </AppSectionCard>
+
+        <AppSectionCard className="settings-view__section settings-view__target-attributes">
+          <AppSectionHeading
+            eyebrow="Workout targets"
+            subtitle="Default target settings for new workouts."
+            title="Target attributes"
+          />
+          <div
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              overflow: "hidden",
+            }}
+          >
+            <button
+              aria-expanded={targetAttributesSettingsExpanded}
+              onClick={() =>
+                setTargetAttributesSettingsExpanded((value) => !value)
+              }
+              type="button"
+              style={{
+                alignItems: "center",
+                background: "var(--surface-muted)",
+                border: 0,
+                color: "var(--text)",
+                display: "flex",
+                fontSize: "15px",
+                fontWeight: 700,
+                justifyContent: "space-between",
+                minHeight: "44px",
+                padding: "10px 12px",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <span>Target attributes</span>
+              <span aria-hidden="true">
+                {targetAttributesSettingsExpanded ? "▴" : "▾"}
+              </span>
+            </button>
+
+            {targetAttributesSettingsExpanded && (
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  display: "grid",
+                  gap: "10px",
+                  padding: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                    gridTemplateColumns: "1fr 1fr",
+                  }}
+                >
+                  <label style={{ display: "grid", gap: "4px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                      Min rep deviation
+                    </span>
+                    <select
+                      aria-label="Default minimum rep deviation"
+                      onChange={(event) =>
+                        updateTargetAttributeDefault(
+                          "minRepDeviation",
+                          event.target.value
+                        )
+                      }
+                      value={targetAttributeDefaults.minRepDeviation}
+                    >
+                      {MIN_REP_DEVIATION_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: "4px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                      Max rep deviation
+                    </span>
+                    <select
+                      aria-label="Default maximum rep deviation"
+                      onChange={(event) =>
+                        updateTargetAttributeDefault(
+                          "maxRepDeviation",
+                          event.target.value
+                        )
+                      }
+                      value={targetAttributeDefaults.maxRepDeviation}
+                    >
+                      {MAX_REP_DEVIATION_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: "4px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                      Progress target (%)
+                    </span>
+                    <select
+                      aria-label="Default progression percentage target"
+                      onChange={(event) =>
+                        updateTargetAttributeDefault(
+                          "progressionPercent",
+                          Number(event.target.value) / 100
+                        )
+                      }
+                      value={targetAttributeDefaults.progressionPercent * 100}
+                    >
+                      {PROGRESSION_PERCENT_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: "4px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700 }}>
+                      Progress cap (%)
+                    </span>
+                    <select
+                      aria-label="Default maximum progression percentage"
+                      onChange={(event) =>
+                        updateTargetAttributeDefault(
+                          "maxProgressionPercent",
+                          Number(event.target.value) / 100
+                        )
+                      }
+                      value={targetAttributeDefaults.maxProgressionPercent * 100}
+                    >
+                      {PROGRESSION_PERCENT_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
         </AppSectionCard>
 
         {hasProvisioningExpiry && (
@@ -13768,6 +13957,7 @@ export default function App() {
           setSelectedTemplateId={setSelectedTemplateId}
           plateInventory={plateInventory}
           bodyWeightEntries={localBodyWeightEntries}
+          targetAttributeDefaults={targetAttributeDefaults}
           onEditModeChange={setTemplatePreviewEditActive}
           onWorkoutCompleted={(completedWorkout) => {
             setSelectedHistory(completedWorkout);
@@ -13812,6 +14002,7 @@ export default function App() {
           requestSyncCheckpoint(["plans"], "plan prescription save");
         }}
         planWeekOverride={selectedTemplatePlanWeek}
+        targetAttributeDefaults={targetAttributeDefaults}
       />,
       "home"
     );

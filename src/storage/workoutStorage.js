@@ -4,6 +4,7 @@ import {
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark.js";
 import { withDefaultExerciseStatus } from "../utils/exerciseStatus.js";
+import { getTargetAttributeDefaults } from "../utils/targetAttributes.js";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
 
@@ -22,6 +23,7 @@ const WORKOUT_DATA_KEYS = {
   plans: "plans",
   selectedSessionId: "selectedSessionId",
   sessions: "sessions",
+  targetAttributeDefaults: "targetAttributeDefaults",
   templates: "templates",
 };
 
@@ -121,6 +123,9 @@ function normalizeWorkoutData(data, { seedExercises }) {
     plans: arrayOrEmpty(data?.plans),
     selectedSessionId: data?.selectedSessionId ?? null,
     sessions: arrayOrEmpty(data?.sessions),
+    targetAttributeDefaults: getTargetAttributeDefaults(
+      data?.targetAttributeDefaults
+    ),
     templates: arrayOrEmpty(data?.templates),
   };
 }
@@ -150,6 +155,10 @@ function readLegacyFullWorkoutBackup() {
       plans: readJson(WORKOUT_DATA_KEYS.plans, []),
       selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
       sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
+      targetAttributeDefaults: readJson(
+        WORKOUT_DATA_KEYS.targetAttributeDefaults,
+        null
+      ),
       templates: readJson(WORKOUT_DATA_KEYS.templates, []),
     },
     updatedAt,
@@ -262,6 +271,10 @@ export function loadWorkoutData({ seedExercises }) {
     plans: readJson(WORKOUT_DATA_KEYS.plans, []),
     selectedSessionId: readJson(WORKOUT_DATA_KEYS.selectedSessionId, null),
     sessions: readJson(WORKOUT_DATA_KEYS.sessions, []),
+    targetAttributeDefaults: readJson(
+      WORKOUT_DATA_KEYS.targetAttributeDefaults,
+      null
+    ),
     templates: readJson(WORKOUT_DATA_KEYS.templates, []),
   };
   const activeRecovery = getActiveWorkoutSessionRecovery();
@@ -286,6 +299,10 @@ export function saveWorkoutData(data, storageVersion) {
   // IndexedDB restore; cleanup happens only after that restored data commits.
   writeJson(WORKOUT_DATA_KEYS.ownerUserId, data.ownerUserId || null);
   writeJson(WORKOUT_DATA_KEYS.selectedSessionId, data.selectedSessionId);
+  writeJson(
+    WORKOUT_DATA_KEYS.targetAttributeDefaults,
+    getTargetAttributeDefaults(data.targetAttributeDefaults)
+  );
   writeJson(STORAGE_VERSION_KEY, storageVersion);
 }
 
@@ -380,9 +397,24 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
       }
     : preferredData;
 
-  return normalizeWorkoutData(dataWithActiveRecovery, {
-    seedExercises,
-  });
+  // These are device-level defaults, so retain the synchronous local copy if
+  // it is newer than the IndexedDB snapshot currently being restored.
+  const locallySavedTargetAttributeDefaults = readJson(
+    WORKOUT_DATA_KEYS.targetAttributeDefaults,
+    null
+  );
+
+  return normalizeWorkoutData(
+    locallySavedTargetAttributeDefaults == null
+      ? dataWithActiveRecovery
+      : {
+          ...dataWithActiveRecovery,
+          targetAttributeDefaults: locallySavedTargetAttributeDefaults,
+        },
+    {
+      seedExercises,
+    }
+  );
 }
 export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
   const updatedAt = new Date().toISOString();
@@ -481,6 +513,9 @@ export function createWorkoutBackup(data) {
       plans: arrayOrEmpty(data.plans),
       selectedSessionId: data.selectedSessionId ?? null,
       sessions: arrayOrEmpty(data.sessions),
+      targetAttributeDefaults: getTargetAttributeDefaults(
+        data.targetAttributeDefaults
+      ),
       templates: arrayOrEmpty(data.templates),
     },
     exportedAt: new Date().toISOString(),

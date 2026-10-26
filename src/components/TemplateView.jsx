@@ -59,6 +59,7 @@ import {
   getExerciseWeightIncrement,
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
+import { getTargetAttributeDefaults } from "../utils/targetAttributes";
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
 import { buildWarmupRecommendations } from "../utils/warmupRecommendations";
@@ -313,6 +314,7 @@ export default function TemplateView({
   sessions,
   setSessions,
   setSelectedSessionId,
+  targetAttributeDefaults,
   onEditModeChange,
   onEditCommitted,
   onAutoStartHandled,
@@ -1540,6 +1542,7 @@ export default function TemplateView({
       workoutTimerBaseSeconds: 0,
       workoutTimerPaused: false,
       workoutTimerResumedAtIso: startedAtIso,
+      targetAttributes: getTargetAttributeDefaults(targetAttributeDefaults),
       planId: template.planId || null,
       planWeek: plan ? currentPlanWeek : null,
       planWorkoutId: template.planWorkoutId || null,

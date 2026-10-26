@@ -85,6 +85,13 @@ import {
 import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import { isPlanCompleteFromCompletions } from "../utils/planLifecycle";
+import {
+  DEFAULT_TARGET_ATTRIBUTES,
+  getTargetAttributeDefaults,
+  MAX_REP_DEVIATION_VALUES,
+  MIN_REP_DEVIATION_VALUES,
+  PROGRESSION_PERCENT_VALUES,
+} from "../utils/targetAttributes";
 import { getPlanWorkingSetCount } from "../utils/planSetCount";
 import {
   canUseNativeRestNotifications,
@@ -742,6 +749,7 @@ export default function SessionView({
   setSelectedTemplateId,
   plateInventory,
   bodyWeightEntries = [],
+  targetAttributeDefaults = DEFAULT_TARGET_ATTRIBUTES,
   onWorkoutCompleted,
   onWorkoutDataCommitted,
   onPlanCompletionNeeded,
@@ -1130,12 +1138,7 @@ export default function SessionView({
   }
 
   function getTargetAttributesForSet(set) {
-    const prescribedReps = parseSessionNumber(getSetPrescribedReps(set));
-    const prescribedMinimumReps = parseSessionNumber(getSetMinimumReps(set));
-    const hasRepRange =
-      prescribedMinimumReps != null &&
-      prescribedReps != null &&
-      prescribedMinimumReps < prescribedReps;
+    const defaults = getTargetAttributeDefaults(targetAttributeDefaults);
     const configured = session.targetAttributes || {};
     const configuredMinDeviation = parseSessionNumber(
       configured.minRepDeviation
@@ -1151,22 +1154,26 @@ export default function SessionView({
     );
     const progressionPercent = Math.max(
       0,
-      configuredProgressionPercent ?? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+      configuredProgressionPercent ?? defaults.progressionPercent
     );
+
+    const minRepDeviation =
+      configuredMinDeviation == null
+        ? Math.abs(defaults.minRepDeviation)
+        : configuredMinDeviation > 0
+          ? configuredMinDeviation
+          : Math.abs(configuredMinDeviation);
 
     return {
       maxProgressionPercent: Math.max(
-        progressionPercent,
-        configuredMaxProgressionPercent ?? MAX_PROGRESS_E1RM_INCREASE_PERCENT
+        0,
+        configuredMaxProgressionPercent ?? defaults.maxProgressionPercent
       ),
       maxRepDeviation: Math.max(
         0,
-        configuredMaxDeviation ?? (hasRepRange ? 1 : 2)
+        configuredMaxDeviation ?? defaults.maxRepDeviation
       ),
-      minRepDeviation: Math.max(
-        0,
-        configuredMinDeviation ?? (hasRepRange ? 0 : 2)
-      ),
+      minRepDeviation,
       progressionPercent,
     };
   }
@@ -5671,24 +5678,11 @@ export default function SessionView({
       const currentAttributes = currentSession.targetAttributes || {};
       const nextAttributes = {
         ...currentAttributes,
-        [attribute]: Math.max(0, numericValue),
+        [attribute]:
+          attribute === "minRepDeviation"
+            ? Math.min(0, numericValue)
+            : Math.max(0, numericValue),
       };
-
-      if (attribute === "progressionPercent") {
-        nextAttributes.maxProgressionPercent = Math.max(
-          nextAttributes.maxProgressionPercent ??
-            MAX_PROGRESS_E1RM_INCREASE_PERCENT,
-          nextAttributes.progressionPercent
-        );
-      }
-
-      if (attribute === "maxProgressionPercent") {
-        nextAttributes.maxProgressionPercent = Math.max(
-          nextAttributes.maxProgressionPercent,
-          nextAttributes.progressionPercent ??
-            PLAN_PROGRESS_E1RM_INCREASE_PERCENT
-        );
-      }
 
       return {
         ...currentSession,
@@ -11084,17 +11078,6 @@ export default function SessionView({
                     >
                       <div
                         style={{
-                          color: "var(--text-muted)",
-                          fontSize: "12px",
-                          lineHeight: 1.35,
-                        }}
-                      >
-                        Applies only to this in-progress workout. Targets update
-                        immediately; your plan and workout template are unchanged.
-                      </div>
-
-                      <div
-                        style={{
                           display: "grid",
                           gap: "8px",
                           gridTemplateColumns: "1fr 1fr",
@@ -11104,104 +11087,103 @@ export default function SessionView({
                           <span style={{ fontSize: "12px", fontWeight: 700 }}>
                             Min rep deviation
                           </span>
-                          <input
+                          <select
                             aria-label="Minimum rep deviation"
-                            inputMode="numeric"
-                            min="0"
                             onChange={(event) =>
                               updateTargetAttribute(
                                 "minRepDeviation",
                                 event.target.value
                               )
                             }
-                            step="1"
-                            type="number"
                             value={
-                              configuredTargetAttributes.minRepDeviation ??
-                              resolvedTargetAttributes.minRepDeviation
+                              configuredTargetAttributes.minRepDeviation == null
+                                ? -resolvedTargetAttributes.minRepDeviation
+                                : Number(configuredTargetAttributes.minRepDeviation) > 0
+                                  ? -Number(configuredTargetAttributes.minRepDeviation)
+                                  : configuredTargetAttributes.minRepDeviation
                             }
-                          />
+                          >
+                            {MIN_REP_DEVIATION_VALUES.map((value) => (
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label style={{ display: "grid", gap: "4px" }}>
                           <span style={{ fontSize: "12px", fontWeight: 700 }}>
                             Max rep deviation
                           </span>
-                          <input
+                          <select
                             aria-label="Maximum rep deviation"
-                            inputMode="numeric"
-                            min="0"
                             onChange={(event) =>
                               updateTargetAttribute(
                                 "maxRepDeviation",
                                 event.target.value
                               )
                             }
-                            step="1"
-                            type="number"
                             value={
                               configuredTargetAttributes.maxRepDeviation ??
                               resolvedTargetAttributes.maxRepDeviation
                             }
-                          />
+                          >
+                            {MAX_REP_DEVIATION_VALUES.map((value) => (
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label style={{ display: "grid", gap: "4px" }}>
                           <span style={{ fontSize: "12px", fontWeight: 700 }}>
                             Progress target (%)
                           </span>
-                          <input
+                          <select
                             aria-label="Progression percentage target"
-                            inputMode="decimal"
-                            min="0"
                             onChange={(event) =>
                               updateTargetAttribute(
                                 "progressionPercent",
                                 Number(event.target.value) / 100
                               )
                             }
-                            step="0.1"
-                            type="number"
-                            value={(
+                            value={
                               (configuredTargetAttributes.progressionPercent ??
                                 resolvedTargetAttributes.progressionPercent) *
                               100
-                            ).toFixed(1)}
-                          />
+                            }
+                          >
+                            {PROGRESSION_PERCENT_VALUES.map((value) => (
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label style={{ display: "grid", gap: "4px" }}>
                           <span style={{ fontSize: "12px", fontWeight: 700 }}>
                             Progress cap (%)
                           </span>
-                          <input
+                          <select
                             aria-label="Maximum progression percentage"
-                            inputMode="decimal"
-                            min="0"
                             onChange={(event) =>
                               updateTargetAttribute(
                                 "maxProgressionPercent",
                                 Number(event.target.value) / 100
                               )
                             }
-                            step="0.1"
-                            type="number"
-                            value={(
+                            value={
                               (configuredTargetAttributes.maxProgressionPercent ??
                                 resolvedTargetAttributes.maxProgressionPercent) *
                               100
-                            ).toFixed(1)}
-                          />
+                            }
+                          >
+                            {PROGRESSION_PERCENT_VALUES.map((value) => (
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
+                            ))}
+                          </select>
                         </label>
-                      </div>
-
-                      <div
-                        style={{
-                          color: "var(--text-muted)",
-                          fontSize: "11px",
-                          lineHeight: 1.35,
-                        }}
-                      >
-                        Defaults are 0 / 1 for rep ranges and 2 / 2 for exact
-                        rep prescriptions. The progression defaults are 0.5% and
-                        1.0%.
                       </div>
 
                       <button

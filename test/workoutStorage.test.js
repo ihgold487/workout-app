@@ -55,6 +55,39 @@ test("completed workouts retain a compact synchronous recovery journal", () => {
   }
 });
 
+test("target attribute defaults persist independently of workout collections", () => {
+  const originalStorage = globalThis.localStorage;
+  globalThis.localStorage = createStorage();
+
+  try {
+    const targetAttributeDefaults = {
+      minRepDeviation: -2,
+      maxRepDeviation: 3,
+      progressionPercent: 0.015,
+      maxProgressionPercent: 0.025,
+    };
+    saveWorkoutData(
+      {
+        exerciseLibrary: [],
+        exerciseMetadata: {},
+        history: [],
+        ownerUserId: "user-1",
+        plans: [],
+        selectedSessionId: null,
+        sessions: [],
+        targetAttributeDefaults,
+        templates: [],
+      },
+      1
+    );
+
+    const restored = loadWorkoutData({ seedExercises: [] });
+    assert.deepEqual(restored.targetAttributeDefaults, targetAttributeDefaults);
+  } finally {
+    globalThis.localStorage = originalStorage;
+  }
+});
+
 test("saved built-in exercise notes survive seed-library merging", () => {
   const seedExercise = {
     active: "active",

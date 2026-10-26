@@ -306,6 +306,10 @@ h2 {
   min-width: 0;
 }
 
+.settings-view__target-attributes {
+  order: 1;
+}
+
 .settings-view__section > .app-section-heading {
   margin-bottom: 14px;
 }
