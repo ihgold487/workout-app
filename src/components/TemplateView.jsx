@@ -53,7 +53,6 @@ import {
   recommendDeloadTargetPrescription,
   recommendTargetPrescription,
   resolvePlanGoalMode,
-  PLAN_PROGRESS_E1RM_INCREASE_PERCENT,
 } from "../utils/targetRecommendation";
 import {
   getExerciseWeightIncrement,
@@ -1268,6 +1267,12 @@ export default function TemplateView({
     targetRir,
     latestPerformance = getLatestHistoryPerformance(exercise),
   }) {
+    // A preview represents the target a newly started workout will receive.
+    // Resolve the same global defaults that Template View snapshots into that
+    // new session, while keeping later in-session overrides session-local.
+    const targetAttributes = getTargetAttributeDefaults(
+      targetAttributeDefaults
+    );
     const recommendationExercise = getExerciseForTargetCalculation(
       exercise,
       libraryExercise
@@ -1339,6 +1344,8 @@ export default function TemplateView({
             e1rms: latestE1RMs,
             setIndex,
           }),
+          maxRepDeviation: targetAttributes.maxRepDeviation,
+          minRepDeviation: targetAttributes.minRepDeviation,
           minimumReps: targetMinimumReps,
           preferredRepWindow: 2,
           setIndex,
@@ -1352,12 +1359,16 @@ export default function TemplateView({
           bodyWeight: templateBodyWeight,
           exercise: recommendationExercise,
           goalMode: getGoalMode(plan),
+          maxProgressionPercent: targetAttributes.maxProgressionPercent,
+          maxRepDeviation: targetAttributes.maxRepDeviation,
           minimumReps: targetMinimumReps,
+          minRepDeviation: targetAttributes.minRepDeviation,
+          preferHigherRepsForFirstSet: setIndex === 0,
           preferredRepWindow: 2,
           previousE1RM: latestBaselineE1RM,
           progressionPercent:
             getGoalMode(plan) === "progress"
-              ? PLAN_PROGRESS_E1RM_INCREASE_PERCENT
+              ? targetAttributes.progressionPercent
               : 0,
           targetReps,
           targetRir,
