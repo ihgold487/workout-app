@@ -947,6 +947,7 @@ const PLAN_TYPE_DEFAULTS = {
     durationWeeks: "4",
     goal: "maintain",
     rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
+    minimumReps: "12",
     reps: "15",
     rir: "2",
   },
@@ -956,6 +957,7 @@ const PLAN_TYPE_DEFAULTS = {
     durationWeeks: "4",
     goal: "maintain",
     rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
+    minimumReps: "10",
     reps: "12",
     rir: "2",
   },
@@ -965,6 +967,7 @@ const PLAN_TYPE_DEFAULTS = {
     durationWeeks: "4",
     goal: "maintain",
     rirPeriodization: RIR_PERIODIZATION_MODES.CONSTANT,
+    minimumReps: "6",
     reps: "8",
     rir: "2",
     sets: "3",
@@ -975,6 +978,7 @@ const PLAN_TYPE_DEFAULTS = {
     durationWeeks: "5",
     goal: "progress",
     rirPeriodization: RIR_PERIODIZATION_MODES.STEP,
+    minimumReps: "6",
     reps: "8",
     rir: "3",
     sets: "3",
@@ -1769,6 +1773,7 @@ function createReplacementPlanExercise({
     exercise: replacementExercise,
     goal,
     history,
+    minimumReps: basePrescription.minimumReps || basePrescription.reps,
     planMuscle: replacedExercise.planMuscle,
     reps: basePrescription.reps,
     rir: basePrescription.rir,
@@ -2849,6 +2854,12 @@ export default function PlansView({
   const [reps, setReps] = useState(
     formatPlanSetting(editingPlanConfig.reps, initialPlanDefaults.reps)
   );
+  const [minimumReps, setMinimumReps] = useState(
+    formatPlanSetting(
+      editingPlanConfig.minimumReps ?? editingPlanConfig.minimum_reps,
+      initialPlanDefaults.minimumReps || initialPlanDefaults.reps
+    )
+  );
   const [rir, setRir] = useState(
     formatPlanSetting(editingPlanConfig.rir, initialPlanDefaults.rir)
   );
@@ -3093,6 +3104,7 @@ export default function PlansView({
         history,
         planHistoryWorkouts: recentPlanHistoryWorkouts,
         planType,
+        minimumReps,
         reps,
         rir,
         seed,
@@ -3113,6 +3125,7 @@ export default function PlansView({
       isAiPlanType,
       recentPlanHistoryWorkouts,
       planType,
+      minimumReps,
       reps,
       rir,
       seed,
@@ -3252,6 +3265,7 @@ export default function PlansView({
       supersetGroupBySlot,
       deload,
       durationWeeks,
+      minimumReps,
       reps,
       rir,
       rirPeriodization,
@@ -3375,6 +3389,7 @@ export default function PlansView({
       generationMode: "workout",
       goal,
       history,
+      minimumReps,
       planType,
       reps,
       rir,
@@ -3803,6 +3818,7 @@ export default function PlansView({
       exercise: selectedExercise,
       goal,
       history,
+      minimumReps,
       planMuscle: selectedExercise.muscles?.[0] || "",
       reps,
       rir,
@@ -4194,6 +4210,7 @@ export default function PlansView({
       completions: isEditingExistingPlan ? editingPlan?.completions || [] : [],
       config: {
         deload,
+        ...(isAiPlanType ? {} : { minimumReps }),
         reps,
         rir,
         rirPeriodization,
@@ -4709,6 +4726,15 @@ export default function PlansView({
                 const nextMode = event.target.value;
 
                 setGenerationMode(nextMode);
+                if (nextMode === "workout") {
+                  setMinimumReps("6");
+                } else {
+                  const planDefaults = getPlanTypeDefaults(planType);
+
+                  setMinimumReps(
+                    planDefaults.minimumReps ?? planDefaults.reps
+                  );
+                }
                 regeneratePlanPreview();
                 setWorkoutNameBySlot({});
                 setWorkoutTypeByDay({});
@@ -4753,6 +4779,9 @@ export default function PlansView({
                     getDefaultRirPeriodizationMode(nextPlanType)
                 );
                 setReps(nextDefaults.reps);
+                setMinimumReps(
+                  nextDefaults.minimumReps ?? nextDefaults.reps
+                );
                 setRir(nextDefaults.rir);
                 setSets(nextDefaults.sets || "3");
                 setAiPlanStatus("");
@@ -5214,11 +5243,18 @@ export default function PlansView({
         )}
 
         {!isAiPlanType && (
-          <PlanPickerButton
-            label="Reps"
-            value={reps}
-            onClick={() => setActiveValuePicker("reps")}
-          />
+          <>
+            <PlanPickerButton
+              label="Minimum reps"
+              value={minimumReps}
+              onClick={() => setActiveValuePicker("minimumReps")}
+            />
+            <PlanPickerButton
+              label="Maximum reps"
+              value={reps}
+              onClick={() => setActiveValuePicker("reps")}
+            />
+          </>
         )}
 
         {!isAiPlanType && (
@@ -5865,14 +5901,40 @@ export default function PlansView({
       />
 
       <WeightPickerModal
+        isOpen={activeValuePicker === "minimumReps"}
+        onClose={() => setActiveValuePicker(null)}
+        value={minimumReps}
+        increment={1}
+        title="Select Minimum Reps"
+        values={Array.from({ length: 20 }, (_, index) => index + 1)}
+        onSelect={(value) => {
+          const nextMinimumReps = String(value);
+
+          setMinimumReps(nextMinimumReps);
+          if (Number(nextMinimumReps) > Number(reps)) {
+            setReps(nextMinimumReps);
+          }
+          if (!preservePlanDraftEditMode()) {
+            regeneratePlanPreview();
+          }
+          setSaveStatus("");
+        }}
+      />
+
+      <WeightPickerModal
         isOpen={activeValuePicker === "reps"}
         onClose={() => setActiveValuePicker(null)}
         value={reps}
         increment={1}
-        title="Select Reps"
+        title="Select Maximum Reps"
         values={Array.from({ length: 20 }, (_, index) => index + 1)}
         onSelect={(value) => {
-          setReps(String(value));
+          const nextMaximumReps = String(value);
+
+          setReps(nextMaximumReps);
+          if (Number(nextMaximumReps) < Number(minimumReps)) {
+            setMinimumReps(nextMaximumReps);
+          }
           if (!preservePlanDraftEditMode()) {
             regeneratePlanPreview();
           }

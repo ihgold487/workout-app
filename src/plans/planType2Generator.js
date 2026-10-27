@@ -1074,8 +1074,18 @@ function rememberExerciseUsage(usage, muscle, exercise) {
 }
 
 function createSets(count, exercise, options) {
+  const maximumReps = Number(options.reps);
+  const requestedMinimumReps = Number(options.minimumReps);
+  const minimumReps =
+    Number.isFinite(maximumReps) && Number.isFinite(requestedMinimumReps)
+      ? Math.min(requestedMinimumReps, maximumReps)
+      : options.minimumReps ?? options.reps;
+
   return Array.from({ length: count }, (_, index) => ({
     id: Date.now() + Math.random() + index,
+    ...(String(minimumReps) === String(options.reps)
+      ? {}
+      : { minimumReps: formatTargetValue(minimumReps) }),
     reps: formatTargetValue(options.reps),
     rir: formatTargetValue(options.rir),
   }));
@@ -1089,6 +1099,7 @@ export function createPlanExercise({
   exercise,
   goal,
   history,
+  minimumReps,
   planMuscle,
   reps,
   rir,
@@ -1105,6 +1116,7 @@ export function createPlanExercise({
     sets: createSets(setCount, exercise, {
       goal,
       history,
+      minimumReps,
       reps,
       rir,
     }),
@@ -1119,6 +1131,7 @@ export function generatePlanWorkouts({
   generationMode = "plan",
   goal = "maintain",
   history,
+  minimumReps,
   planHistoryWorkouts,
   planType,
   reps,
@@ -1191,6 +1204,10 @@ export function generatePlanWorkouts({
             exercise,
             goal,
             history,
+            minimumReps: Math.min(
+              Number(minimumReps) || Number(slotConfig.reps || reps),
+              Number(slotConfig.reps || reps)
+            ),
             planMuscle: muscle,
             reps: slotConfig.reps || reps,
             rir: slotConfig.rir || rir,
