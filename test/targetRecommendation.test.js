@@ -135,6 +135,46 @@ test("progression caps rounded e1RM jumps before prioritizing exact reps", () =>
   );
 });
 
+test("recent actual loads remain candidates when they fall between configured increments", () => {
+  const options = {
+    goalMode: "progress",
+    maxProgressionPercent: 0.02,
+    maxRepDeviation: 1,
+    minRepDeviation: 0,
+    minimumReps: 14,
+    preferHigherRepsForFirstSet: true,
+    previousE1RM: 13.7083333333,
+    progressionPercent: 0.005,
+    targetReps: 15,
+    targetRir: 2.5,
+    weightIncrement: 2.5,
+  };
+
+  const incrementOnlyTarget = recommendTargetPrescription(options);
+  const recentLoadTarget = recommendTargetPrescription({
+    ...options,
+    recentActualWeights: [8.75],
+  });
+
+  assert.deepEqual(
+    {
+      reps: incrementOnlyTarget.recommendation.reps,
+      rir: incrementOnlyTarget.recommendation.rir,
+      weight: incrementOnlyTarget.recommendation.weight,
+    },
+    { reps: 16, rir: 2.5, weight: 7.5 }
+  );
+  assert.deepEqual(
+    {
+      reps: recentLoadTarget.recommendation.reps,
+      rir: recentLoadTarget.recommendation.rir,
+      weight: recentLoadTarget.recommendation.weight,
+    },
+    { reps: 15, rir: 2.5, weight: 8.75 }
+  );
+  assert.ok(recentLoadTarget.recommendation.e1rm <= 13.7083333333 * 1.02);
+});
+
 test("a prescribed rep range never recommends below its lower bound", () => {
   const target = recommendTargetPrescription({
     allowedRepWindow: 2,
@@ -394,7 +434,7 @@ test("top-of-range performance leaves one rep of fatigue reserve at the same wei
   });
 });
 
-test("bottom-of-range performance prioritizes a live rep drop when lowering weight", () => {
+test("a projected rep drop below the range defers to bounded progression", () => {
   const target = recommendNextSetTargetAfterPerformance({
     actualReps: 10,
     actualRir: 3,
@@ -409,12 +449,7 @@ test("bottom-of-range performance prioritizes a live rep drop when lowering weig
     weightIncrement: 5,
   });
 
-  assert.deepEqual(target, {
-    reason: "projected-fatigue-weight-adjustment",
-    reps: 12,
-    rir: 3,
-    weight: 135,
-  });
+  assert.equal(target, null);
 });
 
 test("a live rep-drop projection stays at the same weight when the range has room", () => {

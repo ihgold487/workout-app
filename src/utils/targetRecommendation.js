@@ -514,6 +514,7 @@ export function recommendTargetPrescription({
   minimumReps,
   minWeight = 0,
   normalizeWeight,
+  recentActualWeights = [],
   preferredRepWindow = 2,
   previousE1RM,
   preferHigherRepsForFirstSet = false,
@@ -565,6 +566,14 @@ export function recommendTargetPrescription({
     minReps,
     Math.round(reps + resolvedMaxRepDeviation)
   );
+  // A recently completed load is known to be usable, even when it falls
+  // between the normal equipment increment options. Preserve its exact value
+  // as an additional candidate instead of rounding it back onto that grid.
+  const knownRecentActualWeights = uniqueNumbers(
+    (Array.isArray(recentActualWeights) ? recentActualWeights : [])
+      .map(toNumber)
+      .filter((weight) => weight != null && weight >= minWeight)
+  );
   const candidates = [];
 
   for (let candidateReps = minReps; candidateReps <= maxReps; candidateReps += 1) {
@@ -600,7 +609,7 @@ export function recommendTargetPrescription({
       )
       .filter((weight) => Number.isFinite(weight) && weight >= minWeight);
 
-    uniqueNumbers(weightOptions).forEach((weight) => {
+    uniqueNumbers([...weightOptions, ...knownRecentActualWeights]).forEach((weight) => {
       const e1rm = calculateE1RM(weight, candidateReps, rir, null, null, null, {
         bodyWeight,
         exercise,
@@ -1008,51 +1017,12 @@ export function recommendNextSetTargetAfterPerformance({
     projectedReps < minimum &&
     actualE1RM != null
   ) {
-    const liveProjectedE1RM = calculateE1RM(
-      weight,
-      projectedReps,
-      prescribedRir,
-      null,
-      null,
-      null,
-      { bodyWeight, exercise }
-    );
-    const liveFatigueRatio =
-      liveProjectedE1RM == null ? null : liveProjectedE1RM / actualE1RM;
-    const fatigueRatio =
-      liveFatigueRatio != null && historicalRatio > 0
-        ? liveFatigueRatio * 0.75 + Math.min(1, historicalRatio) * 0.25
-        : liveFatigueRatio;
-
-    if (fatigueRatio == null || fatigueRatio <= 0 || fatigueRatio >= 1) {
-      return null;
-    }
-
-    const projectedE1RM = actualE1RM * fatigueRatio;
-    const rawWeight = estimateWeightForE1RM(
-      projectedE1RM,
-      prescribed,
-      prescribedRir,
-      { bodyWeight, exercise }
-    );
-    const increment = resolveWeightIncrement(weightIncrement, rawWeight);
-    const roundedWeight = roundWeightToIncrement(
-      Math.max(0, rawWeight ?? 0),
-      increment
-    );
-    const resolvedWeight =
-      typeof normalizeWeight === "function"
-        ? normalizeWeight(roundedWeight)
-        : roundedWeight;
-
-    if (Number.isFinite(resolvedWeight) && resolvedWeight < weight) {
-      return {
-        reason: "projected-fatigue-weight-adjustment",
-        reps: prescribed,
-        rir: prescribedRir,
-        weight: resolvedWeight,
-      };
-    }
+    // A projected rep drop below the prescribed floor is useful fatigue
+    // evidence, but it must not force a lighter load at the top of the range.
+    // Defer to the caller's bounded progression candidates, which can retain a
+    // valid in-range target while respecting the historical set baseline and
+    // configured progression ceiling.
+    return null;
   }
 
   // Once a comparable prior workout shows a real set-to-set decline, make

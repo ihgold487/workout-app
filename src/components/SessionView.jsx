@@ -1353,6 +1353,12 @@ export default function SessionView({
     return maxE1RM > 0 ? maxE1RM : null;
   }
 
+  function getLatestMatchingActualWeights(exercise) {
+    return (getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [])
+      .map((set) => parseSessionNumber(set.actualWeight))
+      .filter((weight) => weight != null);
+  }
+
   // Keep every target path tied to the same completed workout rendered in
   // "Last completed sets." The first working set progresses from that
   // workout's best set; subsequent sets progress from their matching set,
@@ -1948,6 +1954,7 @@ export default function SessionView({
                 getGoalMode() === "progress"
                   ? targetAttributes.progressionPercent
                   : 0,
+              recentActualWeights: getLatestMatchingActualWeights(exercise),
               targetReps,
               targetRir,
               weightIncrement: (weight) =>

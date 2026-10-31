@@ -1306,6 +1306,9 @@ export default function TemplateView({
       0,
       ...latestE1RMs.filter(Number.isFinite)
     );
+    const recentActualWeights = (latestHistoryExercise?.sets || [])
+      .map((set) => Number.parseFloat(String(set.actualWeight)))
+      .filter(Number.isFinite);
     const completedPerformanceFallback = (
       [latestHistoryExercise?.sets?.[setIndex], ...(latestHistoryExercise?.sets || [])]
     )
@@ -1370,6 +1373,7 @@ export default function TemplateView({
             getGoalMode(plan) === "progress"
               ? targetAttributes.progressionPercent
               : 0,
+          recentActualWeights,
           targetReps,
           targetRir,
           weightIncrement: (weight) =>
