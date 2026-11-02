@@ -4179,8 +4179,6 @@ export default function NutritionView({ session = null }) {
   const [calorieHistorySheetOpen, setCalorieHistorySheetOpen] = useState(false);
   const [calorieGoalPickerOpen, setCalorieGoalPickerOpen] = useState(false);
   const [calorieTargetSyncStatus, setCalorieTargetSyncStatus] = useState("");
-  const [weightSheetInitialAdding, setWeightSheetInitialAdding] =
-    useState(false);
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
@@ -7065,13 +7063,11 @@ export default function NutritionView({ session = null }) {
         className="nutrition-view__utility-card"
         aria-label="Body weight"
         onClick={() => {
-          setWeightSheetInitialAdding(false);
           setWeightSheetOpen(true);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setWeightSheetInitialAdding(false);
             setWeightSheetOpen(true);
           }
         }}
@@ -7107,14 +7103,7 @@ export default function NutritionView({ session = null }) {
           aria-label="Add body weight"
           onClick={(event) => {
             event.stopPropagation();
-
-            if (latestBodyWeight) {
-              setWeightPickerOpen(true);
-              return;
-            }
-
-            setWeightSheetInitialAdding(true);
-            setWeightSheetOpen(true);
+            setWeightPickerOpen(true);
           }}
           style={{
             alignItems: "center",
@@ -7430,12 +7419,8 @@ export default function NutritionView({ session = null }) {
       {weightSheetOpen && (
         <BodyWeightSheet
           entries={bodyWeightEntries}
-          entryDate={selectedDate}
-          initialAdding={weightSheetInitialAdding}
-          onAddEntry={() => setWeightPickerOpen(true)}
           onClose={() => {
             setWeightSheetOpen(false);
-            setWeightSheetInitialAdding(false);
           }}
           onDelete={removeBodyWeight}
           onSave={saveBodyWeight}

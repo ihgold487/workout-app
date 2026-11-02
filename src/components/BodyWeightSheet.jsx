@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   CalendarDays,
   Check,
+  Pencil,
   Plus,
   Scale,
   Trash2,
@@ -529,15 +530,14 @@ function WeightChart({ entries, rangeDays, trendDays }) {
 
 export default function BodyWeightSheet({
   entries,
-  entryDate = getTodayKey(),
-  initialAdding = false,
-  onAddEntry,
   onClose,
   onDelete,
   onSave,
 }) {
-  const [adding, setAdding] = useState(initialAdding);
+  const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [draftDate, setDraftDate] = useState(getTodayKey);
+  const [editingDate, setEditingDate] = useState(null);
   const [chartSettings, setChartSettings] = useState(getStoredChartSettings);
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
   const [trendSheetOpen, setTrendSheetOpen] = useState(false);
@@ -545,8 +545,6 @@ export default function BodyWeightSheet({
     () => [...entries].sort((a, b) => b.date.localeCompare(a.date)),
     [entries]
   );
-  const latestEntry = sortedEntries[0] || null;
-  const latestWeight = latestEntry ? parseWeight(latestEntry.weight) : null;
   const parsedDraft = parseWeight(draft);
   const { rangeDays, trendDays } = chartSettings;
   const rangeLabel = getOptionLabel(RANGE_OPTIONS, rangeDays);
@@ -566,13 +564,29 @@ export default function BodyWeightSheet({
   }
 
   function saveEntry() {
-    if (!parsedDraft) {
+    if (!parsedDraft || !draftDate) {
       return;
     }
 
-    onSave(entryDate, parsedDraft);
+    onSave(draftDate, parsedDraft);
     setDraft("");
+    setDraftDate(getTodayKey());
+    setEditingDate(null);
     setAdding(false);
+  }
+
+  function startAdding() {
+    setDraft("");
+    setDraftDate(getTodayKey());
+    setEditingDate(null);
+    setAdding(true);
+  }
+
+  function startEditing(entry) {
+    setDraft(String(entry.weight));
+    setDraftDate(entry.date);
+    setEditingDate(entry.date);
+    setAdding(true);
   }
 
   return (
@@ -691,15 +705,7 @@ export default function BodyWeightSheet({
         <WeightChart entries={entries} rangeDays={rangeDays} trendDays={trendDays} />
 
         <button
-          onClick={() => {
-            if (latestWeight) {
-              onAddEntry?.();
-              setAdding(false);
-              return;
-            }
-
-            setAdding((current) => !current);
-          }}
+          onClick={startAdding}
           style={{
             alignItems: "center",
             display: "inline-flex",
@@ -719,7 +725,7 @@ export default function BodyWeightSheet({
               alignItems: "end",
               display: "grid",
               gap: "8px",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
             }}
           >
             <label
@@ -729,7 +735,40 @@ export default function BodyWeightSheet({
                 minWidth: 0,
               }}
             >
-              {entryDate}
+              Date
+              <span
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "6px",
+                }}
+              >
+                <CalendarDays aria-hidden="true" size={17} />
+                <input
+                  aria-label="Entry date"
+                  max={getTodayKey()}
+                  onChange={(event) => setDraftDate(event.target.value)}
+                  style={{
+                    boxSizing: "border-box",
+                    font: "inherit",
+                    minHeight: "42px",
+                    minWidth: 0,
+                    padding: "7px 6px",
+                    width: "100%",
+                  }}
+                  type="date"
+                  value={draftDate}
+                />
+              </span>
+            </label>
+            <label
+              style={{
+                display: "grid",
+                gap: "5px",
+                minWidth: 0,
+              }}
+            >
+              Weight (lb)
               <input
                 aria-label="Body weight"
                 inputMode="decimal"
@@ -755,7 +794,7 @@ export default function BodyWeightSheet({
               }}
               type="button"
             >
-              Save
+              {editingDate ? "Update" : "Save"}
             </button>
           </div>
         )}
@@ -775,17 +814,39 @@ export default function BodyWeightSheet({
                   border: "1px solid var(--border)",
                   borderRadius: "8px",
                   color: "var(--text-muted)",
+                  cursor: "pointer",
                   display: "grid",
                   fontSize: "13px",
                   gap: "8px",
-                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
                   padding: "8px",
                 }}
               >
-                <span>{entry.date}</span>
-                <strong style={{ color: "var(--text-h)" }}>
-                  {entry.weight} {entry.unit || "lb"}
-                </strong>
+                <button
+                  aria-label={`Edit body weight for ${entry.date}`}
+                  onClick={() => startEditing(entry)}
+                  style={{
+                    alignItems: "center",
+                    background: "transparent",
+                    border: 0,
+                    color: "inherit",
+                    cursor: "pointer",
+                    display: "grid",
+                    font: "inherit",
+                    gap: "8px",
+                    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                    minWidth: 0,
+                    padding: 0,
+                    textAlign: "left",
+                  }}
+                  type="button"
+                >
+                  <span>{entry.date}</span>
+                  <strong style={{ color: "var(--text-h)" }}>
+                    {entry.weight} {entry.unit || "lb"}
+                  </strong>
+                  <Pencil aria-hidden="true" size={15} />
+                </button>
                 <button
                   aria-label={`Remove body weight for ${entry.date}`}
                   onClick={() => onDelete(entry.date)}

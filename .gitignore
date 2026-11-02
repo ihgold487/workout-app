@@ -25,3 +25,22 @@ dist-ssr
 
 # Blender automatic recovery backups (the source .blend files are versioned).
 *.blend1
+
+# Experimental WorkoutAnimations artifacts. Versioned master/source assets in
+# this directory remain tracked; intentionally promoting a new asset requires
+# an explicit `git add -f`.
+/WorkoutAnimations/Athlete_Anatomy_*.blend
+/WorkoutAnimations/Athlete_Animation_Test_*.blend
+/WorkoutAnimations/Athlete_Hybrid_*.blend
+/WorkoutAnimations/Athlete_Presentation_Appearance_*.blend
+/WorkoutAnimations/Human Male Base Mesh with armature/HumanBaseMale.blend
+/WorkoutAnimations/assets/
+/WorkoutAnimations/reviews/
+/WorkoutAnimations/scripts/
+/WorkoutAnimations/textures/anatomy_pilot_sources/
+/WorkoutAnimations/textures/athlete_anatomy_*.png
+/WorkoutAnimations/textures/athlete_anatomy_*.svg
+/WorkoutAnimations/textures/athlete_anatomy_*.kra
+/WorkoutAnimations/textures/athlete_anatomy_*.kra~
+/WorkoutAnimations/textures/athlete_cc0_*.png
+/WorkoutAnimations/textures/athlete_muscle_*.png

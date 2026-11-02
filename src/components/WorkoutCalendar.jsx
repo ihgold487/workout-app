@@ -2247,7 +2247,6 @@ export default function WorkoutCalendar({
       {selectedWeight && (
         <BodyWeightSheet
           entries={localBodyWeightEntries}
-          entryDate={selectedWeight.date || getLocalDateKey(today)}
           onClose={() => setSelectedWeight(null)}
           onDelete={removeBodyWeight}
           onSave={saveBodyWeight}
