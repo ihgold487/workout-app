@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isPlanCompleteFromCompletions,
   markPlanCompleted,
+  removeWeekFromWeeklyPrescriptions,
 } from "../src/utils/planLifecycle.js";
 
 const workouts = [{ planWorkoutId: "a" }, { planWorkoutId: "b" }];
@@ -74,4 +75,20 @@ test("marking a plan complete leaves other plan states unchanged", () => {
     { id: "finished", status: "completed" },
     { id: "draft", status: "inactive" },
   ]);
+});
+
+test("removing a prescription week shifts following weeks forward", () => {
+  const prescriptions = [
+    { reps: 12, weekNumber: 1 },
+    { reps: 10, weekNumber: 2 },
+    { reps: 8, weekNumber: 3 },
+    { isDeload: true, reps: 6, weekNumber: 4 },
+  ];
+
+  assert.deepEqual(removeWeekFromWeeklyPrescriptions(prescriptions, 2), [
+    { reps: 12, weekNumber: 1 },
+    { reps: 8, weekNumber: 2 },
+    { isDeload: true, reps: 6, weekNumber: 3 },
+  ]);
+  assert.deepEqual(prescriptions[1], { reps: 10, weekNumber: 2 });
 });

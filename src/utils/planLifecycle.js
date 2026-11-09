@@ -4,6 +4,29 @@ export function getPlanTotalWeeks(plan = {}) {
   );
 }
 
+export function removeWeekFromWeeklyPrescriptions(
+  weeklyPrescriptions,
+  weekNumber
+) {
+  if (!Array.isArray(weeklyPrescriptions)) {
+    return weeklyPrescriptions;
+  }
+
+  const removedWeekNumber = Number(weekNumber);
+
+  return weeklyPrescriptions
+    .filter((week) => Number(week?.weekNumber) !== removedWeekNumber)
+    .map((week) => {
+      const currentWeekNumber = Number(week?.weekNumber);
+
+      return Number.isFinite(currentWeekNumber) &&
+        currentWeekNumber > removedWeekNumber
+        ? { ...week, weekNumber: currentWeekNumber - 1 }
+        : { ...week };
+    })
+    .sort((left, right) => Number(left.weekNumber) - Number(right.weekNumber));
+}
+
 export function isPlanCompleteFromCompletions(plan = {}, completions = []) {
   const finalWeekWorkoutIds = new Set(
     completions

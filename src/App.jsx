@@ -43,6 +43,7 @@ import {
   getPlanTotalWeeks,
   isPlanCompleteFromCompletions,
   markPlanCompleted,
+  removeWeekFromWeeklyPrescriptions,
 } from "./utils/planLifecycle";
 import { getPlanWorkingSetCount } from "./utils/planSetCount";
 import {
@@ -8623,6 +8624,114 @@ export default function App() {
     requestSyncCheckpoint(["plans"], "plan extend");
   }
 
+  function deletePlanWeek(plan, weekNumber) {
+    const trainingWeeks = Math.max(1, Number(plan.durationWeeks) || 1);
+    const totalWeeks = getPlanTotalWeeks(plan);
+    const isDeloadWeek =
+      Boolean(plan.config?.deload) && Number(weekNumber) === totalWeeks;
+    const hasCompletedWorkouts = getPlanCompletionsForWeek(
+      plan,
+      weekNumber,
+      history
+    ).length > 0;
+    const currentWeek = Number(plan.currentWeek) || 1;
+
+    if (
+      Number(weekNumber) < currentWeek ||
+      hasCompletedWorkouts ||
+      plan.status === "completed" ||
+      (!isDeloadWeek && trainingWeeks <= 1)
+    ) {
+      return;
+    }
+
+    const weekLabel = getPlanWeekLabel(plan, weekNumber);
+    const confirmed = window.confirm(
+      `Delete ${weekLabel} from ${plan.name}? Later week prescriptions will shift forward. Completed workout history will be kept.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const nextDurationWeeks = isDeloadWeek
+      ? trainingWeeks
+      : trainingWeeks - 1;
+    const nextTotalWeeks = nextDurationWeeks +
+      (isDeloadWeek ? 0 : plan.config?.deload ? 1 : 0);
+    const updateWeeklyPrescriptions = (weeklyPrescriptions) =>
+      removeWeekFromWeeklyPrescriptions(weeklyPrescriptions, weekNumber);
+    const nextPlans = plans.map((item) => {
+      if (String(item.id) !== String(plan.id)) {
+        return item;
+      }
+
+      return {
+        ...item,
+        config: isDeloadWeek
+          ? { ...item.config, deload: false }
+          : item.config,
+        currentWeek: Math.min(Number(item.currentWeek) || 1, nextTotalWeeks),
+        durationWeeks: nextDurationWeeks,
+        updatedAt: new Date().toISOString(),
+        workouts: (item.workouts || []).map((workout) => ({
+          ...workout,
+          ...(Array.isArray(workout.exercises)
+            ? {
+                exercises: workout.exercises.map((exercise) => ({
+                  ...exercise,
+                  weeklyPrescriptions: updateWeeklyPrescriptions(
+                    exercise.weeklyPrescriptions
+                  ),
+                })),
+              }
+            : {}),
+          weeklyPrescriptionsByPosition: Object.fromEntries(
+            Object.entries(workout.weeklyPrescriptionsByPosition || {}).map(
+              ([position, weeklyPrescriptions]) => [
+                position,
+                updateWeeklyPrescriptions(weeklyPrescriptions),
+              ]
+            )
+          ),
+        })),
+      };
+    });
+    const planTemplateIds = new Set(
+      (plan.workouts || []).map((workout) => String(workout.templateId))
+    );
+    const nextTemplates = templates.map((template) =>
+      planTemplateIds.has(String(template.id))
+        ? {
+            ...template,
+            exercises: (template.exercises || []).map((exercise) => ({
+              ...exercise,
+              weeklyPrescriptions: updateWeeklyPrescriptions(
+                exercise.weeklyPrescriptions
+              ),
+            })),
+          }
+        : template
+    );
+
+    setPlans(nextPlans);
+    setTemplates(nextTemplates);
+    setPlanDisplayWeeks((current) => {
+      const displayedWeek = Number(current[plan.id]) || currentWeek;
+
+      return {
+        ...current,
+        [plan.id]: Math.min(
+          displayedWeek > Number(weekNumber)
+            ? displayedWeek - 1
+            : displayedWeek,
+          nextTotalWeeks
+        ),
+      };
+    });
+    requestSyncCheckpoint(["plans", "workouts"], "plan week delete");
+  }
+
   function clonePlan(plan) {
     const clonedAt = getCurrentTimeMs();
     const clonedPlanId = clonedAt;
@@ -10149,47 +10258,100 @@ export default function App() {
           >
             {getPlanWeekOptions(plan).map((week) => {
               const selected = Number(selectedWeek) === Number(week.weekNumber);
+              const trainingWeeks = Math.max(1, Number(plan.durationWeeks) || 1);
+              const isDeloadWeek =
+                Boolean(plan.config?.deload) &&
+                Number(week.weekNumber) > trainingWeeks;
+              const completedWorkoutCount = getPlanCompletionsForWeek(
+                plan,
+                week.weekNumber,
+                history
+              ).length;
+              const canDelete =
+                plan.status !== "completed" &&
+                Number(week.weekNumber) >= (Number(plan.currentWeek) || 1) &&
+                completedWorkoutCount === 0 &&
+                (isDeloadWeek || trainingWeeks > 1);
+              const deleteUnavailableReason =
+                plan.status === "completed"
+                  ? "Completed plan weeks cannot be deleted"
+                  : Number(week.weekNumber) < (Number(plan.currentWeek) || 1)
+                    ? "Past weeks cannot be deleted"
+                    : completedWorkoutCount > 0
+                      ? "Weeks with completed workouts cannot be deleted"
+                      : "A plan needs at least one training week";
 
               return (
-                <button
+                <div
                   key={week.weekNumber}
-                  onClick={() => {
-                    setPlanDisplayWeeks((current) => ({
-                      ...current,
-                      [plan.id]: week.weekNumber,
-                    }));
-                    setExpandedPlanIds((current) => ({
-                      ...current,
-                      [plan.id]: true,
-                    }));
-                    setWeekPickerPlanId(null);
-                  }}
                   style={{
                     alignItems: "center",
-                    background: selected
-                      ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
-                      : "var(--surface)",
-                    border: selected
-                      ? "1px solid var(--accent)"
-                      : "1px solid var(--border)",
-                    borderRadius: "8px",
-                    color: "var(--text)",
                     display: "grid",
                     gap: "8px",
-                    gridTemplateColumns: "auto minmax(0, 1fr)",
-                    minHeight: "42px",
-                    padding: "8px 10px",
-                    textAlign: "left",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
                   }}
-                  type="button"
                 >
-                  {week.completed ? (
-                    <CheckCircle2 size={17} color="var(--success-text)" />
-                  ) : (
-                    <Circle size={17} color="var(--text-muted)" />
-                  )}
-                  <span>{week.label}</span>
-                </button>
+                  <button
+                    onClick={() => {
+                      setPlanDisplayWeeks((current) => ({
+                        ...current,
+                        [plan.id]: week.weekNumber,
+                      }));
+                      setExpandedPlanIds((current) => ({
+                        ...current,
+                        [plan.id]: true,
+                      }));
+                      setWeekPickerPlanId(null);
+                    }}
+                    style={{
+                      alignItems: "center",
+                      background: selected
+                        ? "color-mix(in srgb, var(--accent) 12%, var(--surface))"
+                        : "var(--surface)",
+                      border: selected
+                        ? "1px solid var(--accent)"
+                        : "1px solid var(--border)",
+                      borderRadius: "8px",
+                      color: "var(--text)",
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "auto minmax(0, 1fr)",
+                      minHeight: "42px",
+                      padding: "8px 10px",
+                      textAlign: "left",
+                    }}
+                    type="button"
+                  >
+                    {week.completed ? (
+                      <CheckCircle2 size={17} color="var(--success-text)" />
+                    ) : (
+                      <Circle size={17} color="var(--text-muted)" />
+                    )}
+                    <span>{week.label}</span>
+                  </button>
+                  <button
+                    aria-label={`Delete ${week.label}`}
+                    disabled={!canDelete}
+                    onClick={() => deletePlanWeek(plan, week.weekNumber)}
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      color: canDelete ? "var(--danger-text)" : "var(--text-muted)",
+                      cursor: canDelete ? "pointer" : "not-allowed",
+                      display: "inline-flex",
+                      justifyContent: "center",
+                      minHeight: "42px",
+                      minWidth: "42px",
+                      opacity: canDelete ? 1 : 0.5,
+                      padding: "8px",
+                    }}
+                    title={canDelete ? `Delete ${week.label}` : deleteUnavailableReason}
+                    type="button"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               );
             })}
           </div>
