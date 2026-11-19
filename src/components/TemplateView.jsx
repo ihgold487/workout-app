@@ -59,7 +59,7 @@ import {
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
 import { getTargetAttributeDefaults } from "../utils/targetAttributes";
-import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import { findExercisePerformanceReferences } from "../utils/workoutHistoryLookup";
 import { REST_DURATION_PICKER_VALUES } from "../utils/restDurationPicker";
 import { buildWarmupRecommendations } from "../utils/warmupRecommendations";
 import {
@@ -1211,7 +1211,7 @@ export default function TemplateView({
   }
 
   function getLatestHistoryPerformance(templateExercise) {
-    return findLatestExercisePerformance({
+    const references = findExercisePerformanceReferences({
       currentIsDeload: isDeloadPlanWorkout(linkedPlan),
       exercise: templateExercise,
       history,
@@ -1222,6 +1222,15 @@ export default function TemplateView({
       templateId: template.id,
       templates,
     });
+
+    return (
+      (references.defaultSource === "most-recent"
+        ? references.mostRecent
+        : references.lastCompleted) ||
+      references.mostRecent ||
+      references.lastCompleted ||
+      null
+    );
   }
 
   function getLatestHistoryExercise(templateExercise) {

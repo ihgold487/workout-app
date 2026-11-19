@@ -82,7 +82,7 @@ import {
   getExerciseWeightIncrement,
   roundWeightToIncrement,
 } from "../utils/weightIncrement";
-import { findLatestExercisePerformance } from "../utils/workoutHistoryLookup";
+import { findExercisePerformanceReferences } from "../utils/workoutHistoryLookup";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
 import { isPlanCompleteFromCompletions } from "../utils/planLifecycle";
 import {
@@ -940,7 +940,7 @@ export default function SessionView({
     };
   }
 
-  const latestHistoryPerformanceCache = useMemo(() => new Map(), [
+  const historyPerformanceReferencesCache = useMemo(() => new Map(), [
     history,
     plans,
     session.id,
@@ -964,14 +964,14 @@ export default function SessionView({
     });
   }
 
-  const getLatestMatchingHistoryPerformance = useCallback((sessionExercise) => {
+  function getHistoryPerformanceReferences(sessionExercise) {
     const cacheKey = getHistoryPerformanceCacheKey(sessionExercise);
 
-    if (latestHistoryPerformanceCache.has(cacheKey)) {
-      return latestHistoryPerformanceCache.get(cacheKey);
+    if (historyPerformanceReferencesCache.has(cacheKey)) {
+      return historyPerformanceReferencesCache.get(cacheKey);
     }
 
-    const performance = findLatestExercisePerformance({
+    const references = findExercisePerformanceReferences({
       currentSessionId: session.id,
       currentIsDeload: isDeloadPlanWorkout(),
       exercise: sessionExercise,
@@ -984,19 +984,32 @@ export default function SessionView({
       templates,
     });
 
-    latestHistoryPerformanceCache.set(cacheKey, performance);
-    return performance;
-  }, [
-    history,
-    latestHistoryPerformanceCache,
-    plans,
-    session.id,
-    session.planId,
-    session.planWeek,
-    session.planWorkoutId,
-    session.templateId,
-    templates,
-  ]);
+    historyPerformanceReferencesCache.set(cacheKey, references);
+    return references;
+  }
+
+  function getSelectedHistoryReferenceSource(sessionExercise) {
+    const cacheKey = getHistoryPerformanceCacheKey(sessionExercise);
+    const references = getHistoryPerformanceReferences(sessionExercise);
+    const selectedSource =
+      historyReferenceSourceByExercise[cacheKey] ||
+      references.defaultSource;
+
+    if (selectedSource === "last-completed" && references.lastCompleted) {
+      return selectedSource;
+    }
+
+    return references.mostRecent ? "most-recent" : "last-completed";
+  }
+
+  function getLatestMatchingHistoryPerformance(sessionExercise) {
+    const references = getHistoryPerformanceReferences(sessionExercise);
+    const selectedSource = getSelectedHistoryReferenceSource(sessionExercise);
+
+    return selectedSource === "most-recent"
+      ? references.mostRecent || references.lastCompleted
+      : references.lastCompleted || references.mostRecent;
+  }
 
   function getLatestWorkoutPerformance(exerciseOrId) {
     const sessionExercise =
@@ -1006,23 +1019,17 @@ export default function SessionView({
             (exercise) =>
               exercise.exerciseId === exerciseOrId || exercise.id === exerciseOrId
           );
+    const latestPerformance = sessionExercise
+      ? getLatestMatchingHistoryPerformance(sessionExercise)
+      : null;
 
-    if (!sessionExercise) {
-      return null;
-    }
-
-    const latestPerformance =
-      getLatestMatchingHistoryPerformance(sessionExercise);
-
-    if (!latestPerformance) {
-      return null;
-    }
-
-    return {
-      completedAt: latestPerformance.workout.completedAt,
-      sets: latestPerformance.exercise.sets,
-      workout: latestPerformance.workout,
-    };
+    return latestPerformance
+      ? {
+          completedAt: latestPerformance.workout.completedAt,
+          sets: latestPerformance.exercise.sets,
+          workout: latestPerformance.workout,
+        }
+      : null;
   }
 
   function getLatestActualForSet(sessionExercise, setIndex) {
@@ -1162,6 +1169,7 @@ export default function SessionView({
   function getTargetCalculationCacheKey(exercise, set, setIndex) {
     return `${setIndex}:${JSON.stringify({
       exercise,
+      historyReferenceSource: getSelectedHistoryReferenceSource(exercise),
       set,
       targetAttributes: session.targetAttributes || null,
     })}`;
@@ -3858,6 +3866,8 @@ export default function SessionView({
   const [sessionActionsClosing, setSessionActionsClosing] = useState(false);
   const [targetAttributesExpanded, setTargetAttributesExpanded] =
     useState(false);
+  const [historyReferenceSourceByExercise, setHistoryReferenceSourceByExercise] =
+    useState({});
 
   const [pendingDeleteSet, setPendingDeleteSet] = useState(null);
 
@@ -6501,7 +6511,34 @@ export default function SessionView({
   }
 
   function renderLatestSetHistory(exercise) {
-    const latestPerformance = getLatestWorkoutPerformance(exercise);
+    const references = getHistoryPerformanceReferences(exercise);
+    const selectedSource = getSelectedHistoryReferenceSource(exercise);
+    const referenceOptions = [
+      references.mostRecent && {
+        isDeload: references.mostRecentIsDeload,
+        label: "Most recent sets",
+        performance: references.mostRecent,
+        source: "most-recent",
+      },
+      !references.samePerformance &&
+        references.lastCompleted && {
+          isDeload: references.lastCompletedIsDeload,
+          label: "Previous completion of this workout",
+          performance: references.lastCompleted,
+          source: "last-completed",
+        },
+    ].filter(Boolean);
+    const hasReferenceChoice = referenceOptions.length > 1;
+    const radioName = `history-reference-${getHistoryPerformanceCacheKey(exercise)}`;
+
+    function selectReference(source) {
+      const cacheKey = getHistoryPerformanceCacheKey(exercise);
+
+      setHistoryReferenceSourceByExercise((current) => ({
+        ...current,
+        [cacheKey]: source,
+      }));
+    }
 
     return (
       <div
@@ -6513,20 +6550,7 @@ export default function SessionView({
           paddingTop: "8px",
         }}
       >
-        <div
-          style={{
-            color: "var(--text-muted)",
-            fontSize: "12px",
-            fontWeight: 700,
-          }}
-        >
-          Last completed sets
-          {latestPerformance?.completedAt
-            ? ` · ${latestPerformance.completedAt}`
-            : ""}
-        </div>
-
-        {!latestPerformance?.sets?.length ? (
+        {!referenceOptions.length ? (
           <div
             style={{
               color: "var(--text-muted)",
@@ -6536,147 +6560,145 @@ export default function SessionView({
             No completed history for this exercise yet.
           </div>
         ) : (
-          <>
-            <div
-              style={{
-                alignItems: "center",
-                color: "var(--text-muted)",
-                columnGap: "4px",
-                display: "grid",
-                fontSize: "14px",
-                fontWeight: "bold",
-                gridTemplateColumns: "78px 50px 46px 36px 42px",
-                lineHeight: 1,
-                padding: "0 2px",
-              }}
-            >
-              <span
+          referenceOptions.map((reference) => {
+            const workout = reference.performance.workout || {};
+            const completedAt =
+              workout.completedAt ||
+              workout.completedAtIso ||
+              workout.completed_at ||
+              workout.workoutStartedAtIso ||
+              workout.startedAtIso ||
+              workout.startedAt;
+            const workoutName =
+              workout.templateName || workout.workoutName || workout.name || "";
+
+            return (
+              <div
+                key={reference.source}
                 style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  fontSize: "14px",
+                  borderTop:
+                    reference.source === "last-completed"
+                      ? "1px solid var(--border)"
+                      : "none",
+                  display: "grid",
                   gap: "3px",
-                  whiteSpace: "nowrap",
+                  paddingTop:
+                    reference.source === "last-completed" ? "7px" : "0",
                 }}
               >
-                Set
-              </span>
-
-              <span
-                title="Weight"
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  fontSize: "14px",
-                  justifyContent: "center",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <Weight size={15} aria-label="Weight" />
-              </span>
-
-              <span
-                title="Reps"
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  fontSize: "14px",
-                  justifyContent: "center",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <Hash size={15} aria-label="Reps" />
-              </span>
-
-              <span
-                title="RIR"
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  fontSize: "14px",
-                  justifyContent: "center",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <BatteryMedium size={15} aria-label="RIR" />
-              </span>
-
-              <span
-                title="e1RM"
-                style={{
-                  alignItems: "center",
-                  display: "inline-flex",
-                  fontSize: "14px",
-                  justifyContent: "center",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <Dumbbell size={15} aria-label="e1RM" />
-              </span>
-            </div>
-
-            {latestPerformance.sets.map((set, setIndex) => {
-              const weight = firstPresentValue(set.actualWeight);
-              const reps = firstPresentValue(set.actualReps);
-              const rir = firstPresentValue(set.actualRir);
-              const e1rm = isBlankValue(reps)
-                ? null
-                : getHistorySetE1RM(exercise, set, latestPerformance.workout);
-
-              return (
                 <div
-                  key={set.id || setIndex}
                   style={{
-                    alignItems: "center",
                     color: "var(--text-muted)",
-                    columnGap: "4px",
                     display: "grid",
-                    flexWrap: "nowrap",
                     fontSize: "12px",
-                    gridTemplateColumns: "78px 50px 46px 36px 42px",
-                    lineHeight: 1,
-                    padding: "0 2px",
+                    fontWeight: 700,
+                    gap: "2px",
                   }}
                 >
-                  <span
-                    style={{
-                      fontWeight: 700,
-                    }}
-                  >
-                    {setIndex + 1}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "center",
-                    }}
-                  >
-                    {displayHistoricalWeight(weight)}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "center",
-                    }}
-                  >
-                    {displayHistoricalValue(reps)}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "center",
-                    }}
-                  >
-                    {displayHistoricalValue(rir)}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "center",
-                    }}
-                  >
-                    {formatSessionE1RMDisplay(e1rm)}
-                  </span>
+                  <div>
+                    {hasReferenceChoice ? (
+                      <label
+                        style={{
+                          alignItems: "center",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          gap: "5px",
+                        }}
+                      >
+                        <input
+                          checked={selectedSource === reference.source}
+                          name={radioName}
+                          onChange={() => selectReference(reference.source)}
+                          type="radio"
+                        />
+                        <span>{reference.label}</span>
+                      </label>
+                    ) : (
+                      <span>{reference.label}</span>
+                    )}
+                  </div>
+                  {(workoutName || completedAt || reference.isDeload) && (
+                    <div
+                      style={{
+                        columnGap: "0",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        rowGap: "2px",
+                      }}
+                    >
+                      {workoutName && <span>{workoutName}</span>}
+                      {(completedAt || reference.isDeload) && (
+                        <span style={{ whiteSpace: "nowrap" }}>
+                          {workoutName && completedAt ? " · " : ""}
+                          {completedAt || ""}
+                          {reference.isDeload
+                            ? `${completedAt ? " · " : ""}Deload`
+                            : ""}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </>
+                {reference.performance.exercise?.sets?.length ? (
+                  <>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        color: "var(--text-muted)",
+                        columnGap: "4px",
+                        display: "grid",
+                        fontSize: "14px",
+                        fontWeight: "bold",
+                        gridTemplateColumns: "78px 50px 46px 36px 42px",
+                        lineHeight: 1,
+                        padding: "0 2px",
+                      }}
+                    >
+                      <span>Set</span>
+                      <span style={{ textAlign: "center" }} title="Weight"><Weight size={15} aria-label="Weight" /></span>
+                      <span style={{ textAlign: "center" }} title="Reps"><Hash size={15} aria-label="Reps" /></span>
+                      <span style={{ textAlign: "center" }} title="RIR"><BatteryMedium size={15} aria-label="RIR" /></span>
+                      <span style={{ textAlign: "center" }} title="e1RM"><Dumbbell size={15} aria-label="e1RM" /></span>
+                    </div>
+                    {reference.performance.exercise.sets.map((set, setIndex) => {
+                      const weight = firstPresentValue(set.actualWeight);
+                      const reps = firstPresentValue(set.actualReps);
+                      const rir = firstPresentValue(set.actualRir);
+                      const e1rm = isBlankValue(reps)
+                        ? null
+                        : getHistorySetE1RM(exercise, set, workout);
+
+                      return (
+                        <div
+                          key={set.id || setIndex}
+                          style={{
+                            alignItems: "center",
+                            color: "var(--text-muted)",
+                            columnGap: "4px",
+                            display: "grid",
+                            fontSize: "12px",
+                            gridTemplateColumns: "78px 50px 46px 36px 42px",
+                            lineHeight: 1,
+                            padding: "0 2px",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{setIndex + 1}</span>
+                          <span style={{ textAlign: "center" }}>{displayHistoricalWeight(weight)}</span>
+                          <span style={{ textAlign: "center" }}>{displayHistoricalValue(reps)}</span>
+                          <span style={{ textAlign: "center" }}>{displayHistoricalValue(rir)}</span>
+                          <span style={{ textAlign: "center" }}>{formatSessionE1RMDisplay(e1rm)}</span>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    No completed sets recorded.
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     );

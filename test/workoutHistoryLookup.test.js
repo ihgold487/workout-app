@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  findExercisePerformanceReferences,
   findLatestExercisePerformance,
   isHistoryWorkoutDeload,
 } from "../src/utils/workoutHistoryLookup.js";
@@ -106,6 +107,54 @@ test("standalone workouts prefer their previous completion over newer exercise h
   });
 
   assert.equal(performance?.workout.id, "previous-standalone-workout");
+});
+
+test("standalone references expose the newest exercise sets beside the prior workout completion", () => {
+  const references = findExercisePerformanceReferences({
+    currentIsDeload: false,
+    exercise,
+    history: [
+      {
+        completedAtIso: "2026-10-21T12:00:00.000Z",
+        exercises: [{ ...exercise, sets: [{ actualWeight: "145" }] }],
+        id: "newer-other-workout",
+        templateId: "other-template",
+      },
+      {
+        completedAtIso: "2026-10-14T12:00:00.000Z",
+        exercises: [{ ...exercise, sets: [{ actualWeight: "125" }] }],
+        id: "previous-standalone-workout",
+        templateId: "standalone-template",
+      },
+    ],
+    templateId: "standalone-template",
+  });
+
+  assert.equal(references.mostRecent?.workout.id, "newer-other-workout");
+  assert.equal(
+    references.lastCompleted?.workout.id,
+    "previous-standalone-workout"
+  );
+  assert.equal(references.defaultSource, "most-recent");
+  assert.equal(references.samePerformance, false);
+});
+
+test("plan references retain the safe contextual default while exposing a newer deload", () => {
+  const references = findExercisePerformanceReferences({
+    currentIsDeload: false,
+    exercise,
+    history,
+    plan: plans[1],
+    planWeek: 1,
+    planWorkoutId: "new-workout",
+    plans,
+    templateId: "new-template",
+  });
+
+  assert.equal(references.mostRecent?.workout.id, "deload-workout");
+  assert.equal(references.lastCompleted?.workout.id, "training-workout");
+  assert.equal(references.defaultSource, "last-completed");
+  assert.equal(references.samePerformance, false);
 });
 
 test("standalone workouts fall back to the newest exercise history regardless of prescription", () => {

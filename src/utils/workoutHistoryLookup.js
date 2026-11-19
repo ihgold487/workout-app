@@ -696,3 +696,95 @@ export function findLatestExercisePerformance({
     findForDeloadStatus(!resolvedCurrentIsDeload)
   );
 }
+
+function findMostRecentExercisePerformance({
+  currentSessionId,
+  exercise,
+  history = [],
+}) {
+  const workout = [...history]
+    .filter(
+      (historyWorkout) =>
+        currentSessionId == null ||
+        (String(historyWorkout.id) !== String(currentSessionId) &&
+          String(historyWorkout.sourceSessionId || "") !== String(currentSessionId))
+    )
+    .filter((historyWorkout) =>
+      historyWorkout.exercises?.some((historyExercise) =>
+        exercisesMatch(exercise, historyExercise)
+      )
+    )
+    .sort(
+      (leftWorkout, rightWorkout) =>
+        getWorkoutCompletedTime(rightWorkout) - getWorkoutCompletedTime(leftWorkout)
+    )[0];
+  const matchingExercise = workout?.exercises?.find((historyExercise) =>
+    exercisesMatch(exercise, historyExercise)
+  );
+
+  return workout && matchingExercise
+    ? {
+        exercise: matchingExercise,
+        isPlanWorkoutScoped: false,
+        workout,
+      }
+    : null;
+}
+
+function performancesMatch(leftPerformance, rightPerformance) {
+  if (!leftPerformance || !rightPerformance) {
+    return false;
+  }
+
+  if (leftPerformance.workout === rightPerformance.workout) {
+    return true;
+  }
+
+  const leftId =
+    leftPerformance.workout?.id ||
+    leftPerformance.workout?.sourceSessionId ||
+    leftPerformance.workout?.source_key ||
+    leftPerformance.workout?.sourceKey;
+  const rightId =
+    rightPerformance.workout?.id ||
+    rightPerformance.workout?.sourceSessionId ||
+    rightPerformance.workout?.source_key ||
+    rightPerformance.workout?.sourceKey;
+
+  return leftId != null && rightId != null && String(leftId) === String(rightId);
+}
+
+// Keep the contextual lookup used by plan programming available alongside a
+// raw, chronological exercise reference. Consumers can expose both references
+// while preserving the existing safe default for active plans and deloads.
+export function findExercisePerformanceReferences(options) {
+  const lastCompleted = findLatestExercisePerformance(options);
+  const mostRecent = findMostRecentExercisePerformance(options);
+  const allPlans = [options?.plan, ...(options?.plans || [])].filter(Boolean);
+  const isDeloadPerformance = (performance) =>
+    Boolean(
+      performance &&
+        (isHistoryWorkoutDeload(performance.workout, allPlans) ||
+          isHistoryExerciseDeload(performance.exercise))
+    );
+  const isStandaloneTemplateSession =
+    options?.templateId != null &&
+    !options?.plan?.id &&
+    options?.planWorkoutId == null;
+  const defaultSource = isStandaloneTemplateSession
+    ? mostRecent
+      ? "most-recent"
+      : "last-completed"
+    : lastCompleted
+      ? "last-completed"
+      : "most-recent";
+
+  return {
+    defaultSource,
+    lastCompleted,
+    lastCompletedIsDeload: isDeloadPerformance(lastCompleted),
+    mostRecent,
+    mostRecentIsDeload: isDeloadPerformance(mostRecent),
+    samePerformance: performancesMatch(mostRecent, lastCompleted),
+  };
+}
