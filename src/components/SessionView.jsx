@@ -279,6 +279,7 @@ const SAME_WEIGHT_TARGET_E1RM_TOLERANCE = 0.05;
 const WEIGHT_CHANGE_TARGET_SCORE_PENALTY = 0.025;
 const WORKOUT_PAUSE_REMINDER_SECONDS = 300;
 const WORKOUT_INACTIVITY_REMINDER_SECONDS = 360;
+const REST_TIMER_NATIVE_WATCHDOG_INTERVAL_MS = 5000;
 const NATIVE_APP_ICON = `${
   import.meta.env.BASE_URL || "/"
 }workout-icon-native.png?v=6`;
@@ -605,6 +606,24 @@ function RestTimerTick({ children, ...timer }) {
     timer.timerExpiredAt,
     timer.timerStartedAt,
   ]);
+
+  useEffect(() => {
+    const refreshNow = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
+      }
+    };
+
+    document.addEventListener("visibilitychange", refreshNow);
+    window.addEventListener("focus", refreshNow);
+    window.addEventListener("pageshow", refreshNow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshNow);
+      window.removeEventListener("focus", refreshNow);
+      window.removeEventListener("pageshow", refreshNow);
+    };
+  }, []);
 
   const displayedRestSeconds = getRestTimerDisplayedSeconds({ ...timer, now });
   const restTimerStateLabel = timer.timerFinished
@@ -1007,10 +1026,8 @@ export default function SessionView({
   }
 
   function getLatestActualForSet(sessionExercise, setIndex) {
-    const historySet =
-      getLatestMatchingHistoryPerformance(sessionExercise)?.exercise?.sets?.[
-        setIndex
-      ];
+    const latestPerformance = getLatestMatchingHistoryPerformance(sessionExercise);
+    const historySet = latestPerformance?.exercise?.sets?.[setIndex];
 
     if (!historySet) {
       return null;
@@ -1027,7 +1044,11 @@ export default function SessionView({
     return {
       e1rm: isBlankValue(reps)
         ? null
-        : calculateSessionE1RM(sessionExercise, weight, reps, rir),
+        : getHistorySetE1RM(
+            sessionExercise,
+            historySet,
+            latestPerformance.workout
+          ),
       reps,
       rir,
       weight,
@@ -3855,6 +3876,10 @@ export default function SessionView({
   const [restSeconds, setRestSeconds] = useState(90);
   const restSecondsRef = useRef(90);
   const localRestTimerAdjustmentUntilRef = useRef(0);
+  const nativeRestTimerCommandQueueRef = useRef(Promise.resolve());
+  const nativeRestTimerCommandPendingRef = useRef(false);
+  const nativeRestTimerCommandSequenceRef = useRef(0);
+  const nativeRestTimerReconcileSequenceRef = useRef(0);
   const [restTimerRunDuration, setRestTimerRunDuration] = useState(90);
   const [restTimerProgressTotal, setRestTimerProgressTotal] = useState(90);
   const restTimerProgressTotalRef = useRef(90);
@@ -3884,6 +3909,32 @@ export default function SessionView({
   const [inactivityReminderOpen, setInactivityReminderOpen] = useState(false);
   const [inactivityWarningFlash, setInactivityWarningFlash] = useState(false);
   const inactivityReminderHandledKeyRef = useRef(null);
+
+  const queueNativeRestTimerCommand = useCallback((command) => {
+    const commandSequence = nativeRestTimerCommandSequenceRef.current + 1;
+    nativeRestTimerCommandSequenceRef.current = commandSequence;
+    nativeRestTimerReconcileSequenceRef.current += 1;
+    nativeRestTimerCommandPendingRef.current = true;
+
+    const queuedCommand = nativeRestTimerCommandQueueRef.current
+      .catch(() => false)
+      .then(command)
+      .catch((error) => {
+        console.warn("Native rest timer command failed:", error);
+        return false;
+      })
+      .finally(() => {
+        if (
+          nativeRestTimerCommandSequenceRef.current === commandSequence
+        ) {
+          nativeRestTimerCommandPendingRef.current = false;
+        }
+      });
+
+    nativeRestTimerCommandQueueRef.current = queuedCommand;
+    return queuedCommand;
+  }, []);
+
   useEffect(() => {
     restSecondsRef.current = restSeconds;
   }, [restSeconds]);
@@ -4199,20 +4250,34 @@ export default function SessionView({
 
   useEffect(
     () => () => {
-      void endNativeRestTimerLiveActivity();
+      void queueNativeRestTimerCommand(() => endNativeRestTimerLiveActivity());
     },
-    []
+    [queueNativeRestTimerCommand]
   );
 
   useEffect(() => {
+    let disposed = false;
+
     async function reconcileNativeRestTimer() {
-      if (document.visibilityState !== "visible") {
+      if (
+        disposed ||
+        document.visibilityState !== "visible" ||
+        nativeRestTimerCommandPendingRef.current
+      ) {
         return;
       }
 
+      const reconcileSequence =
+        nativeRestTimerReconcileSequenceRef.current + 1;
+      nativeRestTimerReconcileSequenceRef.current = reconcileSequence;
       const nativeState = await getNativeRestTimerLiveActivityState();
 
-      if (!nativeState?.active) {
+      if (
+        disposed ||
+        nativeRestTimerReconcileSequenceRef.current !== reconcileSequence ||
+        nativeRestTimerCommandPendingRef.current ||
+        !nativeState?.active
+      ) {
         return;
       }
 
@@ -4230,14 +4295,19 @@ export default function SessionView({
       if (!nativeState.paused && seconds <= 0) {
         const endsAtMs = Number(nativeState.endsAtMs) || Date.now();
         const completionKey = String(endsAtMs);
+        const overdueSeconds = Math.max(
+          0,
+          Math.floor((Date.now() - endsAtMs) / 1000)
+        );
 
-        setRestSeconds(Math.max(0, Math.floor((Date.now() - endsAtMs) / 1000)));
+        restSecondsRef.current = overdueSeconds;
+        setRestSeconds(overdueSeconds);
         setTimerExpiredAt(endsAtMs);
         setTimerFinished(true);
         setTimerPaused(false);
         setTimerRunning(false);
         setTimerStartedAt(null);
-        void endNativeRestTimerLiveActivity();
+        void queueNativeRestTimerCommand(() => endNativeRestTimerLiveActivity());
 
         if (nativeRestCompletionHandledRef.current !== completionKey) {
           nativeRestCompletionHandledRef.current = completionKey;
@@ -4247,6 +4317,7 @@ export default function SessionView({
         return;
       }
 
+      restSecondsRef.current = seconds;
       setRestSeconds(seconds);
       setRestTimerRunDuration(seconds);
       setTimerExpiredAt(null);
@@ -4265,13 +4336,32 @@ export default function SessionView({
     // open. The native Live Activity owns its own timing in the background,
     // so reconciling at lifecycle and timer-state boundaries preserves
     // recovery without crossing the native bridge every second.
+    const reconcileWhenVisible = () => {
+      void reconcileNativeRestTimer();
+    };
+    const watchdog =
+      timerRunning || timerPaused
+        ? window.setInterval(
+            reconcileWhenVisible,
+            REST_TIMER_NATIVE_WATCHDOG_INTERVAL_MS
+          )
+        : null;
+
     void reconcileNativeRestTimer();
-    document.addEventListener("visibilitychange", reconcileNativeRestTimer);
+    document.addEventListener("visibilitychange", reconcileWhenVisible);
+    window.addEventListener("focus", reconcileWhenVisible);
+    window.addEventListener("pageshow", reconcileWhenVisible);
 
     return () => {
-      document.removeEventListener("visibilitychange", reconcileNativeRestTimer);
+      disposed = true;
+      if (watchdog != null) {
+        window.clearInterval(watchdog);
+      }
+      document.removeEventListener("visibilitychange", reconcileWhenVisible);
+      window.removeEventListener("focus", reconcileWhenVisible);
+      window.removeEventListener("pageshow", reconcileWhenVisible);
     };
-  }, [timerPaused, timerRunning]);
+  }, [queueNativeRestTimerCommand, timerPaused, timerRunning]);
 
   useEffect(() => {
     if (!timerRunning && !timerPaused && !timerFinished) {
@@ -4324,7 +4414,7 @@ export default function SessionView({
         void showRestCompleteNotification();
       }
 
-      void endNativeRestTimerLiveActivity();
+      void queueNativeRestTimerCommand(() => endNativeRestTimerLiveActivity());
       setRestComplete(true);
       window.setTimeout(() => setRestComplete(false), 1200);
 
@@ -5064,13 +5154,15 @@ export default function SessionView({
     nativeRestCompletionHandledRef.current = null;
     void requestRestNotificationPermission();
     void scheduleNativeRestTimerNotification(duration);
-    void startNativeRestTimerLiveActivity(duration, {
-      exerciseName: nextExercise?.name,
-      setNumber: nextSetIndex >= 0 ? nextSetIndex + 1 : undefined,
-      totalSets: nextExercise?.sets?.length,
-      workoutName: session.templateName,
-      startedAtMs: startedAt,
-    });
+    void queueNativeRestTimerCommand(() =>
+      startNativeRestTimerLiveActivity(duration, {
+        exerciseName: nextExercise?.name,
+        setNumber: nextSetIndex >= 0 ? nextSetIndex + 1 : undefined,
+        totalSets: nextExercise?.sets?.length,
+        workoutName: session.templateName,
+        startedAtMs: startedAt,
+      })
+    );
     setTimerRunning(true);
   }
 
@@ -5084,7 +5176,7 @@ export default function SessionView({
     restNotificationSentKeyRef.current = null;
     nativeRestCompletionHandledRef.current = null;
     void cancelNativeRestTimerNotification();
-    void endNativeRestTimerLiveActivity();
+    void queueNativeRestTimerCommand(() => endNativeRestTimerLiveActivity());
     setRestTimerRunDuration(resetSeconds);
     restTimerProgressTotalRef.current = resetSeconds;
     setRestTimerProgressTotal(resetSeconds);
@@ -5139,7 +5231,9 @@ export default function SessionView({
       setTimerPaused(true);
       setTimerRunning(false);
       void cancelNativeRestTimerNotification();
-      void pauseNativeRestTimerLiveActivity(liveRestTimerSeconds);
+      void queueNativeRestTimerCommand(() =>
+        pauseNativeRestTimerLiveActivity(liveRestTimerSeconds)
+      );
       return;
     }
 
@@ -5169,11 +5263,15 @@ export default function SessionView({
     void scheduleNativeRestTimerNotification(liveActivitySeconds);
 
     if (timerPaused) {
-      void resumeNativeRestTimerLiveActivity(liveActivitySeconds);
+      void queueNativeRestTimerCommand(() =>
+        resumeNativeRestTimerLiveActivity(liveActivitySeconds)
+      );
     } else {
-      void startNativeRestTimerLiveActivity(
-        liveActivitySeconds,
-        getActiveRestTimerContext()
+      void queueNativeRestTimerCommand(() =>
+        startNativeRestTimerLiveActivity(
+          liveActivitySeconds,
+          getActiveRestTimerContext()
+        )
       );
     }
 
@@ -5200,9 +5298,11 @@ export default function SessionView({
         setTimerStartedAt(Date.now());
         restNotificationSentKeyRef.current = null;
         void scheduleNativeRestTimerNotification(adjustedSeconds);
-        void startNativeRestTimerLiveActivity(
-          adjustedSeconds,
-          getActiveRestTimerContext()
+        void queueNativeRestTimerCommand(() =>
+          startNativeRestTimerLiveActivity(
+            adjustedSeconds,
+            getActiveRestTimerContext()
+          )
         );
         setTimerRunning(true);
       } else {
@@ -5237,17 +5337,21 @@ export default function SessionView({
         setTimerExpiredAt(Date.now());
         setTimerFinished(true);
         void cancelNativeRestTimerNotification();
-        void endNativeRestTimerLiveActivity();
+        void queueNativeRestTimerCommand(() => endNativeRestTimerLiveActivity());
         return;
       }
 
       if (timerPaused) {
         setTimerStartedAt(null);
-        void pauseNativeRestTimerLiveActivity(adjustedSeconds);
+        void queueNativeRestTimerCommand(() =>
+          pauseNativeRestTimerLiveActivity(adjustedSeconds)
+        );
       } else {
         setTimerStartedAt(Date.now());
         void scheduleNativeRestTimerNotification(adjustedSeconds);
-        void resumeNativeRestTimerLiveActivity(adjustedSeconds);
+        void queueNativeRestTimerCommand(() =>
+          resumeNativeRestTimerLiveActivity(adjustedSeconds)
+        );
       }
       return;
     }
