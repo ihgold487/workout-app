@@ -109,6 +109,7 @@ import { buildStandaloneTemplateFromHistory } from "./utils/historyWorkoutReuse"
 import {
   downloadExerciseLibraryWithPreferences,
   getCustomExercises,
+  migrateSharedBuiltInDescriptionsToPersonalNotes,
   uploadExercisePreferences,
   uploadCustomExercises,
 } from "./sync/exerciseCloudSync";
@@ -6852,6 +6853,16 @@ export default function App() {
 
   async function downloadNormalizedWorkoutData(data, session, dirtyDomains = []) {
     const dirtyDomainSet = new Set(dirtyDomains);
+
+    if (session.user.email === APP_OWNER_EMAIL) {
+      try {
+        await migrateSharedBuiltInDescriptionsToPersonalNotes(session);
+      } catch (error) {
+        // The migration is safe to retry after its database function is deployed.
+        console.warn("Unable to migrate shared exercise descriptions:", error);
+      }
+    }
+
     const exercisePreferences = await downloadExerciseLibraryWithPreferences(
       data.exerciseLibrary,
       data.exerciseMetadata,
@@ -14154,7 +14165,6 @@ export default function App() {
         }}
         session={authSession}
         exerciseMetadata={exerciseMetadata}
-        setExerciseMetadata={setExerciseMetadata}
         history={history}
         onEditCommitted={persistCommittedWorkoutTemplate}
         onAutoStartHandled={() => setAutoStartTemplateId(null)}

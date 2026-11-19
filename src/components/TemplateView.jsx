@@ -305,7 +305,6 @@ export default function TemplateView({
   session = null,
   canEditBuiltInExercises = false,
   exerciseMetadata,
-  setExerciseMetadata,
   history,
   plans = [],
   setPlans,
@@ -1580,10 +1579,7 @@ export default function TemplateView({
           ...exercise,
 
           sessionNote:
-            exerciseMetadata?.[exercise.exerciseId || exercise.id]?.note ||
-            libraryExercise?.description ||
-            libraryExercise?.note ||
-            "",
+            exerciseMetadata?.[exercise.exerciseId || exercise.id]?.note || "",
 
           sets: applyInitialDropSetWeights(
             getExerciseSetsForPlanWeek(
@@ -2509,13 +2505,6 @@ export default function TemplateView({
                           exercise={exercise}
                           exerciseDetail={exerciseDetail}
                           layout="templateCompact"
-                          note={
-                            exerciseMetadata?.[
-                              templateExercise.exerciseId || templateExercise.id
-                            ]?.note ||
-                            exerciseDetail?.description ||
-                            exerciseDetail?.note
-                          }
                           onExerciseClick={() => setDetailExercise(exerciseDetail)}
                           onSetClick={
                             isEditMode

@@ -448,7 +448,9 @@ function applyCloudExerciseMetadata(localExercise, cloudExercise) {
       cloudExercise.bodyweight_load_percent ??
       localExercise.bodyweightLoadPercent ??
       null,
-    description: cloudExercise.description || localExercise.description || "",
+    description:
+      cloudExercise.description ||
+      (cloudExercise.is_builtin ? "" : localExercise.description || ""),
     exerciseId: cloudExercise.id,
     imageAlt: cloudExercise.image_alt || localExercise.imageAlt || "",
     imageStoragePath:
@@ -466,6 +468,7 @@ function applyCloudExerciseMetadata(localExercise, cloudExercise) {
       cloudExercise.primary_muscle,
       ...(cloudExercise.secondary_muscles || []),
     ].filter(Boolean),
+    note: cloudExercise.is_builtin ? "" : localExercise.note || "",
     source: cloudExercise.source || localExercise.source,
     sourceKey: cloudExercise.source_key || localExercise.sourceKey,
   });
@@ -540,6 +543,26 @@ export async function uploadExercisePreferences(
     unmatched,
     uploaded: records.length,
   };
+}
+
+export async function migrateSharedBuiltInDescriptionsToPersonalNotes(session) {
+  const blockedResult = skipBlockedRemoteWrite(
+    "shared exercise-description migration",
+    { migrated: 0 }
+  );
+  if (blockedResult) return blockedResult.migrated;
+
+  assertCloudReady(session);
+
+  const { data, error } = await supabase.rpc(
+    "migrate_shared_builtin_descriptions_to_personal_notes"
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  return Number(data) || 0;
 }
 
 export async function downloadExerciseLibraryWithPreferences(

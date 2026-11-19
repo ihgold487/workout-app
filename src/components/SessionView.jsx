@@ -488,7 +488,7 @@ function getExerciseKey(exercise) {
 function getDefaultPlateLoadingEquipmentId(exercise) {
   const name = normalizeLookupValue(exercise?.name);
 
-  if (name.includes("belt squat")) {
+  if (name.includes("belt squat") || name.includes("squats belt")) {
     return "landmine";
   }
 
@@ -3824,20 +3824,6 @@ export default function SessionView({
         },
       }));
 
-      setExerciseLibrary((currentLibrary) =>
-        currentLibrary.map((libraryExercise) => {
-          const libraryExerciseId =
-            libraryExercise.exerciseId ?? libraryExercise.id;
-
-          return String(libraryExerciseId) === exerciseMetadataId
-            ? {
-                ...libraryExercise,
-                description: note,
-                note,
-              }
-            : libraryExercise;
-        })
-      );
     }
 
     setExpandedNotes((notes) => ({

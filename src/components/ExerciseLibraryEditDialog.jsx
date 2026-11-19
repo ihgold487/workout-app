@@ -50,7 +50,7 @@ function exerciseFromDraft(draft, exercise) {
     equipment: draft.equipment ? [draft.equipment] : [],
     muscles: [draft.primaryMuscle, ...draft.secondaryMuscles].filter(Boolean),
     name: draft.name.trim(),
-    note: description,
+    note: exercise.builtin ? "" : description,
   };
 }
 
@@ -196,12 +196,26 @@ export default function ExerciseLibraryEditDialog({
               ))}
             </select>
           </label>
-          <textarea
-            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-            placeholder="Description or notes"
-            rows={2}
-            value={draft.description}
-          />
+          <label style={{ display: "grid", gap: "4px" }}>
+            <strong style={{ fontSize: "12px" }}>
+              {exercise.builtin ? "Shared description" : "Description"}
+            </strong>
+            <textarea
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              placeholder={
+                exercise.builtin
+                  ? "Visible in Exercise Info to everyone"
+                  : "Description"
+              }
+              rows={2}
+              value={draft.description}
+            />
+            {exercise.builtin && (
+              <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                Use Exercise notes during a workout for a private personal note.
+              </span>
+            )}
+          </label>
           <label style={{ display: "grid", gap: "4px" }}>
             <strong style={{ fontSize: "12px" }}>Primary muscle</strong>
             <select

@@ -157,7 +157,7 @@ function exerciseFromDraft(draft, existing = {}) {
     imageUrl: draft.imageUrl.trim(),
     muscles,
     name: draft.name.trim(),
-    note: draft.description.trim(),
+    note: existing.builtin ? "" : draft.description.trim(),
   };
 }
 
@@ -618,7 +618,6 @@ export default function ExerciseView({
               : exercise
           )
         );
-        saveExerciseNoteToMetadata(savedExercise);
         setDetailExercise((currentExercise) =>
           currentExercise?.id === editingExercise.id
             ? savedExercise
@@ -1206,23 +1205,37 @@ export default function ExerciseView({
       </select>
     );
     const descriptionInput = (
-      <textarea
-        value={formDraft.description}
-        onChange={(event) =>
-          setFormDraft({
-            ...formDraft,
-            description: event.target.value,
-          })
-        }
-        placeholder="Description or notes"
-        rows={2}
-        style={{
-          boxSizing: "border-box",
-          minHeight: isImageLayout ? "72px" : undefined,
-          resize: "vertical",
-          width: "100%",
-        }}
-      />
+      <label style={{ display: "grid", gap: "4px" }}>
+        <strong style={{ fontSize: "12px" }}>
+          {editingExercise?.builtin ? "Shared description" : "Description"}
+        </strong>
+        <textarea
+          value={formDraft.description}
+          onChange={(event) =>
+            setFormDraft({
+              ...formDraft,
+              description: event.target.value,
+            })
+          }
+          placeholder={
+            editingExercise?.builtin
+              ? "Visible in Exercise Info to everyone"
+              : "Description"
+          }
+          rows={2}
+          style={{
+            boxSizing: "border-box",
+            minHeight: isImageLayout ? "72px" : undefined,
+            resize: "vertical",
+            width: "100%",
+          }}
+        />
+        {editingExercise?.builtin && (
+          <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+            Use Exercise notes during a workout for a private personal note.
+          </span>
+        )}
+      </label>
     );
     const imageButton = draftImagePicker ? (
       <button
