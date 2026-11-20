@@ -562,6 +562,41 @@ function WorkoutDurationDisplay({ session }) {
   return <>{formatWorkoutDuration(getWorkoutDurationSeconds(session, now))}</>;
 }
 
+function getWorkoutPauseDurationSeconds(session, now = Date.now()) {
+  const pausedAt =
+    session?.workoutTimerPausedAtIso ||
+    session?.workoutPauseReminderStartedAtIso;
+  const pausedAtMs = pausedAt ? new Date(pausedAt).getTime() : NaN;
+
+  if (!Number.isFinite(pausedAtMs)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((now - pausedAtMs) / 1000));
+}
+
+function WorkoutPauseDurationDisplay({ session }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setNow(Date.now());
+
+    if (!session.workoutTimerPaused) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    session.workoutPauseReminderStartedAtIso,
+    session.workoutTimerPaused,
+    session.workoutTimerPausedAtIso,
+  ]);
+
+  return <>{formatWorkoutDuration(getWorkoutPauseDurationSeconds(session, now))}</>;
+}
+
 function getRestTimerDisplayedSeconds({
   now = Date.now(),
   restSeconds,
@@ -8584,7 +8619,9 @@ export default function SessionView({
                   ? "var(--surface-raised)"
                   : "var(--text-h)",
                 display: "inline-flex",
-                fontSize: "20px",
+                fontSize: session.workoutTimerPaused
+                  ? "clamp(15px, 4.6vw, 18px)"
+                  : "20px",
                 fontWeight: session.workoutTimerPaused ? 900 : "bold",
                 gap: "6px",
                 justifyContent: "center",
@@ -8605,15 +8642,28 @@ export default function SessionView({
               {session.workoutTimerPaused && (
                 <Pause aria-hidden="true" size={16} />
               )}
+              {session.workoutTimerPaused && (
+                <span
+                  aria-label="Paused for"
+                  style={{
+                    flex: "0 0 auto",
+                    fontSize: "0.83em",
+                    fontVariantNumeric: "tabular-nums",
+                    letterSpacing: 0,
+                  }}
+                >
+                  <WorkoutPauseDurationDisplay session={session} />
+                </span>
+              )}
               <span
                 style={{
                   display: "block",
+                  flex: "1 1 0",
                   maxWidth: "100%",
                   minWidth: 0,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
-                  width: "100%",
                 }}
               >
                 {session.templateName}
