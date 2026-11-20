@@ -1116,18 +1116,6 @@ export function recommendNextSetTargetAfterPerformance({
     };
   }
 
-  // A set completed at the top of a multi-rep range should leave room for
-  // normal within-workout fatigue. Hold the load and move down one rep before
-  // considering a heavier, bottom-of-range target for the following set.
-  if (!rangeMissed && !effortExceeded && reps >= prescribed && minimum < prescribed) {
-    return {
-      reason: "top-of-range-fatigue-reserve",
-      reps: Math.max(minimum, prescribed - 1),
-      rir: prescribedRir,
-      weight,
-    };
-  }
-
   if (!rangeMissed && !effortExceeded) {
     return null;
   }

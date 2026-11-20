@@ -414,24 +414,20 @@ test("an achieved lower rep in range carries forward at the same weight", () => 
   });
 });
 
-test("top-of-range performance leaves one rep of fatigue reserve at the same weight", () => {
+test("top-of-range performance does not assume fatigue when history is flat", () => {
   const target = recommendNextSetTargetAfterPerformance({
-    actualReps: 15,
-    actualRir: 3,
-    actualWeight: 80,
+    actualReps: 10,
+    actualRir: 2,
+    actualWeight: 255,
     exercise: {},
-    minimumReps: 12,
-    prescribedReps: 15,
-    targetRir: 3,
+    historicalFatigueRatio: 1,
+    minimumReps: 8,
+    prescribedReps: 10,
+    targetRir: 2,
     weightIncrement: 5,
   });
 
-  assert.deepEqual(target, {
-    reason: "top-of-range-fatigue-reserve",
-    reps: 14,
-    rir: 3,
-    weight: 80,
-  });
+  assert.equal(target, null);
 });
 
 test("a projected rep drop below the range defers to bounded progression", () => {

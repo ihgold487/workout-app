@@ -1531,6 +1531,7 @@ export default function SessionView({
     maxRepDeviation = 0,
     minRepDeviation = 0,
     minimumReps = null,
+    prioritizeSameWeightOneFewerRep = false,
     preferredSameWeightReps = null,
     progressionBaselineE1RM = null,
     progressionFloorE1RM = null,
@@ -1615,6 +1616,7 @@ export default function SessionView({
           numericCurrentWeight != null &&
           Math.abs(normalizedWeight - numericCurrentWeight) < 0.001,
         isSameWeightOneFewerRep:
+          prioritizeSameWeightOneFewerRep &&
           numericCurrentWeight != null &&
           numericPreferredSameWeightReps != null &&
           Math.abs(normalizedWeight - numericCurrentWeight) < 0.001 &&
@@ -2446,6 +2448,10 @@ export default function SessionView({
           : todayBestE1RM * fatigueRatio;
     const hasClearPriorFatigueDrop =
       (adjacentFatigueRatio ?? fatigueRatio) < CLEAR_FATIGUE_DROP_RATIO;
+    const hasExceededTargetEffort =
+      parseSessionNumber(actualRir) != null &&
+      parseSessionNumber(targetRir) != null &&
+      parseSessionNumber(actualRir) < parseSessionNumber(targetRir);
     const automaticCeilingE1RM = hasClearPriorFatigueDrop
       ? actualE1RM
       : actualExceedsProgressionCeiling
@@ -2483,6 +2489,8 @@ export default function SessionView({
       maxRepDeviation: targetAttributes.maxRepDeviation,
       minRepDeviation: targetAttributes.minRepDeviation,
       minimumReps,
+      prioritizeSameWeightOneFewerRep:
+        hasClearPriorFatigueDrop || hasExceededTargetEffort,
       preferredSameWeightReps:
         actualReps == null ? null : actualReps - 1,
       progressionBaselineE1RM,
@@ -5515,6 +5523,13 @@ export default function SessionView({
         : null;
     const historicalFatigueRatio =
       getLatestAdjacentFatigueRatio(exercise, nextSetIndex);
+    const hasHistoricalFatigueEvidence =
+      historicalFatigueRatio != null &&
+      historicalFatigueRatio < CLEAR_FATIGUE_DROP_RATIO;
+    const hasExceededTargetEffort =
+      actualRirNumber != null &&
+      targetRirNumber != null &&
+      actualRirNumber < targetRirNumber;
     const performanceAdjustment = recommendNextSetTargetAfterPerformance({
       actualReps,
       actualRir: actualRirNumber,
@@ -5653,6 +5668,8 @@ export default function SessionView({
         maxRepDeviation: targetAttributes.maxRepDeviation,
         minRepDeviation: targetAttributes.minRepDeviation,
         minimumReps: explicitMinimumReps,
+        prioritizeSameWeightOneFewerRep:
+          hasHistoricalFatigueEvidence || hasExceededTargetEffort || liveRepDrop > 0,
         preferredSameWeightReps:
           actualReps == null ? null : actualReps - 1,
         progressionBaselineE1RM,
