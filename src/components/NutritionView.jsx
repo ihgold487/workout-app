@@ -4182,6 +4182,7 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
+  const [weightPickerRequest, setWeightPickerRequest] = useState(null);
 
   useEffect(() => {
     if (openBodyWeightRequest) {
@@ -7427,20 +7428,33 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
           entries={bodyWeightEntries}
           onClose={() => {
             setWeightSheetOpen(false);
+            setWeightPickerRequest(null);
           }}
           onDelete={removeBodyWeight}
+          onRequestWeightPicker={setWeightPickerRequest}
           onSave={saveBodyWeight}
         />
       )}
 
       <WeightPickerModal
         increment={0.1}
-        isOpen={weightPickerOpen}
-        onClose={() => setWeightPickerOpen(false)}
-        onSelect={(value) => saveBodyWeight(selectedDate, value)}
+        isOpen={weightPickerOpen || Boolean(weightPickerRequest)}
+        onClose={() => {
+          setWeightPickerOpen(false);
+          setWeightPickerRequest(null);
+        }}
+        onSelect={(value) => {
+          if (weightPickerRequest) {
+            weightPickerRequest.onSelect(value);
+            setWeightPickerRequest(null);
+            return;
+          }
+
+          saveBodyWeight(selectedDate, value);
+        }}
         range={50}
         title="Select body weight"
-        value={latestBodyWeight?.weight || ""}
+        value={weightPickerRequest?.value ?? latestBodyWeight?.weight ?? ""}
         zIndex={2350}
       />
 

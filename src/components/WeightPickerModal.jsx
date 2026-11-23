@@ -54,29 +54,6 @@ function WeightPickerModalContent({
   }
 
   useEffect(() => {
-    const scrollY = window.scrollY || window.pageYOffset || 0;
-    const previousBodyStyles = {
-      overflow: document.body.style.overflow,
-      position: document.body.style.position,
-      top: document.body.style.top,
-      width: document.body.style.width,
-    };
-
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      document.body.style.overflow = previousBodyStyles.overflow;
-      document.body.style.position = previousBodyStyles.position;
-      document.body.style.top = previousBodyStyles.top;
-      document.body.style.width = previousBodyStyles.width;
-      window.scrollTo(0, scrollY);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!scrollRef.current) {
       return;
     }
@@ -102,7 +79,9 @@ function WeightPickerModalContent({
 
   return (
     <div
-      onClick={onClose}
+      aria-label={title || "Select Value"}
+      aria-modal="true"
+      role="dialog"
       style={{
         position: "fixed",
         inset: 0,
@@ -117,8 +96,19 @@ function WeightPickerModalContent({
         zIndex,
       }}
     >
+      <button
+        aria-label="Close picker"
+        onClick={onClose}
+        style={{
+          background: "transparent",
+          border: 0,
+          inset: 0,
+          padding: 0,
+          position: "absolute",
+        }}
+        type="button"
+      />
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
           background: "var(--surface-raised)",
           color: "var(--text)",
@@ -134,6 +124,7 @@ function WeightPickerModalContent({
             "min(560px, calc(100dvh - 24px - env(safe-area-inset-bottom)))",
           minWidth: "220px",
           overflow: "hidden",
+          position: "relative",
           width: "min(100%, 300px)",
         }}
       >
@@ -188,7 +179,7 @@ function WeightPickerModalContent({
               inputMode="decimal"
               min="0"
               value={manualValue}
-              onChange={(e) => setManualValue(e.target.value)}
+              onChange={(event) => setManualValue(event.target.value)}
               style={{
                 width: "90px",
                 textAlign: "center",
@@ -310,7 +301,6 @@ export default function WeightPickerModal({
 
   const modal = (
     <WeightPickerModalContent
-      key={`${title || "value"}-${current}`}
       current={current}
       onClose={onClose}
       onSelect={onSelect}

@@ -3,7 +3,6 @@ import {
   CalendarDays,
   Check,
   Pencil,
-  Plus,
   Scale,
   Trash2,
   TrendingUp,
@@ -532,9 +531,9 @@ export default function BodyWeightSheet({
   entries,
   onClose,
   onDelete,
+  onRequestWeightPicker,
   onSave,
 }) {
-  const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [draftDate, setDraftDate] = useState(getTodayKey);
   const [editingDate, setEditingDate] = useState(null);
@@ -572,21 +571,21 @@ export default function BodyWeightSheet({
     setDraft("");
     setDraftDate(getTodayKey());
     setEditingDate(null);
-    setAdding(false);
   }
 
-  function startAdding() {
-    setDraft("");
-    setDraftDate(getTodayKey());
-    setEditingDate(null);
-    setAdding(true);
+  function requestWeightPicker(
+    value = parsedDraft || sortedEntries[0]?.weight || ""
+  ) {
+    onRequestWeightPicker({
+      onSelect: (nextValue) => setDraft(String(nextValue)),
+      value,
+    });
   }
 
   function startEditing(entry) {
     setDraft(String(entry.weight));
     setDraftDate(entry.date);
     setEditingDate(entry.date);
-    setAdding(true);
   }
 
   return (
@@ -704,100 +703,87 @@ export default function BodyWeightSheet({
 
         <WeightChart entries={entries} rangeDays={rangeDays} trendDays={trendDays} />
 
-        <button
-          onClick={startAdding}
+        <div
           style={{
-            alignItems: "center",
-            display: "inline-flex",
-            gap: "6px",
-            justifyContent: "center",
-            minHeight: "42px",
+            alignItems: "end",
+            display: "grid",
+            gap: "8px",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
           }}
-          type="button"
         >
-          <Plus size={17} />
-          Add entry
-        </button>
-
-        {adding && (
-          <div
+          <label
             style={{
-              alignItems: "end",
               display: "grid",
-              gap: "8px",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
+              gap: "5px",
+              minWidth: 0,
             }}
           >
-            <label
+            Date
+            <span
               style={{
-                display: "grid",
-                gap: "5px",
-                minWidth: 0,
+                alignItems: "center",
+                display: "flex",
+                gap: "6px",
               }}
             >
-              Date
-              <span
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  gap: "6px",
-                }}
-              >
-                <CalendarDays aria-hidden="true" size={17} />
-                <input
-                  aria-label="Entry date"
-                  max={getTodayKey()}
-                  onChange={(event) => setDraftDate(event.target.value)}
-                  style={{
-                    boxSizing: "border-box",
-                    font: "inherit",
-                    minHeight: "42px",
-                    minWidth: 0,
-                    padding: "7px 6px",
-                    width: "100%",
-                  }}
-                  type="date"
-                  value={draftDate}
-                />
-              </span>
-            </label>
-            <label
-              style={{
-                display: "grid",
-                gap: "5px",
-                minWidth: 0,
-              }}
-            >
-              Weight (lb)
+              <CalendarDays aria-hidden="true" size={17} />
               <input
-                aria-label="Body weight"
-                inputMode="decimal"
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Weight"
+                aria-label="Entry date"
+                max={getTodayKey()}
+                onChange={(event) => setDraftDate(event.target.value)}
                 style={{
                   boxSizing: "border-box",
                   font: "inherit",
                   minHeight: "42px",
                   minWidth: 0,
-                  padding: "7px 10px",
+                  padding: "7px 6px",
                   width: "100%",
                 }}
-                value={draft}
+                type="date"
+                value={draftDate}
               />
-            </label>
+            </span>
+          </label>
+          <label
+            style={{
+              display: "grid",
+              gap: "5px",
+              minWidth: 0,
+            }}
+          >
+            Weight (lb)
             <button
-              disabled={!parsedDraft}
-              onClick={saveEntry}
+              aria-label="Select body weight"
+              onClick={() => requestWeightPicker()}
               style={{
+                alignItems: "center",
+                boxSizing: "border-box",
+                display: "flex",
+                font: "inherit",
+                justifyContent: "space-between",
                 minHeight: "42px",
-                padding: "7px 12px",
+                minWidth: 0,
+                padding: "7px 10px",
+                width: "100%",
               }}
               type="button"
             >
-              {editingDate ? "Update" : "Save"}
+              <span>{parsedDraft ? `${parsedDraft} lb` : "Select weight"}</span>
+              <Scale aria-hidden="true" size={17} />
             </button>
-          </div>
-        )}
+          </label>
+          <button
+            disabled={!parsedDraft}
+            onClick={saveEntry}
+            style={{
+              minHeight: "42px",
+              padding: "7px 12px",
+            }}
+            type="button"
+          >
+            {editingDate ? "Update" : "Save"}
+          </button>
+        </div>
 
         <div
           style={{
