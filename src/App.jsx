@@ -1,10 +1,15 @@
 /* global __BUILD_TIME__, __IS_NATIVE_BUILD__ */
-import { useState, useEffect, useRef, useDeferredValue } from "react";
+import { useState, useEffect, useRef, useDeferredValue, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { writeTextToClipboard } from "./native/clipboard";
+import {
+  addHomeScreenWidgetActionListener,
+  consumeHomeScreenWidgetAction,
+  publishHomeScreenWidget,
+} from "./native/homeScreenWidget";
 import {
   getNativeProvisioningExpiration,
   scheduleNativeProvisioningExpiryReminders,
@@ -5274,6 +5279,7 @@ export default function App() {
   const [planEditorOpen, setPlanEditorOpen] = useState(false);
 
   const [showNutrition, setShowNutrition] = useState(false);
+  const [widgetBodyWeightRequest, setWidgetBodyWeightRequest] = useState(0);
 
   const [showSettings, setShowSettings] = useState(false);
   const [targetAttributesSettingsExpanded, setTargetAttributesSettingsExpanded] =
@@ -8424,6 +8430,118 @@ export default function App() {
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
   const localBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return;
+    }
+
+    const activePlan = plans.find((plan) => plan.status === "active");
+    const weekStatus = activePlan
+      ? getPlanWeekStatus(activePlan, activePlan.currentWeek || 1, history)
+      : null;
+    const nextPlanWorkout = activePlan
+      ? (activePlan.workouts || []).find(
+          (workout) =>
+            !isPlanWorkoutComplete(
+              activePlan,
+              workout.planWorkoutId,
+              weekStatus.currentWeek,
+              history
+            ) &&
+            templates.some(
+              (template) => String(template.id) === String(workout.templateId)
+            )
+        ) || null
+      : null;
+    const template = nextPlanWorkout
+      ? templates.find(
+          (item) => String(item.id) === String(nextPlanWorkout.templateId)
+        )
+      : null;
+
+    void publishHomeScreenWidget(
+      JSON.stringify({
+        exerciseCount: template?.exercises?.length || 0,
+        planWeek: weekStatus?.currentWeek || null,
+        workoutName: template?.name || null,
+      })
+    );
+  }, [history, indexedDbReady, plans, templates]);
+
+  const openWidgetDestination = useCallback(
+    (value) => {
+      const action = value ? new URL(value).searchParams.get("action") : null;
+
+      if (!action) {
+        return;
+      }
+
+      if (action === "weight") {
+        setShowNutrition(true);
+        setWidgetBodyWeightRequest(Date.now());
+        return;
+      }
+
+      const activePlan = plans.find((plan) => plan.status === "active");
+      const weekStatus = activePlan
+        ? getPlanWeekStatus(activePlan, activePlan.currentWeek || 1, history)
+        : null;
+      const workout = activePlan
+        ? (activePlan.workouts || []).find(
+            (item) =>
+              !isPlanWorkoutComplete(
+                activePlan,
+                item.planWorkoutId,
+                weekStatus.currentWeek,
+                history
+              ) &&
+              templates.some(
+                (template) => String(template.id) === String(item.templateId)
+              )
+          )
+        : null;
+
+      if (!workout || !weekStatus) {
+        return;
+      }
+
+      setSelectedTemplatePlanWeek(weekStatus.currentWeek);
+      setAutoStartTemplateId(action === "start" ? workout.templateId : null);
+      setSelectedTemplateId(workout.templateId);
+    },
+    [history, plans, templates]
+  );
+
+  useEffect(() => {
+    if (!indexedDbReady) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let listener;
+
+    void consumeHomeScreenWidgetAction().then((value) => {
+      if (!cancelled) {
+        openWidgetDestination(value);
+      }
+    });
+
+    void addHomeScreenWidgetActionListener(({ action }) => {
+      openWidgetDestination(action);
+    }).then((handle) => {
+      if (cancelled) {
+        void handle.remove();
+      } else {
+        listener = handle;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      void listener?.remove();
+    };
+  }, [indexedDbReady, openWidgetDestination]);
   const editingPlan = plans.find(
     (plan) => String(plan.id) === String(editingPlanId)
   );
@@ -13983,7 +14101,13 @@ export default function App() {
   }
 
   if (showNutrition) {
-    return renderAppShell(<NutritionView session={authSession} />, "nutrition");
+    return renderAppShell(
+      <NutritionView
+        openBodyWeightRequest={widgetBodyWeightRequest}
+        session={authSession}
+      />,
+      "nutrition"
+    );
   }
 
   if (selectedHistoryList) {

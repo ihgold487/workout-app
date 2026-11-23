@@ -10,6 +10,14 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
+			<string>com.ihgold487.workoutapp.widget</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>workout</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
 			<string>com.ihgold487.workoutapp.spotify</string>
 			<key>CFBundleURLSchemes</key>
 			<array>

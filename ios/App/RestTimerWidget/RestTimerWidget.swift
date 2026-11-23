@@ -7,6 +7,126 @@ import WidgetKit
 struct RestTimerWidgetBundle: WidgetBundle {
     var body: some Widget {
         RestTimerLiveActivity()
+        NextWorkoutWidget()
+    }
+}
+
+private struct NextWorkoutSnapshot: Decodable {
+    let exerciseCount: Int
+    let planWeek: Int?
+    let workoutName: String?
+}
+
+private struct NextWorkoutEntry: TimelineEntry {
+    let date: Date
+    let snapshot: NextWorkoutSnapshot?
+}
+
+private struct NextWorkoutProvider: TimelineProvider {
+    func placeholder(in context: Context) -> NextWorkoutEntry {
+        NextWorkoutEntry(date: .now, snapshot: NextWorkoutSnapshot(exerciseCount: 5, planWeek: 2, workoutName: "Upper Body"))
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (NextWorkoutEntry) -> Void) {
+        completion(entry())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<NextWorkoutEntry>) -> Void) {
+        completion(Timeline(entries: [entry()], policy: .never))
+    }
+
+    private func entry() -> NextWorkoutEntry {
+        let stored = UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
+            .string(forKey: "homeWidgetSnapshot")
+        let snapshot = stored.flatMap { try? JSONDecoder().decode(NextWorkoutSnapshot.self, from: Data($0.utf8)) }
+        return NextWorkoutEntry(date: .now, snapshot: snapshot)
+    }
+}
+
+private struct NextWorkoutWidget: Widget {
+    let kind = "NextWorkoutWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: NextWorkoutProvider()) { entry in
+            NextWorkoutWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Next Workout")
+        .description("Preview or start your next workout, or log body weight.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+private struct NextWorkoutWidgetView: View {
+    let entry: NextWorkoutEntry
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            content
+                .containerBackground(.fill.tertiary, for: .widget)
+        } else {
+            content
+                .background(Color.black.opacity(0.04))
+        }
+    }
+
+    private var content: some View {
+        let snapshot = entry.snapshot
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                NextWorkoutBrandMark(size: 40)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NEXT UP")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text(snapshot?.workoutName ?? "Open Workout to see your next session")
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(snapshot.map { "\($0.exerciseCount) exercises\($0.planWeek.map { " · Week \($0)" } ?? "")" } ?? "Your plan stays private on this device")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 7) {
+                WidgetActionLink(title: "Preview", systemImage: "eye", action: "preview")
+                WidgetActionLink(title: "Start", systemImage: "play.fill", action: "start", emphasized: true)
+                WidgetActionLink(title: "Weight", systemImage: "scalemass.fill", action: "weight")
+            }
+        }
+        .padding()
+    }
+}
+
+private struct NextWorkoutBrandMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image("WorkoutAppIcon")
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct WidgetActionLink: View {
+    let title: String
+    let systemImage: String
+    let action: String
+    var emphasized = false
+
+    var body: some View {
+        Link(destination: URL(string: "workout://widget?action=\(action)")!) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(emphasized ? Color.workoutPurple : Color.primary.opacity(0.08), in: Capsule())
+                .foregroundStyle(emphasized ? .white : .primary)
+        }
     }
 }
 

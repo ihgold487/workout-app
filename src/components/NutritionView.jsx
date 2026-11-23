@@ -4087,7 +4087,7 @@ function includesCreatine(value) {
   return /\bcreatine\b/i.test(String(value || ""));
 }
 
-export default function NutritionView({ session = null }) {
+export default function NutritionView({ openBodyWeightRequest = 0, session = null }) {
   const signedInUserId = session?.user?.id || null;
   const nutritionStorageKey = useMemo(
     () => getNutritionLogStorageKey(signedInUserId),
@@ -4182,6 +4182,12 @@ export default function NutritionView({ session = null }) {
   const [weightSyncStatus, setWeightSyncStatus] = useState("");
   const [weightSheetOpen, setWeightSheetOpen] = useState(false);
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (openBodyWeightRequest) {
+      setWeightSheetOpen(true);
+    }
+  }, [openBodyWeightRequest]);
   const [foodSearchQuery, setFoodSearchQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState("fatsecret");
   const [foodAutocompleteSuggestions, setFoodAutocompleteSuggestions] = useState([]);

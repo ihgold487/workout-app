@@ -7,6 +7,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        if let url = launchOptions?[.url] as? URL,
+           url.scheme == "workout",
+           url.host == "widget" {
+            saveHomeWidgetAction(url)
+        }
+
         // Override point for customization after application launch.
         return true
     }
@@ -34,6 +40,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if url.scheme == "workout" && url.host == "widget" {
+            saveHomeWidgetAction(url)
+            return true
+        }
+
         if SpotifyPlaybackPlugin.handleAuthorizationCallback(url) {
             return true
         }
@@ -48,6 +59,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    private func saveHomeWidgetAction(_ url: URL) {
+        let action = url.absoluteString
+        if #available(iOS 16.2, *),
+           RestTimerLiveActivityPlugin.handleHomeWidgetAction(action) {
+            return
+        }
+
+        UserDefaults.standard.set(action, forKey: "pendingHomeWidgetAction")
     }
 
 }

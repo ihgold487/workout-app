@@ -1,6 +1,7 @@
 import ActivityKit
 import Capacitor
 import Foundation
+import WidgetKit
 
 @available(iOS 16.2, *)
 @objc(RestTimerLiveActivityPlugin)
@@ -12,8 +13,26 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resume", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "end", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "publishHomeWidget", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "consumeHomeWidgetAction", returnType: CAPPluginReturnPromise)
     ]
+    private static weak var activeInstance: RestTimerLiveActivityPlugin?
+
+    override public func load() {
+        Self.activeInstance = self
+    }
+
+    @discardableResult
+    public static func handleHomeWidgetAction(_ action: String) -> Bool {
+        guard let activeInstance,
+              activeInstance.hasListeners("homeWidgetAction") else {
+            return false
+        }
+
+        activeInstance.notifyListeners("homeWidgetAction", data: ["action": action])
+        return true
+    }
 
     @objc func start(_ call: CAPPluginCall) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
@@ -124,6 +143,25 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             "seconds": seconds,
             "endsAtMs": state.endsAt.timeIntervalSince1970 * 1000.0
         ])
+    }
+
+    @objc func publishHomeWidget(_ call: CAPPluginCall) {
+        guard let snapshot = call.getString("snapshot") else {
+            call.reject("A home-widget snapshot is required")
+            return
+        }
+
+        UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
+            .set(snapshot, forKey: "homeWidgetSnapshot")
+        WidgetCenter.shared.reloadTimelines(ofKind: "NextWorkoutWidget")
+        call.resolve()
+    }
+
+    @objc func consumeHomeWidgetAction(_ call: CAPPluginCall) {
+        let key = "pendingHomeWidgetAction"
+        let action = UserDefaults.standard.string(forKey: key)
+        UserDefaults.standard.removeObject(forKey: key)
+        call.resolve(["action": action ?? NSNull()])
     }
 
     private func updateAllActivities(
