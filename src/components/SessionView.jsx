@@ -1520,6 +1520,29 @@ export default function SessionView({
     return Math.min(1, Math.max(0, matchingSetE1RM / previousSetE1RM));
   }
 
+  function hasFlatHistoricalSetTransition(exercise, setIndex) {
+    const latestSets =
+      getLatestMatchingHistoryPerformance(exercise)?.exercise?.sets || [];
+    const previousSet = latestSets[setIndex - 1];
+    const matchingSet = latestSets[setIndex];
+    const previousWeight = parseSessionNumber(previousSet?.actualWeight);
+    const matchingWeight = parseSessionNumber(matchingSet?.actualWeight);
+    const previousReps = parseSessionNumber(previousSet?.actualReps);
+    const matchingReps = parseSessionNumber(matchingSet?.actualReps);
+    const fatigueRatio = getLatestAdjacentFatigueRatio(exercise, setIndex);
+
+    return (
+      previousWeight != null &&
+      matchingWeight != null &&
+      previousReps != null &&
+      matchingReps != null &&
+      Math.abs(previousWeight - matchingWeight) < 0.001 &&
+      previousReps === matchingReps &&
+      fatigueRatio != null &&
+      fatigueRatio >= CLEAR_FATIGUE_DROP_RATIO
+    );
+  }
+
   function getRankedProgressionCandidates({
     balanceAroundE1RM = null,
     baselineE1RM,
@@ -5523,6 +5546,10 @@ export default function SessionView({
         : null;
     const historicalFatigueRatio =
       getLatestAdjacentFatigueRatio(exercise, nextSetIndex);
+    const historicalPerformanceWasFlat = hasFlatHistoricalSetTransition(
+      exercise,
+      nextSetIndex
+    );
     const hasHistoricalFatigueEvidence =
       historicalFatigueRatio != null &&
       historicalFatigueRatio < CLEAR_FATIGUE_DROP_RATIO;
@@ -5536,6 +5563,7 @@ export default function SessionView({
       actualWeight,
       bodyWeight: sessionBodyWeight,
       exercise: calculationExercise,
+      historicalPerformanceWasFlat,
       historicalFatigueRatio,
       liveProjectedReps,
       minimumReps: minimumAcceptableReps,

@@ -373,7 +373,7 @@ test("a small RIR miss prefers one fewer rep at the same weight", () => {
   });
 });
 
-test("a comparable historical fatigue drop adjusts the next set before repeating it", () => {
+test("a comparable historical fatigue drop prioritizes one fewer rep at the same weight", () => {
   const target = recommendNextSetTargetAfterPerformance({
     actualReps: 10,
     actualRir: 2.5,
@@ -388,9 +388,52 @@ test("a comparable historical fatigue drop adjusts the next set before repeating
 
   assert.deepEqual(target, {
     reason: "historical-fatigue-adjustment",
-    reps: 8,
+    reps: 9,
     rir: 2.5,
     weight: 100,
+  });
+});
+
+test("historical fatigue keeps the completed load and prefers one fewer rep in a range", () => {
+  const target = recommendNextSetTargetAfterPerformance({
+    actualReps: 9,
+    actualRir: 2,
+    actualWeight: 135,
+    exercise: {},
+    historicalFatigueRatio: 176.7 / 184.3,
+    minimumReps: 7,
+    prescribedReps: 9,
+    targetRir: 2,
+    weightIncrement: 2.5,
+  });
+
+  assert.deepEqual(target, {
+    reason: "historical-fatigue-adjustment",
+    reps: 8,
+    rir: 2,
+    weight: 135,
+  });
+});
+
+test("a flat historical set transition repeats an in-range top set", () => {
+  const target = recommendNextSetTargetAfterPerformance({
+    actualReps: 9,
+    actualRir: 2,
+    actualWeight: 135,
+    exercise: {},
+    historicalPerformanceWasFlat: true,
+    historicalFatigueRatio: 1,
+    minimumReps: 7,
+    prescribedReps: 9,
+    targetRir: 2,
+    weightIncrement: 2.5,
+  });
+
+  assert.deepEqual(target, {
+    reason: "historical-flat-repeat",
+    reps: 9,
+    rir: 2,
+    weight: 135,
   });
 });
 

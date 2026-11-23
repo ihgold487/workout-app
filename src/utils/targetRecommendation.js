@@ -961,6 +961,7 @@ export function recommendDeloadTargetPrescription({
 export function recommendNextSetTargetAfterPerformance({
   bodyWeight,
   exercise,
+  historicalPerformanceWasFlat = false,
   historicalFatigueRatio,
   liveProjectedReps,
   minimumReps,
@@ -1064,11 +1065,16 @@ export function recommendNextSetTargetAfterPerformance({
       }
     }
 
+    // A prior within-workout drop establishes that the second set should be
+    // easier, but the most predictable way to express that is one fewer rep
+    // at the load just completed. Keep the historical e1RM projection as the
+    // next tie-breaker rather than letting it skip directly to a larger rep
+    // reduction when the prescribed range leaves room.
     const sameWeightFatigueTarget = sameWeightFatigueCandidates.sort(
       (a, b) =>
+        Math.abs(a.reps - preferredReps) - Math.abs(b.reps - preferredReps) ||
         Math.abs(a.e1rm - fatigueTargetE1RM) -
           Math.abs(b.e1rm - fatigueTargetE1RM) ||
-        Math.abs(a.reps - preferredReps) - Math.abs(b.reps - preferredReps) ||
         b.reps - a.reps
     )[0];
 
@@ -1105,6 +1111,24 @@ export function recommendNextSetTargetAfterPerformance({
         weight: resolvedWeight,
       };
     }
+  }
+
+  // When the matching pair in the selected history is genuinely flat, repeat
+  // the completed set before considering a new within-workout progression.
+  // This is intentionally limited to an in-range top set, so it does not
+  // suppress corrections for missed reps or higher-than-prescribed effort.
+  if (
+    !rangeMissed &&
+    !effortExceeded &&
+    historicalPerformanceWasFlat &&
+    reps <= prescribed
+  ) {
+    return {
+      reason: "historical-flat-repeat",
+      reps,
+      rir: prescribedRir,
+      weight,
+    };
   }
 
   if (!rangeMissed && !effortExceeded && reps < prescribed) {
