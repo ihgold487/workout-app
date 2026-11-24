@@ -53,7 +53,7 @@ private struct NextWorkoutWidget: Widget {
         }
         .configurationDisplayName("Next Workout")
         .description("Preview or start your next workout, or log body weight.")
-        .supportedFamilies([.systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
@@ -97,6 +97,8 @@ private struct NextWorkoutWidgetView: View {
                 inlineContent
             } else if widgetFamily == .accessoryCircular {
                 circularContent
+            } else if widgetFamily == .systemSmall {
+                smallHomeScreenContent
             } else {
                 homeScreenContent
             }
@@ -156,6 +158,43 @@ private struct NextWorkoutWidgetView: View {
         }
         .padding()
     }
+
+    private var smallHomeScreenContent: some View {
+        GeometryReader { proxy in
+            let gap: CGFloat = 4
+            let side = min(proxy.size.width, proxy.size.height)
+            let cellSize = (side - gap) / 2
+            let actionIconSize = ((side - 8) / 2) * 0.46
+
+            VStack(spacing: gap) {
+                HStack(spacing: gap) {
+                    SmallWidgetAppIconLink(size: cellSize * 0.76)
+                    SmallWidgetIconLink(
+                        systemImage: "scalemass.fill",
+                        action: "weight",
+                        accessibilityLabel: "Log body weight",
+                        size: actionIconSize
+                    )
+                }
+                HStack(spacing: gap) {
+                    SmallWidgetIconLink(
+                        systemImage: "eye",
+                        action: "preview",
+                        accessibilityLabel: "Preview workout",
+                        size: actionIconSize
+                    )
+                    SmallWidgetIconLink(
+                        systemImage: "play.fill",
+                        action: "start",
+                        accessibilityLabel: "Start workout",
+                        size: actionIconSize
+                    )
+                }
+            }
+            .frame(width: side, height: side)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 }
 
 private struct NextWorkoutBrandMark: View {
@@ -186,6 +225,43 @@ private struct WidgetActionLink: View {
                 .background(emphasized ? Color.workoutPurple : Color.primary.opacity(0.08), in: Capsule())
                 .foregroundStyle(emphasized ? .white : .primary)
         }
+    }
+}
+
+private struct SmallWidgetAppIconLink: View {
+    let size: CGFloat
+
+    var body: some View {
+        Link(destination: URL(string: "workout://widget?action=home")!) {
+            ZStack {
+                Circle()
+                    .fill(Color.workoutPurplePale)
+                NextWorkoutBrandMark(size: size)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityLabel("Open Workout")
+    }
+}
+
+private struct SmallWidgetIconLink: View {
+    let systemImage: String
+    let action: String
+    let accessibilityLabel: String
+    let size: CGFloat
+
+    var body: some View {
+        Link(destination: URL(string: "workout://widget?action=\(action)")!) {
+            ZStack {
+                Circle()
+                    .fill(Color.workoutPurplePale)
+                Image(systemName: systemImage)
+                    .font(.system(size: size, weight: .semibold))
+                    .foregroundStyle(Color.workoutPurpleDark)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -368,5 +444,17 @@ private extension Color {
         red: 170.0 / 255.0,
         green: 59.0 / 255.0,
         blue: 255.0 / 255.0
+    )
+
+    static let workoutPurplePale = Color(
+        red: 244.0 / 255.0,
+        green: 233.0 / 255.0,
+        blue: 255.0 / 255.0
+    )
+
+    static let workoutPurpleDark = Color(
+        red: 101.0 / 255.0,
+        green: 34.0 / 255.0,
+        blue: 141.0 / 255.0
     )
 }

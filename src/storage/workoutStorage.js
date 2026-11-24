@@ -179,6 +179,57 @@ function getActiveWorkoutSessionRecovery() {
   return recovery;
 }
 
+function getCompletedWorkoutRecovery() {
+  const recovery = readJson(COMPLETED_WORKOUT_RECOVERY_KEY, null);
+
+  return recovery?.workout?.id ? recovery : null;
+}
+
+function getCompletedWorkoutSourceSessionId(recovery) {
+  return (
+    recovery?.workout?.sourceSessionId ??
+    recovery?.workout?.source_session_id ??
+    null
+  );
+}
+
+function isCompletedSourceSession(recovery, sessionId) {
+  const sourceSessionId = getCompletedWorkoutSourceSessionId(recovery);
+
+  return (
+    sourceSessionId != null &&
+    sessionId != null &&
+    String(sourceSessionId) === String(sessionId)
+  );
+}
+
+function completedRecoveryMatchesOwner(recovery, ownerUserId) {
+  return Boolean(
+    recovery?.workout?.id && ownersMatch(recovery.ownerUserId, ownerUserId)
+  );
+}
+
+function removeCompletedSourceSession(data, completionRecovery) {
+  const sourceSessionId = getCompletedWorkoutSourceSessionId(completionRecovery);
+
+  if (sourceSessionId == null) {
+    return data;
+  }
+
+  return {
+    ...data,
+    selectedSessionId: isCompletedSourceSession(
+      completionRecovery,
+      data.selectedSessionId
+    )
+      ? null
+      : data.selectedSessionId,
+    sessions: arrayOrEmpty(data.sessions).filter(
+      (session) => String(session.id) !== String(sourceSessionId)
+    ),
+  };
+}
+
 function ownersMatch(firstOwnerUserId, secondOwnerUserId) {
   return (
     !firstOwnerUserId ||
@@ -277,11 +328,30 @@ export function loadWorkoutData({ seedExercises }) {
     ),
     templates: readJson(WORKOUT_DATA_KEYS.templates, []),
   };
+  const completionRecovery = getCompletedWorkoutRecovery();
+  const completionRecoveryApplies = completedRecoveryMatchesOwner(
+    completionRecovery,
+    data.ownerUserId
+  );
   const activeRecovery = getActiveWorkoutSessionRecovery();
 
-  if (activeRecovery && ownersMatch(activeRecovery.ownerUserId, data.ownerUserId)) {
+  if (
+    activeRecovery &&
+    ownersMatch(activeRecovery.ownerUserId, data.ownerUserId) &&
+    !(
+      completionRecoveryApplies &&
+      isCompletedSourceSession(
+        completionRecovery,
+        activeRecovery.selectedSessionId
+      )
+    )
+  ) {
     data.selectedSessionId = activeRecovery.selectedSessionId;
     data.sessions = mergeRecoveredActiveSession(data.sessions, activeRecovery);
+  }
+
+  if (completionRecoveryApplies) {
+    Object.assign(data, removeCompletedSourceSession(data, completionRecovery));
   }
 
   return normalizeWorkoutData(
@@ -331,12 +401,21 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
         WORKOUT_SESSION_JOURNAL_ID
       )
     : null;
+  const completionRecovery = getCompletedWorkoutRecovery();
+  const completionRecoveryMatchesRecord = completedRecoveryMatchesOwner(
+    completionRecovery,
+    record?.data?.ownerUserId || legacyFullBackup?.data?.ownerUserId
+  );
   const journalIsCurrent =
     journal &&
     new Date(journal.updatedAt).getTime() >= new Date(record.updatedAt).getTime() &&
     (!journal.ownerUserId ||
       !record.data.ownerUserId ||
-      String(journal.ownerUserId) === String(record.data.ownerUserId));
+      String(journal.ownerUserId) === String(record.data.ownerUserId)) &&
+    !(
+      completionRecoveryMatchesRecord &&
+      isCompletedSourceSession(completionRecovery, journal.selectedSessionId)
+    );
   const recoveredData = journalIsCurrent
     ? {
         ...record.data,
@@ -353,12 +432,10 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
         legacyFullBackup.updatedAt > indexedDbUpdatedAt
       : !record?.data);
 
-  const completionRecovery = readJson(COMPLETED_WORKOUT_RECOVERY_KEY, null);
-  const recoveryMatchesOwner =
-    completionRecovery?.workout?.id &&
-    (!completionRecovery.ownerUserId ||
-      !recoveredData.ownerUserId ||
-      String(completionRecovery.ownerUserId) === String(recoveredData.ownerUserId));
+  const recoveryMatchesOwner = completedRecoveryMatchesOwner(
+    completionRecovery,
+    recoveredData.ownerUserId
+  );
   const recoveryAlreadyStored = recoveredData.history?.some(
     (workout) => String(workout.id) === String(completionRecovery?.workout?.id)
   );
@@ -374,6 +451,9 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
             ],
           }
         : recoveredData;
+  const dataAfterCompletionRecovery = recoveryMatchesOwner
+    ? removeCompletedSourceSession(preferredData, completionRecovery)
+    : preferredData;
 
   const activeRecovery = getActiveWorkoutSessionRecovery();
   const activeRecoveryUpdatedAt = Date.parse(activeRecovery?.updatedAt || "");
@@ -383,19 +463,26 @@ export async function loadWorkoutDataFromIndexedDb({ seedExercises }) {
   );
   const shouldRecoverActiveSession =
     activeRecovery &&
-    ownersMatch(activeRecovery.ownerUserId, preferredData.ownerUserId) &&
+    ownersMatch(activeRecovery.ownerUserId, dataAfterCompletionRecovery.ownerUserId) &&
     (!Number.isFinite(persistedUpdatedAt) ||
-      activeRecoveryUpdatedAt >= persistedUpdatedAt);
+      activeRecoveryUpdatedAt >= persistedUpdatedAt) &&
+    !(
+      recoveryMatchesOwner &&
+      isCompletedSourceSession(
+        completionRecovery,
+        activeRecovery.selectedSessionId
+      )
+    );
   const dataWithActiveRecovery = shouldRecoverActiveSession
     ? {
-        ...preferredData,
+        ...dataAfterCompletionRecovery,
         selectedSessionId: activeRecovery.selectedSessionId,
         sessions: mergeRecoveredActiveSession(
-          preferredData.sessions,
+          dataAfterCompletionRecovery.sessions,
           activeRecovery
         ),
       }
-    : preferredData;
+    : dataAfterCompletionRecovery;
 
   // These are device-level defaults, so retain the synchronous local copy if
   // it is newer than the IndexedDB snapshot currently being restored.
@@ -444,7 +531,18 @@ export async function saveWorkoutDataToIndexedDb(data, storageVersion) {
   // legacy localStorage snapshot. Only now is it safe to free that quota.
   clearLegacyFullWorkoutBackup();
 
-  const completionRecovery = readJson(COMPLETED_WORKOUT_RECOVERY_KEY, null);
+  // Clear an active-session fallback only after the completed state is durable.
+  // Until this point, the completion marker keeps startup from reviving the
+  // source session if iOS suspends the app between completion and this write.
+  if (data.selectedSessionId == null) {
+    saveActiveWorkoutSessionRecovery({
+      ownerUserId: data.ownerUserId,
+      selectedSessionId: null,
+      sessions: data.sessions,
+    });
+  }
+
+  const completionRecovery = getCompletedWorkoutRecovery();
   if (
     completionRecovery?.workout?.id &&
     (data.history || []).some(
@@ -460,6 +558,18 @@ export async function saveWorkoutSessionJournal({
   selectedSessionId,
   sessions,
 }) {
+  const completionRecovery = getCompletedWorkoutRecovery();
+
+  // An already-completed source session must never win a late journal write.
+  // This can happen when the app is suspended while React effects are flushing.
+  if (
+    completedRecoveryMatchesOwner(completionRecovery, ownerUserId) &&
+    isCompletedSourceSession(completionRecovery, selectedSessionId)
+  ) {
+    await db.workoutSessionJournal.delete(WORKOUT_SESSION_JOURNAL_ID);
+    return;
+  }
+
   await db.workoutSessionJournal.put({
     id: WORKOUT_SESSION_JOURNAL_ID,
     ownerUserId: ownerUserId || null,
@@ -474,11 +584,17 @@ export function saveActiveWorkoutSessionRecovery({
   selectedSessionId,
   sessions,
 }) {
+  const completionRecovery = getCompletedWorkoutRecovery();
   const activeSession = arrayOrEmpty(sessions).find(
     (session) => String(session.id) === String(selectedSessionId)
   );
 
-  if (selectedSessionId == null || !activeSession) {
+  if (
+    selectedSessionId == null ||
+    !activeSession ||
+    (completedRecoveryMatchesOwner(completionRecovery, ownerUserId) &&
+      isCompletedSourceSession(completionRecovery, selectedSessionId))
+  ) {
     localStorage.removeItem(ACTIVE_WORKOUT_SESSION_RECOVERY_KEY);
     return;
   }
