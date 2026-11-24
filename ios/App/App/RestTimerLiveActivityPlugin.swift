@@ -154,6 +154,7 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
             .set(snapshot, forKey: "homeWidgetSnapshot")
         WidgetCenter.shared.reloadTimelines(ofKind: "NextWorkoutWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "WorkoutLockScreenWidgetV4")
         call.resolve()
     }
 

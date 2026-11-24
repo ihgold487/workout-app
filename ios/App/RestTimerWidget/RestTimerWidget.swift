@@ -8,6 +8,7 @@ struct RestTimerWidgetBundle: WidgetBundle {
     var body: some Widget {
         RestTimerLiveActivity()
         NextWorkoutWidget()
+        WorkoutLockScreenWidget()
     }
 }
 
@@ -56,20 +57,78 @@ private struct NextWorkoutWidget: Widget {
     }
 }
 
+/// A separate kind gives the Lock Screen mark an independent WidgetKit identity.
+/// This keeps the existing Home Screen widget stable while allowing Lock Screen
+/// previews to refresh from the current extension bundle.
+private struct WorkoutLockScreenWidget: Widget {
+    // A new kind ensures iOS obtains a fresh Lock Screen preview instead of
+    // retaining a cached preview from the raster-image experiments.
+    let kind = "WorkoutLockScreenWidgetV4"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: NextWorkoutProvider()) { entry in
+            NextWorkoutWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Workout")
+        .description("Open Workout from your Lock Screen.")
+        .supportedFamilies([.accessoryCircular, .accessoryInline])
+    }
+}
+
 private struct NextWorkoutWidgetView: View {
+    @Environment(\.widgetFamily) private var widgetFamily
     let entry: NextWorkoutEntry
 
     var body: some View {
         if #available(iOS 17.0, *) {
-            content
+            widgetContent
                 .containerBackground(.fill.tertiary, for: .widget)
+                .widgetURL(URL(string: "workout://widget?action=home"))
         } else {
-            content
+            widgetContent
                 .background(Color.black.opacity(0.04))
+                .widgetURL(URL(string: "workout://widget?action=home"))
         }
     }
 
-    private var content: some View {
+    private var widgetContent: some View {
+        Group {
+            if widgetFamily == .accessoryInline {
+                inlineContent
+            } else if widgetFamily == .accessoryCircular {
+                circularContent
+            } else {
+                homeScreenContent
+            }
+        }
+        .privacySensitive(false)
+    }
+
+    private var inlineContent: some View {
+        Label(inlineSummary, systemImage: "dumbbell.fill")
+            .lineLimit(1)
+    }
+
+    private var circularContent: some View {
+        Image("WorkoutLockScreenMarkV3")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(.primary)
+        .frame(width: 64, height: 64)
+        .accessibilityLabel("Open Workout")
+    }
+
+    private var inlineSummary: String {
+        guard let workoutName = entry.snapshot?.workoutName,
+              !workoutName.isEmpty else {
+            return "Open Workout"
+        }
+
+        return "Next: \(workoutName)"
+    }
+
+    private var homeScreenContent: some View {
         let snapshot = entry.snapshot
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {

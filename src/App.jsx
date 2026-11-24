@@ -8483,6 +8483,21 @@ export default function App() {
         return;
       }
 
+      if (action === "home") {
+        setShowExercises(false);
+        setShowPlans(false);
+        setEditingPlanId(null);
+        setPlanEditorOpen(false);
+        setShowNutrition(false);
+        setShowSettings(false);
+        setSelectedHistory(null);
+        setSelectedHistoryList(null);
+        setAutoStartTemplateId(null);
+        setSelectedTemplateId(null);
+        setSelectedTemplatePlanWeek(null);
+        return;
+      }
+
       const activePlan = plans.find((plan) => plan.status === "active");
       const weekStatus = activePlan
         ? getPlanWeekStatus(activePlan, activePlan.currentWeek || 1, history)
