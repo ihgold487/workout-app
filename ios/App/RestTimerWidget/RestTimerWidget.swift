@@ -18,14 +18,82 @@ private struct NextWorkoutSnapshot: Decodable {
     let workoutName: String?
 }
 
+private struct CreatineReminderSnapshot: Decodable {
+    let enabled: Bool
+    let reminderTime: String
+    let takenDate: String
+    let takenToday: Bool
+
+    func isDue(at date: Date) -> Bool {
+        guard enabled,
+              let reminderDate = reminderDate(on: date) else {
+            return false
+        }
+
+        return date >= reminderDate && !(takenToday && takenDate == Self.dateKey(for: date))
+    }
+
+    func upcomingTimelineDates(after date: Date) -> [Date] {
+        guard enabled else { return [] }
+
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: date)
+        var dates: [Date] = []
+
+        for dayOffset in 0..<31 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday),
+                  let reminderDate = reminderDate(on: day) else {
+                continue
+            }
+
+            if reminderDate > date {
+                dates.append(reminderDate)
+            }
+
+            if let nextDay = calendar.date(byAdding: .day, value: 1, to: day),
+               nextDay > date {
+                dates.append(nextDay)
+            }
+        }
+
+        return Array(Set(dates)).sorted()
+    }
+
+    private func reminderDate(on date: Date) -> Date? {
+        let parts = reminderTime.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2,
+              (0...23).contains(parts[0]),
+              (0...59).contains(parts[1]) else {
+            return nil
+        }
+
+        return Calendar.current.date(
+            bySettingHour: parts[0],
+            minute: parts[1],
+            second: 0,
+            of: date
+        )
+    }
+
+    private static func dateKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
 private struct NextWorkoutEntry: TimelineEntry {
     let date: Date
     let snapshot: NextWorkoutSnapshot?
+    let creatineReminder: CreatineReminderSnapshot?
 }
 
 private struct NextWorkoutProvider: TimelineProvider {
     func placeholder(in context: Context) -> NextWorkoutEntry {
-        NextWorkoutEntry(date: .now, snapshot: NextWorkoutSnapshot(exerciseCount: 5, planWeek: 2, workoutName: "Upper Body"))
+        NextWorkoutEntry(date: .now, snapshot: NextWorkoutSnapshot(exerciseCount: 5, planWeek: 2, workoutName: "Upper Body"), creatineReminder: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (NextWorkoutEntry) -> Void) {
@@ -33,14 +101,28 @@ private struct NextWorkoutProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<NextWorkoutEntry>) -> Void) {
-        completion(Timeline(entries: [entry()], policy: .never))
+        let now = Date()
+        let currentEntry = entry(at: now)
+        let reminderEntries = currentEntry.creatineReminder?
+            .upcomingTimelineDates(after: now)
+            .map { entry(at: $0) } ?? []
+        let entries = [currentEntry] + reminderEntries
+        let refreshDate = reminderEntries.last?.date.addingTimeInterval(1)
+            ?? now.addingTimeInterval(24 * 60 * 60)
+
+        completion(Timeline(entries: entries, policy: .after(refreshDate)))
     }
 
-    private func entry() -> NextWorkoutEntry {
+    private func entry(at date: Date = .now) -> NextWorkoutEntry {
         let stored = UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
             .string(forKey: "homeWidgetSnapshot")
         let snapshot = stored.flatMap { try? JSONDecoder().decode(NextWorkoutSnapshot.self, from: Data($0.utf8)) }
-        return NextWorkoutEntry(date: .now, snapshot: snapshot)
+        let creatineStored = UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
+            .string(forKey: "creatineReminderWidgetSnapshot")
+        let creatineReminder = creatineStored.flatMap {
+            try? JSONDecoder().decode(CreatineReminderSnapshot.self, from: Data($0.utf8))
+        }
+        return NextWorkoutEntry(date: date, snapshot: snapshot, creatineReminder: creatineReminder)
     }
 }
 
@@ -182,12 +264,13 @@ private struct NextWorkoutWidgetView: View {
                 HStack(spacing: gap) {
                     SmallWidgetAppIconLink(
                         size: cellSize * 0.76,
-                        backgroundSize: backgroundSize
+                        backgroundSize: backgroundSize,
+                        showsReminderBadge: entry.creatineReminder?.isDue(at: entry.date) ?? false
                     )
                     .frame(width: cellSize, height: cellSize)
                     .offset(x: -tileOutset, y: -tileOutset)
                     SmallWidgetIconLink(
-                        systemImage: "scalemass.fill",
+                        systemImage: "scalemass",
                         action: "weight",
                         accessibilityLabel: "Log body weight",
                         size: actionIconSize,
@@ -207,11 +290,12 @@ private struct NextWorkoutWidgetView: View {
                     .frame(width: cellSize, height: cellSize)
                     .offset(x: -tileOutset, y: tileOutset)
                     SmallWidgetIconLink(
-                        systemImage: "play.fill",
+                        systemImage: "play",
                         action: "start",
                         accessibilityLabel: "Start workout",
                         size: actionIconSize,
-                        backgroundSize: backgroundSize
+                        backgroundSize: backgroundSize,
+                        iconWeight: .bold
                     )
                     .frame(width: cellSize, height: cellSize)
                     .offset(x: tileOutset, y: tileOutset)
@@ -257,6 +341,7 @@ private struct WidgetActionLink: View {
 private struct SmallWidgetAppIconLink: View {
     let size: CGFloat
     let backgroundSize: CGFloat
+    let showsReminderBadge: Bool
 
     var body: some View {
         Link(destination: URL(string: "workout://widget?action=home")!) {
@@ -266,9 +351,29 @@ private struct SmallWidgetAppIconLink: View {
                     .frame(width: backgroundSize, height: backgroundSize)
                 NextWorkoutBrandMark(size: size)
             }
+            .overlay(alignment: .topTrailing) {
+                if showsReminderBadge {
+                    Image("CreatineMortarMark")
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(
+                            width: max(19, backgroundSize * 0.27),
+                            height: max(19, backgroundSize * 0.27)
+                        )
+                        .padding(max(3, backgroundSize * 0.045))
+                        .background(.white.opacity(0.96), in: Circle())
+                        .overlay(Circle().stroke(Color.workoutPurple.opacity(0.16), lineWidth: 1))
+                        .offset(x: backgroundSize * 0.04, y: -backgroundSize * 0.04)
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .accessibilityLabel("Open Workout")
+        .accessibilityLabel(
+            showsReminderBadge
+                ? "Open Workout. Creatine reminder due"
+                : "Open Workout"
+        )
     }
 }
 
@@ -278,6 +383,7 @@ private struct SmallWidgetIconLink: View {
     let accessibilityLabel: String
     let size: CGFloat
     let backgroundSize: CGFloat
+    var iconWeight: Font.Weight = .semibold
 
     var body: some View {
         Link(destination: URL(string: "workout://widget?action=\(action)")!) {
@@ -286,7 +392,7 @@ private struct SmallWidgetIconLink: View {
                     .fill(Color.workoutPurplePale)
                     .frame(width: backgroundSize, height: backgroundSize)
                 Image(systemName: systemImage)
-                    .font(.system(size: size, weight: .semibold))
+                    .font(.system(size: size, weight: iconWeight))
                     .foregroundStyle(Color.workoutPurpleDark)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

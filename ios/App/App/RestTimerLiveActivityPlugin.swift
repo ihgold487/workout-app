@@ -15,6 +15,7 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "end", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "publishHomeWidget", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "publishCreatineReminderWidget", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "consumeHomeWidgetAction", returnType: CAPPluginReturnPromise)
     ]
     private static weak var activeInstance: RestTimerLiveActivityPlugin?
@@ -155,6 +156,18 @@ public class RestTimerLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             .set(snapshot, forKey: "homeWidgetSnapshot")
         WidgetCenter.shared.reloadTimelines(ofKind: "NextWorkoutWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "WorkoutLockScreenWidgetV4")
+        call.resolve()
+    }
+
+    @objc func publishCreatineReminderWidget(_ call: CAPPluginCall) {
+        guard let snapshot = call.getString("snapshot") else {
+            call.reject("A creatine reminder widget snapshot is required")
+            return
+        }
+
+        UserDefaults(suiteName: "group.com.ihgold487.workoutapp")?
+            .set(snapshot, forKey: "creatineReminderWidgetSnapshot")
+        WidgetCenter.shared.reloadTimelines(ofKind: "NextWorkoutWidget")
         call.resolve()
     }
 

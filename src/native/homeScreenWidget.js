@@ -12,6 +12,16 @@ export async function publishHomeScreenWidget(snapshot) {
   }
 }
 
+export async function publishCreatineReminderWidget(snapshot) {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await RestTimerLiveActivity.publishCreatineReminderWidget({ snapshot });
+  } catch (error) {
+    console.warn("Unable to update the creatine reminder widget badge:", error);
+  }
+}
+
 export async function consumeHomeScreenWidgetAction() {
   if (!Capacitor.isNativePlatform()) return null;
 

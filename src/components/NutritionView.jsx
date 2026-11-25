@@ -58,6 +58,7 @@ import {
   canUseNativeCreatineNotifications,
   scheduleNativeCreatineNotifications,
 } from "../native/creatineReminderNotifications";
+import { publishCreatineReminderWidget } from "../native/homeScreenWidget";
 import { triggerNativePickerSelectionHaptic } from "../native/pickerHaptics";
 
 const NUTRITION_LOG_KEY = "nutritionLogEntries";
@@ -4330,6 +4331,23 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
     return () => window.clearInterval(intervalId);
   }, []);
 
+  const todayKey = getTodayKey();
+  const todayEntries = useMemo(
+    () => entries.filter((entry) => entry.date === todayKey),
+    [entries, todayKey]
+  );
+  const todayRecipeIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          todayEntries
+            .map((entry) => entry.recipeId)
+            .filter(Boolean)
+            .map(String)
+        ),
+      ].sort(),
+    [todayEntries]
+  );
   const dayEntries = useMemo(
     () => entries.filter((entry) => entry.date === selectedDate),
     [entries, selectedDate]
@@ -4397,6 +4415,21 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
   const creatineAutoDetected = creatineFoodDetected || creatineRecipeDetected;
   const creatineManuallyChecked = Boolean(dailyCreatineLog[selectedDate]);
   const creatineTaken = creatineAutoDetected || creatineManuallyChecked;
+  const todayCreatineTaken = useMemo(
+    () =>
+      Boolean(dailyCreatineLog[todayKey]) ||
+      todayEntries.some(
+        (entry) =>
+          includesCreatine(entry.name) ||
+          includesCreatine(entry.servingDescription)
+      ) ||
+      todayRecipeIds.some((recipeId) => recipeCreatineById[recipeId]),
+    [dailyCreatineLog, recipeCreatineById, todayEntries, todayKey, todayRecipeIds]
+  );
+  const creatineDetectionRecipeIds = useMemo(
+    () => [...new Set([...dayRecipeIds, ...todayRecipeIds])].sort(),
+    [dayRecipeIds, todayRecipeIds]
+  );
   const creatineReminderSkippedDates = useMemo(() => {
     const dates = new Set(Object.keys(dailyCreatineLog));
 
@@ -4426,6 +4459,22 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
   );
   const [creatineReminderHours, creatineReminderMinutes] =
     dailyCreatineReminderTime.split(":").map(Number);
+
+  useEffect(() => {
+    void publishCreatineReminderWidget(
+      JSON.stringify({
+        enabled: dailyCreatineReminderEnabled,
+        reminderTime: dailyCreatineReminderTime,
+        takenDate: todayKey,
+        takenToday: todayCreatineTaken,
+      })
+    );
+  }, [
+    dailyCreatineReminderEnabled,
+    dailyCreatineReminderTime,
+    todayCreatineTaken,
+    todayKey,
+  ]);
 
   useEffect(() => {
     if (!canUseNativeCreatineNotifications()) {
@@ -4697,7 +4746,7 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
 
   useEffect(() => {
     if (
-      dayRecipeIds.length === 0 ||
+      creatineDetectionRecipeIds.length === 0 ||
       !session?.user?.id ||
       !isSupabaseConfigured
     ) {
@@ -4711,7 +4760,7 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
       const entriesByRecipeId = {};
 
       await Promise.all(
-        dayRecipeIds.map(async (recipeId) => {
+        creatineDetectionRecipeIds.map(async (recipeId) => {
           try {
             const ingredients = await fetchSupplementalRecipeIngredients(recipeId);
             entriesByRecipeId[recipeId] = ingredients.some((ingredient) =>
@@ -4734,7 +4783,7 @@ export default function NutritionView({ openBodyWeightRequest = 0, session = nul
     return () => {
       cancelled = true;
     };
-  }, [dayRecipeIds, session]);
+  }, [creatineDetectionRecipeIds, session]);
 
   useEffect(() => {
     let cancelled = false;
