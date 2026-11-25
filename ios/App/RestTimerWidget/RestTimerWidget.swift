@@ -81,12 +81,22 @@ private struct NextWorkoutWidgetView: View {
 
     var body: some View {
         if #available(iOS 17.0, *) {
-            widgetContent
-                .containerBackground(.fill.tertiary, for: .widget)
-                .widgetURL(URL(string: "workout://widget?action=home"))
+            if widgetFamily == .systemSmall {
+                widgetContent
+                    .containerBackground(Color.workoutWidgetBackground, for: .widget)
+                    .widgetURL(URL(string: "workout://widget?action=home"))
+            } else {
+                widgetContent
+                    .containerBackground(.fill.tertiary, for: .widget)
+                    .widgetURL(URL(string: "workout://widget?action=home"))
+            }
         } else {
             widgetContent
-                .background(Color.black.opacity(0.04))
+                .background(
+                    widgetFamily == .systemSmall
+                        ? Color.workoutWidgetBackground
+                        : Color.black.opacity(0.04)
+                )
                 .widgetURL(URL(string: "workout://widget?action=home"))
         }
     }
@@ -165,30 +175,46 @@ private struct NextWorkoutWidgetView: View {
             let side = min(proxy.size.width, proxy.size.height)
             let cellSize = (side - gap) / 2
             let actionIconSize = ((side - 8) / 2) * 0.46
+            let backgroundSize = cellSize + 3
+            let tileOutset: CGFloat = 2.5
 
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
-                    SmallWidgetAppIconLink(size: cellSize * 0.76)
+                    SmallWidgetAppIconLink(
+                        size: cellSize * 0.76,
+                        backgroundSize: backgroundSize
+                    )
+                    .frame(width: cellSize, height: cellSize)
+                    .offset(x: -tileOutset, y: -tileOutset)
                     SmallWidgetIconLink(
                         systemImage: "scalemass.fill",
                         action: "weight",
                         accessibilityLabel: "Log body weight",
-                        size: actionIconSize
+                        size: actionIconSize,
+                        backgroundSize: backgroundSize
                     )
+                    .frame(width: cellSize, height: cellSize)
+                    .offset(x: tileOutset, y: -tileOutset)
                 }
                 HStack(spacing: gap) {
                     SmallWidgetIconLink(
                         systemImage: "eye",
                         action: "preview",
                         accessibilityLabel: "Preview workout",
-                        size: actionIconSize
+                        size: actionIconSize,
+                        backgroundSize: backgroundSize
                     )
+                    .frame(width: cellSize, height: cellSize)
+                    .offset(x: -tileOutset, y: tileOutset)
                     SmallWidgetIconLink(
                         systemImage: "play.fill",
                         action: "start",
                         accessibilityLabel: "Start workout",
-                        size: actionIconSize
+                        size: actionIconSize,
+                        backgroundSize: backgroundSize
                     )
+                    .frame(width: cellSize, height: cellSize)
+                    .offset(x: tileOutset, y: tileOutset)
                 }
             }
             .frame(width: side, height: side)
@@ -230,12 +256,14 @@ private struct WidgetActionLink: View {
 
 private struct SmallWidgetAppIconLink: View {
     let size: CGFloat
+    let backgroundSize: CGFloat
 
     var body: some View {
         Link(destination: URL(string: "workout://widget?action=home")!) {
             ZStack {
                 Circle()
                     .fill(Color.workoutPurplePale)
+                    .frame(width: backgroundSize, height: backgroundSize)
                 NextWorkoutBrandMark(size: size)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -249,12 +277,14 @@ private struct SmallWidgetIconLink: View {
     let action: String
     let accessibilityLabel: String
     let size: CGFloat
+    let backgroundSize: CGFloat
 
     var body: some View {
         Link(destination: URL(string: "workout://widget?action=\(action)")!) {
             ZStack {
                 Circle()
                     .fill(Color.workoutPurplePale)
+                    .frame(width: backgroundSize, height: backgroundSize)
                 Image(systemName: systemImage)
                     .font(.system(size: size, weight: .semibold))
                     .foregroundStyle(Color.workoutPurpleDark)
@@ -456,5 +486,11 @@ private extension Color {
         red: 101.0 / 255.0,
         green: 34.0 / 255.0,
         blue: 141.0 / 255.0
+    )
+
+    static let workoutWidgetBackground = Color(
+        red: 253.0 / 255.0,
+        green: 252.0 / 255.0,
+        blue: 255.0 / 255.0
     )
 }
