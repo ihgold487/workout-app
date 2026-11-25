@@ -205,3 +205,32 @@ test("saved built-in exercise notes survive seed-library merging", () => {
   assert.equal(clearedExercise.description, "");
   assert.equal(clearedExercise.note, "");
 });
+
+test("a renamed seeded exercise replaces its prior local name without duplication", () => {
+  const renamedSeedExercise = {
+    builtin: true,
+    equipment: ["Machine"],
+    id: 98,
+    name: "Stationary Bike",
+  };
+  const savedPreRenameExercise = {
+    ...renamedSeedExercise,
+    name: "Cycling on Stationary Bike",
+    note: "Keep this personal note.",
+  };
+  const downloadedBuiltin = {
+    builtin: true,
+    equipment: ["Machine"],
+    id: "87a3f271-193d-4f69-86ca-47a4c675531b",
+    name: "Stationary Bike",
+  };
+
+  const mergedExercises = mergeExerciseLibraryWithSeed(
+    [savedPreRenameExercise, downloadedBuiltin],
+    [renamedSeedExercise]
+  );
+
+  assert.equal(mergedExercises.length, 1);
+  assert.equal(mergedExercises[0].name, "Stationary Bike");
+  assert.equal(mergedExercises[0].note, "Keep this personal note.");
+});

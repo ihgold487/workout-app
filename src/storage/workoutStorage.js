@@ -4,6 +4,7 @@ import {
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark.js";
 import { withDefaultExerciseStatus } from "../utils/exerciseStatus.js";
+import { withExerciseModalities } from "../utils/exerciseModalities.js";
 import { getTargetAttributeDefaults } from "../utils/targetAttributes.js";
 
 export const WORKOUT_DATA_SCHEMA_VERSION = 1;
@@ -108,7 +109,7 @@ function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
     mergedExercise.note = savedExercise.note;
   }
 
-  return mergedExercise;
+  return withExerciseModalities(mergedExercise);
 }
 
 function normalizeWorkoutData(data, { seedExercises }) {
@@ -268,6 +269,7 @@ function withDefaultExerciseBenchmark(exercise) {
 export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
   const savedExercises = arrayOrEmpty(exerciseLibrary);
   const seedKeys = new Set(seedExercises.map(getExerciseSeedKey));
+  const seedIds = new Set(seedExercises.map((exercise) => String(exercise.id)));
   const seedIdentityKeys = new Set(
     seedExercises.map(getBuiltInExerciseIdentityKey)
   );
@@ -276,18 +278,26 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
       .filter((exercise) => exercise.builtin)
       .map((exercise) => [getExerciseSeedKey(exercise), exercise])
   );
+  const savedBuiltInById = new Map(
+    savedExercises
+      .filter((exercise) => exercise.builtin && exercise.id != null)
+      .map((exercise) => [String(exercise.id), exercise])
+  );
   const savedBuiltInByIdentityKey = new Map(
     savedExercises
       .filter((exercise) => exercise.builtin)
       .map((exercise) => [getBuiltInExerciseIdentityKey(exercise), exercise])
   );
   const seededExercises = seedExercises.map((exercise) =>
-    withDefaultExerciseBenchmark(
-      withDefaultExerciseStatus(
-        mergeSavedBuiltinExercise(
-          exercise,
-          savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise)) ||
-            savedBuiltInByIdentityKey.get(getBuiltInExerciseIdentityKey(exercise))
+    withExerciseModalities(
+      withDefaultExerciseBenchmark(
+        withDefaultExerciseStatus(
+          mergeSavedBuiltinExercise(
+            exercise,
+            savedBuiltInBySeedKey.get(getExerciseSeedKey(exercise)) ||
+              savedBuiltInById.get(String(exercise.id)) ||
+              savedBuiltInByIdentityKey.get(getBuiltInExerciseIdentityKey(exercise))
+          )
         )
       )
     )
@@ -299,16 +309,21 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
     (exercise) =>
       exercise.builtin &&
       !seedKeys.has(getExerciseSeedKey(exercise)) &&
+      !seedIds.has(String(exercise.id)) &&
       !seedIdentityKeys.has(getBuiltInExerciseIdentityKey(exercise))
   );
 
   return [
     ...seededExercises,
     ...promotedBuiltInExercises.map((exercise) =>
-      withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+      withExerciseModalities(
+        withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+      )
     ),
     ...customExercises.map((exercise) =>
-      withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+      withExerciseModalities(
+        withDefaultExerciseBenchmark(withDefaultExerciseStatus(exercise))
+      )
     ),
   ];
 }

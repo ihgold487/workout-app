@@ -7,6 +7,7 @@ import {
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
+import { isStrengthExercise } from "../utils/exerciseModalities";
 
 const fieldStyle = {
   boxSizing: "border-box",
@@ -187,6 +188,7 @@ export default function AiPlanningGuidancePanel({
             .filter(
               (exercise) =>
                 exercise.active !== "inactive" &&
+                isStrengthExercise(exercise) &&
                 isExerciseBenchmark(exercise) &&
                 getBenchmarkFamilyForExercise(exercise) ===
                   family.benchmarkFamily

@@ -260,11 +260,12 @@ export const seedExercises = [
   },
   {
     id: 98,
-    name: "Cycling on Stationary Bike",
+    name: "Stationary Bike",
     equipment: ["Machine"],
     muscles: ["Cardio", "Quads"],
+    trainingModalities: ["cardio", "conditioning"],
     imageUrl: "exercise-media/history-csv-2026-06-07-cycling-on-stationary-bike-machine.webp",
-    imageAlt: "Cycling on Stationary Bike Machine exercise demonstration",
+    imageAlt: "Stationary Bike exercise demonstration",
     builtin: true,
   },
   {

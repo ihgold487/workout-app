@@ -27,6 +27,11 @@ import {
   getBenchmarkFamilyKeyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
+import {
+  EXERCISE_MODALITIES,
+  getExerciseModalities,
+  hasExerciseModality,
+} from "../utils/exerciseModalities";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseThumbnail from "./ExerciseThumbnail";
@@ -68,6 +73,7 @@ const emptyDraft = {
   name: "",
   primaryMuscle: "Other",
   secondaryMuscles: [],
+  trainingModalities: ["strength"],
 };
 
 const cropPreviewSize = 260;
@@ -132,6 +138,7 @@ function getExerciseDraft(exercise = {}) {
     name: exercise.name || "",
     primaryMuscle: muscles[0] || "Other",
     secondaryMuscles: muscles.slice(1),
+    trainingModalities: getExerciseModalities(exercise),
   };
 }
 
@@ -158,6 +165,7 @@ function exerciseFromDraft(draft, existing = {}) {
     muscles,
     name: draft.name.trim(),
     note: existing.builtin ? "" : draft.description.trim(),
+    trainingModalities: getExerciseModalities(draft),
   };
 }
 
@@ -248,6 +256,7 @@ export default function ExerciseView({
   const [exerciseStatus, setExerciseStatus] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("");
+  const [selectedModality, setSelectedModality] = useState("");
   const [search, setSearch] = useState("");
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -454,6 +463,8 @@ export default function ExerciseView({
           !normalizedSearch ||
           exercise.name.toLowerCase().includes(normalizedSearch);
         const matchesMuscle = !selectedMuscle || primaryMuscle === selectedMuscle;
+        const matchesModality =
+          !selectedModality || hasExerciseModality(exercise, selectedModality);
         const matchesEquipment =
           !selectedEquipment || equipment === selectedEquipment;
         const matchesType =
@@ -470,6 +481,7 @@ export default function ExerciseView({
         return (
           matchesSearch &&
           matchesMuscle &&
+          matchesModality &&
           matchesEquipment &&
           matchesType &&
           matchesStatus &&
@@ -484,6 +496,7 @@ export default function ExerciseView({
     exerciseType,
     search,
     selectedEquipment,
+    selectedModality,
     selectedMuscle,
   ]);
 
@@ -1319,6 +1332,50 @@ export default function ExerciseView({
         </select>
       </label>
     );
+    const trainingModalities = getExerciseModalities(formDraft);
+    const modalitySelector = (
+      <fieldset
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          display: "grid",
+          gap: "6px",
+          margin: 0,
+          padding: "8px 10px",
+        }}
+      >
+        <legend style={{ fontSize: "12px", fontWeight: "bold" }}>
+          Training modalities
+        </legend>
+        {EXERCISE_MODALITIES.map((modality) => {
+          const selected = trainingModalities.includes(modality.key);
+
+          return (
+            <label
+              key={modality.key}
+              style={{ alignItems: "center", display: "flex", gap: "7px" }}
+            >
+              <input
+                checked={selected}
+                disabled={selected && trainingModalities.length === 1}
+                onChange={() => {
+                  const nextModalities = selected
+                    ? trainingModalities.filter((key) => key !== modality.key)
+                    : [...trainingModalities, modality.key];
+
+                  setFormDraft({
+                    ...formDraft,
+                    trainingModalities: nextModalities,
+                  });
+                }}
+                type="checkbox"
+              />
+              {modality.label}
+            </label>
+          );
+        })}
+      </fieldset>
+    );
     const bodyweightSelect = (
       <label
         style={{
@@ -1492,6 +1549,13 @@ export default function ExerciseView({
                 gridColumn: "1 / -1",
               }}
             >
+              {modalitySelector}
+            </div>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+              }}
+            >
               {benchmarkSelect}
             </div>
             {benchmarkFamilySelect && (
@@ -1519,6 +1583,13 @@ export default function ExerciseView({
               {descriptionInput}
             </div>
             {primaryMuscleSelect}
+            <div
+              style={{
+                gridColumn: compact ? "auto" : "1 / -1",
+              }}
+            >
+              {modalitySelector}
+            </div>
           </>
         )}
 
@@ -1739,6 +1810,7 @@ export default function ExerciseView({
             Filters
             {[
               selectedMuscle,
+              selectedModality,
               selectedEquipment,
               exerciseType,
               exerciseStatus,
@@ -1747,6 +1819,7 @@ export default function ExerciseView({
               ? ` (${
                   [
                     selectedMuscle,
+                    selectedModality,
                     selectedEquipment,
                     exerciseType,
                     exerciseStatus,
@@ -1769,6 +1842,21 @@ export default function ExerciseView({
                 {muscleGroups.map((muscle) => (
                   <option key={muscle} value={muscle}>
                     {muscle}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Modality</span>
+              <select
+                value={selectedModality}
+                onChange={(event) => setSelectedModality(event.target.value)}
+              >
+                <option value="">All modalities</option>
+                {EXERCISE_MODALITIES.map((modality) => (
+                  <option key={modality.key} value={modality.key}>
+                    {modality.label}
                   </option>
                 ))}
               </select>
@@ -1829,6 +1917,7 @@ export default function ExerciseView({
               className="app-secondary-action exercise-library-view__clear-filters"
               disabled={
                 !selectedMuscle &&
+                !selectedModality &&
                 !selectedEquipment &&
                 !exerciseType &&
                 !exerciseStatus &&
@@ -1836,6 +1925,7 @@ export default function ExerciseView({
               }
               onClick={() => {
                 setSelectedMuscle("");
+                setSelectedModality("");
                 setSelectedEquipment("");
                 setExerciseType("");
                 setExerciseStatus("");
@@ -1869,6 +1959,9 @@ export default function ExerciseView({
           const primaryMuscle = exercise.muscles?.[0] || "Other";
           const secondaryMuscles = exercise.muscles?.slice(1) || [];
           const active = isExerciseActive(exercise);
+          const nonStrengthModalities = getExerciseModalities(exercise).filter(
+            (modality) => modality !== "strength"
+          );
           const recentPerformance = recentPerformanceByExerciseId.get(
             String(exercise.id)
           );
@@ -1958,6 +2051,13 @@ export default function ExerciseView({
                     {isExerciseBenchmark(exercise) && (
                       <AppStatusPill tone="benchmark">Benchmark</AppStatusPill>
                     )}
+                    {nonStrengthModalities.map((modality) => (
+                      <AppStatusPill key={modality} tone="accent">
+                        {EXERCISE_MODALITIES.find(
+                          (item) => item.key === modality
+                        )?.label || modality}
+                      </AppStatusPill>
+                    ))}
                   </div>
                 </div>
 

@@ -1,4 +1,5 @@
 import { isExerciseActive } from "../utils/exerciseStatus";
+import { isStrengthExercise } from "../utils/exerciseModalities";
 
 const CHEST_MUSCLES = ["Chest", "Upper Chest"];
 const LEG_MUSCLES = ["Glutes", "Quads", "Hamstrings"];
@@ -1168,7 +1169,9 @@ export function generatePlanWorkouts({
         workoutTypeByDay,
       });
   const workoutCount = workoutDefinitions.length;
-  const activeExerciseLibrary = exerciseLibrary.filter(isExerciseActive);
+  const activeExerciseLibrary = exerciseLibrary.filter(
+    (exercise) => isExerciseActive(exercise) && isStrengthExercise(exercise)
+  );
   const usage = {
     chestVariants: new Set(),
     equipmentByMuscle: new Map(),

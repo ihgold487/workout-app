@@ -5,6 +5,7 @@ import {
   getBenchmarkFamilyKeyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
+import { getExerciseModalities } from "../utils/exerciseModalities";
 
 const EXERCISES_TABLE = "exercises";
 const EXERCISE_PREFERENCES_TABLE = "user_exercise_preferences";
@@ -65,6 +66,7 @@ function cloudExerciseFromLocal(exercise, userId) {
     secondary_muscles: remainingArrayValues(muscles),
     source: LOCAL_APP_SOURCE,
     source_key: String(exercise.id),
+    training_modalities: getExerciseModalities(exercise),
     updated_at: new Date().toISOString(),
     user_id: userId,
   };
@@ -100,6 +102,7 @@ function cloudBuiltinExerciseFromLocal(exercise, userId) {
     secondary_muscles: remainingArrayValues(muscles),
     source: "trainer_promoted",
     source_key: sourceKey,
+    training_modalities: getExerciseModalities(exercise),
   };
 }
 
@@ -424,6 +427,7 @@ function cloudExerciseToLocal(exercise) {
     name: exercise.name,
     source: exercise.source,
     sourceKey: exercise.source_key,
+    trainingModalities: getExerciseModalities(exercise),
   });
 }
 
@@ -464,6 +468,7 @@ function applyCloudExerciseMetadata(localExercise, cloudExercise) {
       "",
     instructionSteps:
       cloudExercise.instruction_steps || localExercise.instructionSteps || [],
+    trainingModalities: getExerciseModalities(cloudExercise),
     muscles: [
       cloudExercise.primary_muscle,
       ...(cloudExercise.secondary_muscles || []),
@@ -577,7 +582,7 @@ export async function downloadExerciseLibraryWithPreferences(
   const { data: cloudExercises, error: exerciseError } = await supabase
     .from(EXERCISES_TABLE)
     .select(
-      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_benchmark,benchmark_family_key,is_builtin,source,source_key"
+      "id,user_id,name,description,instruction_steps,instruction_source,instruction_source_url,image_url,image_storage_path,image_alt,equipment,primary_muscle,secondary_muscles,bodyweight_load_percent,is_benchmark,benchmark_family_key,is_builtin,source,source_key,training_modalities"
     )
     .or(`user_id.eq.${userId},user_id.is.null`)
     .is("deleted_at", null);

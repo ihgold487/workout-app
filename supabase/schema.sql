@@ -400,6 +400,7 @@ create table if not exists public.exercises (
   equipment text,
   primary_muscle text,
   secondary_muscles text[] not null default '{}',
+  training_modalities text[] not null default array['strength']::text[],
   bodyweight_load_percent numeric,
   is_benchmark boolean not null default false,
   benchmark_family_key text,
@@ -422,6 +423,12 @@ on public.exercises (user_id, source, source_key);
 create unique index if not exists exercises_builtin_source_key_idx
 on public.exercises (source, source_key)
 where user_id is null;
+create unique index if not exists exercises_active_builtin_source_key_unique_idx
+on public.exercises (source_key)
+where is_builtin = true
+  and user_id is null
+  and deleted_at is null
+  and source_key is not null;
 
 alter table public.exercises
 add column if not exists image_storage_path text;
@@ -440,6 +447,18 @@ add column if not exists instruction_source_url text;
 
 alter table public.exercises
 add column if not exists bodyweight_load_percent numeric;
+
+alter table public.exercises
+add column if not exists training_modalities text[] not null default array['strength']::text[];
+
+alter table public.exercises
+drop constraint if exists exercises_training_modalities_check;
+
+alter table public.exercises
+add constraint exercises_training_modalities_check check (
+  cardinality(training_modalities) > 0
+  and training_modalities <@ array['strength', 'cardio', 'conditioning']::text[]
+);
 
 alter table public.exercises
 add column if not exists is_benchmark boolean not null default false;
@@ -835,6 +854,7 @@ begin
     equipment,
     primary_muscle,
     secondary_muscles,
+    training_modalities,
     bodyweight_load_percent,
     is_benchmark,
     benchmark_family_key,
@@ -866,6 +886,19 @@ begin
       ),
       '{}'::text[]
     ),
+    coalesce(
+      nullif(
+        array(
+          select value
+          from jsonb_array_elements_text(
+            coalesce(exercise_payload->'training_modalities', '[]'::jsonb)
+          ) as modalities(value)
+          where value in ('strength', 'cardio', 'conditioning')
+        ),
+        '{}'::text[]
+      ),
+      array['strength']::text[]
+    ),
     nullif(exercise_payload->>'bodyweight_load_percent', '')::numeric,
     coalesce((exercise_payload->>'is_benchmark')::boolean, false),
     nullif(exercise_payload->>'benchmark_family_key', ''),
@@ -891,6 +924,7 @@ begin
     equipment = excluded.equipment,
     primary_muscle = excluded.primary_muscle,
     secondary_muscles = excluded.secondary_muscles,
+    training_modalities = excluded.training_modalities,
     bodyweight_load_percent = excluded.bodyweight_load_percent,
     is_benchmark = excluded.is_benchmark,
     benchmark_family_key = excluded.benchmark_family_key,
@@ -966,6 +1000,22 @@ begin
       ),
       '{}'::text[]
     ),
+    training_modalities = case
+      when exercise_payload ? 'training_modalities' then coalesce(
+        nullif(
+          array(
+            select value
+            from jsonb_array_elements_text(
+              coalesce(exercise_payload->'training_modalities', '[]'::jsonb)
+            ) as modalities(value)
+            where value in ('strength', 'cardio', 'conditioning')
+          ),
+          '{}'::text[]
+        ),
+        array['strength']::text[]
+      )
+      else training_modalities
+    end,
     bodyweight_load_percent = nullif(exercise_payload->>'bodyweight_load_percent', '')::numeric,
     is_benchmark = case
       when exercise_payload ? 'is_benchmark' then coalesce((exercise_payload->>'is_benchmark')::boolean, false)

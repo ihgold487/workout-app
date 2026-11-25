@@ -56,7 +56,7 @@ values
   (null, 'Curls', null, 'exercise-media/history-csv-2026-06-07-curls-cable.webp', null, 'Curls Cable exercise demonstration', 'Cable', 'Biceps', array['Forearms'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:curls-cable'),
   (null, 'Curls', null, 'exercise-media/history-csv-2026-06-07-curls-dumbbells.webp', null, 'Curls Dumbbells exercise demonstration', 'Dumbbells', 'Biceps', array['Forearms'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:curls-dumbbells'),
   (null, 'Curls (one arm)', null, 'exercise-media/history-csv-2026-06-07-curls-one-arm-cable.webp', null, 'Curls (one arm) Cable exercise demonstration', 'Cable', 'Biceps', array['Forearms'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:curls-one-arm-cable'),
-  (null, 'Cycling on Stationary Bike', null, 'exercise-media/history-csv-2026-06-07-cycling-on-stationary-bike-machine.webp', null, 'Cycling on Stationary Bike Machine exercise demonstration', 'Machine', 'Cardio', array['Quads'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:cycling-on-stationary-bike-machine'),
+  (null, 'Stationary Bike', null, 'exercise-media/history-csv-2026-06-07-cycling-on-stationary-bike-machine.webp', null, 'Stationary Bike exercise demonstration', 'Machine', 'Cardio', array['Quads'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:cycling-on-stationary-bike-machine'),
   (null, 'Deadlifts', null, 'exercise-media/history-csv-2026-06-07-deadlifts-barbell.webp', null, 'Deadlifts Barbell exercise demonstration', 'Barbell', 'Glutes', array['Hamstrings', 'Quads', 'Upper Back', 'Lats', 'Traps', 'Rear Delts', 'Forearms', 'Abductors', 'Adductors', 'Lower Back', 'Abs', 'Calves'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:deadlifts-barbell'),
   (null, 'Deadlifts', null, 'exercise-media/history-csv-2026-06-07-deadlifts-trap-bar.webp', null, 'Deadlifts Trap Bar exercise demonstration', 'Trap Bar', 'Glutes', array['Hamstrings', 'Quads', 'Upper Back', 'Lats', 'Traps', 'Rear Delts', 'Forearms', 'Abductors', 'Adductors', 'Lower Back', 'Abs', 'Calves'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:deadlifts-trap-bar'),
   (null, 'Decline Bench Press', null, 'exercise-media/history-csv-2026-06-07-decline-bench-press-barbell.webp', null, 'Decline Bench Press Barbell exercise demonstration', 'Barbell', 'Chest', array['Forearms', 'Triceps', 'Front Delts'], true, 'curated_exercise_library_v1', 'history-csv-2026-06-07:decline-bench-press-barbell'),
@@ -215,5 +215,11 @@ do update set
   is_builtin = true,
   updated_at = now(),
   deleted_at = null;
+
+update public.exercises
+set training_modalities = array['cardio', 'conditioning']::text[]
+where user_id is null
+  and is_builtin = true
+  and source_key = 'history-csv-2026-06-07:cycling-on-stationary-bike-machine';
 
 commit;

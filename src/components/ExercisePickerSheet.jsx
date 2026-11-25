@@ -1,6 +1,7 @@
 import { Plus, Search, X } from "lucide-react";
 import { useState } from "react";
 import { isExerciseBenchmark } from "../utils/exerciseBenchmark";
+import { hasExerciseModality } from "../utils/exerciseModalities";
 import { isExerciseActive } from "../utils/exerciseStatus";
 import BenchmarkTrophy from "./BenchmarkTrophy";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
@@ -21,6 +22,7 @@ export default function ExercisePickerSheet({
   onAction,
   onClose,
   onSelect,
+  requiredModality = "strength",
   history = [],
   search,
   selectedMuscle,
@@ -29,7 +31,11 @@ export default function ExercisePickerSheet({
   title,
 }) {
   const [detailExercise, setDetailExercise] = useState(null);
-  const activeExercises = exerciseLibrary.filter(isExerciseActive);
+  const activeExercises = exerciseLibrary.filter(
+    (exercise) =>
+      isExerciseActive(exercise) &&
+      (!requiredModality || hasExerciseModality(exercise, requiredModality))
+  );
   const muscleGroups = [
     ...new Set(activeExercises.map((exercise) => exercise.muscles?.[0])),
   ]

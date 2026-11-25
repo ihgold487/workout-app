@@ -3,6 +3,7 @@ import {
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
 } from "../utils/exerciseBenchmark";
+import { isStrengthExercise } from "../utils/exerciseModalities";
 
 export const AI_PLANNING_GUIDANCE_STORAGE_KEY =
   "workout-app.ai-planning-guidance.v1";
@@ -187,6 +188,7 @@ export function buildAiPlanningContext(guidance, exerciseLibrary = []) {
     const selectedExercise = exerciseLibrary.find(
       (exercise) =>
         exercise.active !== "inactive" &&
+        isStrengthExercise(exercise) &&
         isExerciseBenchmark(exercise) &&
         getBenchmarkFamilyForExercise(exercise) === family.benchmarkFamily &&
         (savedExerciseId

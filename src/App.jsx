@@ -109,6 +109,7 @@ import {
   getBenchmarkFamilyForExercise,
   isExerciseBenchmark,
 } from "./utils/exerciseBenchmark";
+import { isStrengthExercise } from "./utils/exerciseModalities";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import { buildStandaloneTemplateFromHistory } from "./utils/historyWorkoutReuse";
 import {
@@ -3264,6 +3265,7 @@ function buildTrainingProfileContext(exerciseLibrary = []) {
         .filter(
           (exercise) =>
             exercise.active !== "inactive" &&
+            isStrengthExercise(exercise) &&
             isExerciseBenchmark(exercise) &&
             getBenchmarkFamilyForExercise(exercise) === family.benchmarkFamily
         )
@@ -3814,7 +3816,10 @@ function buildAiPlanContext({
   });
   const previousPlanAIContext = buildPreviousPlanAiContext({ plans });
   const activeExercises = exerciseLibrary
-    .filter((exercise) => exercise.active !== "inactive")
+    .filter(
+      (exercise) =>
+        exercise.active !== "inactive" && isStrengthExercise(exercise)
+    )
     .map((exercise) => ({
       benchmark: isExerciseBenchmark(exercise),
       benchmarkFamily: getBenchmarkFamilyForExercise(exercise) || null,
@@ -4043,7 +4048,8 @@ function findAiDraftExercise(exerciseDraft, exerciseLibrary = []) {
     normalizeAiDraftEquipment(exerciseDraft?.equipment).join(", ")
   );
   const activeExercises = exerciseLibrary.filter(
-    (exercise) => exercise.active !== "inactive"
+    (exercise) =>
+      exercise.active !== "inactive" && isStrengthExercise(exercise)
   );
 
   return (

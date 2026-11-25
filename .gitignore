@@ -44,3 +44,6 @@ dist-ssr
 /WorkoutAnimations/textures/athlete_anatomy_*.kra~
 /WorkoutAnimations/textures/athlete_cc0_*.png
 /WorkoutAnimations/textures/athlete_muscle_*.png
+
+/backups/
+/supabase/.temp/
