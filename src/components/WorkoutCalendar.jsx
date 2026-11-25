@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import BodyWeightSheet from "./BodyWeightSheet";
+import { CompletedCardioWorkoutSheet } from "./CardioWorkoutFlow";
 import ExerciseDetailDialog from "./ExerciseDetailDialog";
 import ExerciseThumbnail from "./ExerciseThumbnail";
 import WeightPickerModal from "./WeightPickerModal";
@@ -39,6 +40,7 @@ const BASE_MEAL_OPTIONS = [
 const DEFAULT_MEAL = "breakfast";
 const DEFAULT_SNACK_MEAL = "snack-1";
 const RIR_PICKER_VALUES = Array.from({ length: 13 }, (_, index) => index * 0.5);
+const CARDIO_WORKOUT_COLOR = "#3f5f7d";
 
 function getCompletedWorkoutDurationSeconds(workout) {
   const duration = Number(
@@ -1522,6 +1524,7 @@ export function CompletedWorkoutSheet({
 
 export default function WorkoutCalendar({
   bodyWeightEntries = [],
+  cardioHistory = [],
   exerciseLibrary = [],
   history,
   nutritionEntries = [],
@@ -1544,6 +1547,7 @@ export default function WorkoutCalendar({
   const [expandedFoodMeals, setExpandedFoodMeals] = useState({});
   const [selectedWeight, setSelectedWeight] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [selectedCardioWorkout, setSelectedCardioWorkout] = useState(null);
 
   const today = new Date();
 
@@ -1714,6 +1718,12 @@ export default function WorkoutCalendar({
     return history.filter((session) => getSessionDateKey(session) === dateKey);
   };
 
+  const cardioWorkoutsForDate = (date) => {
+    const dateKey = getLocalDateKey(date);
+
+    return cardioHistory.filter((workout) => getSessionDateKey(workout) === dateKey);
+  };
+
   const nutritionForDate = (date) => {
     const dateKey = getLocalDateKey(date);
 
@@ -1728,14 +1738,20 @@ export default function WorkoutCalendar({
 
   const getDateSummary = (date) => {
     const workouts = workoutsForDate(date);
+    const cardioWorkouts = cardioWorkoutsForDate(date);
     const foods = nutritionForDate(date);
     const bodyWeight = bodyWeightForDate(date);
 
     return {
       bodyWeight,
+      cardioWorkouts,
       foods,
       foodTotals: totalFoods(foods),
-      hasActivity: workouts.length > 0 || foods.length > 0 || Boolean(bodyWeight),
+      hasActivity:
+        workouts.length > 0 ||
+        cardioWorkouts.length > 0 ||
+        foods.length > 0 ||
+        Boolean(bodyWeight),
       workouts,
     };
   };
@@ -1758,6 +1774,18 @@ export default function WorkoutCalendar({
             background: "#2e7d32",
             borderRadius: "999px",
             height: "8px",
+            marginRight: "-1px",
+            width: "8px",
+          }}
+        />
+      )}
+      {summary.cardioWorkouts.length > 0 && (
+        <span
+          style={{
+            background: CARDIO_WORKOUT_COLOR,
+            borderRadius: "999px",
+            height: "8px",
+            marginLeft: "-1px",
             marginRight: "-1px",
             width: "8px",
           }}
@@ -1799,6 +1827,7 @@ export default function WorkoutCalendar({
             setSelectedFoods(null);
             setSelectedWeight(null);
             setSelectedWorkout(null);
+            setSelectedCardioWorkout(null);
           }
 
           return !current;
@@ -2000,6 +2029,7 @@ export default function WorkoutCalendar({
                           setSelectedFoods(null);
                           setSelectedWeight(null);
                           setSelectedWorkout(null);
+                          setSelectedCardioWorkout(null);
                           setSelectedDate(
                             selectedDate &&
                               selectedDate.toDateString() === date.toDateString()
@@ -2059,6 +2089,7 @@ export default function WorkoutCalendar({
                   setSelectedFoods(null);
                   setSelectedWeight(null);
                   setSelectedWorkout(null);
+                  setSelectedCardioWorkout(null);
                   setSelectedDate(nextToday);
                 }}
                 style={{
@@ -2140,6 +2171,66 @@ export default function WorkoutCalendar({
                                   ? ` (${new Date(
                                       workout.completedAtIso
                                     ).toLocaleTimeString([], {
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    })})`
+                                  : ""}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {summary.cardioWorkouts.length > 0 && (
+                          <div>
+                            <div
+                              style={{
+                                alignItems: "center",
+                                display: "flex",
+                                fontSize: "13px",
+                                fontWeight: "bold",
+                                gap: "6px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  background: CARDIO_WORKOUT_COLOR,
+                                  display: "block",
+                                  height: "20px",
+                                  mask: "url('/cardio-workouts-icon.png') center / contain no-repeat",
+                                  WebkitMask:
+                                    "url('/cardio-workouts-icon.png') center / contain no-repeat",
+                                  width: "20px",
+                                }}
+                              />
+                              <span>Cardio workouts</span>
+                            </div>
+                            {summary.cardioWorkouts.map((workout) => (
+                              <button
+                                key={workout.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedCardioWorkout(workout);
+                                }}
+                                style={{
+                                  background: "var(--surface-muted)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "8px",
+                                  color: "var(--text-h)",
+                                  display: "block",
+                                  fontSize: "13px",
+                                  font: "inherit",
+                                  marginBottom: "4px",
+                                  padding: "8px",
+                                  textAlign: "left",
+                                  width: "100%",
+                                }}
+                                type="button"
+                              >
+                                {workout.templateName || workout.exercise?.name || "Cardio workout"}
+                                {workout.completedAt
+                                  ? ` (${new Date(workout.completedAt).toLocaleTimeString([], {
                                       hour: "numeric",
                                       minute: "2-digit",
                                     })})`
@@ -2682,6 +2773,13 @@ export default function WorkoutCalendar({
           plans={plans}
           templates={templates}
           workout={selectedWorkout}
+        />
+      )}
+
+      {selectedCardioWorkout && (
+        <CompletedCardioWorkoutSheet
+          onClose={() => setSelectedCardioWorkout(null)}
+          workout={selectedCardioWorkout}
         />
       )}
     </div>

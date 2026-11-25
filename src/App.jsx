@@ -64,6 +64,7 @@ import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import WorkoutHistoryView from "./components/WorkoutHistoryView";
 import {
+  CompletedCardioWorkoutSheet,
   CardioWorkoutDetail,
   CardioWorkoutEditor,
   CardioWorkoutHistory,
@@ -5293,6 +5294,7 @@ export default function App() {
     useState(null);
   const [selectedCardioWorkoutHistoryTemplateId, setSelectedCardioWorkoutHistoryTemplateId] =
     useState(null);
+  const [selectedCardioWorkoutLog, setSelectedCardioWorkoutLog] = useState(null);
   const [cardioWorkoutEditorOpen, setCardioWorkoutEditorOpen] = useState(false);
   const [editingCardioWorkoutTemplateId, setEditingCardioWorkoutTemplateId] =
     useState(null);
@@ -10613,10 +10615,18 @@ export default function App() {
     );
   }
 
+  function clearCardioWorkoutNavigation() {
+    setSelectedCardioWorkoutTemplateId(null);
+    setSelectedCardioWorkoutHistoryTemplateId(null);
+    setSelectedCardioWorkoutLog(null);
+  }
+
   function goHome() {
     if (templatePreviewEditActive) {
       return;
     }
+
+    clearCardioWorkoutNavigation();
 
     const activePlan = plans.find((plan) => plan.status === "active");
 
@@ -10644,6 +10654,8 @@ export default function App() {
       return;
     }
 
+    clearCardioWorkoutNavigation();
+
     setShowExercises(true);
     setShowPlans(false);
     setEditingPlanId(null);
@@ -10660,6 +10672,8 @@ export default function App() {
     if (templatePreviewEditActive) {
       return;
     }
+
+    clearCardioWorkoutNavigation();
 
     setShowExercises(false);
     setEditingPlanId(null);
@@ -10699,6 +10713,8 @@ export default function App() {
       return;
     }
 
+    clearCardioWorkoutNavigation();
+
     setShowExercises(false);
     setShowPlans(false);
     setEditingPlanId(null);
@@ -10715,6 +10731,8 @@ export default function App() {
     if (templatePreviewEditActive) {
       return;
     }
+
+    clearCardioWorkoutNavigation();
 
     setShowExercises(false);
     setShowPlans(false);
@@ -14447,21 +14465,34 @@ export default function App() {
 
   if (selectedCardioWorkoutHistoryTemplate) {
     return renderAppShell(
-      <CardioWorkoutHistory
-        history={cardioWorkoutHistory}
-        onBack={() => setSelectedCardioWorkoutHistoryTemplateId(null)}
-        onDeleteLog={(log) => {
-          if (!window.confirm("Delete this completed cardio workout?")) {
-            return;
-          }
+      <>
+        <CardioWorkoutHistory
+          history={cardioWorkoutHistory}
+          onBack={() => {
+            setSelectedCardioWorkoutLog(null);
+            setSelectedCardioWorkoutHistoryTemplateId(null);
+          }}
+          onDeleteLog={(log) => {
+            if (!window.confirm("Delete this completed cardio workout?")) {
+              return;
+            }
 
-          setCardioWorkoutHistory((currentHistory) =>
-            currentHistory.filter((item) => String(item.id) !== String(log.id))
-          );
-          requestSyncCheckpoint(["cardio"], "cardio workout log delete");
-        }}
-        template={selectedCardioWorkoutHistoryTemplate}
-      />,
+            setCardioWorkoutHistory((currentHistory) =>
+              currentHistory.filter((item) => String(item.id) !== String(log.id))
+            );
+            setSelectedCardioWorkoutLog(null);
+            requestSyncCheckpoint(["cardio"], "cardio workout log delete");
+          }}
+          onOpenLog={setSelectedCardioWorkoutLog}
+          template={selectedCardioWorkoutHistoryTemplate}
+        />
+        {selectedCardioWorkoutLog && (
+          <CompletedCardioWorkoutSheet
+            onClose={() => setSelectedCardioWorkoutLog(null)}
+            workout={selectedCardioWorkoutLog}
+          />
+        )}
+      </>,
       "home"
     );
   }
@@ -15112,6 +15143,7 @@ export default function App() {
 
       <WorkoutCalendar
         bodyWeightEntries={localBodyWeightEntries}
+        cardioHistory={cardioWorkoutHistory}
         exerciseLibrary={exerciseLibrary}
         history={history}
         nutritionEntries={calendarNutritionEntries}
