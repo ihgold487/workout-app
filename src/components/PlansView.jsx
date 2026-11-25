@@ -2748,6 +2748,7 @@ export default function PlansView({
   history,
   onBuildAiPlanDraft,
   onCancel,
+  onCreateCardioWorkout,
   onCopyAiPlanContext,
   onCopyAiPlanPrompt,
   onDownloadAiPlanContext,
@@ -4725,6 +4726,11 @@ export default function PlansView({
                 onChange={(event) => {
                 const nextMode = event.target.value;
 
+                if (nextMode === "cardio") {
+                  onCreateCardioWorkout?.();
+                  return;
+                }
+
                 setGenerationMode(nextMode);
                 if (nextMode === "workout") {
                   setMinimumReps("6");
@@ -4750,6 +4756,7 @@ export default function PlansView({
             >
               <option value="plan">Plan</option>
               <option value="workout">Workout</option>
+              <option value="cardio">Cardio workout</option>
             </select>
           </label>
         )}

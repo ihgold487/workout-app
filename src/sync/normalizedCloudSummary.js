@@ -79,6 +79,8 @@ export async function getNormalizedCloudSummary(session) {
     bodyMeasurements,
     exercisePreferences,
     plateInventory,
+    cardioWorkoutTemplates,
+    cardioWorkoutLogs,
   ] = await Promise.all([
     getActiveCount("exercises", session),
     getUserActiveCount("workouts", session),
@@ -95,6 +97,8 @@ export async function getNormalizedCloudSummary(session) {
     getUserActiveCount("body_measurements", session),
     getUserCount("user_exercise_preferences", session),
     getUserCount("equipment_plate_inventories", session),
+    getUserActiveCount("cardio_workout_templates", session),
+    getUserActiveCount("cardio_workout_logs", session),
   ]);
 
   const { data: recentSessions, error: latestError } = await supabase
@@ -129,6 +133,8 @@ export async function getNormalizedCloudSummary(session) {
 
   return {
     bodyMeasurements,
+    cardioWorkoutLogs,
+    cardioWorkoutTemplates,
     exercisePreferences,
     exercises,
     latestSession: recentSessions?.[0] || null,

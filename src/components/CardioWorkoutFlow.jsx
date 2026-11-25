@@ -1,0 +1,442 @@
+import { useMemo, useState } from "react";
+import { ChevronLeft, Play, Save, Trash2 } from "lucide-react";
+import {
+  CARDIO_WORKOUT_FORMATS,
+  createCardioExerciseSnapshot,
+  createCardioWorkoutLog,
+  getCardioExercises,
+  getCardioWorkoutFormatLabel,
+  getCardioWorkoutSummary,
+  getDefaultCardioWorkoutName,
+  formatCardioDuration,
+  metersPerSecondToMph,
+  metersToMiles,
+  secondsToMinutes,
+} from "../utils/cardioWorkouts";
+
+function Field({ children, label }) {
+  return (
+    <label style={{ display: "grid", gap: "5px" }}>
+      <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function NumericField({ label, onChange, step = "any", value }) {
+  return (
+    <Field label={label}>
+      <input
+        inputMode="decimal"
+        min="0"
+        onChange={(event) => onChange(event.target.value)}
+        step={step}
+        type="number"
+        value={value}
+      />
+    </Field>
+  );
+}
+
+function getPrescriptionFormValues(template) {
+  const prescription = template?.prescription || {};
+  const work = prescription.work || {};
+  const recovery = prescription.recovery || {};
+
+  return {
+    gradePercent: prescription.gradePercent ?? "",
+    plannedDistanceMiles: metersToMiles(prescription.plannedDistanceMeters),
+    plannedDurationMinutes: secondsToMinutes(
+      prescription.plannedDurationSeconds
+    ),
+    recoveryDurationSeconds: prescription.recoveryDurationSeconds ?? "",
+    recoveryGradePercent: recovery.gradePercent ?? "",
+    recoveryResistance: recovery.resistance ?? "",
+    recoverySpeedMph: metersPerSecondToMph(recovery.speedMetersPerSecond),
+    resistance: prescription.resistance ?? "",
+    rounds: prescription.rounds ?? "",
+    speedMph: metersPerSecondToMph(prescription.speedMetersPerSecond),
+    workDurationSeconds: prescription.workDurationSeconds ?? "",
+    workGradePercent: work.gradePercent ?? "",
+    workResistance: work.resistance ?? "",
+    workSpeedMph: metersPerSecondToMph(work.speedMetersPerSecond),
+  };
+}
+
+export function CardioWorkoutEditor({
+  exerciseLibrary,
+  onCancel,
+  onSave,
+  template,
+}) {
+  const cardioExercises = useMemo(
+    () => getCardioExercises(exerciseLibrary),
+    [exerciseLibrary]
+  );
+  const [exerciseId, setExerciseId] = useState(
+    template?.exercise?.exerciseId ?? cardioExercises[0]?.id ?? ""
+  );
+  const [format, setFormat] = useState(
+    template?.format || CARDIO_WORKOUT_FORMATS.steady
+  );
+  const [name, setName] = useState(template?.name || "");
+  const [values, setValues] = useState(() => getPrescriptionFormValues(template));
+  const [error, setError] = useState("");
+  const selectedExercise = cardioExercises.find(
+    (exercise) => String(exercise.id) === String(exerciseId)
+  );
+
+  const updateValue = (key, value) => {
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+
+  function handleSave() {
+    if (!selectedExercise) {
+      setError("Choose a cardio exercise before saving.");
+      return;
+    }
+
+    onSave({
+      createdAt: template?.createdAt || null,
+      exercise: createCardioExerciseSnapshot(selectedExercise),
+      format,
+      id: template?.id || null,
+      name: name.trim() || getDefaultCardioWorkoutName(selectedExercise, format),
+      prescription: values,
+      updatedAt: null,
+    });
+  }
+
+  if (cardioExercises.length === 0) {
+    return (
+      <section style={{ padding: "20px" }}>
+        <h1>No cardio exercises yet</h1>
+        <p style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
+          Add or tag an active exercise with the cardio modality first, then
+          return here to create a cardio workout.
+        </p>
+        <button onClick={onCancel} type="button">Back</button>
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ display: "grid", gap: "16px", padding: "20px" }}>
+      <div>
+        <button
+          onClick={onCancel}
+          style={{ alignItems: "center", display: "inline-flex", gap: "5px" }}
+          type="button"
+        >
+          <ChevronLeft size={17} /> Back to Plans
+        </button>
+        <h1 style={{ marginBottom: "5px" }}>
+          {template ? "Edit cardio workout" : "New cardio workout"}
+        </h1>
+        <p style={{ color: "var(--text-muted)", lineHeight: 1.5, margin: 0 }}>
+          Save a reusable one-exercise workout. All prescription details are
+          optional reference values.
+        </p>
+      </div>
+
+      <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
+        <Field label="Cardio exercise">
+          <select onChange={(event) => setExerciseId(event.target.value)} value={exerciseId}>
+            {cardioExercises.map((exercise) => (
+              <option key={exercise.id} value={exercise.id}>
+                {exercise.name}{exercise.equipment ? ` · ${Array.isArray(exercise.equipment) ? exercise.equipment.join(", ") : exercise.equipment}` : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Workout type">
+          <select onChange={(event) => setFormat(event.target.value)} value={format}>
+            <option value={CARDIO_WORKOUT_FORMATS.steady}>Steady state</option>
+            <option value={CARDIO_WORKOUT_FORMATS.hiit}>HIIT</option>
+          </select>
+        </Field>
+
+        <Field label="Workout name (optional)">
+          <input
+            onChange={(event) => setName(event.target.value)}
+            placeholder={getDefaultCardioWorkoutName(selectedExercise, format)}
+            value={name}
+          />
+        </Field>
+      </div>
+
+      <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
+        <div>
+          <h2 style={{ fontSize: "17px", margin: 0 }}>Reference prescription</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
+            Leave any value blank when you do not need it.
+          </p>
+        </div>
+
+        {format === CARDIO_WORKOUT_FORMATS.steady ? (
+          <>
+            <div className="cardio-field-grid">
+              <NumericField label="Planned duration (minutes)" onChange={(value) => updateValue("plannedDurationMinutes", value)} value={values.plannedDurationMinutes} />
+              <NumericField label="Planned distance (miles)" onChange={(value) => updateValue("plannedDistanceMiles", value)} value={values.plannedDistanceMiles} />
+              <NumericField label="Speed (mph)" onChange={(value) => updateValue("speedMph", value)} value={values.speedMph} />
+              <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("gradePercent", value)} value={values.gradePercent} />
+              <NumericField label="Resistance" onChange={(value) => updateValue("resistance", value)} value={values.resistance} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="cardio-field-grid">
+              <NumericField label="Rounds" onChange={(value) => updateValue("rounds", value)} step="1" value={values.rounds} />
+              <NumericField label="Work duration (seconds)" onChange={(value) => updateValue("workDurationSeconds", value)} step="1" value={values.workDurationSeconds} />
+              <NumericField label="Recovery duration (seconds)" onChange={(value) => updateValue("recoveryDurationSeconds", value)} step="1" value={values.recoveryDurationSeconds} />
+            </div>
+            <div className="cardio-intensity-grid">
+              <div>
+                <h3>Work</h3>
+                <div className="cardio-field-grid">
+                  <NumericField label="Speed (mph)" onChange={(value) => updateValue("workSpeedMph", value)} value={values.workSpeedMph} />
+                  <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("workGradePercent", value)} value={values.workGradePercent} />
+                  <NumericField label="Resistance" onChange={(value) => updateValue("workResistance", value)} value={values.workResistance} />
+                </div>
+              </div>
+              <div>
+                <h3>Recovery</h3>
+                <div className="cardio-field-grid">
+                  <NumericField label="Speed (mph)" onChange={(value) => updateValue("recoverySpeedMph", value)} value={values.recoverySpeedMph} />
+                  <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("recoveryGradePercent", value)} value={values.recoveryGradePercent} />
+                  <NumericField label="Resistance" onChange={(value) => updateValue("recoveryResistance", value)} value={values.recoveryResistance} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {error && <div role="alert" style={{ color: "var(--danger-text)" }}>{error}</div>}
+      <button className="app-primary-action" onClick={handleSave} type="button">
+        <Save size={17} /> Save cardio workout
+      </button>
+    </section>
+  );
+}
+
+export function CardioWorkoutDetail({
+  history = [],
+  onBack,
+  onComplete,
+  onEdit,
+  template,
+}) {
+  const [startedAt, setStartedAt] = useState(null);
+  const [notes, setNotes] = useState("");
+  const [results, setResults] = useState({
+    averageSpeedMph: "",
+    caloriesKilocalories: "",
+    cadenceRpm: "",
+    distanceMiles: "",
+    durationMinutes: "",
+    gradePercent: "",
+    location: "",
+    maxSpeedMph: "",
+    powerWatts: "",
+    resistance: "",
+  });
+  const updateResult = (key, value) => {
+    setResults((current) => ({ ...current, [key]: value }));
+  };
+  const isStarted = Boolean(startedAt);
+  const templateHistory = history
+    .filter((log) => String(log.templateId) === String(template.id))
+    .sort((left, right) =>
+      String(right.completedAt || "").localeCompare(String(left.completedAt || ""))
+    );
+
+  return (
+    <section style={{ display: "grid", gap: "16px", padding: "20px" }}>
+      <div>
+        <button
+          onClick={onBack}
+          style={{ alignItems: "center", display: "inline-flex", gap: "5px" }}
+          type="button"
+        >
+          <ChevronLeft size={17} /> Back
+        </button>
+        <div style={{ alignItems: "start", display: "flex", gap: "10px", justifyContent: "space-between" }}>
+          <div>
+            <h1 style={{ marginBottom: "4px" }}>{template.name}</h1>
+            <div style={{ color: "var(--text-muted)" }}>
+              {template.exercise.name}{template.exercise.equipment ? ` · ${template.exercise.equipment}` : ""} · {getCardioWorkoutFormatLabel(template.format)}
+            </div>
+          </div>
+          <button onClick={onEdit} type="button">Edit</button>
+        </div>
+      </div>
+
+      <div className="app-section-card">
+        <strong>Prescription</strong>
+        <div style={{ color: "var(--text-muted)", marginTop: "5px" }}>
+          {getCardioWorkoutSummary(template)}
+        </div>
+      </div>
+
+      {templateHistory.length > 0 && (
+        <div className="app-section-card" style={{ display: "grid", gap: "8px" }}>
+          <strong>Recent completions</strong>
+          {templateHistory.slice(0, 5).map((log) => {
+            const resultDetails = [
+              formatCardioDuration(log.results?.durationSeconds),
+              log.results?.distanceMeters
+                ? `${metersToMiles(log.results.distanceMeters)} mi`
+                : null,
+            log.results?.averageSpeedMetersPerSecond
+              ? `${metersPerSecondToMph(log.results.averageSpeedMetersPerSecond)} mph avg`
+              : null,
+            log.results?.powerWatts ? `${log.results.powerWatts} W` : null,
+          ].filter(Boolean);
+
+            return (
+              <div
+                key={log.id}
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                  fontSize: "13px",
+                  paddingTop: "8px",
+                }}
+              >
+                <strong style={{ color: "var(--text)" }}>
+                  {new Date(log.completedAt).toLocaleDateString()}
+                </strong>
+                {resultDetails.length > 0 ? ` · ${resultDetails.join(" · ")}` : " · Completed"}
+                {log.notes ? <div style={{ marginTop: "3px" }}>{log.notes}</div> : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!isStarted ? (
+        <button className="app-primary-action" onClick={() => setStartedAt(new Date().toISOString())} type="button">
+          <Play size={17} /> Start workout
+        </button>
+      ) : (
+        <>
+          <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
+            <div>
+              <h2 style={{ fontSize: "17px", margin: 0 }}>Completion details</h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
+                These fields are optional reference data for this completed session.
+              </p>
+            </div>
+            <div className="cardio-field-grid">
+              <NumericField label="Duration (minutes)" onChange={(value) => updateResult("durationMinutes", value)} value={results.durationMinutes} />
+              <NumericField label="Distance (miles)" onChange={(value) => updateResult("distanceMiles", value)} value={results.distanceMiles} />
+              <NumericField label="Average speed (mph)" onChange={(value) => updateResult("averageSpeedMph", value)} value={results.averageSpeedMph} />
+              <NumericField label="Maximum speed (mph)" onChange={(value) => updateResult("maxSpeedMph", value)} value={results.maxSpeedMph} />
+              <NumericField label="Power (watts)" onChange={(value) => updateResult("powerWatts", value)} value={results.powerWatts} />
+              <NumericField label="Cadence (RPM)" onChange={(value) => updateResult("cadenceRpm", value)} value={results.cadenceRpm} />
+              <NumericField label="Incline / grade (%)" onChange={(value) => updateResult("gradePercent", value)} value={results.gradePercent} />
+              <NumericField label="Resistance" onChange={(value) => updateResult("resistance", value)} value={results.resistance} />
+              <NumericField label="Calories" onChange={(value) => updateResult("caloriesKilocalories", value)} value={results.caloriesKilocalories} />
+              <Field label="Location">
+                <select onChange={(event) => updateResult("location", event.target.value)} value={results.location}>
+                  <option value="">Not specified</option>
+                  <option value="indoor">Indoor</option>
+                  <option value="outdoor">Outdoor</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Session notes">
+              <textarea onChange={(event) => setNotes(event.target.value)} rows="3" value={notes} />
+            </Field>
+          </div>
+          <button
+            className="app-primary-action"
+            onClick={() => onComplete(createCardioWorkoutLog(template, results, notes, startedAt))}
+            type="button"
+          >
+            <Save size={17} /> Complete and save workout
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
+
+export function CardioWorkoutHistory({
+  history = [],
+  onBack,
+  onDeleteLog,
+  template,
+}) {
+  const templateHistory = history
+    .filter((log) => String(log.templateId) === String(template.id))
+    .sort((left, right) =>
+      String(right.completedAt || "").localeCompare(String(left.completedAt || ""))
+    );
+
+  return (
+    <section style={{ display: "grid", gap: "16px", padding: "20px" }}>
+      <div>
+        <button
+          onClick={onBack}
+          style={{ alignItems: "center", display: "inline-flex", gap: "5px" }}
+          type="button"
+        >
+          <ChevronLeft size={17} /> Back
+        </button>
+        <h1 style={{ marginBottom: "4px" }}>{template.name} history</h1>
+        <p style={{ color: "var(--text-muted)", margin: 0 }}>
+          {templateHistory.length} completed {templateHistory.length === 1 ? "workout" : "workouts"}
+        </p>
+      </div>
+
+      {templateHistory.length === 0 ? (
+        <div className="app-section-card" style={{ color: "var(--text-muted)" }}>
+          No completed workouts for this template yet.
+        </div>
+      ) : (
+        templateHistory.map((log) => {
+          const resultDetails = [
+            formatCardioDuration(log.results?.durationSeconds),
+            log.results?.distanceMeters
+              ? `${metersToMiles(log.results.distanceMeters)} mi`
+              : null,
+            log.results?.averageSpeedMetersPerSecond
+              ? `${metersPerSecondToMph(log.results.averageSpeedMetersPerSecond)} mph avg`
+              : null,
+            log.results?.powerWatts ? `${log.results.powerWatts} W` : null,
+          ].filter(Boolean);
+
+          return (
+            <div
+              className="app-section-card"
+              key={log.id}
+              style={{ display: "grid", gap: "8px" }}
+            >
+              <div style={{ alignItems: "center", display: "flex", gap: "10px", justifyContent: "space-between" }}>
+                <strong>{new Date(log.completedAt).toLocaleString()}</strong>
+                <button
+                  aria-label="Delete completed cardio workout"
+                  onClick={() => onDeleteLog(log)}
+                  style={{ color: "var(--danger-text)", minHeight: "40px", minWidth: "40px", padding: "5px" }}
+                  title="Delete completed workout"
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div style={{ color: "var(--text-muted)", fontSize: "14px" }}>
+                {resultDetails.length > 0 ? resultDetails.join(" · ") : "Completed"}
+              </div>
+              {log.notes ? <div style={{ color: "var(--text-muted)", fontSize: "14px" }}>{log.notes}</div> : null}
+            </div>
+          );
+        })
+      )}
+    </section>
+  );
+}

@@ -64,6 +64,11 @@ import WeightPickerModal from "./components/WeightPickerModal";
 import WorkoutCalendar, { CompletedWorkoutSheet } from "./components/WorkoutCalendar";
 import WorkoutHistoryView from "./components/WorkoutHistoryView";
 import {
+  CardioWorkoutDetail,
+  CardioWorkoutEditor,
+  CardioWorkoutHistory,
+} from "./components/CardioWorkoutFlow";
+import {
   AppPageHeader,
   AppSectionCard,
   AppSectionHeading,
@@ -110,6 +115,7 @@ import {
   isExerciseBenchmark,
 } from "./utils/exerciseBenchmark";
 import { isStrengthExercise } from "./utils/exerciseModalities";
+import { normalizeCardioPrescription } from "./utils/cardioWorkouts";
 import { findPlanWorkoutHistory } from "./utils/workoutHistoryLookup";
 import { buildStandaloneTemplateFromHistory } from "./utils/historyWorkoutReuse";
 import {
@@ -125,6 +131,10 @@ import {
   uploadWorkoutHistory,
 } from "./sync/sessionCloudSync";
 import { downloadPlans, uploadPlans } from "./sync/planCloudSync";
+import {
+  downloadCardioWorkouts,
+  uploadCardioWorkouts,
+} from "./sync/cardioWorkoutCloudSync";
 import {
   downloadPlateInventory,
   uploadPlateInventory,
@@ -153,7 +163,7 @@ import {
 } from "./sync/remoteWritePolicy";
 
 // STORAGE VERSION
-const STORAGE_VERSION = 12;
+const STORAGE_VERSION = 13;
 
 const APP_VERSION = "0.16";
 
@@ -185,6 +195,7 @@ const PLATE_INVENTORY_OWNER_KEY = "equipmentPlateInventoryOwner";
 const APP_APPROVAL_CACHE_KEY_PREFIX = "appUserApproval:";
 const APP_OWNER_EMAIL = "ihgold@comcast.net";
 const NORMALIZED_SYNC_DOMAINS = [
+  "cardio",
   "exercisePreferences",
   "workouts",
   "history",
@@ -192,6 +203,7 @@ const NORMALIZED_SYNC_DOMAINS = [
   "plateInventory",
 ];
 const NORMALIZED_SYNC_DOMAIN_LABELS = {
+  cardio: "cardio workouts",
   exercisePreferences: "exercise preferences",
   workouts: "workouts",
   history: "completed workouts",
@@ -199,6 +211,8 @@ const NORMALIZED_SYNC_DOMAIN_LABELS = {
   plateInventory: "plate inventory",
 };
 const NORMALIZED_WORKOUT_RESET_TABLES = [
+  "cardio_workout_logs",
+  "cardio_workout_templates",
   "session_sets",
   "session_exercises",
   "workout_sessions",
@@ -698,8 +712,12 @@ function formatNormalizedSummary(summary) {
     summary.maxE1RM == null ? "" : ` Max e1RM stored: ${summary.maxE1RM.toFixed(1)}.`;
   const plateInventory =
     summary.plateInventory > 0 ? ` Plate inventory saved.` : "";
+  const cardio =
+    summary.cardioWorkoutTemplates > 0 || summary.cardioWorkoutLogs > 0
+      ? ` ${summary.cardioWorkoutTemplates} cardio workouts, ${summary.cardioWorkoutLogs} cardio logs.`
+      : "";
 
-  return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${latest}${maxE1RM}${plateInventory}`;
+  return `${summary.exercises} exercises, ${summary.workouts} workouts, ${summary.workoutSessions} completed workouts, ${summary.sessionSets} completed sets.${cardio}${latest}${maxE1RM}${plateInventory}`;
 }
 
 function formatHistoryTimestamp(workout) {
@@ -4357,6 +4375,8 @@ function hasInactiveExercisePreference(exerciseLibrary) {
 
 function hasLocalNormalizedUserData(data) {
   return (
+    data.cardioWorkoutTemplates.length > 0 ||
+    data.cardioWorkoutHistory.length > 0 ||
     data.templates.length > 0 ||
     data.plans.length > 0 ||
     data.history.length > 0 ||
@@ -4370,6 +4390,8 @@ function hasNormalizedCloudData(summary) {
   return Boolean(
     summary &&
       (summary.workouts > 0 ||
+        summary.cardioWorkoutTemplates > 0 ||
+        summary.cardioWorkoutLogs > 0 ||
         summary.trainingPlans > 0 ||
         summary.workoutSessions > 0 ||
         summary.exercisePreferences > 0 ||
@@ -4523,6 +4545,7 @@ function getPlanTemplateIdSet(plans) {
 }
 
 function getAutoSyncSummary({
+  cardio,
   exercisePreferences,
   domains = [],
   history,
@@ -4536,7 +4559,7 @@ function getAutoSyncSummary({
   const domainSummary =
     domains.length > 0 ? ` Pushed: ${domains.join(", ")}.` : "";
 
-  return `${verb}: ${workouts.downloaded} workouts, ${plans.downloaded} plans, ${history.downloaded} completed workouts, ${exercisePreferences.updated} exercise preferences, ${plateInventory.downloaded} plate inventory.${domainSummary}`;
+  return `${verb}: ${workouts.downloaded} workouts, ${plans.downloaded} plans, ${history.downloaded} completed workouts, ${cardio?.templates?.length || 0} cardio workouts, ${cardio?.history?.length || 0} cardio logs, ${exercisePreferences.updated} exercise preferences, ${plateInventory.downloaded} plate inventory.${domainSummary}`;
 }
 
 function readNormalizedSyncDirtyDomains() {
@@ -5232,6 +5255,10 @@ export default function App() {
 
   const [templates, setTemplates] = useState(initialWorkoutData.templates);
 
+  const [cardioWorkoutTemplates, setCardioWorkoutTemplates] = useState(
+    initialWorkoutData.cardioWorkoutTemplates
+  );
+
   const [plans, setPlans] = useState(initialWorkoutData.plans);
 
   const [sessions, setSessions] = useState(initialWorkoutData.sessions);
@@ -5241,6 +5268,10 @@ export default function App() {
   );
 
   const [history, setHistory] = useState(initialWorkoutData.history);
+
+  const [cardioWorkoutHistory, setCardioWorkoutHistory] = useState(
+    initialWorkoutData.cardioWorkoutHistory
+  );
 
   const [localOwnerUserId, setLocalOwnerUserId] = useState(
     initialWorkoutData.ownerUserId || null
@@ -5258,6 +5289,13 @@ export default function App() {
   );
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [selectedCardioWorkoutTemplateId, setSelectedCardioWorkoutTemplateId] =
+    useState(null);
+  const [selectedCardioWorkoutHistoryTemplateId, setSelectedCardioWorkoutHistoryTemplateId] =
+    useState(null);
+  const [cardioWorkoutEditorOpen, setCardioWorkoutEditorOpen] = useState(false);
+  const [editingCardioWorkoutTemplateId, setEditingCardioWorkoutTemplateId] =
+    useState(null);
   const [temporaryTemplate, setTemporaryTemplate] = useState(null);
   const [selectedTemplatePlanWeek, setSelectedTemplatePlanWeek] = useState(null);
   const [autoStartTemplateId, setAutoStartTemplateId] = useState(null);
@@ -5266,8 +5304,15 @@ export default function App() {
 
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState(null);
   const [workoutMenuTemplateId, setWorkoutMenuTemplateId] = useState(null);
+  const [confirmDeleteCardioWorkout, setConfirmDeleteCardioWorkout] =
+    useState(null);
+  const [cardioWorkoutMenuTemplateId, setCardioWorkoutMenuTemplateId] =
+    useState(null);
 
   const [templateSort, setTemplateSort] = useState("recent");
+  const [cardioTemplateSort, setCardioTemplateSort] = useState("recent");
+  const [cardioWorkoutsExpanded, setCardioWorkoutsExpanded] = useState(false);
+  const [cardioWorkoutsPlacement, setCardioWorkoutsPlacement] = useState(null);
 
   const [selectedSessionId, setSelectedSessionId] = useState(
     initialWorkoutData.selectedSessionId
@@ -5319,7 +5364,7 @@ export default function App() {
   const [weekPickerPlanId, setWeekPickerPlanId] = useState(null);
   const [planComparisonOpen, setPlanComparisonOpen] = useState(false);
   const [selectedPlanComparisonIds, setSelectedPlanComparisonIds] = useState([]);
-  const [workoutsExpanded, setWorkoutsExpanded] = useState(true);
+  const [workoutsExpanded, setWorkoutsExpanded] = useState(false);
   const [completedPlanActions, setCompletedPlanActions] = useState(null);
   const [extendPlanTarget, setExtendPlanTarget] = useState(null);
   const [aiPlanNotesTarget, setAiPlanNotesTarget] = useState(null);
@@ -6263,6 +6308,8 @@ export default function App() {
     );
 
     return {
+      cardioWorkoutHistory,
+      cardioWorkoutTemplates,
       exerciseLibrary,
       exerciseMetadata,
       history,
@@ -6295,8 +6342,10 @@ export default function App() {
     );
 
     setTemplates(normalizedPlanData.templates);
+    setCardioWorkoutTemplates(data.cardioWorkoutTemplates || []);
     setPlans(normalizedPlanData.plans);
     setHistory(data.history);
+    setCardioWorkoutHistory(data.cardioWorkoutHistory || []);
     setSessions(data.sessions);
     setTargetAttributeDefaults(
       getTargetAttributeDefaults(data.targetAttributeDefaults)
@@ -6579,6 +6628,8 @@ export default function App() {
   }
 
   function resetLocalWorkoutDataForUser(userId = null) {
+    setCardioWorkoutHistory([]);
+    setCardioWorkoutTemplates([]);
     setTemplates([]);
     setPlans([]);
     setHistory([]);
@@ -6596,6 +6647,8 @@ export default function App() {
   useEffect(() => {
     localDataRevisionRef.current += 1;
     currentWorkoutDataRef.current = {
+      cardioWorkoutHistory,
+      cardioWorkoutTemplates,
       exerciseLibrary,
       exerciseMetadata,
       history,
@@ -6607,6 +6660,8 @@ export default function App() {
       templates,
     };
   }, [
+    cardioWorkoutHistory,
+    cardioWorkoutTemplates,
     templates,
     plans,
     history,
@@ -6803,6 +6858,15 @@ export default function App() {
       domainSet.has("plans");
     let workoutsUploaded = false;
 
+    if (domainSet.has("cardio")) {
+      setSyncStatus("Syncing now... uploading cardio workouts.");
+      await uploadCardioWorkouts(
+        data.cardioWorkoutTemplates,
+        data.cardioWorkoutHistory,
+        session
+      );
+    }
+
     if (domainSet.has("exercisePreferences")) {
       setSyncStatus("Syncing now... uploading exercise preferences.");
       await uploadCustomExercises(data.exerciseLibrary, session);
@@ -6880,6 +6944,14 @@ export default function App() {
       data.exerciseMetadata,
       session
     );
+    const cardioData = await downloadCardioWorkouts(
+      data.cardioWorkoutTemplates,
+      data.cardioWorkoutHistory,
+      session,
+      {
+        keepLocalOnly: dirtyDomainSet.has("cardio"),
+      }
+    );
     const workoutData = await downloadWorkouts(
       data.templates,
       exercisePreferences.exerciseLibrary,
@@ -6916,6 +6988,8 @@ export default function App() {
     );
     const nextData = {
       ...data,
+      cardioWorkoutHistory: cardioData.history,
+      cardioWorkoutTemplates: cardioData.templates,
       exerciseLibrary: exercisePreferences.exerciseLibrary,
       exerciseMetadata: exercisePreferences.exerciseMetadata,
       history: historyData.history,
@@ -6935,6 +7009,7 @@ export default function App() {
           : null,
       },
       plans: planData,
+      cardio: cardioData,
       workouts: workoutData,
     };
   }
@@ -6961,6 +7036,7 @@ export default function App() {
       markNormalizedSyncClean();
       setSyncStatus(
         `${getAutoSyncSummary({
+          cardio: downloaded.cardio,
           exercisePreferences: downloaded.exercisePreferences,
           history: downloaded.history,
           mode: "check",
@@ -7140,6 +7216,7 @@ export default function App() {
       }
       setSyncStatus(
         `${getAutoSyncSummary({
+          cardio: downloaded.cardio,
           exercisePreferences: downloaded.exercisePreferences,
           domains: shouldUpload ? uploadDomains : [],
           history: downloaded.history,
@@ -7419,7 +7496,7 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      "Reset workout sync data?\n\nThis deletes normalized plans, workouts, completed workout history, saved workout sessions, and the old snapshot row for this signed-in user. It also clears the same workout data on this device.\n\nThe exercise library and exercise preferences are kept."
+      "Reset workout sync data?\n\nThis deletes normalized plans, strength workouts, completed workout history, standalone cardio workouts, saved workout sessions, and the old snapshot row for this signed-in user. It also clears the same workout data on this device.\n\nThe exercise library and exercise preferences are kept."
     );
 
     if (!confirmed) {
@@ -7453,6 +7530,8 @@ export default function App() {
       automaticSyncSuppressUntilRef.current =
         getCurrentTimeMs() + AUTO_SYNC_SUPPRESS_MS;
       const resetData = {
+        cardioWorkoutHistory: [],
+        cardioWorkoutTemplates: [],
         exerciseLibrary,
         exerciseMetadata: {},
         history: [],
@@ -7466,8 +7545,10 @@ export default function App() {
       saveWorkoutData(resetData, STORAGE_VERSION);
       await saveWorkoutDataToIndexedDb(resetData, STORAGE_VERSION);
       setTemplates([]);
+      setCardioWorkoutTemplates([]);
       setPlans([]);
       setHistory([]);
+      setCardioWorkoutHistory([]);
       setSessions([]);
       setExerciseMetadata({});
       setSelectedTemplateId(null);
@@ -7483,7 +7564,7 @@ export default function App() {
       setDataAuditStatus("");
       markNormalizedSyncClean();
       setSyncStatus(
-        "Workout sync data reset. Cloud plans, workouts, history, saved sessions, and this device's matching local data were cleared. Exercises were kept."
+        "Workout sync data reset. Cloud plans, strength and cardio workouts, history, saved sessions, and this device's matching local data were cleared. Exercises were kept."
       );
     } catch (error) {
       console.error("Workout sync reset failed:", error);
@@ -8113,8 +8194,14 @@ export default function App() {
             normalizeWorkoutDataPlanTypes(indexedDbData);
 
           setTemplates(normalizedIndexedDbData.templates);
+          setCardioWorkoutTemplates(
+            normalizedIndexedDbData.cardioWorkoutTemplates || []
+          );
           setPlans(normalizedIndexedDbData.plans);
           setHistory(normalizedIndexedDbData.history);
+          setCardioWorkoutHistory(
+            normalizedIndexedDbData.cardioWorkoutHistory || []
+          );
           setSessions(normalizedIndexedDbData.sessions);
           setTargetAttributeDefaults(
             getTargetAttributeDefaults(
@@ -8260,6 +8347,8 @@ export default function App() {
   useEffect(() => {
     const normalizedPlanData = normalizeStoredPlanWorkoutTypes(plans, templates);
     const data = {
+      cardioWorkoutHistory,
+      cardioWorkoutTemplates,
       exerciseLibrary,
       exerciseMetadata,
       history,
@@ -8275,6 +8364,8 @@ export default function App() {
 
     saveWorkoutData(data, STORAGE_VERSION);
   }, [
+    cardioWorkoutHistory,
+    cardioWorkoutTemplates,
     templates,
     plans,
     history,
@@ -8301,6 +8392,8 @@ export default function App() {
 
     localDataRevisionRef.current += 1;
   }, [
+    cardioWorkoutHistory,
+    cardioWorkoutTemplates,
     exerciseLibrary,
     exerciseMetadata,
     history,
@@ -8395,6 +8488,8 @@ export default function App() {
       console.error("Failed to save workout data to IndexedDB:", error);
     });
   }, [
+    cardioWorkoutHistory,
+    cardioWorkoutTemplates,
     templates,
     plans,
     history,
@@ -8433,6 +8528,14 @@ export default function App() {
     (String(temporaryTemplate?.id) === String(selectedTemplateId)
       ? temporaryTemplate
       : null);
+
+  const selectedCardioWorkoutTemplate = cardioWorkoutTemplates.find(
+    (template) => String(template.id) === String(selectedCardioWorkoutTemplateId)
+  );
+  const selectedCardioWorkoutHistoryTemplate = cardioWorkoutTemplates.find(
+    (template) =>
+      String(template.id) === String(selectedCardioWorkoutHistoryTemplateId)
+  );
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
   const localBodyWeightEntries = readLocalArray(BODY_WEIGHT_LOG_KEY);
@@ -13929,6 +14032,56 @@ export default function App() {
   }
 
   if (showPlans) {
+    if (cardioWorkoutEditorOpen) {
+      const editingCardioWorkout = cardioWorkoutTemplates.find(
+        (template) =>
+          String(template.id) === String(editingCardioWorkoutTemplateId)
+      );
+
+      return renderAppShell(
+        <CardioWorkoutEditor
+          exerciseLibrary={exerciseLibrary}
+          onCancel={() => {
+            setCardioWorkoutEditorOpen(false);
+            setEditingCardioWorkoutTemplateId(null);
+          }}
+          onSave={(draft) => {
+            const { prescription: prescriptionValues, ...template } = draft;
+            const savedAt = new Date().toISOString();
+            const nextTemplate = {
+              ...template,
+              createdAt: template.createdAt || savedAt,
+              id: template.id || getCurrentTimeMs(),
+              prescription: normalizeCardioPrescription({
+                format: template.format,
+                values: prescriptionValues,
+              }),
+              updatedAt: savedAt,
+            };
+
+            setCardioWorkoutTemplates((currentTemplates) => {
+              const exists = currentTemplates.some(
+                (item) => String(item.id) === String(nextTemplate.id)
+              );
+
+              return exists
+                ? currentTemplates.map((item) =>
+                    String(item.id) === String(nextTemplate.id)
+                      ? { ...item, ...nextTemplate }
+                      : item
+                  )
+                : [...currentTemplates, nextTemplate];
+            });
+            setCardioWorkoutEditorOpen(false);
+            setEditingCardioWorkoutTemplateId(null);
+            requestSyncCheckpoint(["cardio"], "cardio workout save");
+          }}
+          template={editingCardioWorkout}
+        />,
+        "plans"
+      );
+    }
+
     if (!planEditorOpen) {
       const activePlans = plans.filter((plan) => plan.status === "active");
       const pastPlans = plans
@@ -13975,6 +14128,19 @@ export default function App() {
           >
             <Plus size={17} />
             New Plan
+          </button>
+
+          <button
+            className="app-secondary-action"
+            onClick={() => {
+              setEditingCardioWorkoutTemplateId(null);
+              setCardioWorkoutEditorOpen(true);
+            }}
+            style={{ justifyContent: "center", margin: "0 0 12px", width: "100%" }}
+            type="button"
+          >
+            <Plus size={17} />
+            New Cardio Workout
           </button>
 
           {plans.length >= 2 ? (
@@ -14088,6 +14254,11 @@ export default function App() {
         onCancel={() => {
           setEditingPlanId(null);
           setPlanEditorOpen(false);
+        }}
+        onCreateCardioWorkout={() => {
+          setPlanEditorOpen(false);
+          setEditingCardioWorkoutTemplateId(null);
+          setCardioWorkoutEditorOpen(true);
         }}
         onCopyAiPlanPrompt={copyAiPlanPrompt}
         onCopyAiPlanContext={copyAiPlanContext}
@@ -14245,6 +14416,56 @@ export default function App() {
     );
   }
 
+  if (selectedCardioWorkoutTemplate) {
+    return renderAppShell(
+      <CardioWorkoutDetail
+        history={cardioWorkoutHistory}
+        onBack={() => setSelectedCardioWorkoutTemplateId(null)}
+        onComplete={(log) => {
+          setCardioWorkoutHistory((currentHistory) => [log, ...currentHistory]);
+          setCardioWorkoutTemplates((currentTemplates) =>
+            currentTemplates.map((template) =>
+              String(template.id) === String(log.templateId)
+                ? { ...template, lastCompletedAt: log.completedAt }
+                : template
+            )
+          );
+          requestSyncCheckpoint(["cardio"], "cardio workout completion");
+          setSelectedCardioWorkoutTemplateId(null);
+        }}
+        onEdit={() => {
+          setEditingCardioWorkoutTemplateId(selectedCardioWorkoutTemplate.id);
+          setSelectedCardioWorkoutTemplateId(null);
+          setShowPlans(true);
+          setCardioWorkoutEditorOpen(true);
+        }}
+        template={selectedCardioWorkoutTemplate}
+      />,
+      "home"
+    );
+  }
+
+  if (selectedCardioWorkoutHistoryTemplate) {
+    return renderAppShell(
+      <CardioWorkoutHistory
+        history={cardioWorkoutHistory}
+        onBack={() => setSelectedCardioWorkoutHistoryTemplateId(null)}
+        onDeleteLog={(log) => {
+          if (!window.confirm("Delete this completed cardio workout?")) {
+            return;
+          }
+
+          setCardioWorkoutHistory((currentHistory) =>
+            currentHistory.filter((item) => String(item.id) !== String(log.id))
+          );
+          requestSyncCheckpoint(["cardio"], "cardio workout log delete");
+        }}
+        template={selectedCardioWorkoutHistoryTemplate}
+      />,
+      "home"
+    );
+  }
+
   if (selectedSession) {
     return (
       <>
@@ -14341,6 +14562,17 @@ export default function App() {
 
       return b.homeLastCompletedTime - a.homeLastCompletedTime;
     });
+  const standaloneCardioWorkoutTemplates = [...cardioWorkoutTemplates].sort(
+    (left, right) => {
+      if (cardioTemplateSort === "alpha") {
+        return left.name.localeCompare(right.name);
+      }
+
+      return String(right.lastCompletedAt || "").localeCompare(
+        String(left.lastCompletedAt || "")
+      );
+    }
+  );
   const activeHomePlan = plans.find((plan) => plan.status === "active") || null;
   const activeHomeWeekStatus = activeHomePlan
     ? getPlanWeekStatus(
@@ -14563,6 +14795,309 @@ export default function App() {
         </div>
       </AppSectionCard>
 
+      {cardioWorkoutsPlacement &&
+        createPortal(
+          <>
+      <button
+        aria-expanded={cardioWorkoutsExpanded}
+        onClick={() => setCardioWorkoutsExpanded((expanded) => !expanded)}
+        style={{
+          alignItems: "center",
+          background: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "14px",
+          color: "var(--text-h)",
+          display: "grid",
+          font: "inherit",
+          gridTemplateColumns: "44px minmax(0, 1fr) 44px",
+          margin: "14px 0 12px",
+          minHeight: "60px",
+          padding: "7px",
+          width: "100%",
+        }}
+        type="button"
+      >
+        <span style={{ alignItems: "center", display: "inline-flex", justifyContent: "center" }}>
+          {cardioWorkoutsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </span>
+        <span style={{ display: "grid", fontSize: "17px", fontWeight: "bold", lineHeight: 1.2, textAlign: "left" }}>
+          <span style={{ alignItems: "center", display: "inline-flex", gap: "7px" }}>
+            <img
+              alt=""
+              aria-hidden="true"
+              src="/cardio-workouts-icon.png"
+              style={{ display: "block", height: "28px", objectFit: "contain", width: "28px" }}
+            />
+            Cardio workouts
+          </span>
+          <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "normal" }}>
+            {cardioWorkoutTemplates.length} saved standalone {cardioWorkoutTemplates.length === 1 ? "workout" : "workouts"}
+          </span>
+        </span>
+        <span />
+      </button>
+
+      {cardioWorkoutsExpanded && (
+        <>
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: "10px",
+              justifyContent: "space-between",
+              marginBottom: "10px",
+            }}
+          >
+            <button
+              className="app-secondary-action"
+              onClick={() => {
+                setEditingCardioWorkoutTemplateId(null);
+                setShowPlans(true);
+                setCardioWorkoutEditorOpen(true);
+              }}
+              type="button"
+            >
+              <Plus size={16} /> New Cardio Workout
+            </button>
+            <select
+              onChange={(event) => setCardioTemplateSort(event.target.value)}
+              style={{ minHeight: "44px", padding: "8px 10px" }}
+              value={cardioTemplateSort}
+            >
+              <option value="recent">Recent</option>
+              <option value="alpha">A → Z</option>
+            </select>
+          </div>
+
+          {cardioWorkoutTemplates.length === 0 ? (
+            <div className="home-today-card__empty">
+              Save a bike, jog, or treadmill workout to start it from Home.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "8px", marginBottom: "12px" }}>
+              {standaloneCardioWorkoutTemplates.map((template) => (
+                  <div
+                    key={template.id}
+                    style={{
+                      alignItems: "center",
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "12px",
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      padding: "8px",
+                    }}
+                  >
+                    <button
+                      onClick={() => setSelectedCardioWorkoutTemplateId(template.id)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text)",
+                        minHeight: "44px",
+                        minWidth: 0,
+                        padding: "4px",
+                        textAlign: "left",
+                      }}
+                      type="button"
+                    >
+                      <strong style={{ display: "block" }}>{template.name}</strong>
+                      <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                        {template.exercise?.name} · {template.format === "hiit" ? "HIIT" : "Steady state"}
+                        {template.lastCompletedAt
+                          ? ` · Last completed ${new Date(template.lastCompletedAt).toLocaleDateString()}`
+                          : " · Not completed yet"}
+                      </span>
+                    </button>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        gap: "4px",
+                        position: "relative",
+                      }}
+                    >
+                      <button
+                        aria-expanded={
+                          String(cardioWorkoutMenuTemplateId) === String(template.id)
+                        }
+                        aria-label={`More actions for ${template.name}`}
+                        onClick={() => {
+                          setCardioWorkoutMenuTemplateId((current) =>
+                            String(current) === String(template.id)
+                              ? null
+                              : template.id
+                          );
+                        }}
+                        style={{ minHeight: "40px", minWidth: "40px", padding: "5px" }}
+                        title="More actions"
+                        type="button"
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                      <button
+                        aria-label={`${template.name} history`}
+                        onClick={() => setSelectedCardioWorkoutHistoryTemplateId(template.id)}
+                        style={{ minHeight: "40px", minWidth: "40px", padding: "5px" }}
+                        title="History"
+                        type="button"
+                      >
+                        <History size={16} />
+                      </button>
+                      {String(cardioWorkoutMenuTemplateId) === String(template.id) && (
+                        <>
+                          <div
+                            aria-hidden="true"
+                            onClick={() => setCardioWorkoutMenuTemplateId(null)}
+                            style={{
+                              background: "transparent",
+                              inset: 0,
+                              position: "fixed",
+                              zIndex: 1000,
+                            }}
+                          />
+                          <div
+                            style={{
+                              background: "var(--surface-raised)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "10px",
+                              boxShadow: "0 12px 32px rgba(0,0,0,.2)",
+                              display: "grid",
+                              gap: "4px",
+                              minWidth: "150px",
+                              padding: "6px",
+                              position: "absolute",
+                              right: 0,
+                              top: "44px",
+                              zIndex: 1001,
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                const copiedAt = new Date().toISOString();
+                                setCardioWorkoutTemplates((currentTemplates) => [
+                                  ...currentTemplates,
+                                  {
+                                    ...template,
+                                    createdAt: copiedAt,
+                                    id: getCurrentTimeMs(),
+                                    lastCompletedAt: null,
+                                    name: `${template.name} copy`,
+                                    updatedAt: copiedAt,
+                                  },
+                                ]);
+                                setCardioWorkoutMenuTemplateId(null);
+                                requestSyncCheckpoint(["cardio"], "cardio workout duplicate");
+                              }}
+                              style={{
+                                alignItems: "center",
+                                display: "flex",
+                                gap: "8px",
+                                minHeight: "44px",
+                                padding: "8px 10px",
+                                textAlign: "left",
+                              }}
+                              type="button"
+                            >
+                              <Copy size={16} /> Duplicate
+                            </button>
+                            <button
+                              onClick={() => {
+                                setCardioWorkoutMenuTemplateId(null);
+                                setConfirmDeleteCardioWorkout(template);
+                              }}
+                              style={{
+                                alignItems: "center",
+                                color: "var(--danger-text)",
+                                display: "flex",
+                                gap: "8px",
+                                minHeight: "44px",
+                                padding: "8px 10px",
+                                textAlign: "left",
+                              }}
+                              type="button"
+                            >
+                              <Trash2 size={16} /> Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              {confirmDeleteCardioWorkout && (
+                <div
+                  style={{
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "12px",
+                    boxShadow: "0 12px 32px rgba(0,0,0,.22)",
+                    left: "50%",
+                    padding: "20px",
+                    position: "fixed",
+                    top: "50%",
+                    transform: "translate(-50%, -50%)",
+                    width: "280px",
+                    zIndex: 1002,
+                  }}
+                >
+                  <div style={{ fontSize: "16px", fontWeight: 800 }}>
+                    Delete cardio workout?
+                  </div>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "13px",
+                      lineHeight: 1.45,
+                      marginTop: "8px",
+                    }}
+                  >
+                    “{confirmDeleteCardioWorkout.name}” will be removed from your
+                    saved cardio workouts. Completed history is kept.
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      gridTemplateColumns: "1fr 1fr",
+                      marginTop: "16px",
+                    }}
+                  >
+                    <button
+                      className="app-secondary-action"
+                      onClick={() => setConfirmDeleteCardioWorkout(null)}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="app-danger-action"
+                      onClick={() => {
+                        const templateId = confirmDeleteCardioWorkout.id;
+                        setCardioWorkoutTemplates((currentTemplates) =>
+                          currentTemplates.filter(
+                            (template) => String(template.id) !== String(templateId)
+                          )
+                        );
+                        setConfirmDeleteCardioWorkout(null);
+                        requestSyncCheckpoint(["cardio"], "cardio workout delete");
+                      }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+          </>,
+          cardioWorkoutsPlacement
+        )}
+
       <div className="home-section-label">
         <span>Calendar</span>
         <button
@@ -14629,7 +15164,10 @@ export default function App() {
             textAlign: "left",
           }}
         >
-          Workouts
+          <span style={{ alignItems: "center", display: "inline-flex", gap: "7px" }}>
+            <Dumbbell color="var(--accent)" size={19} />
+            Workouts
+          </span>
           <span
             style={{
               color: "var(--text-muted)",
@@ -14967,6 +15505,7 @@ export default function App() {
         </>
       )}
       </div>
+      <div ref={setCardioWorkoutsPlacement} />
       {selectedHistory && (
         <CompletedWorkoutSheet
           bodyWeightEntries={localBodyWeightEntries}

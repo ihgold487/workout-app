@@ -17,6 +17,8 @@ const WORKOUT_DATA_RECORD_ID = "current";
 const WORKOUT_SESSION_JOURNAL_ID = "active";
 
 const WORKOUT_DATA_KEYS = {
+  cardioWorkoutHistory: "cardioWorkoutHistory",
+  cardioWorkoutTemplates: "cardioWorkoutTemplates",
   exerciseLibrary: "exerciseLibrary",
   exerciseMetadata: "exerciseMetadata",
   history: "history",
@@ -114,6 +116,8 @@ function mergeSavedBuiltinExercise(seedExercise, savedExercise) {
 
 function normalizeWorkoutData(data, { seedExercises }) {
   return {
+    cardioWorkoutHistory: arrayOrEmpty(data?.cardioWorkoutHistory),
+    cardioWorkoutTemplates: arrayOrEmpty(data?.cardioWorkoutTemplates),
     exerciseLibrary: mergeExerciseLibraryWithSeed(
       data?.exerciseLibrary,
       seedExercises
@@ -137,6 +141,8 @@ function readLegacyFullWorkoutBackup() {
   );
   const history = readJson(WORKOUT_DATA_KEYS.history, []);
   const hasLegacyData =
+    localStorage.getItem(WORKOUT_DATA_KEYS.cardioWorkoutHistory) != null ||
+    localStorage.getItem(WORKOUT_DATA_KEYS.cardioWorkoutTemplates) != null ||
     localStorage.getItem(WORKOUT_DATA_KEYS.exerciseLibrary) != null ||
     localStorage.getItem(WORKOUT_DATA_KEYS.history) != null ||
     localStorage.getItem(WORKOUT_DATA_KEYS.plans) != null ||
@@ -149,6 +155,11 @@ function readLegacyFullWorkoutBackup() {
 
   return {
     data: {
+      cardioWorkoutHistory: readJson(WORKOUT_DATA_KEYS.cardioWorkoutHistory, []),
+      cardioWorkoutTemplates: readJson(
+        WORKOUT_DATA_KEYS.cardioWorkoutTemplates,
+        []
+      ),
       exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
       exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
       history,
@@ -250,6 +261,8 @@ function mergeRecoveredActiveSession(sessions, recovery) {
 
 function clearLegacyFullWorkoutBackup() {
   localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseLibrary);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.cardioWorkoutHistory);
+  localStorage.removeItem(WORKOUT_DATA_KEYS.cardioWorkoutTemplates);
   localStorage.removeItem(WORKOUT_DATA_KEYS.exerciseMetadata);
   localStorage.removeItem(WORKOUT_DATA_KEYS.history);
   localStorage.removeItem(WORKOUT_DATA_KEYS.plans);
@@ -330,6 +343,11 @@ export function mergeExerciseLibraryWithSeed(exerciseLibrary, seedExercises) {
 
 export function loadWorkoutData({ seedExercises }) {
   const data = {
+    cardioWorkoutHistory: readJson(WORKOUT_DATA_KEYS.cardioWorkoutHistory, []),
+    cardioWorkoutTemplates: readJson(
+      WORKOUT_DATA_KEYS.cardioWorkoutTemplates,
+      []
+    ),
     exerciseLibrary: readJson(WORKOUT_DATA_KEYS.exerciseLibrary, []),
     exerciseMetadata: readJson(WORKOUT_DATA_KEYS.exerciseMetadata, {}),
     history: readJson(WORKOUT_DATA_KEYS.history, []),
@@ -637,6 +655,8 @@ export function clearLegacyEquipmentStorage() {
 export function createWorkoutBackup(data) {
   return {
     data: {
+      cardioWorkoutHistory: arrayOrEmpty(data.cardioWorkoutHistory),
+      cardioWorkoutTemplates: arrayOrEmpty(data.cardioWorkoutTemplates),
       exerciseLibrary: arrayOrEmpty(data.exerciseLibrary),
       exerciseMetadata: objectOrEmpty(data.exerciseMetadata),
       history: arrayOrEmpty(data.history),
@@ -659,6 +679,8 @@ export function getWorkoutDataSummary(data) {
     customExercises: arrayOrEmpty(data.exerciseLibrary).filter(
       (exercise) => !exercise.builtin
     ).length,
+    cardioWorkoutHistory: arrayOrEmpty(data.cardioWorkoutHistory).length,
+    cardioWorkoutTemplates: arrayOrEmpty(data.cardioWorkoutTemplates).length,
     history: arrayOrEmpty(data.history).length,
     plans: arrayOrEmpty(data.plans).length,
     sessions: arrayOrEmpty(data.sessions).length,
