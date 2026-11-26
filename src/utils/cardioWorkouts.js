@@ -82,6 +82,11 @@ export function secondsToMinutes(value) {
   return seconds == null ? "" : (seconds / 60).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+function optionalText(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
 function compactObject(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item != null && item !== "")
@@ -89,41 +94,145 @@ function compactObject(value) {
 }
 
 export function normalizeCardioPrescription({ format, values = {} }) {
-  const shared = {
-    plannedDistanceMeters: milesToMeters(values.plannedDistanceMiles),
-    plannedDurationSeconds: minutesToSeconds(values.plannedDurationMinutes),
-  };
-
-  if (format === CARDIO_WORKOUT_FORMATS.hiit) {
-    const recovery = compactObject({
-      gradePercent: optionalNonNegativeNumber(values.recoveryGradePercent),
-      resistance: optionalNonNegativeNumber(values.recoveryResistance),
-      speedMetersPerSecond: mphToMetersPerSecond(values.recoverySpeedMph),
-    });
-    const work = compactObject({
-      gradePercent: optionalNonNegativeNumber(values.workGradePercent),
-      resistance: optionalNonNegativeNumber(values.workResistance),
-      speedMetersPerSecond: mphToMetersPerSecond(values.workSpeedMph),
-    });
+  const phase = (name) => {
+    const prefix = name;
+    const speedValue = values[`${prefix}SpeedMph`] ??
+      (name === "work" ? values.speedMph : undefined);
+    const gradeValue = values[`${prefix}GradePercent`] ??
+      (name === "work" ? values.gradePercent : undefined);
+    const resistanceValue = values[`${prefix}Resistance`] ??
+      (name === "work" ? values.resistance : undefined);
+    const cadenceValue = values[`${prefix}CadenceRpm`];
+    const powerValue = values[`${prefix}PowerWatts`];
+    const durationValue = values[`${name}DurationSeconds`];
 
     return compactObject({
-      ...shared,
-      ...(Object.keys(recovery).length > 0 ? { recovery } : {}),
-      rounds: optionalPositiveNumber(values.rounds),
-      ...(Object.keys(work).length > 0 ? { work } : {}),
-      workDurationSeconds: optionalPositiveNumber(values.workDurationSeconds),
-      recoveryDurationSeconds: optionalPositiveNumber(
-        values.recoveryDurationSeconds
-      ),
+      cadenceRpm: optionalNonNegativeNumber(cadenceValue),
+      durationSeconds: optionalPositiveNumber(durationValue),
+      gradePercent: optionalNonNegativeNumber(gradeValue),
+      label: optionalText(values[`${name}Label`]),
+      powerWatts: optionalNonNegativeNumber(powerValue),
+      resistance: optionalNonNegativeNumber(resistanceValue),
+      speedMetersPerSecond: mphToMetersPerSecond(speedValue),
     });
+  };
+
+  const warmup = phase("warmup");
+  const work = phase("work");
+  const recovery = phase("recovery");
+  const cooldown = phase("cooldown");
+  const rounds = optionalPositiveNumber(values.rounds);
+
+  // Existing templates stored a steady-state duration and targets at the
+  // prescription root. New templates store every timed portion as a phase.
+  // Keep accepting the older editor values so old saves remain valid.
+  if (format === CARDIO_WORKOUT_FORMATS.steady) {
+    const legacyDuration = minutesToSeconds(values.plannedDurationMinutes);
+    if (work.durationSeconds == null && legacyDuration != null) {
+      work.durationSeconds = legacyDuration;
+    }
   }
 
-  return compactObject({
-    ...shared,
-    gradePercent: optionalNonNegativeNumber(values.gradePercent),
-    resistance: optionalNonNegativeNumber(values.resistance),
-    speedMetersPerSecond: mphToMetersPerSecond(values.speedMph),
+  const normalizedRounds =
+    format === CARDIO_WORKOUT_FORMATS.steady
+      ? 1
+      : rounds;
+  const plannedDurationSeconds = calculateCardioWorkoutDuration({
+    cooldown,
+    format,
+    recovery,
+    rounds: normalizedRounds,
+    warmup,
+    work,
   });
+
+  return compactObject({
+    ...(Object.keys(warmup).length > 0 ? { warmup } : {}),
+    ...(Object.keys(work).length > 0 ? { work } : {}),
+    ...(Object.keys(recovery).length > 0 ? { recovery } : {}),
+    ...(Object.keys(cooldown).length > 0 ? { cooldown } : {}),
+    plannedDistanceMeters: milesToMeters(values.plannedDistanceMiles),
+    plannedDurationSeconds,
+    rounds: normalizedRounds,
+  });
+}
+
+function phaseDuration(phase) {
+  return optionalPositiveNumber(phase?.durationSeconds) || 0;
+}
+
+export function calculateCardioWorkoutDuration(prescription = {}) {
+  const rounds = optionalPositiveNumber(prescription.rounds) || 0;
+  const workDuration = phaseDuration(prescription.work) ||
+    optionalPositiveNumber(prescription.workDurationSeconds) || 0;
+  const recoveryDuration = phaseDuration(prescription.recovery) ||
+    optionalPositiveNumber(prescription.recoveryDurationSeconds) || 0;
+  const warmupDuration = phaseDuration(prescription.warmup) ||
+    optionalPositiveNumber(prescription.warmupDurationSeconds) || 0;
+  const cooldownDuration = phaseDuration(prescription.cooldown) ||
+    optionalPositiveNumber(prescription.cooldownDurationSeconds) || 0;
+  const legacySteadyDuration = optionalPositiveNumber(
+    prescription.plannedDurationSeconds
+  ) || 0;
+  const effectiveRounds = rounds || (workDuration || legacySteadyDuration ? 1 : 0);
+  const effectiveWorkDuration = workDuration ||
+    (effectiveRounds === 1 ? legacySteadyDuration : 0);
+
+  return warmupDuration +
+    effectiveRounds * effectiveWorkDuration +
+    effectiveRounds * recoveryDuration +
+    cooldownDuration || null;
+}
+
+export function getCardioWorkoutPhases(prescription = {}) {
+  const rounds = optionalPositiveNumber(prescription.rounds) || 0;
+  const legacySteadyDuration = optionalPositiveNumber(
+    prescription.plannedDurationSeconds
+  ) || 0;
+  const work = prescription.work || {};
+  const recovery = prescription.recovery || {};
+  const warmup = prescription.warmup || {};
+  const cooldown = prescription.cooldown || {};
+  const workDuration = phaseDuration(work) ||
+    optionalPositiveNumber(prescription.workDurationSeconds) ||
+    (rounds <= 1 ? legacySteadyDuration : 0);
+  const recoveryDuration = phaseDuration(recovery) ||
+    optionalPositiveNumber(prescription.recoveryDurationSeconds) || 0;
+  const effectiveRounds = rounds || (workDuration ? 1 : 0);
+  const phases = [];
+
+  const addPhase = (kind, phase, durationSeconds, index = null) => {
+    if (!durationSeconds) return;
+    phases.push({
+      durationSeconds,
+      index,
+      kind,
+      label: optionalText(phase?.label) ||
+        (kind === "warmup"
+          ? "Warm-up"
+          : kind === "cooldown"
+            ? "Cool-down"
+            : kind === "recovery"
+              ? "Recovery"
+              : "Working"),
+      target: compactObject({
+        cadenceRpm: phase?.cadenceRpm,
+        gradePercent: phase?.gradePercent,
+        powerWatts: phase?.powerWatts,
+        resistance: phase?.resistance,
+        speedMetersPerSecond: phase?.speedMetersPerSecond,
+      }),
+    });
+  };
+
+  addPhase("warmup", warmup, phaseDuration(warmup));
+  for (let round = 0; round < effectiveRounds; round += 1) {
+    addPhase("work", work, workDuration, round + 1);
+    addPhase("recovery", recovery, recoveryDuration, round + 1);
+  }
+  addPhase("cooldown", cooldown, phaseDuration(cooldown));
+
+  return phases;
 }
 
 export function normalizeCardioResults(values = {}) {
@@ -177,21 +286,20 @@ export function formatCardioDuration(seconds) {
 
 export function getCardioWorkoutSummary(workout) {
   const prescription = workout?.prescription || {};
-  const duration = formatCardioDuration(prescription.plannedDurationSeconds);
+  const duration = formatCardioDuration(
+    calculateCardioWorkoutDuration(prescription)
+  );
+  const phases = getCardioWorkoutPhases(prescription);
+  const work = phases.find((phase) => phase.kind === "work");
+  const recovery = phases.find((phase) => phase.kind === "recovery");
+  const roundCount = prescription.rounds || (work ? 1 : null);
+  const structure = [
+    roundCount && work
+      ? `${roundCount} × ${formatCardioDuration(work.durationSeconds)} ${work.label.toLowerCase()}`
+      : null,
+    recovery ? `${formatCardioDuration(recovery.durationSeconds)} ${recovery.label.toLowerCase()}` : null,
+  ].filter(Boolean);
 
-  if (workout?.format === CARDIO_WORKOUT_FORMATS.hiit) {
-    const roundDetails = [
-      prescription.rounds ? `${prescription.rounds} rounds` : null,
-      prescription.workDurationSeconds
-        ? `${formatCardioDuration(prescription.workDurationSeconds)} work`
-        : null,
-      prescription.recoveryDurationSeconds
-        ? `${formatCardioDuration(prescription.recoveryDurationSeconds)} recovery`
-        : null,
-    ].filter(Boolean);
-
-    return roundDetails.join(" · ") || "Interval details optional";
-  }
-
-  return duration ? `${duration} planned` : "Details optional";
+  return [duration ? `${duration} total` : null, ...structure].join(" · ") ||
+    "Add phase times to see the workout structure";
 }

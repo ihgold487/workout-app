@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CARDIO_WORKOUT_FORMATS,
+  calculateCardioWorkoutDuration,
   createCardioWorkoutLog,
   getCardioExercises,
+  getCardioWorkoutPhases,
   normalizeCardioPrescription,
   normalizeCardioResults,
 } from "../src/utils/cardioWorkouts.js";
@@ -24,7 +26,7 @@ test("only offers active cardio exercises", () => {
   );
 });
 
-test("stores displayed distance, duration, and speed in canonical units", () => {
+test("stores a steady-state phase in canonical units", () => {
   assert.deepEqual(
     normalizeCardioPrescription({
       format: CARDIO_WORKOUT_FORMATS.steady,
@@ -37,8 +39,60 @@ test("stores displayed distance, duration, and speed in canonical units", () => 
     {
       plannedDistanceMeters: 4988.9664,
       plannedDurationSeconds: 1800,
-      speedMetersPerSecond: 2.90576,
+      rounds: 1,
+      work: {
+        durationSeconds: 1800,
+        speedMetersPerSecond: 2.90576,
+      },
     }
+  );
+});
+
+test("calculates HIIT duration using complete work and recovery pairs", () => {
+  const prescription = normalizeCardioPrescription({
+    format: CARDIO_WORKOUT_FORMATS.hiit,
+    values: {
+      cooldownDurationSeconds: "300",
+      recoveryDurationSeconds: "180",
+      recoveryLabel: "Walk",
+      rounds: "4",
+      warmupDurationSeconds: "300",
+      workDurationSeconds: "240",
+      workGradePercent: "12",
+      workLabel: "Hard climb",
+    },
+  });
+
+  assert.equal(calculateCardioWorkoutDuration(prescription), 2280);
+  assert.equal(prescription.plannedDurationSeconds, 2280);
+  assert.deepEqual(
+    getCardioWorkoutPhases(prescription).map((phase) => phase.label),
+    [
+      "Warm-up",
+      "Hard climb",
+      "Walk",
+      "Hard climb",
+      "Walk",
+      "Hard climb",
+      "Walk",
+      "Hard climb",
+      "Walk",
+      "Cool-down",
+    ]
+  );
+});
+
+test("continues to read the original flat HIIT prescription shape", () => {
+  const legacyPrescription = {
+    recoveryDurationSeconds: 90,
+    rounds: 3,
+    workDurationSeconds: 60,
+  };
+
+  assert.equal(calculateCardioWorkoutDuration(legacyPrescription), 450);
+  assert.deepEqual(
+    getCardioWorkoutPhases(legacyPrescription).map((phase) => phase.kind),
+    ["work", "recovery", "work", "recovery", "work", "recovery"]
   );
 });
 

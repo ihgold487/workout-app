@@ -3,15 +3,18 @@ import { ArrowLeft, ChevronLeft, Play, Save, Trash2, X } from "lucide-react";
 import { AppPageHeader } from "./ui/AppSurface";
 import {
   CARDIO_WORKOUT_FORMATS,
+  calculateCardioWorkoutDuration,
   createCardioExerciseSnapshot,
   createCardioWorkoutLog,
   getCardioExercises,
+  getCardioWorkoutPhases,
   getCardioWorkoutFormatLabel,
   getCardioWorkoutSummary,
   getDefaultCardioWorkoutName,
   formatCardioDuration,
   metersPerSecondToMph,
   metersToMiles,
+  normalizeCardioPrescription,
   secondsToMinutes,
 } from "../utils/cardioWorkouts";
 
@@ -41,29 +44,408 @@ function NumericField({ label, onChange, step = "any", value }) {
   );
 }
 
+const DURATION_MINUTES = Array.from({ length: 121 }, (_, index) => index);
+const DURATION_SECONDS = Array.from({ length: 60 }, (_, index) => index);
+const TREADMILL_SPEEDS = Array.from(
+  { length: 71 },
+  (_, index) => (3 + index / 10).toFixed(1)
+);
+const TREADMILL_INCLINES = Array.from(
+  { length: 151 },
+  (_, index) => (index / 10).toFixed(1)
+);
+
+function DurationField({ label, onChange, value }) {
+  const totalSeconds = Number(value);
+  const isSet = Number.isFinite(totalSeconds) && totalSeconds > 0;
+  const minutes = isSet ? Math.floor(totalSeconds / 60) : "";
+  const seconds = isSet ? Math.round(totalSeconds % 60) : "";
+
+  const updateDuration = (part, nextValue) => {
+    const nextMinutes = Number(part === "minutes" ? nextValue : minutes) || 0;
+    const nextSeconds = Number(part === "seconds" ? nextValue : seconds) || 0;
+    onChange(nextMinutes * 60 + nextSeconds || "");
+  };
+
+  return (
+    <Field label={label}>
+      <span className="cardio-duration-picker">
+        <select
+          aria-label={`${label}: minutes`}
+          onChange={(event) => updateDuration("minutes", event.target.value)}
+          value={minutes}
+        >
+          <option value="">Min</option>
+          {DURATION_MINUTES.map((minute) => (
+            <option key={minute} value={minute}>{minute}</option>
+          ))}
+        </select>
+        <span>:</span>
+        <select
+          aria-label={`${label}: seconds`}
+          onChange={(event) => updateDuration("seconds", event.target.value)}
+          value={seconds}
+        >
+          <option value="">Sec</option>
+          {DURATION_SECONDS.map((second) => (
+            <option key={second} value={second}>{String(second).padStart(2, "0")}</option>
+          ))}
+        </select>
+      </span>
+    </Field>
+  );
+}
+
+function TreadmillPicker({ label, onChange, options, suffix, value }) {
+  return (
+    <Field label={label}>
+      <select onChange={(event) => onChange(event.target.value)} value={value}>
+        <option value="">Not set</option>
+        {options.map((option) => (
+          <option key={option} value={option}>{option}{suffix}</option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 function getPrescriptionFormValues(template) {
   const prescription = template?.prescription || {};
   const work = prescription.work || {};
   const recovery = prescription.recovery || {};
+  const warmup = prescription.warmup || {};
+  const cooldown = prescription.cooldown || {};
 
   return {
-    gradePercent: prescription.gradePercent ?? "",
     plannedDistanceMiles: metersToMiles(prescription.plannedDistanceMeters),
-    plannedDurationMinutes: secondsToMinutes(
-      prescription.plannedDurationSeconds
-    ),
-    recoveryDurationSeconds: prescription.recoveryDurationSeconds ?? "",
+    cooldownDurationSeconds:
+      cooldown.durationSeconds ?? prescription.cooldownDurationSeconds ?? "",
+    cooldownLabel: cooldown.label ?? "",
+    recoveryDurationSeconds:
+      recovery.durationSeconds ?? prescription.recoveryDurationSeconds ?? "",
+    recoveryLabel: recovery.label ?? "",
     recoveryGradePercent: recovery.gradePercent ?? "",
+    recoveryCadenceRpm: recovery.cadenceRpm ?? "",
+    recoveryPowerWatts: recovery.powerWatts ?? "",
     recoveryResistance: recovery.resistance ?? "",
     recoverySpeedMph: metersPerSecondToMph(recovery.speedMetersPerSecond),
-    resistance: prescription.resistance ?? "",
-    rounds: prescription.rounds ?? "",
-    speedMph: metersPerSecondToMph(prescription.speedMetersPerSecond),
-    workDurationSeconds: prescription.workDurationSeconds ?? "",
-    workGradePercent: work.gradePercent ?? "",
+    rounds:
+      prescription.rounds ??
+      (template?.format === CARDIO_WORKOUT_FORMATS.steady ? 1 : ""),
+    warmupDurationSeconds:
+      warmup.durationSeconds ?? prescription.warmupDurationSeconds ?? "",
+    warmupLabel: warmup.label ?? "",
+    warmupGradePercent: warmup.gradePercent ?? "",
+    warmupCadenceRpm: warmup.cadenceRpm ?? "",
+    warmupPowerWatts: warmup.powerWatts ?? "",
+    warmupResistance: warmup.resistance ?? "",
+    warmupSpeedMph: metersPerSecondToMph(warmup.speedMetersPerSecond),
+    workDurationSeconds:
+      (work.durationSeconds ??
+        prescription.workDurationSeconds ??
+        secondsToMinutes(prescription.plannedDurationSeconds) * 60) ||
+      "",
+    workLabel: work.label ?? "",
+    workGradePercent: work.gradePercent ?? prescription.gradePercent ?? "",
+    workCadenceRpm: work.cadenceRpm ?? "",
+    workPowerWatts: work.powerWatts ?? "",
     workResistance: work.resistance ?? "",
-    workSpeedMph: metersPerSecondToMph(work.speedMetersPerSecond),
+    workSpeedMph: metersPerSecondToMph(
+      work.speedMetersPerSecond ?? prescription.speedMetersPerSecond
+    ),
   };
+}
+
+function getExerciseTargetMode(exercise) {
+  const name = String(exercise?.name || "").toLowerCase();
+  if (name.includes("treadmill")) return "treadmill";
+  if (name.includes("bike") || name.includes("cycling")) return "bike";
+  return "instruction";
+}
+
+function getPhaseInstructionSuggestions(phase) {
+  if (phase === "warmup" || phase === "cooldown") {
+    return ["Easy", "Easy walk", "Easy jog", "Easy ride"];
+  }
+
+  return phase === "recovery"
+    ? ["Walk", "Easy jog", "Easy ride", "Recovery"]
+    : ["Easy jog", "Jog", "Run", "Sprint", "Moderate", "Hard"];
+}
+
+function getPhaseTitle(phase) {
+  return {
+    cooldown: "Cool-down",
+    recovery: "Recovery",
+    warmup: "Warm-up",
+    work: "Working interval",
+  }[phase];
+}
+
+function PhaseEditor({ mode, onChange, phase, values }) {
+  const suggestionId = `cardio-${phase}-instructions`;
+  const fieldPrefix = phase;
+  const targetFields =
+    mode === "bike"
+        ? [
+            ["Resistance", `${fieldPrefix}Resistance`, "any"],
+            ["Cadence (RPM)", `${fieldPrefix}CadenceRpm`, "1"],
+            ["Power (watts)", `${fieldPrefix}PowerWatts`, "1"],
+          ]
+        : [];
+
+  return (
+    <div className="cardio-phase-card">
+      <div className="cardio-phase-card__heading">
+        <h3>{getPhaseTitle(phase)}</h3>
+        <span>{phase === "work" ? "Main effort" : "Optional"}</span>
+      </div>
+      <div className="cardio-field-grid">
+        <DurationField
+          label="Duration"
+          onChange={(value) => onChange(`${fieldPrefix}DurationSeconds`, value)}
+          value={values[`${fieldPrefix}DurationSeconds`]}
+        />
+        <Field label="Instruction (optional)">
+          <input
+            list={suggestionId}
+            onChange={(event) => onChange(`${fieldPrefix}Label`, event.target.value)}
+            placeholder={phase === "work" ? "e.g. Sprint" : "e.g. Easy walk"}
+            value={values[`${fieldPrefix}Label`]}
+          />
+          <datalist id={suggestionId}>
+            {getPhaseInstructionSuggestions(phase).map((suggestion) => (
+              <option key={suggestion} value={suggestion} />
+            ))}
+          </datalist>
+        </Field>
+      </div>
+      {mode === "treadmill" && (
+        <div className="cardio-field-grid cardio-phase-card__targets">
+          <TreadmillPicker
+            label="Speed"
+            onChange={(value) => onChange(`${fieldPrefix}SpeedMph`, value)}
+            options={TREADMILL_SPEEDS}
+            suffix=" mph"
+            value={values[`${fieldPrefix}SpeedMph`]}
+          />
+          <TreadmillPicker
+            label="Incline"
+            onChange={(value) => onChange(`${fieldPrefix}GradePercent`, value)}
+            options={TREADMILL_INCLINES}
+            suffix="%"
+            value={values[`${fieldPrefix}GradePercent`]}
+          />
+        </div>
+      )}
+      {targetFields.length > 0 && (
+        <div className="cardio-field-grid cardio-phase-card__targets">
+          {targetFields.map(([label, key, step]) => (
+            <NumericField
+              key={key}
+              label={label}
+              onChange={(value) => onChange(key, value)}
+              step={step}
+              value={values[key]}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkoutMetricPlot({ color, formatValue, label, metric, onExpand, phases, totalDuration }) {
+  const values = phases.map((phase) => Number(phase.target?.[metric]));
+  if (!values.some(Number.isFinite)) return null;
+
+  const width = 640;
+  const height = 104;
+  const chartTop = 22;
+  const chartBottom = 76;
+  const maxValue = Math.max(1, ...values.filter(Number.isFinite));
+  let elapsed = 0;
+  const segments = phases.map((phase, index) => {
+    const start = (elapsed / totalDuration) * width;
+    elapsed += phase.durationSeconds;
+    const end = (elapsed / totalDuration) * width;
+    const isSet = Number.isFinite(values[index]);
+    const value = isSet ? values[index] : 0;
+    const y = chartBottom - (value / maxValue) * (chartBottom - chartTop);
+    return { end, isSet, start, y };
+  });
+  let hasPreviousValue = false;
+  const path = segments.map(({ end, isSet, start, y }) => {
+    if (!isSet) {
+      hasPreviousValue = false;
+      return "";
+    }
+    const command = hasPreviousValue ? "L" : "M";
+    hasPreviousValue = true;
+    return `${command}${start} ${y} H${end}`;
+  }).join(" ");
+
+  const chart = (
+    <div className="cardio-metric-plot">
+      <div className="cardio-preview__axis-label">{label}</div>
+      <svg aria-label={`${label} over time`} role="img" viewBox={`0 0 ${width} ${height}`}>
+        {[0, 0.5, 1].map((fraction) => {
+          const y = chartBottom - fraction * (chartBottom - chartTop);
+          return <line key={fraction} stroke="var(--border)" x1="0" x2={width} y1={y} y2={y} />;
+        })}
+        {segments.map(({ end, isSet, start, y }, index) => (
+          <rect
+            fill={isSet ? `${color}26` : "var(--surface-muted)"}
+            height={chartBottom - y}
+            key={index}
+            width={Math.max(1, end - start - 2)}
+            x={start + 1}
+            y={y}
+          />
+        ))}
+        <path d={path} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+        <text fill="var(--text-muted)" fontSize="11" x="0" y="14">{formatValue(maxValue)}</text>
+        <text fill="var(--text-muted)" fontSize="11" textAnchor="end" x={width} y="96">{formatCardioDuration(totalDuration)}</text>
+      </svg>
+    </div>
+  );
+
+  return onExpand ? (
+    <button
+      aria-label={`Enlarge ${label} workout chart`}
+      className="cardio-metric-plot__button"
+      onClick={onExpand}
+      type="button"
+    >
+      {chart}
+    </button>
+  ) : chart;
+}
+
+function PhasePreviewTable({ mode, phases }) {
+  const rows = [];
+  phases.forEach((phase) => {
+    const prior = rows.find((row) => row.kind === phase.kind);
+    if (prior) {
+      prior.count += 1;
+    } else {
+      rows.push({ ...phase, count: 1 });
+    }
+  });
+
+  return (
+    <div className="cardio-preview-table-wrap">
+      <table className="cardio-preview-table">
+        <thead>
+          <tr>
+            <th>Phase</th>
+            <th>Duration</th>
+            {mode === "treadmill" && <th>Speed</th>}
+            {mode === "treadmill" && <th>Incline</th>}
+            <th>Instruction</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((phase) => (
+            <tr key={phase.kind}>
+              <td>{phase.kind === "work" ? "Working" : getPhaseTitle(phase.kind)}</td>
+              <td>{phase.count > 1 ? `${phase.count} × ` : ""}{formatCardioDuration(phase.durationSeconds)}</td>
+              {mode === "treadmill" && <td>{phase.target.speedMetersPerSecond != null ? `${metersPerSecondToMph(phase.target.speedMetersPerSecond)} mph` : "—"}</td>}
+              {mode === "treadmill" && <td>{phase.target.gradePercent != null ? `${phase.target.gradePercent}%` : "—"}</td>}
+              <td>{phase.label}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CardioWorkoutPreview({ mode, prescription }) {
+  const phases = getCardioWorkoutPhases(prescription);
+  const totalDuration = calculateCardioWorkoutDuration(prescription);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!phases.length || !totalDuration) {
+    return (
+      <div className="cardio-preview__empty">
+        Add a duration to any phase to see its workout preview.
+      </div>
+    );
+  }
+
+  const treadmillPlots = (onExpand) => (
+    <div className="cardio-metric-plots">
+      <WorkoutMetricPlot
+        color="#3f5f7d"
+        formatValue={(value) => `${metersPerSecondToMph(value)} mph`}
+        label="Speed (mph)"
+        metric="speedMetersPerSecond"
+        onExpand={onExpand}
+        phases={phases}
+        totalDuration={totalDuration}
+      />
+      <WorkoutMetricPlot
+        color="#408d82"
+        formatValue={(value) => `${value}%`}
+        label="Incline (%)"
+        metric="gradePercent"
+        onExpand={onExpand}
+        phases={phases}
+        totalDuration={totalDuration}
+      />
+    </div>
+  );
+
+  const structure = (
+    <>
+      <div className="cardio-timeline" aria-label="Workout phase timeline">
+        {phases.map((phase, index) => (
+          <div
+            className={`cardio-timeline__phase cardio-timeline__phase--${phase.kind}`}
+            key={`${phase.kind}-${index}`}
+            style={{ flexGrow: phase.durationSeconds }}
+          >
+            <strong>{phase.label}</strong>
+            <span>{formatCardioDuration(phase.durationSeconds)}</span>
+          </div>
+        ))}
+      </div>
+      <PhasePreviewTable mode={mode} phases={phases} />
+    </>
+  );
+
+  return (
+    <>
+      <div className="cardio-preview__content">
+        {mode === "treadmill" && treadmillPlots(() => setIsExpanded(true))}
+        {structure}
+      </div>
+      {isExpanded && (
+        <div
+          aria-label="Expanded cardio workout preview"
+          aria-modal="true"
+          className="cardio-preview-dialog"
+          onClick={() => setIsExpanded(false)}
+          role="dialog"
+        >
+          <div className="cardio-preview-dialog__content" onClick={(event) => event.stopPropagation()}>
+            <div className="cardio-preview-dialog__header">
+              <div>
+                <strong>Workout preview</strong>
+                <div>{formatCardioDuration(totalDuration)} total</div>
+              </div>
+              <button aria-label="Close workout preview" onClick={() => setIsExpanded(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+            {mode === "treadmill" && treadmillPlots()}
+            {structure}
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export function CardioWorkoutEditor({
@@ -87,6 +469,11 @@ export function CardioWorkoutEditor({
   const [error, setError] = useState("");
   const selectedExercise = cardioExercises.find(
     (exercise) => String(exercise.id) === String(exerciseId)
+  );
+  const targetMode = getExerciseTargetMode(selectedExercise);
+  const previewPrescription = useMemo(
+    () => normalizeCardioPrescription({ format, values }),
+    [format, values]
   );
 
   const updateValue = (key, value) => {
@@ -147,14 +534,23 @@ export function CardioWorkoutEditor({
           <select onChange={(event) => setExerciseId(event.target.value)} value={exerciseId}>
             {cardioExercises.map((exercise) => (
               <option key={exercise.id} value={exercise.id}>
-                {exercise.name}{exercise.equipment ? ` · ${Array.isArray(exercise.equipment) ? exercise.equipment.join(", ") : exercise.equipment}` : ""}
+                {exercise.name}
               </option>
             ))}
           </select>
         </Field>
 
         <Field label="Workout type">
-          <select onChange={(event) => setFormat(event.target.value)} value={format}>
+          <select
+            onChange={(event) => {
+              const nextFormat = event.target.value;
+              setFormat(nextFormat);
+              if (nextFormat === CARDIO_WORKOUT_FORMATS.steady) {
+                updateValue("rounds", "1");
+              }
+            }}
+            value={format}
+          >
             <option value={CARDIO_WORKOUT_FORMATS.steady}>Steady state</option>
             <option value={CARDIO_WORKOUT_FORMATS.hiit}>HIIT</option>
           </select>
@@ -171,49 +567,64 @@ export function CardioWorkoutEditor({
 
       <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
         <div>
-          <h2 style={{ fontSize: "17px", margin: 0 }}>Reference prescription</h2>
+          <h2 style={{ fontSize: "17px", margin: 0 }}>Workout structure</h2>
           <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
-            Leave any value blank when you do not need it.
+            Total duration is calculated from the phases below. Instructions and
+            machine settings are optional reference values.
           </p>
         </div>
 
-        {format === CARDIO_WORKOUT_FORMATS.steady ? (
-          <>
-            <div className="cardio-field-grid">
-              <NumericField label="Planned duration (minutes)" onChange={(value) => updateValue("plannedDurationMinutes", value)} value={values.plannedDurationMinutes} />
-              <NumericField label="Planned distance (miles)" onChange={(value) => updateValue("plannedDistanceMiles", value)} value={values.plannedDistanceMiles} />
-              <NumericField label="Speed (mph)" onChange={(value) => updateValue("speedMph", value)} value={values.speedMph} />
-              <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("gradePercent", value)} value={values.gradePercent} />
-              <NumericField label="Resistance" onChange={(value) => updateValue("resistance", value)} value={values.resistance} />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="cardio-field-grid">
-              <NumericField label="Rounds" onChange={(value) => updateValue("rounds", value)} step="1" value={values.rounds} />
-              <NumericField label="Work duration (seconds)" onChange={(value) => updateValue("workDurationSeconds", value)} step="1" value={values.workDurationSeconds} />
-              <NumericField label="Recovery duration (seconds)" onChange={(value) => updateValue("recoveryDurationSeconds", value)} step="1" value={values.recoveryDurationSeconds} />
-            </div>
-            <div className="cardio-intensity-grid">
-              <div>
-                <h3>Work</h3>
-                <div className="cardio-field-grid">
-                  <NumericField label="Speed (mph)" onChange={(value) => updateValue("workSpeedMph", value)} value={values.workSpeedMph} />
-                  <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("workGradePercent", value)} value={values.workGradePercent} />
-                  <NumericField label="Resistance" onChange={(value) => updateValue("workResistance", value)} value={values.workResistance} />
-                </div>
-              </div>
-              <div>
-                <h3>Recovery</h3>
-                <div className="cardio-field-grid">
-                  <NumericField label="Speed (mph)" onChange={(value) => updateValue("recoverySpeedMph", value)} value={values.recoverySpeedMph} />
-                  <NumericField label="Incline / grade (%)" onChange={(value) => updateValue("recoveryGradePercent", value)} value={values.recoveryGradePercent} />
-                  <NumericField label="Resistance" onChange={(value) => updateValue("recoveryResistance", value)} value={values.recoveryResistance} />
-                </div>
-              </div>
-            </div>
-          </>
+        <div className="cardio-total-duration">
+          <span>Total duration</span>
+          <strong>
+            {formatCardioDuration(
+              calculateCardioWorkoutDuration(previewPrescription)
+            ) || "Add phase times"}
+          </strong>
+        </div>
+
+        <PhaseEditor mode={targetMode} onChange={updateValue} phase="warmup" values={values} />
+
+        {format === CARDIO_WORKOUT_FORMATS.hiit && (
+          <div className="cardio-rounds-control">
+            <NumericField
+              label="Repeat working / recovery pair"
+              onChange={(value) => updateValue("rounds", value)}
+              step="1"
+              value={values.rounds}
+            />
+            <span>times</span>
+          </div>
         )}
+
+        <PhaseEditor mode={targetMode} onChange={updateValue} phase="work" values={values} />
+        {format === CARDIO_WORKOUT_FORMATS.hiit && (
+          <PhaseEditor mode={targetMode} onChange={updateValue} phase="recovery" values={values} />
+        )}
+        <PhaseEditor mode={targetMode} onChange={updateValue} phase="cooldown" values={values} />
+
+        <Field label="Reference distance (miles, optional)">
+          <input
+            inputMode="decimal"
+            min="0"
+            onChange={(event) => updateValue("plannedDistanceMiles", event.target.value)}
+            step="any"
+            type="number"
+            value={values.plannedDistanceMiles}
+          />
+        </Field>
+      </div>
+
+      <div className="app-section-card cardio-preview" style={{ display: "grid", gap: "10px" }}>
+        <div>
+          <h2 style={{ fontSize: "17px", margin: 0 }}>Workout preview</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
+            {targetMode === "instruction"
+              ? "A timeline keeps subjective instructions clear without requiring pace or speed."
+              : "A numeric machine setting becomes the chart; otherwise the timeline shows each phase."}
+          </p>
+        </div>
+        <CardioWorkoutPreview mode={targetMode} prescription={previewPrescription} />
       </div>
 
       {error && <div role="alert" style={{ color: "var(--danger-text)" }}>{error}</div>}

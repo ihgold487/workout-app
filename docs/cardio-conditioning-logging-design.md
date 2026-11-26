@@ -57,8 +57,9 @@ Neither choice should require creating a separate Treadmill exercise.
 2. The existing strength workout choices remain unchanged. A new **Cardio**
    category offers **Steady state** and **HIIT**.
 3. The user chooses one active exercise with the `cardio` modality.
-4. The format-specific form captures optional configuration details and saves
-   a reusable template.
+4. The format-specific form captures an optional structured prescription and
+   saves a reusable template. It shows a live timeline or target plot while
+   the workout is being edited.
 5. The template appears on Home, where the user can start it any time.
 6. When the workout is completed, the user may enter whatever reference
    metadata is available. Nothing is evaluated as pass/fail against the
@@ -71,11 +72,32 @@ plan or progression lifecycle.
 
 ## First implementation: optional configuration and logs
 
+### Structured phases and calculated duration
+
+Each template is edited as a compact sequence of optional phases:
+
+```text
+Warm-up → Working interval → Recovery → … → Cool-down
+```
+
+Steady state is the same model with one working interval and no recovery.
+HIIT repeats one work/recovery pair. The editor calculates the total rather
+than storing an independently editable total duration:
+
+```text
+warm-up + (rounds × (work + recovery)) + cool-down
+```
+
+Every HIIT round is a complete work/recovery pair, including the final round's
+recovery before cool-down. All phase durations remain optional reference
+values; the exercise and format are still the only inputs needed to save a
+template.
+
 ### Steady state
 
-Steady-state configuration is for reference only. A planned duration is useful
-to display while performing the workout, but it is not a goal and completion
-does not require matching it. All configuration fields are optional:
+Steady-state configuration is for reference only. A calculated duration is
+useful to display while performing the workout, but it is not a goal and
+completion does not require matching it. All configuration fields are optional:
 
 | Field | Purpose | Notes |
 |---|---|---|
@@ -90,6 +112,38 @@ power, incline/grade, resistance, and notes. It is fine for the first version
 to record a single overall or representative value. A steady session whose
 speed, incline, or resistance changes substantially can use completed-workout
 notes initially; detailed time-varying data belongs in a later segment model.
+
+### Phase instructions and targets
+
+The phase's timer role and its visible instruction are distinct. `work` and
+`recovery` determine the repeated structure; each phase may also have a free
+text instruction such as `Sprint`, `Walk`, `Easy ride`, or `Hard climb`.
+Suggested labels keep outdoor jogging simple and entirely subjective. A jog
+workout can therefore be saved as `Walk` / `Sprint` without pace, distance,
+heart-rate, or other numeric targets.
+
+Machine-oriented exercises selectively expose useful numeric reference targets
+on each phase:
+
+| Exercise | Optional phase targets |
+|---|---|
+| Treadmill | Speed and incline/grade |
+| Biking / stationary bike | Resistance, cadence, and reported power |
+| Jogging | Optional instruction label only in the initial editor |
+
+Phase durations use paired minute/second pickers instead of a raw seconds
+keypad. Treadmill speed is a constrained picker from 3.0 to 10.0 mph in 0.1
+mph increments, and incline is a constrained picker from 0.0% to 15.0% in
+0.1% increments. These are initial presentation limits, not a limitation of
+the persisted numeric model.
+
+The preview is intentionally honest about its data: it draws a numeric plot
+only where an applicable target exists (such as treadmill incline over time).
+Otherwise, it shows a labeled phase timeline rather than inventing an
+objective intensity curve for subjective instructions. For treadmill it shows
+separate speed and incline charts over the same phase timeline, followed by a
+compact phase table. The colored work/recovery blocks are deliberately high
+contrast, and tapping either chart opens an enlarged, scrollable preview.
 
 ### Exercise and equipment-specific metrics
 
@@ -133,20 +187,22 @@ single note or exercise-level value.
 
 ## Interval/HIIT design
 
-The first HIIT editor should support a repeated work/recovery pattern rather
-than a general-purpose interval-programming language. Warm-up and cool-down
-are outside the initial model:
+The initial editor supports a repeated work/recovery pattern rather than a
+general-purpose interval-programming language. It now includes optional
+warm-up and cool-down phases:
 
 | Field | Purpose |
 |---|---|
 | Rounds | Number of repetitions |
+| Warm-up duration and instruction | Optional pre-work reference block |
 | Work duration | High-intensity interval length |
 | Recovery duration | Low-intensity interval length |
+| Cool-down duration and instruction | Optional post-work reference block |
 | Work configuration | Optional speed/pace, incline, resistance, power, or notes |
 | Recovery configuration | The same optional fields, where relevant |
 
-The work/recovery rounds are the useful persistent reference configuration.
-The completion flow can initially capture any optional total metadata and
+The phase structure is useful persistent reference configuration. The
+completion flow can initially capture any optional total metadata and
 completed-workout notes. Recording actual values for every work/recovery
 interval is valuable, but should be a follow-up once the basic
 create/complete/history loop is reliable.
@@ -218,12 +274,45 @@ Those remain compatible future directions, not omissions from the data model.
 ## Planned enhancement: built-in HIIT runner
 
 After the create, complete, and history loop is proven, add a native-backed
-HIIT runner to the app. It should run a template's repeated work/recovery
-rounds, provide reliable cues while the app is backgrounded, and write the
-completion and interval results directly to the cardio log. This avoids a
-dependency on a third-party interval-timer API. Apple Watch / WorkoutKit can
-be evaluated as an optional later execution surface, not a requirement for
-the standalone cardio model.
+HIIT runner to the app. It should run the template's warm-up, repeated
+work/recovery pair, and cool-down; provide reliable cues while the app is
+backgrounded; and write completion and interval results directly to the cardio
+log. This avoids a dependency on a third-party interval-timer API. Apple Watch
+/ WorkoutKit can be evaluated as an optional later execution surface, not a
+requirement for the standalone cardio model.
+
+## Planned enhancement: MapMyRun import
+
+MapMyRun's MapMyFitness platform has a documented OAuth 2 API for retrieving
+workouts and their optional GPS, distance, elevation, speed, heart-rate,
+cadence, and power time series. It is a strong future source for outdoor-run
+data, but is separate from the in-app timer and from strength persistence.
+
+Initial integration scope:
+
+- The user explicitly connects a MapMyRun account using OAuth 2.
+- A protected server-side component (not the PWA or native client) owns the
+  OAuth client secret and syncs data with the MapMyFitness API.
+- The first user experience is a manual **Import latest MapMyRun workouts**
+  action, or an import on app open. A webhook can be evaluated later for
+  near-real-time updates.
+- Each imported run becomes a cardio log with provider provenance and the
+  MapMyFitness workout ID retained for deduplication. The original imported
+  data should remain distinct from manually entered cardio logs.
+- Import the useful summary values first: started/completed time, duration,
+  distance, average/max speed, calories, elevation, heart rate, cadence,
+  power, and notes. Preserve route/time-series data only when maps, splits,
+  or charts have a defined user interface.
+
+The API can create a workout record, but there is no documented way to command
+the native MapMyRun app to begin its live GPS recorder. Therefore, do not plan
+on a "Start in MapMyRun" control unless MapMyFitness confirms a supported
+deep-link or partner capability. The realistic first goal is importing runs
+recorded in MapMyRun after completion.
+
+References: [MapMyFitness Workout API](https://developer.mapmyfitness.com/docs/v71_Workout/),
+[authentication requirements](https://developer.mapmyfitness.com/docs/v70_Authentication/),
+and [webhooks](https://developer.mapmyfitness.com/docs/v70_Webhook/).
 
 ## Future expansion: structured and mixed workouts
 
