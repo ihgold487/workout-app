@@ -159,6 +159,24 @@ test("snapshots a template when recording a completed cardio workout", () => {
   assert.notEqual(log.prescription, undefined);
 });
 
+test("uses the recorded timer duration over a manual duration override", () => {
+  const log = createCardioWorkoutLog(
+    {
+      exercise: { name: "Treadmill" },
+      format: "steady",
+      id: "template-1",
+      name: "Treadmill easy",
+      prescription: {},
+    },
+    { durationMinutes: "28" },
+    "",
+    "2026-11-25T10:00:00.000Z",
+    1687
+  );
+
+  assert.equal(log.results.durationSeconds, 1687);
+});
+
 test("omits empty optional completion values", () => {
   assert.deepEqual(normalizeCardioResults({ durationMinutes: "" }), {});
 });

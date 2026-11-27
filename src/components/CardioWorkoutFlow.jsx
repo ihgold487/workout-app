@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, Pencil, Play, Save, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronLeft, Pause, Pencil, Play, RotateCcw, Save, Square, Trash2, X } from "lucide-react";
 import { AppPageHeader, AppSectionCard, AppSectionHeading } from "./ui/AppSurface";
 import {
   CARDIO_PHASE_DEFAULT_COLORS,
@@ -52,6 +52,19 @@ function NumericField({ label, onChange, step = "any", value }) {
       />
     </Field>
   );
+}
+
+function formatWorkoutTimer(seconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainder = totalSeconds % 60;
+  const paddedMinutes = String(minutes).padStart(2, "0");
+  const paddedSeconds = String(remainder).padStart(2, "0");
+
+  return hours > 0
+    ? `${hours}:${paddedMinutes}:${paddedSeconds}`
+    : `${paddedMinutes}:${paddedSeconds}`;
 }
 
 const DURATION_MINUTES = Array.from({ length: 121 }, (_, index) => index);
@@ -712,6 +725,10 @@ export function CardioWorkoutDetail({
   template,
 }) {
   const [startedAt, setStartedAt] = useState(null);
+  const [timerStatus, setTimerStatus] = useState("idle");
+  const [timerStartedAt, setTimerStartedAt] = useState(null);
+  const [elapsedBeforeRunSeconds, setElapsedBeforeRunSeconds] = useState(0);
+  const [timerNow, setTimerNow] = useState(() => Date.now());
   const [notes, setNotes] = useState("");
   const [results, setResults] = useState({
     averageSpeedMph: "",
@@ -728,13 +745,65 @@ export function CardioWorkoutDetail({
   const updateResult = (key, value) => {
     setResults((current) => ({ ...current, [key]: value }));
   };
-  const isStarted = Boolean(startedAt);
+  const getElapsedTimerSeconds = (now = Date.now()) => {
+    if (timerStatus !== "running" || !timerStartedAt) {
+      return elapsedBeforeRunSeconds;
+    }
+
+    return elapsedBeforeRunSeconds + Math.max(
+      0,
+      Math.floor((now - new Date(timerStartedAt).getTime()) / 1000)
+    );
+  };
+  const elapsedTimerSeconds = getElapsedTimerSeconds(timerNow);
+  const isStarted = timerStatus !== "idle";
   const targetMode = getExerciseTargetMode(template.exercise);
   const templateHistory = history
     .filter((log) => String(log.templateId) === String(template.id))
     .sort((left, right) =>
       String(right.completedAt || "").localeCompare(String(left.completedAt || ""))
     );
+
+  useEffect(() => {
+    if (timerStatus !== "running") return undefined;
+
+    setTimerNow(Date.now());
+    const intervalId = window.setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [timerStatus]);
+
+  const startTimer = () => {
+    const now = new Date();
+    setStartedAt(now.toISOString());
+    setElapsedBeforeRunSeconds(0);
+    setTimerNow(now.getTime());
+    setTimerStartedAt(now.toISOString());
+    setTimerStatus("running");
+  };
+
+  const pauseOrStopTimer = (nextStatus) => {
+    const now = Date.now();
+    setElapsedBeforeRunSeconds(getElapsedTimerSeconds(now));
+    setTimerNow(now);
+    setTimerStartedAt(null);
+    setTimerStatus(nextStatus);
+  };
+
+  const resumeTimer = () => {
+    const now = new Date();
+    setTimerNow(now.getTime());
+    setTimerStartedAt(now.toISOString());
+    setTimerStatus("running");
+  };
+
+  const restartTimer = () => {
+    const now = new Date();
+    setStartedAt(now.toISOString());
+    setElapsedBeforeRunSeconds(0);
+    setTimerNow(now.getTime());
+    setTimerStartedAt(now.toISOString());
+    setTimerStatus("running");
+  };
 
   return (
     <section className="cardio-workout-detail">
@@ -812,7 +881,7 @@ export function CardioWorkoutDetail({
         <div className="template-view__start-bar">
           <button
             className="app-primary-action template-view__start-button"
-            onClick={() => setStartedAt(new Date().toISOString())}
+            onClick={startTimer}
             type="button"
           >
             <Play size={18} /> Start Workout
@@ -820,6 +889,46 @@ export function CardioWorkoutDetail({
         </div>
       ) : (
         <>
+          <div className="app-section-card cardio-workout-timer" aria-live="polite">
+            <div className="cardio-workout-timer__display">
+              <span>Workout timer</span>
+              <strong>{formatWorkoutTimer(elapsedTimerSeconds)}</strong>
+              <small>
+                {timerStatus === "running"
+                  ? "Running"
+                  : timerStatus === "paused"
+                    ? "Paused"
+                    : "Stopped"}
+              </small>
+            </div>
+            <div className="cardio-workout-timer__controls">
+              {timerStatus === "running" && (
+                <>
+                  <button className="app-secondary-action" onClick={() => pauseOrStopTimer("paused")} type="button">
+                    <Pause size={16} /> Pause
+                  </button>
+                  <button className="app-secondary-action" onClick={() => pauseOrStopTimer("stopped")} type="button">
+                    <Square size={15} /> Stop
+                  </button>
+                </>
+              )}
+              {timerStatus === "paused" && (
+                <>
+                  <button className="app-primary-action" onClick={resumeTimer} type="button">
+                    <Play size={16} /> Resume
+                  </button>
+                  <button className="app-secondary-action" onClick={() => pauseOrStopTimer("stopped")} type="button">
+                    <Square size={15} /> Stop
+                  </button>
+                </>
+              )}
+              {timerStatus !== "running" && (
+                <button className="app-secondary-action" onClick={restartTimer} type="button">
+                  <RotateCcw size={16} /> Restart
+                </button>
+              )}
+            </div>
+          </div>
           <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
             <div>
               <h2 style={{ fontSize: "17px", margin: 0 }}>Completion details</h2>
@@ -828,7 +937,7 @@ export function CardioWorkoutDetail({
               </p>
             </div>
             <div className="cardio-field-grid">
-              <NumericField label="Duration (minutes)" onChange={(value) => updateResult("durationMinutes", value)} value={results.durationMinutes} />
+              <NumericField label="Manual duration override (minutes)" onChange={(value) => updateResult("durationMinutes", value)} value={results.durationMinutes} />
               <NumericField label="Distance (miles)" onChange={(value) => updateResult("distanceMiles", value)} value={results.distanceMiles} />
               <NumericField label="Average speed (mph)" onChange={(value) => updateResult("averageSpeedMph", value)} value={results.averageSpeedMph} />
               <NumericField label="Maximum speed (mph)" onChange={(value) => updateResult("maxSpeedMph", value)} value={results.maxSpeedMph} />
@@ -851,7 +960,13 @@ export function CardioWorkoutDetail({
           </div>
           <button
             className="app-primary-action"
-            onClick={() => onComplete(createCardioWorkoutLog(template, results, notes, startedAt))}
+            onClick={() => onComplete(createCardioWorkoutLog(
+              template,
+              results,
+              notes,
+              startedAt,
+              getElapsedTimerSeconds()
+            ))}
             type="button"
           >
             <Save size={17} /> Complete and save workout

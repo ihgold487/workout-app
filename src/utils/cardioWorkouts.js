@@ -267,8 +267,16 @@ export function getDefaultCardioWorkoutName(exercise, format) {
   return `${exercise?.name || "Cardio"} ${getCardioWorkoutFormatLabel(format)}`;
 }
 
-export function createCardioWorkoutLog(template, results, notes, startedAt) {
+export function createCardioWorkoutLog(
+  template,
+  results,
+  notes,
+  startedAt,
+  timerDurationSeconds = null
+) {
   const completedAt = new Date().toISOString();
+  const recordedTimerDuration = optionalPositiveNumber(timerDurationSeconds);
+  const normalizedResults = normalizeCardioResults(results);
 
   return {
     completedAt,
@@ -277,7 +285,12 @@ export function createCardioWorkoutLog(template, results, notes, startedAt) {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     notes: String(notes || "").trim(),
     prescription: structuredClone(template.prescription || {}),
-    results: normalizeCardioResults(results),
+    results: {
+      ...normalizedResults,
+      ...(recordedTimerDuration != null
+        ? { durationSeconds: recordedTimerDuration }
+        : {}),
+    },
     startedAt: startedAt || null,
     templateId: template.id,
     templateName: template.name,
