@@ -29,6 +29,15 @@ function Field({ children, label }) {
   );
 }
 
+function CompactField({ children, label }) {
+  return (
+    <label className="cardio-compact-field">
+      <span>{label}</span>
+      <span className="cardio-compact-field__entry">{children}</span>
+    </label>
+  );
+}
+
 function NumericField({ label, onChange, step = "any", value }) {
   return (
     <Field label={label}>
@@ -68,7 +77,7 @@ function DurationField({ label, onChange, value }) {
   };
 
   return (
-    <Field label={label}>
+    <CompactField label={label}>
       <span className="cardio-duration-picker">
         <select
           aria-label={`${label}: minutes`}
@@ -92,20 +101,20 @@ function DurationField({ label, onChange, value }) {
           ))}
         </select>
       </span>
-    </Field>
+    </CompactField>
   );
 }
 
 function TreadmillPicker({ label, onChange, options, suffix, value }) {
   return (
-    <Field label={label}>
+    <CompactField label={label}>
       <select onChange={(event) => onChange(event.target.value)} value={value}>
         <option value="">Not set</option>
         {options.map((option) => (
           <option key={option} value={option}>{option}{suffix}</option>
         ))}
       </select>
-    </Field>
+    </CompactField>
   );
 }
 
@@ -187,12 +196,12 @@ function PhaseEditor({ mode, onChange, phase, values }) {
   const fieldPrefix = phase;
   const targetFields =
     mode === "bike"
-        ? [
-            ["Resistance", `${fieldPrefix}Resistance`, "any"],
-            ["Cadence (RPM)", `${fieldPrefix}CadenceRpm`, "1"],
-            ["Power (watts)", `${fieldPrefix}PowerWatts`, "1"],
-          ]
-        : [];
+      ? [
+          ["Resistance", `${fieldPrefix}Resistance`, "any"],
+          ["Cadence (RPM)", `${fieldPrefix}CadenceRpm`, "1"],
+          ["Power (watts)", `${fieldPrefix}PowerWatts`, "1"],
+        ]
+      : [];
 
   return (
     <div className="cardio-phase-card">
@@ -200,7 +209,7 @@ function PhaseEditor({ mode, onChange, phase, values }) {
         <h3>{getPhaseTitle(phase)}</h3>
         <span>{phase === "work" ? "Main effort" : "Optional"}</span>
       </div>
-      <div className="cardio-field-grid">
+      <div className="cardio-phase-card__fields">
         <DurationField
           label="Duration"
           onChange={(value) => onChange(`${fieldPrefix}DurationSeconds`, value)}
@@ -221,7 +230,7 @@ function PhaseEditor({ mode, onChange, phase, values }) {
         </Field>
       </div>
       {mode === "treadmill" && (
-        <div className="cardio-field-grid cardio-phase-card__targets">
+        <div className="cardio-phase-card__targets">
           <TreadmillPicker
             label="Speed"
             onChange={(value) => onChange(`${fieldPrefix}SpeedMph`, value)}
@@ -239,15 +248,18 @@ function PhaseEditor({ mode, onChange, phase, values }) {
         </div>
       )}
       {targetFields.length > 0 && (
-        <div className="cardio-field-grid cardio-phase-card__targets">
+        <div className="cardio-phase-card__targets">
           {targetFields.map(([label, key, step]) => (
-            <NumericField
-              key={key}
-              label={label}
-              onChange={(value) => onChange(key, value)}
-              step={step}
-              value={values[key]}
-            />
+            <CompactField key={key} label={label}>
+              <input
+                inputMode="decimal"
+                min="0"
+                onChange={(event) => onChange(key, event.target.value)}
+                step={step}
+                type="number"
+                value={values[key]}
+              />
+            </CompactField>
           ))}
         </div>
       )}
@@ -530,7 +542,7 @@ export function CardioWorkoutEditor({
       </div>
 
       <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
-        <Field label="Cardio exercise">
+        <CompactField label="Cardio exercise">
           <select onChange={(event) => setExerciseId(event.target.value)} value={exerciseId}>
             {cardioExercises.map((exercise) => (
               <option key={exercise.id} value={exercise.id}>
@@ -538,9 +550,9 @@ export function CardioWorkoutEditor({
               </option>
             ))}
           </select>
-        </Field>
+        </CompactField>
 
-        <Field label="Workout type">
+        <CompactField label="Workout type">
           <select
             onChange={(event) => {
               const nextFormat = event.target.value;
@@ -554,15 +566,15 @@ export function CardioWorkoutEditor({
             <option value={CARDIO_WORKOUT_FORMATS.steady}>Steady state</option>
             <option value={CARDIO_WORKOUT_FORMATS.hiit}>HIIT</option>
           </select>
-        </Field>
+        </CompactField>
 
-        <Field label="Workout name (optional)">
+        <CompactField label="Workout name (optional)">
           <input
             onChange={(event) => setName(event.target.value)}
             placeholder={getDefaultCardioWorkoutName(selectedExercise, format)}
             value={name}
           />
-        </Field>
+        </CompactField>
       </div>
 
       <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
@@ -585,25 +597,33 @@ export function CardioWorkoutEditor({
 
         <PhaseEditor mode={targetMode} onChange={updateValue} phase="warmup" values={values} />
 
-        {format === CARDIO_WORKOUT_FORMATS.hiit && (
-          <div className="cardio-rounds-control">
-            <NumericField
-              label="Repeat working / recovery pair"
-              onChange={(value) => updateValue("rounds", value)}
-              step="1"
-              value={values.rounds}
-            />
-            <span>times</span>
+        {format === CARDIO_WORKOUT_FORMATS.hiit ? (
+          <div className="cardio-interval-pair-group">
+            <div className="cardio-interval-pair-group__label">
+              HIIT interval pair
+            </div>
+            <CompactField label="Repeat working / recovery pair">
+              <span className="cardio-rounds-control">
+                <input
+                  inputMode="numeric"
+                  min="1"
+                  onChange={(event) => updateValue("rounds", event.target.value)}
+                  step="1"
+                  type="number"
+                  value={values.rounds}
+                />
+                <span>times</span>
+              </span>
+            </CompactField>
+            <PhaseEditor mode={targetMode} onChange={updateValue} phase="work" values={values} />
+            <PhaseEditor mode={targetMode} onChange={updateValue} phase="recovery" values={values} />
           </div>
-        )}
-
-        <PhaseEditor mode={targetMode} onChange={updateValue} phase="work" values={values} />
-        {format === CARDIO_WORKOUT_FORMATS.hiit && (
-          <PhaseEditor mode={targetMode} onChange={updateValue} phase="recovery" values={values} />
+        ) : (
+          <PhaseEditor mode={targetMode} onChange={updateValue} phase="work" values={values} />
         )}
         <PhaseEditor mode={targetMode} onChange={updateValue} phase="cooldown" values={values} />
 
-        <Field label="Reference distance (miles, optional)">
+        <CompactField label="Reference distance (miles, optional)">
           <input
             inputMode="decimal"
             min="0"
@@ -612,7 +632,7 @@ export function CardioWorkoutEditor({
             type="number"
             value={values.plannedDistanceMiles}
           />
-        </Field>
+        </CompactField>
       </div>
 
       <div className="app-section-card cardio-preview" style={{ display: "grid", gap: "10px" }}>

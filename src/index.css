@@ -1506,6 +1506,28 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
 }
 
+.cardio-compact-field {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 1.2fr);
+}
+
+.cardio-compact-field > span:first-child {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.cardio-compact-field__entry {
+  min-width: 0;
+}
+
+.cardio-compact-field__entry > input,
+.cardio-compact-field__entry > select {
+  box-sizing: border-box;
+  width: 100%;
+}
+
 .cardio-intensity-grid {
   display: grid;
   gap: 14px;
@@ -1553,6 +1575,12 @@ code {
   padding: 12px;
 }
 
+.cardio-phase-card__fields,
+.cardio-phase-card__targets {
+  display: grid;
+  gap: 12px;
+}
+
 .cardio-phase-card__heading {
   align-items: baseline;
   display: flex;
@@ -1571,20 +1599,47 @@ code {
   padding-top: 12px;
 }
 
+.cardio-interval-pair-group {
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, var(--border));
+  border-left: 3px solid color-mix(in srgb, var(--accent) 66%, var(--border));
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 8px;
+}
+
+.cardio-interval-pair-group__label {
+  align-items: center;
+  color: var(--accent);
+  display: flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 0.02em;
+  margin: 0 4px;
+  text-transform: uppercase;
+}
+
+.cardio-interval-pair-group .cardio-phase-card {
+  background: var(--surface-raised);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.035);
+}
+
 .cardio-rounds-control {
-  align-items: end;
+  align-items: center;
   display: flex;
   gap: 10px;
 }
 
-.cardio-rounds-control label {
+.cardio-rounds-control input {
   flex: 1;
+  min-width: 0;
 }
 
 .cardio-rounds-control > span {
   color: var(--text-muted);
   font-size: 14px;
-  padding-bottom: 9px;
 }
 
 .cardio-duration-picker {
