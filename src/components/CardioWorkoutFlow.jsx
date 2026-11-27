@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, Play, Save, Trash2, X } from "lucide-react";
-import { AppPageHeader } from "./ui/AppSurface";
+import { ArrowLeft, ChevronLeft, Pencil, Play, Save, Trash2, X } from "lucide-react";
+import { AppPageHeader, AppSectionCard, AppSectionHeading } from "./ui/AppSurface";
 import {
   CARDIO_PHASE_DEFAULT_COLORS,
   CARDIO_WORKOUT_FORMATS,
@@ -355,7 +355,7 @@ function WorkoutMetricPlot({ color, formatValue, label, metric, onExpand, phases
     const isSet = Number.isFinite(values[index]);
     const value = isSet ? values[index] : 0;
     const y = chartBottom - (value / maxValue) * (chartBottom - chartTop);
-    return { end, isSet, start, y };
+    return { end, isSet, phaseColor: phase.color, start, y };
   });
   let hasPreviousValue = false;
   const path = segments.map(({ end, isSet, start, y }) => {
@@ -376,9 +376,10 @@ function WorkoutMetricPlot({ color, formatValue, label, metric, onExpand, phases
           const y = chartBottom - fraction * (chartBottom - chartTop);
           return <line key={fraction} stroke="var(--border)" x1="0" x2={width} y1={y} y2={y} />;
         })}
-        {segments.map(({ end, isSet, start, y }, index) => (
+        {segments.map(({ end, isSet, phaseColor, start, y }, index) => (
           <rect
-            fill={isSet ? `${color}26` : "var(--surface-muted)"}
+            fill={isSet ? phaseColor : "var(--surface-muted)"}
+            fillOpacity={isSet ? "0.34" : "1"}
             height={chartBottom - y}
             key={index}
             width={Math.max(1, end - start - 2)}
@@ -487,26 +488,7 @@ function CardioWorkoutPreview({ mode, prescription }) {
     </div>
   );
 
-  const structure = (
-    <>
-      <div className="cardio-timeline" aria-label="Workout phase timeline">
-        {phases.map((phase, index) => (
-          <div
-            className={`cardio-timeline__phase cardio-timeline__phase--${phase.kind}`}
-            key={`${phase.kind}-${index}`}
-            style={{
-              "--cardio-phase-color": phase.color,
-              flexGrow: phase.durationSeconds,
-            }}
-          >
-            <strong>{phase.label}</strong>
-            <span>{formatCardioDuration(phase.durationSeconds)}</span>
-          </div>
-        ))}
-      </div>
-      <PhasePreviewTable mode={mode} phases={phases} />
-    </>
-  );
+  const structure = <PhasePreviewTable mode={mode} phases={phases} />;
 
   return (
     <>
@@ -725,7 +707,6 @@ export function CardioWorkoutEditor({
 
 export function CardioWorkoutDetail({
   history = [],
-  onBack,
   onComplete,
   onEdit,
   template,
@@ -756,32 +737,28 @@ export function CardioWorkoutDetail({
     );
 
   return (
-    <section style={{ display: "grid", gap: "16px", padding: "20px" }}>
-      <div>
-        <button
-          onClick={onBack}
-          style={{ alignItems: "center", display: "inline-flex", gap: "5px" }}
-          type="button"
-        >
-          <ChevronLeft size={17} /> Back
-        </button>
-        <div style={{ alignItems: "start", display: "flex", gap: "10px", justifyContent: "space-between" }}>
-          <div>
-            <h1 style={{ marginBottom: "4px" }}>{template.name}</h1>
-            <div style={{ color: "var(--text-muted)" }}>
-              {template.exercise.name}{template.exercise.equipment ? ` · ${template.exercise.equipment}` : ""} · {getCardioWorkoutFormatLabel(template.format)}
-            </div>
-          </div>
-          <button onClick={onEdit} type="button">Edit</button>
-        </div>
-      </div>
+    <section className="cardio-workout-detail">
+      <AppPageHeader
+        action={
+          <button
+            className="app-secondary-action cardio-workout-detail__edit-action"
+            onClick={onEdit}
+            type="button"
+          >
+            <Pencil size={16} /> Edit Workout
+          </button>
+        }
+        subtitle={`${template.exercise.name}${template.exercise.equipment ? ` · ${template.exercise.equipment}` : ""} · ${getCardioWorkoutFormatLabel(template.format)}`}
+        title={template.name}
+      />
 
-      <div className="app-section-card">
-        <strong>Prescription</strong>
-        <div style={{ color: "var(--text-muted)", marginTop: "5px" }}>
-          {getCardioWorkoutSummary(template)}
-        </div>
-      </div>
+      <AppSectionCard className="cardio-workout-detail__summary" tone="accent">
+        <AppSectionHeading
+          eyebrow="Workout prescription"
+          subtitle={getCardioWorkoutSummary(template)}
+          title="Ready when you are"
+        />
+      </AppSectionCard>
 
       <div className="app-section-card cardio-preview" style={{ display: "grid", gap: "10px" }}>
         <div>
@@ -832,9 +809,15 @@ export function CardioWorkoutDetail({
       )}
 
       {!isStarted ? (
-        <button className="app-primary-action" onClick={() => setStartedAt(new Date().toISOString())} type="button">
-          <Play size={17} /> Start workout
-        </button>
+        <div className="template-view__start-bar">
+          <button
+            className="app-primary-action template-view__start-button"
+            onClick={() => setStartedAt(new Date().toISOString())}
+            type="button"
+          >
+            <Play size={18} /> Start Workout
+          </button>
+        </div>
       ) : (
         <>
           <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>

@@ -281,6 +281,21 @@ log. This avoids a dependency on a third-party interval-timer API. Apple Watch
 / WorkoutKit can be evaluated as an optional later execution surface, not a
 requirement for the standalone cardio model.
 
+When the runner is active, it should also capture optional time-series
+telemetry when a permitted device or platform makes it available. Heart rate
+is the first priority: store timestamped samples relative to the workout start
+with the completed cardio log, never on the exercise or reusable template.
+The same sample stream may later carry compatible metrics such as speed, power,
+cadence, distance, or elevation. Retain the source/provenance and sampling
+interval where known. Collection must be entirely optional and must not block
+timer use or workout completion when no device data is available.
+
+The first use of the stream is post-workout review: plot heart rate and other
+available metrics against elapsed time and the prescribed work/recovery phases.
+That comparison can help assess interval response, recovery, and future
+workout prescriptions. Live telemetry displays, health-platform sync, and
+advanced analysis remain separate future UI decisions.
+
 ## Planned enhancement: MapMyRun import
 
 MapMyRun's MapMyFitness platform has a documented OAuth 2 API for retrieving

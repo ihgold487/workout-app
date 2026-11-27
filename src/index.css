@@ -1729,45 +1729,22 @@ code {
   text-align: center;
 }
 
-.cardio-timeline {
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  display: flex;
-  min-height: 88px;
-  overflow: hidden;
+.cardio-workout-detail {
+  display: grid;
+  gap: 16px;
+  padding: 20px 20px 150px;
 }
 
-.cardio-timeline__phase {
-  align-items: center;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--cardio-phase-color) 24%, var(--surface-raised)),
-    color-mix(in srgb, var(--cardio-phase-color) 7%, var(--surface-raised))
-  );
-  border-right: 1px solid color-mix(in srgb, var(--cardio-phase-color) 38%, var(--border));
-  border-top: 4px solid var(--cardio-phase-color);
-  display: flex;
-  flex-basis: 0;
-  flex-direction: column;
-  font-size: 12px;
-  justify-content: center;
-  min-width: 96px;
-  padding: 8px;
-  text-align: center;
+.cardio-workout-detail__summary {
+  display: grid;
+  gap: 12px;
+  margin: 0;
 }
 
-.cardio-timeline__phase:last-child {
-  border-right: 0;
-}
-
-.cardio-timeline__phase strong {
-  color: var(--cardio-phase-color);
-  line-height: 1.15;
-}
-
-.cardio-timeline__phase span {
-  color: var(--text-muted);
+.cardio-workout-detail__edit-action {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  color: var(--accent);
 }
 
 .cardio-preview__content {
@@ -1896,15 +1873,4 @@ code {
   min-height: 38px;
   min-width: 38px;
   padding: 0;
-}
-
-@media (max-width: 560px) {
-  .cardio-timeline {
-    overflow-x: auto;
-  }
-
-  .cardio-timeline__phase {
-    flex-grow: 0 !important;
-    min-width: 108px;
-  }
 }

@@ -14438,7 +14438,6 @@ export default function App() {
     return renderAppShell(
       <CardioWorkoutDetail
         history={cardioWorkoutHistory}
-        onBack={() => setSelectedCardioWorkoutTemplateId(null)}
         onComplete={(log) => {
           setCardioWorkoutHistory((currentHistory) => [log, ...currentHistory]);
           setCardioWorkoutTemplates((currentTemplates) =>
