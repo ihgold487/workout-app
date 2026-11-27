@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ChevronLeft, Play, Save, Trash2, X } from "lucide-react";
 import { AppPageHeader } from "./ui/AppSurface";
 import {
+  CARDIO_PHASE_DEFAULT_COLORS,
   CARDIO_WORKOUT_FORMATS,
   calculateCardioWorkoutDuration,
   createCardioExerciseSnapshot,
@@ -63,6 +64,21 @@ const TREADMILL_INCLINES = Array.from(
   { length: 151 },
   (_, index) => (index / 10).toFixed(1)
 );
+const PHASE_COLOR_OPTIONS = [
+  { label: "Red", value: "#dc2626" },
+  { label: "Orange", value: "#ea7a17" },
+  { label: "Yellow", value: "#ca8a04" },
+  { label: "Green", value: "#2f8a6a" },
+  { label: "Blue", value: "#3f5f9b" },
+  { label: "Purple", value: "#7c5aa6" },
+];
+
+function formatTreadmillPickerValue(value) {
+  if (value === "" || value == null) return "";
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(1) : "";
+}
 
 function DurationField({ label, onChange, value }) {
   const totalSeconds = Number(value);
@@ -130,37 +146,56 @@ function getPrescriptionFormValues(template) {
     cooldownDurationSeconds:
       cooldown.durationSeconds ?? prescription.cooldownDurationSeconds ?? "",
     cooldownLabel: cooldown.label ?? "",
+    cooldownColor: cooldown.color ?? CARDIO_PHASE_DEFAULT_COLORS.cooldown,
+    cooldownGradePercent: formatTreadmillPickerValue(cooldown.gradePercent),
+    cooldownCadenceRpm: cooldown.cadenceRpm ?? "",
+    cooldownPowerWatts: cooldown.powerWatts ?? "",
+    cooldownResistance: cooldown.resistance ?? "",
+    cooldownSpeedMph: formatTreadmillPickerValue(
+      metersPerSecondToMph(cooldown.speedMetersPerSecond)
+    ),
     recoveryDurationSeconds:
       recovery.durationSeconds ?? prescription.recoveryDurationSeconds ?? "",
     recoveryLabel: recovery.label ?? "",
-    recoveryGradePercent: recovery.gradePercent ?? "",
+    recoveryColor: recovery.color ?? CARDIO_PHASE_DEFAULT_COLORS.recovery,
+    recoveryGradePercent: formatTreadmillPickerValue(recovery.gradePercent),
     recoveryCadenceRpm: recovery.cadenceRpm ?? "",
     recoveryPowerWatts: recovery.powerWatts ?? "",
     recoveryResistance: recovery.resistance ?? "",
-    recoverySpeedMph: metersPerSecondToMph(recovery.speedMetersPerSecond),
+    recoverySpeedMph: formatTreadmillPickerValue(
+      metersPerSecondToMph(recovery.speedMetersPerSecond)
+    ),
     rounds:
       prescription.rounds ??
       (template?.format === CARDIO_WORKOUT_FORMATS.steady ? 1 : ""),
     warmupDurationSeconds:
       warmup.durationSeconds ?? prescription.warmupDurationSeconds ?? "",
     warmupLabel: warmup.label ?? "",
-    warmupGradePercent: warmup.gradePercent ?? "",
+    warmupColor: warmup.color ?? CARDIO_PHASE_DEFAULT_COLORS.warmup,
+    warmupGradePercent: formatTreadmillPickerValue(warmup.gradePercent),
     warmupCadenceRpm: warmup.cadenceRpm ?? "",
     warmupPowerWatts: warmup.powerWatts ?? "",
     warmupResistance: warmup.resistance ?? "",
-    warmupSpeedMph: metersPerSecondToMph(warmup.speedMetersPerSecond),
+    warmupSpeedMph: formatTreadmillPickerValue(
+      metersPerSecondToMph(warmup.speedMetersPerSecond)
+    ),
     workDurationSeconds:
       (work.durationSeconds ??
         prescription.workDurationSeconds ??
         secondsToMinutes(prescription.plannedDurationSeconds) * 60) ||
       "",
     workLabel: work.label ?? "",
-    workGradePercent: work.gradePercent ?? prescription.gradePercent ?? "",
+    workColor: work.color ?? CARDIO_PHASE_DEFAULT_COLORS.work,
+    workGradePercent: formatTreadmillPickerValue(
+      work.gradePercent ?? prescription.gradePercent
+    ),
     workCadenceRpm: work.cadenceRpm ?? "",
     workPowerWatts: work.powerWatts ?? "",
     workResistance: work.resistance ?? "",
-    workSpeedMph: metersPerSecondToMph(
-      work.speedMetersPerSecond ?? prescription.speedMetersPerSecond
+    workSpeedMph: formatTreadmillPickerValue(
+      metersPerSecondToMph(
+        work.speedMetersPerSecond ?? prescription.speedMetersPerSecond
+      )
     ),
   };
 }
@@ -194,6 +229,8 @@ function getPhaseTitle(phase) {
 function PhaseEditor({ mode, onChange, phase, values }) {
   const suggestionId = `cardio-${phase}-instructions`;
   const fieldPrefix = phase;
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const phaseColor = values[`${fieldPrefix}Color`] || CARDIO_PHASE_DEFAULT_COLORS[phase];
   const targetFields =
     mode === "bike"
       ? [
@@ -204,9 +241,43 @@ function PhaseEditor({ mode, onChange, phase, values }) {
       : [];
 
   return (
-    <div className="cardio-phase-card">
+    <div className="cardio-phase-card" style={{ "--cardio-phase-color": phaseColor }}>
       <div className="cardio-phase-card__heading">
-        <h3>{getPhaseTitle(phase)}</h3>
+        <div className="cardio-phase-card__title">
+          <div className="cardio-phase-color-picker">
+            <button
+              aria-expanded={isColorPickerOpen}
+              aria-label={`Choose ${getPhaseTitle(phase).toLowerCase()} color`}
+              className="cardio-phase-color-picker__trigger"
+              onClick={() => setIsColorPickerOpen((open) => !open)}
+              style={{ background: phaseColor }}
+              type="button"
+            />
+            {isColorPickerOpen && (
+              <div
+                aria-label={`${getPhaseTitle(phase)} color options`}
+                className="cardio-phase-color-picker__menu"
+                role="group"
+              >
+                {PHASE_COLOR_OPTIONS.map((option) => (
+                  <button
+                    aria-label={option.label}
+                    aria-pressed={option.value === phaseColor}
+                    className="cardio-phase-color-picker__option"
+                    key={option.value}
+                    onClick={() => {
+                      onChange(`${fieldPrefix}Color`, option.value);
+                      setIsColorPickerOpen(false);
+                    }}
+                    style={{ background: option.value }}
+                    type="button"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <h3>{getPhaseTitle(phase)}</h3>
+        </div>
         <span>{phase === "work" ? "Main effort" : "Optional"}</span>
       </div>
       <div className="cardio-phase-card__fields">
@@ -360,7 +431,14 @@ function PhasePreviewTable({ mode, phases }) {
         <tbody>
           {rows.map((phase) => (
             <tr key={phase.kind}>
-              <td>{phase.kind === "work" ? "Working" : getPhaseTitle(phase.kind)}</td>
+              <td>
+                <span
+                  className="cardio-preview-table__phase-label"
+                  style={{ "--cardio-phase-color": phase.color }}
+                >
+                  {phase.kind === "work" ? "Working" : getPhaseTitle(phase.kind)}
+                </span>
+              </td>
               <td>{phase.count > 1 ? `${phase.count} × ` : ""}{formatCardioDuration(phase.durationSeconds)}</td>
               {mode === "treadmill" && <td>{phase.target.speedMetersPerSecond != null ? `${metersPerSecondToMph(phase.target.speedMetersPerSecond)} mph` : "—"}</td>}
               {mode === "treadmill" && <td>{phase.target.gradePercent != null ? `${phase.target.gradePercent}%` : "—"}</td>}
@@ -416,7 +494,10 @@ function CardioWorkoutPreview({ mode, prescription }) {
           <div
             className={`cardio-timeline__phase cardio-timeline__phase--${phase.kind}`}
             key={`${phase.kind}-${index}`}
-            style={{ flexGrow: phase.durationSeconds }}
+            style={{
+              "--cardio-phase-color": phase.color,
+              flexGrow: phase.durationSeconds,
+            }}
           >
             <strong>{phase.label}</strong>
             <span>{formatCardioDuration(phase.durationSeconds)}</span>
@@ -535,10 +616,6 @@ export function CardioWorkoutEditor({
         <h1 style={{ marginBottom: "5px" }}>
           {template ? "Edit cardio workout" : "New cardio workout"}
         </h1>
-        <p style={{ color: "var(--text-muted)", lineHeight: 1.5, margin: 0 }}>
-          Save a reusable one-exercise workout. All prescription details are
-          optional reference values.
-        </p>
       </div>
 
       <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
@@ -580,10 +657,6 @@ export function CardioWorkoutEditor({
       <div className="app-section-card" style={{ display: "grid", gap: "14px" }}>
         <div>
           <h2 style={{ fontSize: "17px", margin: 0 }}>Workout structure</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
-            Total duration is calculated from the phases below. Instructions and
-            machine settings are optional reference values.
-          </p>
         </div>
 
         <div className="cardio-total-duration">
@@ -638,11 +711,6 @@ export function CardioWorkoutEditor({
       <div className="app-section-card cardio-preview" style={{ display: "grid", gap: "10px" }}>
         <div>
           <h2 style={{ fontSize: "17px", margin: 0 }}>Workout preview</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
-            {targetMode === "instruction"
-              ? "A timeline keeps subjective instructions clear without requiring pace or speed."
-              : "A numeric machine setting becomes the chart; otherwise the timeline shows each phase."}
-          </p>
         </div>
         <CardioWorkoutPreview mode={targetMode} prescription={previewPrescription} />
       </div>
@@ -680,6 +748,7 @@ export function CardioWorkoutDetail({
     setResults((current) => ({ ...current, [key]: value }));
   };
   const isStarted = Boolean(startedAt);
+  const targetMode = getExerciseTargetMode(template.exercise);
   const templateHistory = history
     .filter((log) => String(log.templateId) === String(template.id))
     .sort((left, right) =>
@@ -712,6 +781,18 @@ export function CardioWorkoutDetail({
         <div style={{ color: "var(--text-muted)", marginTop: "5px" }}>
           {getCardioWorkoutSummary(template)}
         </div>
+      </div>
+
+      <div className="app-section-card cardio-preview" style={{ display: "grid", gap: "10px" }}>
+        <div>
+          <h2 style={{ fontSize: "17px", margin: 0 }}>Workout preview</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: "4px 0 0" }}>
+            {targetMode === "instruction"
+              ? "Reference timeline for this workout."
+              : "Reference timeline and machine settings for this workout."}
+          </p>
+        </div>
+        <CardioWorkoutPreview mode={targetMode} prescription={template.prescription} />
       </div>
 
       {templateHistory.length > 0 && (

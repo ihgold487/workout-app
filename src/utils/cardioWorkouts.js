@@ -5,6 +5,17 @@ export const CARDIO_WORKOUT_FORMATS = {
   steady: "steady",
 };
 
+export const CARDIO_PHASE_DEFAULT_COLORS = {
+  cooldown: "#3f5f9b",
+  recovery: "#ea7a17",
+  warmup: "#ca8a04",
+  work: "#2f8a6a",
+};
+
+export function getCardioPhaseColor(phase, color) {
+  return optionalText(color) || CARDIO_PHASE_DEFAULT_COLORS[phase] || "#3f5f9b";
+}
+
 export function getCardioWorkoutFormatLabel(format) {
   return format === CARDIO_WORKOUT_FORMATS.hiit ? "HIIT" : "Steady state";
 }
@@ -108,6 +119,7 @@ export function normalizeCardioPrescription({ format, values = {} }) {
 
     return compactObject({
       cadenceRpm: optionalNonNegativeNumber(cadenceValue),
+      color: optionalText(values[`${name}Color`]),
       durationSeconds: optionalPositiveNumber(durationValue),
       gradePercent: optionalNonNegativeNumber(gradeValue),
       label: optionalText(values[`${name}Label`]),
@@ -204,6 +216,7 @@ export function getCardioWorkoutPhases(prescription = {}) {
   const addPhase = (kind, phase, durationSeconds, index = null) => {
     if (!durationSeconds) return;
     phases.push({
+      color: getCardioPhaseColor(kind, phase?.color),
       durationSeconds,
       index,
       kind,

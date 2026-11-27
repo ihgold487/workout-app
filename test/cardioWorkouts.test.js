@@ -82,6 +82,44 @@ test("calculates HIIT duration using complete work and recovery pairs", () => {
   );
 });
 
+test("persists the selected color for each cardio phase", () => {
+  const prescription = normalizeCardioPrescription({
+    format: CARDIO_WORKOUT_FORMATS.hiit,
+    values: {
+      cooldownColor: "#3f5f9b",
+      recoveryColor: "#ea7a17",
+      rounds: "1",
+      warmupColor: "#ca8a04",
+      workColor: "#2f8a6a",
+    },
+  });
+
+  assert.equal(prescription.warmup.color, "#ca8a04");
+  assert.equal(prescription.work.color, "#2f8a6a");
+  assert.equal(prescription.recovery.color, "#ea7a17");
+  assert.equal(prescription.cooldown.color, "#3f5f9b");
+});
+
+test("uses the default phase palette in workout previews", () => {
+  const phases = getCardioWorkoutPhases(
+    normalizeCardioPrescription({
+      format: CARDIO_WORKOUT_FORMATS.hiit,
+      values: {
+        cooldownDurationSeconds: "60",
+        recoveryDurationSeconds: "60",
+        rounds: "1",
+        warmupDurationSeconds: "60",
+        workDurationSeconds: "60",
+      },
+    })
+  );
+
+  assert.deepEqual(
+    phases.map((phase) => phase.color),
+    ["#ca8a04", "#2f8a6a", "#ea7a17", "#3f5f9b"]
+  );
+});
+
 test("continues to read the original flat HIIT prescription shape", () => {
   const legacyPrescription = {
     recoveryDurationSeconds: 90,
