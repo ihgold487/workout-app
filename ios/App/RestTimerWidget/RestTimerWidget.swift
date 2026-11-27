@@ -354,16 +354,17 @@ private struct SmallWidgetAppIconLink: View {
             .overlay(alignment: .topTrailing) {
                 if showsReminderBadge {
                     Image("CreatineMortarMark")
-                        .renderingMode(.original)
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
+                        .foregroundStyle(.white)
                         .frame(
                             width: max(19, backgroundSize * 0.27),
                             height: max(19, backgroundSize * 0.27)
                         )
                         .padding(max(3, backgroundSize * 0.045))
-                        .background(.white.opacity(0.96), in: Circle())
-                        .overlay(Circle().stroke(Color.workoutPurple.opacity(0.16), lineWidth: 1))
+                        .background(Color.workoutPurple, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
                         .offset(x: backgroundSize * 0.04, y: -backgroundSize * 0.04)
                 }
             }
