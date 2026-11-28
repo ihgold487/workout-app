@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronLeft, Pause, Pencil, Play, RotateCcw, Save, Square, Trash2, X } from "lucide-react";
 import { AppPageHeader, AppSectionCard, AppSectionHeading } from "./ui/AppSurface";
 import {
+  canUseNativeAppleHealth,
+  getHeartRateAuthorizationStatus,
+  requestHeartRateAuthorization,
+} from "../native/appleHealth";
+import {
   CARDIO_PHASE_DEFAULT_COLORS,
   CARDIO_WORKOUT_FORMATS,
   calculateCardioWorkoutDuration,
@@ -65,6 +70,89 @@ function formatWorkoutTimer(seconds) {
   return hours > 0
     ? `${hours}:${paddedMinutes}:${paddedSeconds}`
     : `${paddedMinutes}:${paddedSeconds}`;
+}
+
+function AppleHealthHeartRateExperiment() {
+  const [status, setStatus] = useState({ checked: false });
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  const refreshStatus = async () => {
+    setStatus({ checking: true });
+    try {
+      setStatus({
+        checked: true,
+        checking: false,
+        ...(await getHeartRateAuthorizationStatus()),
+      });
+    } catch (error) {
+      setStatus({
+        checked: true,
+        checking: false,
+        error: error?.message || "Unable to contact Apple Health.",
+      });
+    }
+  };
+
+  const requestAccess = async () => {
+    setIsRequesting(true);
+    try {
+      await requestHeartRateAuthorization();
+      await refreshStatus();
+    } catch (error) {
+      setStatus({
+        checking: false,
+        error: error?.message || "Apple Health access could not be requested.",
+      });
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const detail = !status.checked
+    ? "Check that Apple Health is available before requesting heart-rate access."
+    : status.checking
+    ? "Checking Apple Health availability…"
+    : status.error
+      ? status.error
+      : !status.available
+        ? "Apple Health is unavailable on this iPhone."
+        : status.requestStatus === "shouldRequest"
+          ? "Heart-rate access has not been requested yet."
+          : "Apple Health has already handled this request. It will not show the permission screen again; verify the Heart Rate setting in Health > profile > Apps and Services > Workout.";
+
+  return (
+    <AppSectionCard className="cardio-apple-health-experiment">
+      <AppSectionHeading
+        eyebrow="Experiment 1"
+        subtitle="This only checks Apple Health and requests permission to read heart rate. It does not start a Watch workout, collect samples, or save health data."
+        title="Apple Watch heart rate"
+      />
+      <p className="cardio-apple-health-experiment__status">{detail}</p>
+      {(!status.checked || status.error || !status.available) && (
+        <button
+          className="app-secondary-action"
+          disabled={status.checking}
+          onClick={refreshStatus}
+          type="button"
+        >
+          {status.checking ? "Checking Apple Health…" : "Check Apple Health availability"}
+        </button>
+      )}
+      {status.checked &&
+        status.available &&
+        !status.error &&
+        status.requestStatus === "shouldRequest" && (
+        <button
+          className="app-secondary-action"
+          disabled={isRequesting}
+          onClick={requestAccess}
+          type="button"
+        >
+          {isRequesting ? "Requesting access…" : "Allow heart-rate access"}
+        </button>
+      )}
+    </AppSectionCard>
+  );
 }
 
 const DURATION_MINUTES = Array.from({ length: 121 }, (_, index) => index);
@@ -840,6 +928,8 @@ export function CardioWorkoutDetail({
         </div>
         <CardioWorkoutPreview mode={targetMode} prescription={template.prescription} />
       </div>
+
+      {canUseNativeAppleHealth() && <AppleHealthHeartRateExperiment />}
 
       {templateHistory.length > 0 && (
         <div className="app-section-card" style={{ display: "grid", gap: "8px" }}>

@@ -6,6 +6,7 @@ class MainViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
 
         bridge?.registerPluginInstance(WorkoutIdleTimerPlugin())
+        bridge?.registerPluginInstance(AppleHealthPlugin())
         bridge?.registerPluginInstance(PickerHapticsPlugin())
         bridge?.registerPluginInstance(ProvisioningExpiryPlugin())
         bridge?.registerPluginInstance(SpotifyPlaybackPlugin())

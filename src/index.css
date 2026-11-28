@@ -1747,6 +1747,18 @@ code {
   color: var(--accent);
 }
 
+.cardio-apple-health-experiment {
+  display: grid;
+  gap: 12px;
+}
+
+.cardio-apple-health-experiment__status {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .cardio-workout-timer {
   align-items: center;
   display: flex;

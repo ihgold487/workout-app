@@ -47,6 +47,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan food barcodes and capture recipe images.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Workout can read heart-rate data from Apple Health when you choose to connect an Apple Watch workout.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

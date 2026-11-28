@@ -296,6 +296,27 @@ That comparison can help assess interval response, recovery, and future
 workout prescriptions. Live telemetry displays, health-platform sync, and
 advanced analysis remain separate future UI decisions.
 
+### Apple Watch heart-rate experiment
+
+The first controlled Apple Watch experiment is intentionally permission-only.
+On iPhone, a small native Apple Health bridge checks HealthKit availability and
+requests read access for heart-rate data. It does not yet create a Watch app,
+start an `HKWorkoutSession`, query HealthKit, persist samples, or modify cardio
+logs. Apple does not disclose whether an app was granted read access, so the
+experiment directs the user to confirm the setting in Health > Sharing > Apps
+> Workout.
+
+This permission experiment was completed on iPhone: the app launched with the
+HealthKit capability and Heart Rate was explicitly set to Full Access in the
+Health app. The app still has not queried or persisted any health data.
+
+The next isolated experiment is an on-demand read of one latest heart-rate
+sample, displayed with its timestamp and never persisted. That verifies actual
+read access before a later, larger watchOS companion experiment to start a test
+workout session and display live heart rate. Only after live delivery is proven
+should the app retain a compact timestamped heart-rate series alongside summary
+values on a completed cardio log.
+
 ## Planned enhancement: MapMyRun import
 
 MapMyRun's MapMyFitness platform has a documented OAuth 2 API for retrieving
